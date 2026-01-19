@@ -1,0 +1,7 @@
+discord.py
+feedparser
+requests
+beautifulsoup4
+python-dotenv
+groq
+aiohttp
