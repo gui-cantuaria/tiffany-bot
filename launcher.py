@@ -5,8 +5,7 @@ import sys
 # Lista de bots para rodar
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
-    {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas Discord"},
-    # Se você já tiver o arquivo do telegram, descomente a linha abaixo:
+    # {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas Discord"}, # <--- COMENTADO (Desligado temporariamente)
     # {"arquivo": "telegram_offers.py", "nome": "✈️ Bot Ofertas Telegram"} 
 ]
 
@@ -16,11 +15,11 @@ print("🚀 INICIANDO SISTEMA TUFFINE...")
 
 for bot in bots:
     print(f"   👉 Iniciando {bot['nome']}...")
-    # Cria o processo independente para cada bot
+    # Usa sys.executable para garantir que usa o mesmo python do ambiente
     p = subprocess.Popen([sys.executable, bot['arquivo']])
     processos.append(p)
 
-print("✅ Todos os bots estão rodando!")
+print("✅ Bots ativos!")
 
 try:
     while True:
