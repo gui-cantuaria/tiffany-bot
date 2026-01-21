@@ -34,20 +34,21 @@ STATUS_EPHEMERAL = os.getenv("STATUS_EPHEMERAL", "1").strip() == "1"
 ARQUIVO_HISTORICO = os.getenv("ARQUIVO_HISTORICO", "notices_history.json")
 ARQUIVO_CACHE_FEEDS = os.getenv("ARQUIVO_CACHE_FEEDS", "feed_cache.json")
 
+# IMAGEM PADRÃO (FALLBACK) - Capa bonita de tecnologia
+DEFAULT_IMAGE = "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop"
+
 # IA
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "550")) 
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
-# Normais: A cada 30 min
 POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
-# Urgentes: A cada 5 minutos (Para não floodar, mas ainda ser rápido)
 URGENTE_MIN_INTERVAL_SEC = 300 
 
-# Horário de Funcionamento (Ex: 09h às 23h)
+# Horário Comercial (10h às 18h)
 JANELA_INICIO = 10
-JANELA_FIM = 18
+JANELA_FIM = 18     
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3"))
@@ -65,11 +66,11 @@ MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE AJUSTADAS ---
-NOTA_MIN_APROVACAO = 60  # Subiu um pouco para filtrar lixo total
+# --- NOTAS DE CORTE ---
+NOTA_MIN_APROVACAO = 60  
 NOTA_IMPORTANTE = 75
 NOTA_URGENTE = 90
-NOTA_MIN_GAMES = 70      # Games precisa ser bom para passar
+NOTA_MIN_GAMES = 70      
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -195,13 +196,11 @@ URGENTE_RE = re.compile(
     r")\b", re.IGNORECASE,
 )
 
-# Games: Bloqueia lixo (skins, hotfix)
 GAMES_RUIDO_RE = re.compile(
     r"\b(skin|cosm[eé]tico|item shop|loja de itens|hotfix|pequena correção|manutenção)\b", 
     re.IGNORECASE
 )
 
-# Games: Palavras que dão valor (furam a nota mínima)
 GAMES_VALOR_RE = re.compile(
     r"\b(review|análise|gameplay|trailer|lançamento|release|vazamento|rumor|gta|steam deck|switch 2|ps5 pro|xbox handheld)\b",
     re.IGNORECASE
@@ -210,9 +209,7 @@ GAMES_VALOR_RE = re.compile(
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
-    # Se tiver palavra chave de valor, aceita mesmo com nota 50+
     if GAMES_VALOR_RE.search(blob) and nota >= 50: return True
-    # Senão, exige nota alta (70)
     if nota < NOTA_MIN_GAMES: return False
     if GAMES_RUIDO_RE.search(blob): return False
     return True
@@ -492,23 +489,12 @@ def formatar_resumo_3_blocos_uma_linha(resumo: str) -> str:
     if "||" in s: parts = [p.strip() for p in s.split("||") if p.strip()]
     else: parts = [p.strip() for p in re.split(r"\n\s*\n+", s) if p.strip()]
     
-    if len(parts) < 3:
-        s1 = re.sub(r"\s+", " ", s).strip()
-        sentences = re.split(r"(?<=[.!?])\s+", s1)
-        sentences = [x.strip() for x in sentences if x.strip()]
-        if len(sentences) >= 3:
-            n = len(sentences)
-            a = max(1, n // 3)
-            b = max(1, (n - a) // 2)
-            parts = [" ".join(sentences[:a]), " ".join(sentences[a : a + b]), " ".join(sentences[a + b :])]
-        else: parts = [s1]
-        
+    # REMOVIDA A LÓGICA QUE FORÇAVA PONTOS FINAIS "."
     parts = parts[:3]
     fixed = []
     for p in parts:
         p = re.sub(r"\s*\n+\s*", " ", p).strip()
-        p = re.sub(r"[?]+$", "", p).strip()
-        if p and not re.search(r"[.!…]$", p): p += "."
+        # IA sabe o que faz, não vamos forçar ponto
         fixed.append(p)
     return " • ".join(fixed).strip()
 
@@ -525,7 +511,8 @@ def noticia_eh_recente(entry_dt: datetime | None) -> bool:
 # EXTRAÇÃO IMAGEM
 IMG_EXT_RE = re.compile(r"\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)", re.IGNORECASE)
 IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
-OG_IMG_RE = re.compile(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', re.IGNORECASE)
+OG_IMG_RE = re.compile(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE | re.DOTALL)
+TWITTER_IMG_RE = re.compile(r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE | re.DOTALL)
 
 def _norm_img_url(img: str, base: str | None = None) -> str | None:
     if not img: return None
@@ -540,7 +527,6 @@ async def fetch_og_image(url: str) -> str | None:
     """Busca imagem dentro do HTML se o RSS falhar"""
     if not http_session: return None
     try:
-        # User agent real para não tomar bloqueio (403)
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -550,11 +536,12 @@ async def fetch_og_image(url: str) -> str | None:
             html = await r.text()
             m = OG_IMG_RE.search(html)
             if m: return _norm_img_url(m.group(1), url)
+            m2 = TWITTER_IMG_RE.search(html)
+            if m2: return _norm_img_url(m2.group(1), url)
     except: pass
     return None
 
 async def extrair_imagem_inteligente(entry, feed_url: str) -> str | None:
-    # 1. Tenta métodos rápidos do RSS
     img = None
     try:
         if 'media_content' in entry: img = _norm_img_url(entry.media_content[0]['url'], feed_url)
@@ -572,10 +559,8 @@ async def extrair_imagem_inteligente(entry, feed_url: str) -> str | None:
             if m: img = _norm_img_url(m.group(1), feed_url)
     except: pass
 
-    # 2. Se achou no RSS, valida
     if img and await url_eh_imagem(img): return img
 
-    # 3. Se falhou, busca a og:image na página real (Modo Sniper)
     link = entry.get("link")
     if link:
         return await fetch_og_image(link)
@@ -589,7 +574,7 @@ async def url_eh_imagem(url: str) -> bool:
     try:
         async with http_session.head(url, headers={"User-Agent": RSS_UA}, timeout=5) as r:
             if r.status < 400 and "image/" in r.headers.get("Content-Type", "").lower(): return True
-            if r.status in (401, 403, 429): return looks_like # Se bloqueou bot, confia na extensão
+            if r.status in (401, 403, 429): return looks_like 
     except: pass
     return looks_like
 
@@ -645,7 +630,6 @@ Texto: {texto_base[:1500]}
                 if not m: return None
                 data = json.loads(m.group(0))
             
-            # Se a IA mandar pular, respeitamos
             if data.get("skip") is True: return "SKIP"
             if int(data.get("nota", 0)) < NOTA_MIN_APROVACAO: return "SKIP"
             
@@ -670,8 +654,11 @@ async def postar_noticia(item: dict) -> bool:
         try: channel = await discord_client.fetch_channel(CANAL_NOTICIAS_ID)
         except: return False
     
-    # Imagem agora é obrigatória (o extrator inteligente garante que acha)
-    if not channel or not item.get("imagem"): return False
+    if not channel: return False
+
+    # === FALLBACK DE IMAGEM ===
+    # Se não tiver imagem, usa a padrão.
+    img_url = item.get("imagem") or DEFAULT_IMAGE
 
     cat = item.get("categoria", "Outros")
     emoji = EMOJIS_CATEGORIA.get(cat, "🔌")
@@ -685,16 +672,16 @@ async def postar_noticia(item: dict) -> bool:
     
     embed = discord.Embed(title=titulo, url=item.get("link"), description=resumo, color=cor)
     embed.set_author(name=f"Via {item.get('site')} • {cat} {emoji}", icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png")
-    embed.set_image(url=item.get("imagem"))
+    embed.set_image(url=img_url)
     embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({item.get('link')})**", inline=False)
     
+    # === FOOTER ATUALIZADO ===
     footer = "Notícia resumida por IA"
     if MOSTRAR_ORIGINAL_EN and item.get("fonte_ingles"): footer += " • Fonte em inglês"
     embed.set_footer(text=footer)
     
     try:
         msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>" if ID_CARGO_PARA_MARCAR else "", embed=embed)
-        # Sleep para evitar rate limit na criação de tópicos
         await asyncio.sleep(2)
         try: await msg.create_thread(name=limitar_texto(f"💬 {cat}: {item.get('titulo')}", 90), auto_archive_duration=1440)
         except: pass
@@ -728,8 +715,6 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 if historico_status(historico, link_norm, dedupe): continue
                 
                 texto = limpar_html(str(entry.get("summary") or entry.get("description") or title))
-                
-                # Filtro prévio relaxado
                 if nome_site not in FONTES_SEMPRE_URGENTE and not prefiltrar_texto(title, texto):
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "prefiltro"})
                     continue
@@ -739,11 +724,8 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                     continue
                 
-                # BUSCA DE IMAGEM INTELIGENTE (RESOLVE O PROBLEMA DAS NOTÍCIAS SEM FOTO)
+                # BUSCA IMAGEM (Se falhar, retorna None e usamos o fallback depois)
                 img = await extrair_imagem_inteligente(entry, url_feed)
-                if not img:
-                    historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "sem_imagem"})
-                    continue
                 
                 if not await consumir_budget_ia(): continue
                 
@@ -760,7 +742,6 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 urgente = (nome_site in FONTES_SEMPRE_URGENTE or res["nota"] >= NOTA_URGENTE or URGENTE_RE.search(f"{res['titulo']} {texto}"))
                 importante = (nome_site in FONTES_SEMPRE_IMPORTANTE or res["nota"] >= NOTA_IMPORTANTE)
                 
-                # Filtro Games Refinado
                 if res["categoria"] == "Games" and not games_eh_relevante(res["titulo"], texto, res["nota"], urgente): 
                     continue
                 
@@ -829,7 +810,7 @@ async def postar_da_fila():
         await queue_noticias.put(got)
         return
 
-    # --- LÓGICA DE ANTI-FLOOD ---
+    # Anti-Flood Inteligente
     now_utc = datetime.now(timezone.utc)
     target_time = next_urgent_time if urgente else next_post_time
     
@@ -837,13 +818,11 @@ async def postar_da_fila():
         await queue_noticias.put(got)
         return
 
-    # Posta
     historico = ler_historico()
     if await postar_noticia(item):
         historico_set_duplo(historico, item["link_norm"], item["dedupe_hash"], "posted")
         salvar_historico(historico)
         
-        # Intervalo Inteligente
         delay = timedelta(seconds=URGENTE_MIN_INTERVAL_SEC) if urgente else timedelta(minutes=POST_INTERVAL_MIN)
         if urgente: next_urgent_time = now_utc + delay
         else: next_post_time = now_utc + delay
