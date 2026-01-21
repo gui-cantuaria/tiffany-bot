@@ -39,32 +39,37 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "550")) 
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
-# --- INTERVALO DE 30 MINUTOS ---
+# --- INTERVALO E HORÁRIOS ---
 POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
 URGENTE_MIN_INTERVAL_SEC = int(os.getenv("URGENTE_MIN_INTERVAL_SEC", "30"))
 
-ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "2"))
+# MODO TESTE: Horário totalmente liberado (00h as 23h)
+JANELA_INICIO = 0  
+JANELA_FIM = 23     
+FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
+
+ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3")) # Aumentei pra ler mais
 SCAN_POR_FEED = int(os.getenv("SCAN_POR_FEED", "6"))
 
 MAX_CONCORRENCIA_FEEDS = int(os.getenv("MAX_CONCORRENCIA_FEEDS", "2"))
 MAX_CONCORRENCIA_IA = int(os.getenv("MAX_CONCORRENCIA_IA", "1"))
 
-MAX_QUEUE_POR_CICLO = int(os.getenv("MAX_QUEUE_POR_CICLO", "12"))
+MAX_QUEUE_POR_CICLO = int(os.getenv("MAX_QUEUE_POR_CICLO", "15"))
 MAX_IDADE_HORAS = int(os.getenv("MAX_IDADE_HORAS", "24"))
 
-IA_MIN_INTERVAL_SEC = float(os.getenv("IA_MIN_INTERVAL_SEC", "20"))
-MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
+IA_MIN_INTERVAL_SEC = float(os.getenv("IA_MIN_INTERVAL_SEC", "15"))
+MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10")) # Mais chamadas
 
-MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "160"))
+MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100")) # Aceita textos menores
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE (REDUZIDAS PARA POSTAR MAIS) ---
-NOTA_MIN_APROVACAO = int(os.getenv("NOTA_MIN_APROVACAO", "60")) # Baixou de 75 para 60
-NOTA_IMPORTANTE = int(os.getenv("NOTA_IMPORTANTE", "80"))       # Baixou de 88 para 80
-NOTA_URGENTE = int(os.getenv("NOTA_URGENTE", "90"))             # Baixou de 93 para 90
-NOTA_MIN_GAMES = int(os.getenv("NOTA_MIN_GAMES", "82"))
+# --- NOTAS DE CORTE (BAIXAS PARA APROVAR TUDO) ---
+NOTA_MIN_APROVACAO = 50  # Aceita qualquer notícia mediana
+NOTA_IMPORTANTE = 75
+NOTA_URGENTE = 90
+NOTA_MIN_GAMES = 50      # Games liberado também
 
-MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "1"))
+MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
 # Timeouts e Cooldowns
 FEED_TASK_TIMEOUT_SEC = int(os.getenv("FEED_TASK_TIMEOUT_SEC", "25"))
@@ -91,11 +96,6 @@ def _parse_csv_env(name: str) -> set[str]:
 
 CATEGORIAS_BLOQUEADAS = _parse_csv_env("CATEGORIAS_BLOQUEADAS")
 FONTES_DESATIVADAS_USER = _parse_csv_env("FONTES_DESATIVADAS")
-
-# --- HORÁRIO COMERCIAL (FUSO BRASIL UTC-3) ---
-JANELA_INICIO = 10  # 10:00 da manhã
-JANELA_FIM = 23     # 18:00 da tarde
-FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # =========================
 # LOGGING
@@ -193,31 +193,15 @@ URGENTE_RE = re.compile(
     r")\b", re.IGNORECASE,
 )
 
-GAMES_RUIDO_RE = re.compile(
-    r"\b(patch|hotfix|update|atualiza[cç][aã]o|patch notes|notas do patch|"
-    r"season|temporada|battle pass|passe de batalha|skin|cosm[eé]tico|"
-    r"item shop|loja de itens|evento semanal|weekly|rotation|rota[cç][aã]o|"
-    r"meta|build|guia|tips?|dicas?|review|an[aá]lise|comparativo|benchmark)\b", 
-    re.IGNORECASE,
-)
-
-GAMES_RELEVANTE_RE = re.compile(
-    r"\b(the game awards|tga|nintendo direct|state of play|xbox showcase|"
-    r"summer game fest|sgf|acquisit|aquisi[cç][aã]o|layoff|demiss|shutdown|"
-    r"fechamento|delist|pre[cç]o|price increase|game pass|ps plus|"
-    r"playstation plus|steam|valve|epic games|announce|anunci|trailer|"
-    r"launch|release date|data de lan[cç]amento|adiad|delay|cancel|ps5|xbox|"
-    r"nintendo|switch|pc|rockstar|gta|activision|call of duty|battlefield|"
-    r"ubisoft|capcom|blizzard|bethesda)\b", re.IGNORECASE,
-)
+# Games agora é mais permissivo
+GAMES_RUIDO_RE = re.compile(r"\b(skin|cosm[eé]tico|item shop|loja de itens)\b", re.IGNORECASE)
 
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
     if nota < NOTA_MIN_GAMES: return False
-    if not GAMES_RELEVANTE_RE.search(blob): return False
-    if GAMES_RUIDO_RE.search(blob): return False
-    return True
+    if GAMES_RUIDO_RE.search(blob): return False # Só rejeita skin boba
+    return True # Aceita todo o resto
 
 # =========================
 # STATE
@@ -296,7 +280,6 @@ def salvar_historico(h: dict) -> None:
     _atomic_write_json(ARQUIVO_HISTORICO, h)
 
 def limpar_historico_antigo(h: dict, dias: int = 7) -> dict:
-    """Remove entradas velhas da RAM/JSON"""
     cutoff = int(time.time()) - (dias * 86400)
     novo_h = {}
     if "_simhash_idx" in h: novo_h["_simhash_idx"] = h["_simhash_idx"]
@@ -469,7 +452,7 @@ def normalizar_url(url: str) -> str:
 
 TAG_RE = re.compile(r"<[^>]+>")
 SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style).*?>.*?</\1>")
-PALAVRAS_BAN_PY = re.compile(r"\b(oferta|desconto|cupom|preço|compre|barato|menor valor|black friday|achados|promoção|promocao|review|análise|analise|comparativo)\b", re.IGNORECASE)
+PALAVRAS_BAN_PY = re.compile(r"\b(oferta|desconto|cupom|compre|barato|menor valor|black friday|achados|promocao)\b", re.IGNORECASE)
 
 def limpar_html(texto: str) -> str:
     texto = html_lib.unescape(texto or "")
@@ -482,7 +465,7 @@ def prefiltrar_texto(titulo: str, texto: str) -> bool:
     if not blob: return False
     if URGENTE_RE.search(blob): return True
     if len(blob) < MIN_TEXTO_CHARS: return False
-    if PALAVRAS_BAN_PY.search(blob): return False
+    # Removido filtro estrito de palavras banidas aqui para deixar a IA decidir
     if WHITELIST_TERMS:
         low = blob.lower()
         if not any(term in low for term in WHITELIST_TERMS): return False
@@ -574,26 +557,39 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
-    # PROMPT ATUALIZADO: Pedindo 3 blocos COMPLETOS e RICOS
+    # === PROMPT 100% PERMISSIVO ===
     prompt = f"""
-Você é um Editor Chefe de tecnologia MUITO seletivo.
-Regras:
-- Se for promoção/oferta/cupom/review/análise/fofoca/política sem tech -> skip=true
-- Nota 0..100. Se nota < {NOTA_MIN_APROVACAO} -> skip=true
-- Categoria em: {CATEGORIAS_VALIDAS}
-- Games: Só aceitar AAA, Grandes Eventos, Aquisições, Mudanças de Serviço. Patch/Skin = skip.
-- "resumo": Escreva 3 blocos COMPLETOS, RICOS EM DETALHES e INFORMATIVOS em PT-BR.
-  Separe os blocos com " || ". Não pule linha.
-  Explique bem o contexto e as consequências. Não economize detalhes.
-- Responda APENAS JSON.
+Você é um Jornalista de Tecnologia muito empolgado e antenado.
+SUA MISSÃO: Aceitar o máximo de notícias possível sobre tecnologia, games e cultura pop.
 
-Formato: {{"skip":false,"categoria":"Hardware","nota":80,"titulo":"...","resumo":"..."}}
-Fonte: {nome_site} {"(EN)" if fonte_ingles else ""}
+REGRAS OBRIGATÓRIAS:
+1. ACEITAR (NUNCA DAR SKIP):
+   - Rumores e Vazamentos (Ex: Galaxy S26, GTA 6).
+   - Lançamentos de produtos (Novos celulares, placas de vídeo).
+   - Atualizações de Software/Apps (Updates do Windows, Instagram, WhatsApp).
+   - Mudanças de preços em serviços (Netflix aumentou, Spotify mudou).
+   - Curiosidades Tech e Ciência.
+
+2. RECUSAR APENAS SE FOR (skip=true):
+   - Oferta pura de loja (Ex: "Compre agora Geladeira com 10% off").
+   - Conteúdo adulto (+18) ou crime violento sem relação com tech.
+   - Esportes tradicionais (Futebol) sem relação com tecnologia.
+
+3. NOTA (0-100):
+   - Dê nota 80+ para qualquer vazamento de celular famoso ou jogo grande.
+   - Dê nota 60+ para atualizações de apps ou curiosidades.
+
+4. RESUMO (PT-BR):
+   - 3 blocos ricos em detalhes, separados por " || ".
+   - Explique o que aconteceu, specs, datas e preços se houver.
+
+Formato JSON: {{"skip":false,"categoria":"Hardware","nota":85,"titulo":"...","resumo":"..."}}
+Fonte: {nome_site}
 Título: {titulo_original}
-Texto: {texto_base[:1400]}
+Texto: {texto_base[:1500]}
 """.strip()
 
-    for _ in range(5):
+    for _ in range(3):
         try:
             chat = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
@@ -606,6 +602,7 @@ Texto: {texto_base[:1400]}
                 if not m: return None
                 data = json.loads(m.group(0))
             
+            # Se a IA mandar pular, respeitamos, mas o prompt agora é super permissivo
             if data.get("skip") is True: return "SKIP"
             if int(data.get("nota", 0)) < NOTA_MIN_APROVACAO: return "SKIP"
             
@@ -615,8 +612,8 @@ Texto: {texto_base[:1400]}
             return {"categoria": cat, "nota": int(data.get("nota", 0)), 
                     "titulo": data.get("titulo", "").strip(), "resumo": data.get("resumo", "").strip()}
         except Exception as e:
-            if "rate limit" in str(e).lower(): time.sleep(60); continue
-            return None
+            time.sleep(2)
+            continue
     return None
 
 # DISCORD
@@ -685,6 +682,7 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 if historico_status(historico, link_norm, dedupe): continue
                 
                 texto = limpar_html(str(entry.get("summary") or entry.get("description") or title))
+                # Filtro relaxado: só checa URGENTE no Regex, o resto manda pra IA
                 if nome_site not in FONTES_SEMPRE_URGENTE and not prefiltrar_texto(title, texto):
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "prefiltro"})
                     continue
@@ -773,18 +771,16 @@ async def postar_da_fila():
     got = await queue_noticias.get()
     prio, _, _, item = got
     
-    # --- LÓGICA DE HORÁRIO COMERCIAL ---
+    # --- LÓGICA DE HORÁRIO COMERCIAL (AGORA 100% LIBERADO PARA TESTE) ---
     urgente = bool(item.get("urgente"))
     
     # Pega hora atual no Brasil (UTC-3)
     agora_br = datetime.now(FUSO_HORARIO_BR)
     hora = agora_br.hour
     
-    # Se NÃO for urgente E estiver fora do horário (antes das 10 ou depois das 18)
     if not urgente and (hora < JANELA_INICIO or hora >= JANELA_FIM):
-        # Devolve pra fila e espera
         await queue_noticias.put(got)
-        return # Sai da função, tenta de novo em 30s (loop)
+        return
 
     # --- LÓGICA DE INTERVALO ---
     now_utc = datetime.now(timezone.utc)
