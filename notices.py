@@ -46,8 +46,8 @@ POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
 URGENTE_MIN_INTERVAL_SEC = 300 
 
 # Horário de Funcionamento (Ex: 09h às 23h)
-JANELA_INICIO = 9
-JANELA_FIM = 23     
+JANELA_INICIO = 10
+JANELA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3"))
@@ -688,7 +688,7 @@ async def postar_noticia(item: dict) -> bool:
     embed.set_image(url=item.get("imagem"))
     embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({item.get('link')})**", inline=False)
     
-    footer = "Resumido por IA"
+    footer = "Notícia resumida por IA"
     if MOSTRAR_ORIGINAL_EN and item.get("fonte_ingles"): footer += " • Fonte em inglês"
     embed.set_footer(text=footer)
     
