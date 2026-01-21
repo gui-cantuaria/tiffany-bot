@@ -40,15 +40,17 @@ GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "550"))
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
+# Normais: A cada 30 min
 POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
-URGENTE_MIN_INTERVAL_SEC = int(os.getenv("URGENTE_MIN_INTERVAL_SEC", "30"))
+# Urgentes: A cada 5 minutos (Para não floodar, mas ainda ser rápido)
+URGENTE_MIN_INTERVAL_SEC = 300 
 
-# MODO TESTE: Horário totalmente liberado (00h as 23h)
-JANELA_INICIO = 10  
-JANELA_FIM = 18     
+# Horário de Funcionamento (Ex: 09h às 23h)
+JANELA_INICIO = 9
+JANELA_FIM = 23     
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
-ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3")) # Aumentei pra ler mais
+ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3"))
 SCAN_POR_FEED = int(os.getenv("SCAN_POR_FEED", "6"))
 
 MAX_CONCORRENCIA_FEEDS = int(os.getenv("MAX_CONCORRENCIA_FEEDS", "2"))
@@ -58,16 +60,16 @@ MAX_QUEUE_POR_CICLO = int(os.getenv("MAX_QUEUE_POR_CICLO", "15"))
 MAX_IDADE_HORAS = int(os.getenv("MAX_IDADE_HORAS", "24"))
 
 IA_MIN_INTERVAL_SEC = float(os.getenv("IA_MIN_INTERVAL_SEC", "15"))
-MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10")) # Mais chamadas
+MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 
-MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100")) # Aceita textos menores
+MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE (BAIXAS PARA APROVAR TUDO) ---
-NOTA_MIN_APROVACAO = 50  # Aceita qualquer notícia mediana
+# --- NOTAS DE CORTE AJUSTADAS ---
+NOTA_MIN_APROVACAO = 60  # Subiu um pouco para filtrar lixo total
 NOTA_IMPORTANTE = 75
 NOTA_URGENTE = 90
-NOTA_MIN_GAMES = 50      # Games liberado também
+NOTA_MIN_GAMES = 70      # Games precisa ser bom para passar
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -176,7 +178,7 @@ EMOJIS_CATEGORIA = {
 CATEGORIAS_VALIDAS = list(EMOJIS_CATEGORIA.keys())
 
 # =========================
-# FILTROS (REGEX) - URGÊNCIA REFORÇADA
+# FILTROS (REGEX)
 # =========================
 URGENTE_RE = re.compile(
     r"\b("
@@ -193,15 +195,27 @@ URGENTE_RE = re.compile(
     r")\b", re.IGNORECASE,
 )
 
-# Games agora é mais permissivo
-GAMES_RUIDO_RE = re.compile(r"\b(skin|cosm[eé]tico|item shop|loja de itens)\b", re.IGNORECASE)
+# Games: Bloqueia lixo (skins, hotfix)
+GAMES_RUIDO_RE = re.compile(
+    r"\b(skin|cosm[eé]tico|item shop|loja de itens|hotfix|pequena correção|manutenção)\b", 
+    re.IGNORECASE
+)
+
+# Games: Palavras que dão valor (furam a nota mínima)
+GAMES_VALOR_RE = re.compile(
+    r"\b(review|análise|gameplay|trailer|lançamento|release|vazamento|rumor|gta|steam deck|switch 2|ps5 pro|xbox handheld)\b",
+    re.IGNORECASE
+)
 
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
+    # Se tiver palavra chave de valor, aceita mesmo com nota 50+
+    if GAMES_VALOR_RE.search(blob) and nota >= 50: return True
+    # Senão, exige nota alta (70)
     if nota < NOTA_MIN_GAMES: return False
-    if GAMES_RUIDO_RE.search(blob): return False # Só rejeita skin boba
-    return True # Aceita todo o resto
+    if GAMES_RUIDO_RE.search(blob): return False
+    return True
 
 # =========================
 # STATE
@@ -465,7 +479,6 @@ def prefiltrar_texto(titulo: str, texto: str) -> bool:
     if not blob: return False
     if URGENTE_RE.search(blob): return True
     if len(blob) < MIN_TEXTO_CHARS: return False
-    # Removido filtro estrito de palavras banidas aqui para deixar a IA decidir
     if WHITELIST_TERMS:
         low = blob.lower()
         if not any(term in low for term in WHITELIST_TERMS): return False
@@ -512,6 +525,7 @@ def noticia_eh_recente(entry_dt: datetime | None) -> bool:
 # EXTRAÇÃO IMAGEM
 IMG_EXT_RE = re.compile(r"\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)", re.IGNORECASE)
 IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
+OG_IMG_RE = re.compile(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', re.IGNORECASE)
 
 def _norm_img_url(img: str, base: str | None = None) -> str | None:
     if not img: return None
@@ -522,22 +536,50 @@ def _norm_img_url(img: str, base: str | None = None) -> str | None:
         except: pass
     return u
 
-def extrair_imagem(entry, feed_url: str) -> str | None:
+async def fetch_og_image(url: str) -> str | None:
+    """Busca imagem dentro do HTML se o RSS falhar"""
+    if not http_session: return None
     try:
-        if 'media_content' in entry: return _norm_img_url(entry.media_content[0]['url'], feed_url)
-        if 'media_thumbnail' in entry: return _norm_img_url(entry.media_thumbnail[0]['url'], feed_url)
-        
-        if 'enclosures' in entry:
+        # User agent real para não tomar bloqueio (403)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+        async with http_session.get(url, headers=headers, timeout=10) as r:
+            if r.status != 200: return None
+            html = await r.text()
+            m = OG_IMG_RE.search(html)
+            if m: return _norm_img_url(m.group(1), url)
+    except: pass
+    return None
+
+async def extrair_imagem_inteligente(entry, feed_url: str) -> str | None:
+    # 1. Tenta métodos rápidos do RSS
+    img = None
+    try:
+        if 'media_content' in entry: img = _norm_img_url(entry.media_content[0]['url'], feed_url)
+        if not img and 'media_thumbnail' in entry: img = _norm_img_url(entry.media_thumbnail[0]['url'], feed_url)
+        if not img and 'enclosures' in entry:
             for e in entry.enclosures:
                 if 'image' in (e.get('type') or '') or IMG_EXT_RE.search(e.get('href') or ''):
-                    return _norm_img_url(e.get('href'), feed_url)
-                    
-        content = ""
-        if 'content' in entry: content = entry.content[0].get('value', '')
-        summary = entry.get('summary', '')
-        m = IMG_SRC_RE.search(content) or IMG_SRC_RE.search(summary)
-        if m: return _norm_img_url(m.group(1), feed_url)
+                    img = _norm_img_url(e.get('href'), feed_url)
+                    break
+        if not img:
+            content = ""
+            if 'content' in entry: content = entry.content[0].get('value', '')
+            summary = entry.get('summary', '')
+            m = IMG_SRC_RE.search(content) or IMG_SRC_RE.search(summary)
+            if m: img = _norm_img_url(m.group(1), feed_url)
     except: pass
+
+    # 2. Se achou no RSS, valida
+    if img and await url_eh_imagem(img): return img
+
+    # 3. Se falhou, busca a og:image na página real (Modo Sniper)
+    link = entry.get("link")
+    if link:
+        return await fetch_og_image(link)
+    
     return None
 
 async def url_eh_imagem(url: str) -> bool:
@@ -545,9 +587,9 @@ async def url_eh_imagem(url: str) -> bool:
     looks_like = bool(IMG_EXT_RE.search(url))
     if not http_session: return looks_like
     try:
-        async with http_session.head(url, headers={"User-Agent": RSS_UA}, timeout=10) as r:
+        async with http_session.head(url, headers={"User-Agent": RSS_UA}, timeout=5) as r:
             if r.status < 400 and "image/" in r.headers.get("Content-Type", "").lower(): return True
-            if r.status in (401, 403, 429): return looks_like
+            if r.status in (401, 403, 429): return looks_like # Se bloqueou bot, confia na extensão
     except: pass
     return looks_like
 
@@ -560,7 +602,7 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     # === PROMPT 100% PERMISSIVO ===
     prompt = f"""
 Você é um Jornalista de Tecnologia muito empolgado e antenado.
-SUA MISSÃO: Aceitar o máximo de notícias possível sobre tecnologia, games e cultura pop.
+SUA MISSÃO: Classificar e Resumir.
 
 REGRAS OBRIGATÓRIAS:
 1. ACEITAR (NUNCA DAR SKIP):
@@ -577,7 +619,8 @@ REGRAS OBRIGATÓRIAS:
 
 3. NOTA (0-100):
    - Dê nota 80+ para qualquer vazamento de celular famoso ou jogo grande.
-   - Dê nota 60+ para atualizações de apps ou curiosidades.
+   - Dê nota 70+ para atualizações importantes.
+   - Dê nota 60+ para curiosidades.
 
 4. RESUMO (PT-BR):
    - 3 blocos ricos em detalhes, separados por " || ".
@@ -602,7 +645,7 @@ Texto: {texto_base[:1500]}
                 if not m: return None
                 data = json.loads(m.group(0))
             
-            # Se a IA mandar pular, respeitamos, mas o prompt agora é super permissivo
+            # Se a IA mandar pular, respeitamos
             if data.get("skip") is True: return "SKIP"
             if int(data.get("nota", 0)) < NOTA_MIN_APROVACAO: return "SKIP"
             
@@ -627,6 +670,7 @@ async def postar_noticia(item: dict) -> bool:
         try: channel = await discord_client.fetch_channel(CANAL_NOTICIAS_ID)
         except: return False
     
+    # Imagem agora é obrigatória (o extrator inteligente garante que acha)
     if not channel or not item.get("imagem"): return False
 
     cat = item.get("categoria", "Outros")
@@ -650,6 +694,8 @@ async def postar_noticia(item: dict) -> bool:
     
     try:
         msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>" if ID_CARGO_PARA_MARCAR else "", embed=embed)
+        # Sleep para evitar rate limit na criação de tópicos
+        await asyncio.sleep(2)
         try: await msg.create_thread(name=limitar_texto(f"💬 {cat}: {item.get('titulo')}", 90), auto_archive_duration=1440)
         except: pass
         return True
@@ -682,7 +728,8 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 if historico_status(historico, link_norm, dedupe): continue
                 
                 texto = limpar_html(str(entry.get("summary") or entry.get("description") or title))
-                # Filtro relaxado: só checa URGENTE no Regex, o resto manda pra IA
+                
+                # Filtro prévio relaxado
                 if nome_site not in FONTES_SEMPRE_URGENTE and not prefiltrar_texto(title, texto):
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "prefiltro"})
                     continue
@@ -692,8 +739,9 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                     continue
                 
-                img = extrair_imagem(entry, url_feed)
-                if not img or not await url_eh_imagem(img):
+                # BUSCA DE IMAGEM INTELIGENTE (RESOLVE O PROBLEMA DAS NOTÍCIAS SEM FOTO)
+                img = await extrair_imagem_inteligente(entry, url_feed)
+                if not img:
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "sem_imagem"})
                     continue
                 
@@ -712,7 +760,9 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 urgente = (nome_site in FONTES_SEMPRE_URGENTE or res["nota"] >= NOTA_URGENTE or URGENTE_RE.search(f"{res['titulo']} {texto}"))
                 importante = (nome_site in FONTES_SEMPRE_IMPORTANTE or res["nota"] >= NOTA_IMPORTANTE)
                 
-                if res["categoria"] == "Games" and not games_eh_relevante(res["titulo"], texto, res["nota"], urgente): continue
+                # Filtro Games Refinado
+                if res["categoria"] == "Games" and not games_eh_relevante(res["titulo"], texto, res["nota"], urgente): 
+                    continue
                 
                 sh_post = _simhash64(f"{res['titulo']} {res['resumo']}")
                 if simhash_is_dup(historico, sh_post): continue
@@ -749,7 +799,6 @@ async def coletar_noticias():
         for item in lista:
             if enqueued >= MAX_QUEUE_POR_CICLO: break
             
-            # Limite por fonte (apenas para não urgentes)
             if not item["urgente"]:
                 c = counts.get(item["site"], 0)
                 if c >= MAX_POR_FONTE_POR_CICLO: continue
@@ -771,18 +820,16 @@ async def postar_da_fila():
     got = await queue_noticias.get()
     prio, _, _, item = got
     
-    # --- LÓGICA DE HORÁRIO COMERCIAL (AGORA 100% LIBERADO PARA TESTE) ---
     urgente = bool(item.get("urgente"))
     
-    # Pega hora atual no Brasil (UTC-3)
+    # Horário Comercial
     agora_br = datetime.now(FUSO_HORARIO_BR)
     hora = agora_br.hour
-    
     if not urgente and (hora < JANELA_INICIO or hora >= JANELA_FIM):
         await queue_noticias.put(got)
         return
 
-    # --- LÓGICA DE INTERVALO ---
+    # --- LÓGICA DE ANTI-FLOOD ---
     now_utc = datetime.now(timezone.utc)
     target_time = next_urgent_time if urgente else next_post_time
     
@@ -796,6 +843,7 @@ async def postar_da_fila():
         historico_set_duplo(historico, item["link_norm"], item["dedupe_hash"], "posted")
         salvar_historico(historico)
         
+        # Intervalo Inteligente
         delay = timedelta(seconds=URGENTE_MIN_INTERVAL_SEC) if urgente else timedelta(minutes=POST_INTERVAL_MIN)
         if urgente: next_urgent_time = now_utc + delay
         else: next_post_time = now_utc + delay
