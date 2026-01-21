@@ -6,7 +6,6 @@ import sys
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
     # {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas Discord"}, # <--- COMENTADO (Desligado temporariamente)
-    # {"arquivo": "telegram_offers.py", "nome": "✈️ Bot Ofertas Telegram"} 
 ]
 
 processos = []

@@ -94,7 +94,7 @@ FONTES_DESATIVADAS_USER = _parse_csv_env("FONTES_DESATIVADAS")
 
 # --- HORÁRIO COMERCIAL (FUSO BRASIL UTC-3) ---
 JANELA_INICIO = 10  # 10:00 da manhã
-JANELA_FIM = 18     # 18:00 da tarde
+JANELA_FIM = 23     # 18:00 da tarde
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # =========================
