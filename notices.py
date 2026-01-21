@@ -44,8 +44,8 @@ POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
 URGENTE_MIN_INTERVAL_SEC = int(os.getenv("URGENTE_MIN_INTERVAL_SEC", "30"))
 
 # MODO TESTE: Horário totalmente liberado (00h as 23h)
-JANELA_INICIO = 0  
-JANELA_FIM = 23     
+JANELA_INICIO = 10  
+JANELA_FIM = 18     
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "3")) # Aumentei pra ler mais
