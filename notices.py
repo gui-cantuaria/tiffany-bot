@@ -44,9 +44,9 @@ GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
 POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
-URGENTE_MIN_INTERVAL_SEC = 300 
+URGENTE_MIN_INTERVAL_SEC = 300 # 5 Minutos
 
-# Horário Comercial (10h às 18h)
+# Horário Comercial (10h às 18h) - RIGOROSO
 JANELA_INICIO = 10
 JANELA_FIM = 18     
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
@@ -70,7 +70,7 @@ MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 NOTA_MIN_APROVACAO = 60  
 NOTA_IMPORTANTE = 75
 NOTA_URGENTE = 90
-NOTA_MIN_GAMES = 75      # Games mais exigente
+NOTA_MIN_GAMES = 70      
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -179,7 +179,7 @@ EMOJIS_CATEGORIA = {
 CATEGORIAS_VALIDAS = list(EMOJIS_CATEGORIA.keys())
 
 # =========================
-# FILTROS (REGEX)
+# FILTROS (REGEX) - URGÊNCIA CORRIGIDA (SEM MARCAS)
 # =========================
 URGENTE_RE = re.compile(
     r"\b("
@@ -188,11 +188,9 @@ URGENTE_RE = re.compile(
     r"explora[cç][aã]o ativa|out-?of-?band|oob|patch emergencial|"
     r"atualiza[cç][aã]o emergencial|security update|atualiza[cç][aã]o de seguran[cç]a|"
     r"critical vulnerability|vulnerabilidade cr[ií]tica|cvss\s*(9|10|9\.\d|10\.0)|"
-    r"severidade cr[ií]tica|ransomware|breach|data breach|vazamento|dados expostos|"
+    r"severidade cr[ií]tica|ransomware|breach|data breach|vazamento de dados|"
     r"outage|downtime|incident|fora do ar|indisponibilidade|kubernetes|k8s|"
-    r"aws outage|azure outage|gcp outage|cloudflare|akamai|" 
-    r"microsoft|windows|apple|macos|ios|"
-    r"google|android|linux|nvidia|amd|intel"
+    r"aws outage|azure outage|gcp outage|cloudflare down|akamai down"
     r")\b", re.IGNORECASE,
 )
 
@@ -201,7 +199,6 @@ GAMES_RUIDO_RE = re.compile(
     re.IGNORECASE
 )
 
-# Games Valiosos (Furam a nota 75 se tiverem nota > 55)
 GAMES_VALOR_RE = re.compile(
     r"\b(review|análise|gameplay|trailer|lançamento|release|vazamento|rumor|gta|steam deck|switch 2|ps5 pro|xbox handheld)\b",
     re.IGNORECASE
@@ -210,9 +207,7 @@ GAMES_VALOR_RE = re.compile(
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
-    # Se for tema IMPORTANTE (GTA, Lançamento), aceita com nota mediana (55+)
     if GAMES_VALOR_RE.search(blob) and nota >= 55: return True
-    # Se for genérico, exige nota alta (75+)
     if nota < NOTA_MIN_GAMES: return False
     if GAMES_RUIDO_RE.search(blob): return False
     return True
@@ -497,7 +492,6 @@ def formatar_resumo_3_blocos_uma_linha(resumo: str) -> str:
     for p in parts:
         p = re.sub(r"\s*\n+\s*", " ", p).strip()
         fixed.append(p)
-    # AQUI: Mudei de " • " para " " (apenas espaço) para tirar os pontos
     return " ".join(fixed).strip()
 
 def entry_datetime_utc(entry) -> datetime | None:
@@ -584,6 +578,7 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
+    # === PROMPT 100% PERMISSIVO ===
     prompt = f"""
 Você é um Jornalista de Tecnologia muito empolgado e antenado.
 SUA MISSÃO: Classificar e Resumir.
@@ -601,16 +596,16 @@ REGRAS OBRIGATÓRIAS:
    - Conteúdo adulto (+18) ou crime violento sem relação com tech.
    - Esportes tradicionais (Futebol) sem relação com tecnologia.
 
-3. NOTA (0-100):
-   - Dê nota 80+ para qualquer vazamento de celular famoso ou jogo grande.
-   - Dê nota 70+ para atualizações importantes.
-   - Dê nota 60+ para curiosidades.
+3. NOTA (0-100) - SEJA CRITERIOSO:
+   - Dê nota 90+ APENAS se for urgente real (Hackeamento, Sistema fora do ar, Lançamento Mundial).
+   - Dê nota 80+ para vazamentos famosos e jogos grandes.
+   - Dê nota 60-70 para o resto (Atualizações, Curiosidades).
 
 4. RESUMO (PT-BR):
    - 3 blocos ricos em detalhes, separados por " || ".
    - Explique o que aconteceu, specs, datas e preços se houver.
 
-Formato JSON: {{"skip":false,"categoria":"Hardware","nota":85,"titulo":"...","resumo":"..."}}
+Formato JSON: {{"skip":false,"categoria":"Hardware","nota":65,"titulo":"...","resumo":"..."}}
 Fonte: {nome_site}
 Título: {titulo_original}
 Texto: {texto_base[:1500]}
@@ -655,7 +650,6 @@ async def postar_noticia(item: dict) -> bool:
     
     if not channel: return False
 
-    # Imagem Obrigatória (Original ou Backup)
     img_url = item.get("imagem") or DEFAULT_IMAGE
 
     cat = item.get("categoria", "Outros")
@@ -673,7 +667,6 @@ async def postar_noticia(item: dict) -> bool:
     embed.set_image(url=img_url)
     embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({item.get('link')})**", inline=False)
     
-    # FOOTER NOVO
     footer = "Notícia resumida por IA"
     if MOSTRAR_ORIGINAL_EN and item.get("fonte_ingles"): footer += " • Fonte em inglês"
     embed.set_footer(text=footer)
@@ -723,7 +716,6 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                     continue
                 
-                # Tenta pegar imagem, mas NÃO ignora se falhar
                 img = await extrair_imagem_inteligente(entry, url_feed)
                 
                 if not await consumir_budget_ia(): continue
@@ -741,7 +733,6 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 urgente = (nome_site in FONTES_SEMPRE_URGENTE or res["nota"] >= NOTA_URGENTE or URGENTE_RE.search(f"{res['titulo']} {texto}"))
                 importante = (nome_site in FONTES_SEMPRE_IMPORTANTE or res["nota"] >= NOTA_IMPORTANTE)
                 
-                # FILTRO GAMES REFORÇADO
                 if res["categoria"] == "Games" and not games_eh_relevante(res["titulo"], texto, res["nota"], urgente): 
                     continue
                 
