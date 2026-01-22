@@ -44,9 +44,9 @@ GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
 POST_INTERVAL_MIN = int(os.getenv("POST_INTERVAL_MIN", "30"))
-URGENTE_MIN_INTERVAL_SEC = 300 # 5 Minutos
+URGENTE_MIN_INTERVAL_SEC = 300 
 
-# Horário Comercial (10h às 18h) - RIGOROSO
+# Horário Comercial (10h às 18h)
 JANELA_INICIO = 10
 JANELA_FIM = 18     
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
@@ -66,11 +66,11 @@ MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE ---
-NOTA_MIN_APROVACAO = 60  
-NOTA_IMPORTANTE = 75
-NOTA_URGENTE = 90
-NOTA_MIN_GAMES = 70      
+# --- NOTAS DE CORTE (ATUALIZADAS PARA 65) ---
+NOTA_MIN_APROVACAO = 65  
+NOTA_IMPORTANTE = 80
+NOTA_URGENTE = 93       # Subiu para 93 conforme seu prompt
+NOTA_MIN_GAMES = 65     # Alinhado com a nota mínima
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -179,7 +179,7 @@ EMOJIS_CATEGORIA = {
 CATEGORIAS_VALIDAS = list(EMOJIS_CATEGORIA.keys())
 
 # =========================
-# FILTROS (REGEX) - URGÊNCIA CORRIGIDA (SEM MARCAS)
+# FILTROS (REGEX)
 # =========================
 URGENTE_RE = re.compile(
     r"\b("
@@ -578,8 +578,9 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
+    # === PROMPT V10: JORNALISTA CHEFE (CREDIBILIDADE + FILTRO 65) ===
     prompt = f"""
-Você é um Editor-Chefe de Tecnologia focado em INOVAÇÃO e RELEVÂNCIA. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa.
+Você é um jornalista chefe de Tecnologia focado em INOVAÇÃO, RELEVÂNCIA e CREDIBILIDADE. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa para o público saber.
 
 Responda APENAS com JSON válido (sem texto fora do JSON).
 
@@ -588,10 +589,10 @@ FORMATO DE RESPOSTA (Escolha um):
 2. SE REJEITAR: {{"skip":true,"reason":"motivo do bloqueio"}}
 
 REGRAS DE BLOQUEIO IMEDIATO (skip=true):
-- Promoção/oferta/cupom/preço/compra/loja/"melhor custo-benefício".
+- Promoção/oferta/cupom/preço/compra/loja/"melhor custo-benefício"/afiliado.
 - Review, análise, comparativo, guia de compras.
 - Fofoca, treta, política não-tech, celebridade, esporte.
-- Conteúdo vago ou sem confirmação mínima.
+- Conteúdo pequeno, conteúdo vago, conteúdo mentiroso ou sem confirmação mínima.
 
 CATEGORIAS (use uma):
 Hardware; Smartphones; Inteligência Artificial; Games; Cibersegurança; Software & Apps; Big Techs; Ciência & Espaço; Internet & Redes; Cloud & DevOps; Programação & Dev; Mídia & Streaming; Curiosidade Tech; Sistemas Operacionais; Outros
@@ -617,10 +618,10 @@ CRITÉRIO DE NOTA (0-100):
 - 93-100: URGENTE (Crise de segurança, Lançamento Global de iPhone/Galaxy S, Vazamento grave).
 - 85-92: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
 - 70-84: RELEVANTE (Interessante para entusiastas, curiosidades tech).
-- < 70: IRRELEVANTE (skip=true).
+- < 65: IRRELEVANTE (skip=true).
 
 RESUMO (PT-BR) — RIGOROSO:
-- Exatamente 3 frases curtas e diretas.
+- Exatamente 3 paragráfos detalhados, mas sem ficar inventando coisa.
 - Mesma linha (sem quebra).
 - Termine cada frase com ponto final ".".
 - Estrutura: 1) O que houve. 2) Por que importa. 3) O que muda/próximo passo.
