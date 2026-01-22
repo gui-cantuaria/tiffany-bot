@@ -34,7 +34,7 @@ STATUS_EPHEMERAL = os.getenv("STATUS_EPHEMERAL", "1").strip() == "1"
 ARQUIVO_HISTORICO = os.getenv("ARQUIVO_HISTORICO", "notices_history.json")
 ARQUIVO_CACHE_FEEDS = os.getenv("ARQUIVO_CACHE_FEEDS", "feed_cache.json")
 
-# IMAGEM PADRÃO (FALLBACK) - Capa bonita de tecnologia
+# IMAGEM PADRÃO (FALLBACK)
 DEFAULT_IMAGE = "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop"
 
 # IA
@@ -70,7 +70,7 @@ MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 NOTA_MIN_APROVACAO = 60  
 NOTA_IMPORTANTE = 75
 NOTA_URGENTE = 90
-NOTA_MIN_GAMES = 70      
+NOTA_MIN_GAMES = 75      # Games mais exigente
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -201,6 +201,7 @@ GAMES_RUIDO_RE = re.compile(
     re.IGNORECASE
 )
 
+# Games Valiosos (Furam a nota 75 se tiverem nota > 55)
 GAMES_VALOR_RE = re.compile(
     r"\b(review|análise|gameplay|trailer|lançamento|release|vazamento|rumor|gta|steam deck|switch 2|ps5 pro|xbox handheld)\b",
     re.IGNORECASE
@@ -209,7 +210,9 @@ GAMES_VALOR_RE = re.compile(
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
-    if GAMES_VALOR_RE.search(blob) and nota >= 50: return True
+    # Se for tema IMPORTANTE (GTA, Lançamento), aceita com nota mediana (55+)
+    if GAMES_VALOR_RE.search(blob) and nota >= 55: return True
+    # Se for genérico, exige nota alta (75+)
     if nota < NOTA_MIN_GAMES: return False
     if GAMES_RUIDO_RE.search(blob): return False
     return True
@@ -489,14 +492,13 @@ def formatar_resumo_3_blocos_uma_linha(resumo: str) -> str:
     if "||" in s: parts = [p.strip() for p in s.split("||") if p.strip()]
     else: parts = [p.strip() for p in re.split(r"\n\s*\n+", s) if p.strip()]
     
-    # REMOVIDA A LÓGICA QUE FORÇAVA PONTOS FINAIS "."
     parts = parts[:3]
     fixed = []
     for p in parts:
         p = re.sub(r"\s*\n+\s*", " ", p).strip()
-        # IA sabe o que faz, não vamos forçar ponto
         fixed.append(p)
-    return " • ".join(fixed).strip()
+    # AQUI: Mudei de " • " para " " (apenas espaço) para tirar os pontos
+    return " ".join(fixed).strip()
 
 def entry_datetime_utc(entry) -> datetime | None:
     st = entry.get("published_parsed") or entry.get("updated_parsed")
@@ -524,7 +526,6 @@ def _norm_img_url(img: str, base: str | None = None) -> str | None:
     return u
 
 async def fetch_og_image(url: str) -> str | None:
-    """Busca imagem dentro do HTML se o RSS falhar"""
     if not http_session: return None
     try:
         headers = {
@@ -564,7 +565,6 @@ async def extrair_imagem_inteligente(entry, feed_url: str) -> str | None:
     link = entry.get("link")
     if link:
         return await fetch_og_image(link)
-    
     return None
 
 async def url_eh_imagem(url: str) -> bool:
@@ -584,7 +584,6 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
-    # === PROMPT 100% PERMISSIVO ===
     prompt = f"""
 Você é um Jornalista de Tecnologia muito empolgado e antenado.
 SUA MISSÃO: Classificar e Resumir.
@@ -656,8 +655,7 @@ async def postar_noticia(item: dict) -> bool:
     
     if not channel: return False
 
-    # === FALLBACK DE IMAGEM ===
-    # Se não tiver imagem, usa a padrão.
+    # Imagem Obrigatória (Original ou Backup)
     img_url = item.get("imagem") or DEFAULT_IMAGE
 
     cat = item.get("categoria", "Outros")
@@ -675,7 +673,7 @@ async def postar_noticia(item: dict) -> bool:
     embed.set_image(url=img_url)
     embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({item.get('link')})**", inline=False)
     
-    # === FOOTER ATUALIZADO ===
+    # FOOTER NOVO
     footer = "Notícia resumida por IA"
     if MOSTRAR_ORIGINAL_EN and item.get("fonte_ingles"): footer += " • Fonte em inglês"
     embed.set_footer(text=footer)
@@ -715,6 +713,7 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 if historico_status(historico, link_norm, dedupe): continue
                 
                 texto = limpar_html(str(entry.get("summary") or entry.get("description") or title))
+                
                 if nome_site not in FONTES_SEMPRE_URGENTE and not prefiltrar_texto(title, texto):
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "prefiltro"})
                     continue
@@ -724,7 +723,7 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                     continue
                 
-                # BUSCA IMAGEM (Se falhar, retorna None e usamos o fallback depois)
+                # Tenta pegar imagem, mas NÃO ignora se falhar
                 img = await extrair_imagem_inteligente(entry, url_feed)
                 
                 if not await consumir_budget_ia(): continue
@@ -742,6 +741,7 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                 urgente = (nome_site in FONTES_SEMPRE_URGENTE or res["nota"] >= NOTA_URGENTE or URGENTE_RE.search(f"{res['titulo']} {texto}"))
                 importante = (nome_site in FONTES_SEMPRE_IMPORTANTE or res["nota"] >= NOTA_IMPORTANTE)
                 
+                # FILTRO GAMES REFORÇADO
                 if res["categoria"] == "Games" and not games_eh_relevante(res["titulo"], texto, res["nota"], urgente): 
                     continue
                 
