@@ -578,34 +578,53 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
-    # === PROMPT 100% PERMISSIVO ===
     prompt = f"""
-Você é um Jornalista de Tecnologia muito empolgado e antenado.
-SUA MISSÃO: Classificar e Resumir.
+Você é um Editor-Chefe de Tecnologia focado em INOVAÇÃO e RELEVÂNCIA. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa.
 
-REGRAS OBRIGATÓRIAS:
-1. ACEITAR (NUNCA DAR SKIP):
-   - Rumores e Vazamentos (Ex: Galaxy S26, GTA 6).
-   - Lançamentos de produtos (Novos celulares, placas de vídeo).
-   - Atualizações de Software/Apps (Updates do Windows, Instagram, WhatsApp).
-   - Mudanças de preços em serviços (Netflix aumentou, Spotify mudou).
-   - Curiosidades Tech e Ciência.
+Responda APENAS com JSON válido (sem texto fora do JSON).
 
-2. RECUSAR APENAS SE FOR (skip=true):
-   - Oferta pura de loja (Ex: "Compre agora Geladeira com 10% off").
-   - Conteúdo adulto (+18) ou crime violento sem relação com tech.
-   - Esportes tradicionais (Futebol) sem relação com tecnologia.
+FORMATO DE RESPOSTA (Escolha um):
+1. SE APROVAR: {{"skip":false,"categoria":"Hardware","nota":85,"titulo":"...","resumo":"Frase 1. Frase 2. Frase 3."}}
+2. SE REJEITAR: {{"skip":true,"reason":"motivo do bloqueio"}}
 
-3. NOTA (0-100) - SEJA CRITERIOSO:
-   - Dê nota 90+ APENAS se for urgente real (Hackeamento, Sistema fora do ar, Lançamento Mundial).
-   - Dê nota 80+ para vazamentos famosos e jogos grandes.
-   - Dê nota 60-70 para o resto (Atualizações, Curiosidades).
+REGRAS DE BLOQUEIO IMEDIATO (skip=true):
+- Promoção/oferta/cupom/preço/compra/loja/"melhor custo-benefício".
+- Review, análise, comparativo, guia de compras.
+- Fofoca, treta, política não-tech, celebridade, esporte.
+- Conteúdo vago ou sem confirmação mínima.
 
-4. RESUMO (PT-BR):
-   - 3 blocos ricos em detalhes, separados por " || ".
-   - Explique o que aconteceu, specs, datas e preços se houver.
+CATEGORIAS (use uma):
+Hardware; Smartphones; Inteligência Artificial; Games; Cibersegurança; Software & Apps; Big Techs; Ciência & Espaço; Internet & Redes; Cloud & DevOps; Programação & Dev; Mídia & Streaming; Curiosidade Tech; Sistemas Operacionais; Outros
 
-Formato JSON: {{"skip":false,"categoria":"Hardware","nota":65,"titulo":"...","resumo":"..."}}
+FILTRO MAIS IMPORTANTE: SMARTPHONES E NOTEBOOKS
+- RECUSAR (skip=true):
+  • Intermediários/Entrada (Galaxy A/M, Moto G, Redmi Note, POCO básico, PCs de escritório).
+  • "Refresh" sem novidade (só mudou processador/memória).
+  • Lançamento local ("chegou ao Brasil") sem diferencial global.
+- ACEITAR APENAS SE:
+  • Flagship/Topo de linha (iPhone, Galaxy S/Z, Pixel, Xiaomi Ultra).
+  • Inovação real (Telas dobráveis, novas baterias, IA integrada útil).
+  • Impacto de mercado (Recall, banimento, mudança drástica de design).
+
+OUTRAS CATEGORIAS (ACEITAR SE TIVER IMPACTO):
+- Cibersegurança: CVE crítica, ransomware, vazamento de dados, patch emergencial.
+- Software/OS: Atualização com recursos novos (não apenas "correção de bugs").
+- IA: Lançamentos de grandes players (OpenAI, Google, Anthropic) ou recursos novos.
+- Big Techs: Decisões que afetam o usuário final ou o mercado.
+- Games: Apenas AAA, grandes eventos (TGA, E3, Direct), aquisições ou demissões em massa. (RECUSAR: skins, patch notes, eventos semanais).
+
+CRITÉRIO DE NOTA (0-100):
+- 93-100: URGENTE (Crise de segurança, Lançamento Global de iPhone/Galaxy S, Vazamento grave).
+- 85-92: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
+- 70-84: RELEVANTE (Interessante para entusiastas, curiosidades tech).
+- < 70: IRRELEVANTE (skip=true).
+
+RESUMO (PT-BR) — RIGOROSO:
+- Exatamente 3 frases curtas e diretas.
+- Mesma linha (sem quebra).
+- Termine cada frase com ponto final ".".
+- Estrutura: 1) O que houve. 2) Por que importa. 3) O que muda/próximo passo.
+
 Fonte: {nome_site}
 Título: {titulo_original}
 Texto: {texto_base[:1500]}
