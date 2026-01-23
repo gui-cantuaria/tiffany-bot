@@ -1,0 +1,5703 @@
+{
+  "_simhash_idx": {
+    "eca51ca45b46f606": 1768700606,
+    "22d3a5492203a010": 1768700665,
+    "a774190b342021fb": 1768700695,
+    "03c00c32cb062958": 1768704265,
+    "03a49e1059706d49": 1768704205,
+    "4d6149f746618b7d": 1768708135,
+    "2c36caf0a3516570": 1768707805,
+    "63710266522cad49": 1768750389,
+    "f5380d0e664dcc75": 1768750451,
+    "a9c709601a16661a": 1768750470,
+    "75e100b05762cfdc": 1768750490,
+    "e9a50b1258d0411a": 1768750511,
+    "93a18ae07efd4ada": 1768751095,
+    "4165266f512c0408": 1768750570,
+    "277d88169b6ce469": 1768750791,
+    "e7a50d4032700dd6": 1768754605,
+    "6683fd70594c8c70": 1768754635,
+    "b3ad0323020fc51a": 1768758895,
+    "157edd6cab74b108": 1768758235,
+    "f57a25604f664d28": 1768758205,
+    "6998404d52c93eab": 1768758566,
+    "9161a6b6796f8d5a": 1768767179,
+    "61c9d93514432649": 1768767119,
+    "5560877245ec4d6a": 1768767239,
+    "2166ed606a68314d": 1768768041,
+    "a101c56217981895": 1768827021,
+    "81e16c9876ca75ec": 1768827041,
+    "0561db33164a0c36": 1768827061,
+    "ae0445794ce3627f": 1768827081,
+    "e53657544f63c27c": 1768827121
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246180/estudo-porcentagem-degradacao-bateria-eletricos.html": {
+    "status": "skipped",
+    "ts": 1768402846,
+    "reason": "prefiltro"
+  },
+  "H:2c68ab8924400f7733333f76482341f211d579cd": {
+    "status": "skipped",
+    "ts": 1768402846,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246177/xiaomi-libera-efeitos-camera-leica-xiaomi-17-ultra.html": {
+    "status": "posted",
+    "ts": 1768403327,
+    "posted_ts": 1768403327
+  },
+  "H:d71bfcf275c7682f7fb2460a2250414c210cf36d": {
+    "status": "posted",
+    "ts": 1768403327,
+    "posted_ts": 1768403327
+  },
+  "L:https://www.adrenaline.com.br/seguranca/roblox-idade-chat-brasil/": {
+    "status": "posted",
+    "ts": 1768402997,
+    "posted_ts": 1768402997
+  },
+  "H:7ec27e19a1ac7b88ec4399206589391f7204b59a": {
+    "status": "posted",
+    "ts": 1768402997,
+    "posted_ts": 1768402997
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246176/amd-ryzen-ai-max-392-supera-cpus-desktop-teste.html": {
+    "status": "posted",
+    "ts": 1768402967,
+    "posted_ts": 1768402967
+  },
+  "H:1c85aeba567f31b663adccef8b2effdd4487c55f": {
+    "status": "posted",
+    "ts": 1768402967,
+    "posted_ts": 1768402967
+  },
+  "L:https://www.adrenaline.com.br/games/highguard-pode-estar-fadado-ao-fracasso-jogadores-temem-que-seja-mais-um-fiasco-no-lancamento/": {
+    "status": "skipped",
+    "ts": 1768402907,
+    "reason": "ia"
+  },
+  "H:296bf8d0327f495c7fce0bf3b1b80c01266c8334": {
+    "status": "skipped",
+    "ts": 1768402907,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/noticias/trump-cobra-empresas-por-consumo-de-energia-em-ia/": {
+    "status": "skipped",
+    "ts": 1768402927,
+    "reason": "ia"
+  },
+  "H:a62ae4c0aeb238fac08cdd0d015c60a6335688e7": {
+    "status": "skipped",
+    "ts": 1768402927,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/achados/iphone-15-256-gb-fica-44-mais-barato-com-cupom-no-mercado-livre/": {
+    "status": "skipped",
+    "ts": 1768402927,
+    "reason": "prefiltro"
+  },
+  "H:037368c0a9f0e95e2fee17e70a7453dea82fe3a2": {
+    "status": "skipped",
+    "ts": 1768402927,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/meta-fecha-estudios-de-vr-e-demite-mais-de-1-000-funcionarios/": {
+    "status": "skipped",
+    "ts": 1768402928,
+    "reason": "imagem_invalida"
+  },
+  "H:e881e044f1a0816e189759237d6ff4b686037476": {
+    "status": "skipped",
+    "ts": 1768402928,
+    "reason": "imagem_invalida"
+  },
+  "L:https://manualdousuario.net/insider-jan2026/": {
+    "status": "skipped",
+    "ts": 1768402929,
+    "reason": "sem_imagem"
+  },
+  "H:bd4aab4be8bd9db57faf40378b6d3b741b594847": {
+    "status": "skipped",
+    "ts": 1768402929,
+    "reason": "sem_imagem"
+  },
+  "L:https://manualdousuario.net/links-do-dia-20260113/": {
+    "status": "skipped",
+    "ts": 1768402929,
+    "reason": "sem_imagem"
+  },
+  "H:a63cffb8a48578b26341c164ef6a5f0fecb250d4": {
+    "status": "skipped",
+    "ts": 1768402929,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/carros/fim-da-isencao-de-ipva-para-carros-hibridos-em-sp-ja-tem-data-definida/": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "H:7ff333aaf521b71467ca22cc1f5f93463791c712": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/reviews/ofertas-do-dia-galaxy-watch-fones-de-ouvido-e-mais-itens-em-promocao/": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "H:7e5729fc4204d8a72e8db49ea7f93a22021eff77": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/reviews/smartphone-dobravel-em-oferta-samsung-galaxy-z-fold7-512-gb-esta-com-desconto-incrivel/": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "H:bea42de0c2bb8041e8e47215062110329ace61f9": {
+    "status": "skipped",
+    "ts": 1768402930,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/tesla-will-only-offer-subscriptions-for-full-self-driving-supervised-going-forward/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:e6142779b37502ffcc91ea53dc68e18a6b7334bf": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/voicerun-nabs-5-5m-to-build-voice-agent-factory/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:c7b02a311dea3bd683ce28263cec081090cfd324": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/meta-to-reportedly-lay-off-10-of-reality-labs-staff/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:03a82aab0267670186a70709cf154e053f771a28": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/skyfi-raises-12-7m-to-turn-satellite-images-into-insights/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:a454404f9e7871c84520403cd8ed4ab635d63204": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/13/new-york-governor-clears-path-for-robotaxis-everywhere-with-one-notable-exception/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:a4fcda5d09298ec1bddd08c34ff7c7c82983345b": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/13/microsoft-announces-glut-of-new-data-centers-but-says-it-wont-let-your-electricity-bill-go-up/": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "H:cd82e72a07f2b806f1bd7bdc062d01e22edbb446": {
+    "status": "skipped",
+    "ts": 1768402937,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/science/2026/01/epa-makes-it-harder-for-states-tribes-to-block-pipelines/": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "H:e8fbb8ca7f9e5ad08efda81d12d0067f60d908ba": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/cars/2026/01/buttons-in-cars-australian-crash-testers-are-latest-to-require-them/": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "H:7c41b9a27b92843cb21f5cd70931c5dfbd502618": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/cars/2026/01/bmws-first-electric-m-car-is-coming-in-2027-with-one-motor-per-wheel/": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "H:6b79c806f7a799cb30647b5616671930bcf4a056": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/gadgets/2026/01/the-ram-shortages-silver-lining-less-talk-about-ai-pcs/": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "H:fb2765a57f503049f71cc3502b1efe9cc65a0a65": {
+    "status": "skipped",
+    "ts": 1768402938,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/review/hhkb-professional-classic-type-s/": {
+    "status": "skipped",
+    "ts": 1768402939,
+    "reason": "prefiltro"
+  },
+  "H:17545cf534624a76d5f986cb09b3237fe40a36d3": {
+    "status": "skipped",
+    "ts": 1768402939,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/meta-fecha-estudios-de-deadpool-vr-resident-evil-4-vr-e-asgards-wrath/": {
+    "status": "posted",
+    "ts": 1768403657,
+    "posted_ts": 1768403657
+  },
+  "H:4e2389078657727d2b54f51e94ce676f4fc22579": {
+    "status": "posted",
+    "ts": 1768403657,
+    "posted_ts": 1768403657
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246189/youtube-controle-parental-tempo-shorts.html": {
+    "status": "posted",
+    "ts": 1768407587,
+    "posted_ts": 1768407587
+  },
+  "H:072b8d89a7e91671ee79d18347a0d58b8117c6af": {
+    "status": "posted",
+    "ts": 1768407587,
+    "posted_ts": 1768407587
+  },
+  "L:https://www.adrenaline.com.br/hardware/memorias-ddr3-podem-retornar-em-meio-a-crise-de-componentes/": {
+    "status": "posted",
+    "ts": 1768407257,
+    "posted_ts": 1768407257
+  },
+  "H:af74233c8750018a986b7a167c4a9ed42770f571": {
+    "status": "posted",
+    "ts": 1768407257,
+    "posted_ts": 1768407257
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-da-devolver-digital-em-oferta-na-nuuvem-ate-90-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768406468,
+    "reason": "prefiltro"
+  },
+  "H:57cbd4bfc64e216f0d87a19695d9f4c8758326f2": {
+    "status": "skipped",
+    "ts": 1768406468,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/acessorios/noticias/n246188/insta360-lanca-webcams-4k-com-ia.html": {
+    "status": "posted",
+    "ts": 1768406927,
+    "posted_ts": 1768406927
+  },
+  "H:80c7ff1f31f0227ad755e93146541e8ea066e210": {
+    "status": "posted",
+    "ts": 1768406927,
+    "posted_ts": 1768406927
+  },
+  "L:https://www.adrenaline.com.br/microsoft/windows/bloquear-rastreamento-windows-11/": {
+    "status": "posted",
+    "ts": 1768406597,
+    "posted_ts": 1768406597
+  },
+  "H:1d1b36a4893fccee8e39faf99cc159e931a8b9d7": {
+    "status": "posted",
+    "ts": 1768406597,
+    "posted_ts": 1768406597
+  },
+  "L:https://tecnoblog.net/noticias/galaxy-s26-base-pode-ter-suporte-a-carregamento-rapido-aprimorado/": {
+    "status": "posted",
+    "ts": 1768406567,
+    "posted_ts": 1768406567
+  },
+  "H:10c8857ad7f816e6b0c0c9cac3c6ccd97fd30edf": {
+    "status": "posted",
+    "ts": 1768406567,
+    "posted_ts": 1768406567
+  },
+  "L:https://tecnoblog.net/noticias/vovo-vira-youtuber-de-minecraft-para-pagar-tratamento-de-cancer-do-neto/": {
+    "status": "skipped",
+    "ts": 1768406528,
+    "reason": "imagem_invalida"
+  },
+  "H:5a05a63e00ee6b877457a3ad8ba99de8eef6ef72": {
+    "status": "skipped",
+    "ts": 1768406528,
+    "reason": "imagem_invalida"
+  },
+  "L:https://tecnoblog.net/achados/galaxy-z-flip-7-fe-128-gb-possui-55-off-em-oferta-no-magalu/": {
+    "status": "skipped",
+    "ts": 1768406528,
+    "reason": "prefiltro"
+  },
+  "H:0c366365bd642f55c681bcc158db3b860a5236eb": {
+    "status": "skipped",
+    "ts": 1768406528,
+    "reason": "prefiltro"
+  },
+  "L:https://www.theverge.com/tech/849707/dji-neo-2-review-i-guess-im-a-drone-guy-now": {
+    "status": "skipped",
+    "ts": 1768406534,
+    "reason": "prefiltro"
+  },
+  "H:144428094b701592d9aa1875739fd771e354b560": {
+    "status": "skipped",
+    "ts": 1768406534,
+    "reason": "prefiltro"
+  },
+  "L:https://manualdousuario.net/apple-creator-studio/": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "ia"
+  },
+  "H:73e3ba44d1b7f4023aafe498eeaa502606ddf442": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "ia"
+  },
+  "L:https://techcrunch.com/2026/01/14/geminis-new-beta-feature-provides-proactive-responses-based-on-your-photos-emails-and-more/": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "H:bc3c49591b2064146a20d6f5763eae97e6259bff": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/ai-security-firm-depthfirst-announces-40-million-series-a/": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "prefiltro"
+  },
+  "H:99a18554ba8890e17ec79e844d420a8da807c017": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/us-cargo-tech-company-publicly-exposed-its-shipping-systems-and-customer-data-to-the-web/": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "H:2b31ca312d8ef42df0710810705bcdacf2869648": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/youtube-now-has-a-way-for-parents-to-block-kids-from-watching-shorts/": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "H:1b04685c3dd205e4ad07027f4bb54d3a2d507764": {
+    "status": "skipped",
+    "ts": 1768406547,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.theverge.com/games/861760/animal-crossing-new-horizons-update-community-reaction": {
+    "status": "skipped",
+    "ts": 1768406557,
+    "reason": "imagem_invalida"
+  },
+  "H:7d12ccd0c29ee0a518e4f46aba19fb33d1a2fa3c": {
+    "status": "skipped",
+    "ts": 1768406557,
+    "reason": "imagem_invalida"
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246197/steam-initial-drift-gratis.html": {
+    "status": "skipped",
+    "ts": 1768410046,
+    "reason": "prefiltro"
+  },
+  "H:229d5955d2d84000666522c443f3773ee2dae448": {
+    "status": "skipped",
+    "ts": 1768410046,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246187/sony-ps5-pro-pssr-2-0-atualizacao-grafica-fsr4.html": {
+    "status": "posted",
+    "ts": 1768410587,
+    "posted_ts": 1768410587
+  },
+  "H:7175fc2cb3151733f73637e15a5a42a54d860ce5": {
+    "status": "posted",
+    "ts": 1768410587,
+    "posted_ts": 1768410587
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246196/oferta-smart-tv-aoc-s5155-desconto-oferta.html": {
+    "status": "skipped",
+    "ts": 1768410047,
+    "reason": "prefiltro"
+  },
+  "H:89ae85ff06e83b4679da712f4fb6738faa6c353d": {
+    "status": "skipped",
+    "ts": 1768410047,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/intel/resumo-intel-ces-2026-2/": {
+    "status": "posted",
+    "ts": 1768410167,
+    "posted_ts": 1768410167
+  },
+  "H:b766ed1f37b730e7faaef64302299a4cf1a856f2": {
+    "status": "posted",
+    "ts": 1768410167,
+    "posted_ts": 1768410167
+  },
+  "L:https://www.tudocelular.com/asus/noticias/n246194/asus-vivobook-15-ryzen-7-512-gb-por-menos-de-2600.html": {
+    "status": "skipped",
+    "ts": 1768410087,
+    "reason": "ia"
+  },
+  "H:c2bdd13c8fd77a90a9c2e380ac73ce6e5c02b3f7": {
+    "status": "skipped",
+    "ts": 1768410087,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/acessorios/noticias/n246195/bateria-magsafe-do-iphone-air-recebe-update.html": {
+    "status": "skipped",
+    "ts": 1768410087,
+    "reason": "prefiltro"
+  },
+  "H:3eb4852665c6aa4e6f27c04254aecd63127b0a8d": {
+    "status": "skipped",
+    "ts": 1768410087,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/ps-plus-extra-e-deluxe-de-janeiro-recebe-9-jogos-veja-lista/": {
+    "status": "posted",
+    "ts": 1768410257,
+    "posted_ts": 1768410257
+  },
+  "H:516bd4d98a6bd9071ba5b20341eb433384b2aae2": {
+    "status": "posted",
+    "ts": 1768410257,
+    "posted_ts": 1768410257
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246192/google-play-store-8-jogos-gratis-14012026.html": {
+    "status": "skipped",
+    "ts": 1768410127,
+    "reason": "ia"
+  },
+  "H:76d1ec8500f1980be9bd3f0ae24a64139afc4090": {
+    "status": "skipped",
+    "ts": 1768410127,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/eletro/amazon-joga-preco-de-aspirador-electrolux-no-chao-modelo-2-em-1-com-filtro-hepa/": {
+    "status": "skipped",
+    "ts": 1768410128,
+    "reason": "prefiltro"
+  },
+  "H:84e26a65e78d2b4f38e30096bd87be0eefbe3c03": {
+    "status": "skipped",
+    "ts": 1768410128,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/pro/igual-ao-nubank-itau-libera-aumento-de-limite-no-cartao-sem-analise-de-credito-pelo-app/": {
+    "status": "skipped",
+    "ts": 1768410129,
+    "reason": "prefiltro"
+  },
+  "H:ba00e8383c1ef411079304d4a5c5e0eb5fa590bf": {
+    "status": "skipped",
+    "ts": 1768410129,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/bill-gates-backed-type-one-energy-raises-87m-ahead-of-250m-series-b/": {
+    "status": "skipped",
+    "ts": 1768410132,
+    "reason": "sem_imagem"
+  },
+  "H:459eec68fdd6092b8efe865a0c20f778629a7903": {
+    "status": "skipped",
+    "ts": 1768410132,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/robotic-software-maker-skild-ai-hits-14b-valuation/": {
+    "status": "skipped",
+    "ts": 1768410132,
+    "reason": "sem_imagem"
+  },
+  "H:b4036014e8c08dc42efab5b0530f40b7a9c3b8fa": {
+    "status": "skipped",
+    "ts": 1768410132,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.engadget.com/deals/the-first-gen-bose-quietcomfort-ultra-headphones-are-150-off-right-now-164826329.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768410134,
+    "reason": "prefiltro"
+  },
+  "H:03d759beeb0ef63018f43e1fbbe065d92bcf2ce4": {
+    "status": "skipped",
+    "ts": 1768410134,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/responde/o-que-e-microsoft-conheca-a-historia-da-dona-de-windows-e-xbox/": {
+    "status": "posted",
+    "ts": 1768410227,
+    "posted_ts": 1768410227
+  },
+  "H:5679cee7b834cbd0c97b0ed1a8c7dcbea949897d": {
+    "status": "posted",
+    "ts": 1768410227,
+    "posted_ts": 1768410227
+  },
+  "L:https://tecnoblog.net/achados/galaxy-watch-ultra-tem-promocao-imperdivel-com-60-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768410148,
+    "reason": "prefiltro"
+  },
+  "H:30ab70c25f19fcb0674d199fba280a34d31aa378": {
+    "status": "skipped",
+    "ts": 1768410148,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246202/oferta-philips-tat1209-desconto-preco.html": {
+    "status": "skipped",
+    "ts": 1768413647,
+    "reason": "prefiltro"
+  },
+  "H:1407dc0aa456ae0e77f3031ae948b19351bb6a8e": {
+    "status": "skipped",
+    "ts": 1768413647,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246200/samsung-internet-windows-liberado-download-pc.html": {
+    "status": "posted",
+    "ts": 1768414517,
+    "posted_ts": 1768414517
+  },
+  "H:730a459bc911d525f97842d1cb34b3f679c8727a": {
+    "status": "posted",
+    "ts": 1768414517,
+    "posted_ts": 1768414517
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246203/o-preco-despencou-combo-de-teclado-e-mouse-logitech-pop-esta-em-oferta-na-amazon.html": {
+    "status": "skipped",
+    "ts": 1768413648,
+    "reason": "prefiltro"
+  },
+  "H:6c56a587afedb26d981e5dffaf490fcb81a9236c": {
+    "status": "skipped",
+    "ts": 1768413648,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/sid-meiers-civilization-apple-arcade/": {
+    "status": "posted",
+    "ts": 1768413767,
+    "posted_ts": 1768413767
+  },
+  "H:b5394dccc086b3670800c1bb572b206c541a18c8": {
+    "status": "posted",
+    "ts": 1768413767,
+    "posted_ts": 1768413767
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n246201/apple-arcade-civilization-vii-fevereiro.html": {
+    "status": "posted",
+    "ts": 1768413827,
+    "posted_ts": 1768413827
+  },
+  "H:5dfacae1383705adfc4a6d573c4a8b7621aa128a": {
+    "status": "posted",
+    "ts": 1768413827,
+    "posted_ts": 1768413827
+  },
+  "L:https://www.adrenaline.com.br/amd/vendas-do-ryzen-7-9850x3d-comecam-em-29-de-janeiro-diz-site/": {
+    "status": "posted",
+    "ts": 1768413857,
+    "posted_ts": 1768413857
+  },
+  "H:5d87044df40666dc6de44ca4136ec632c01327ed": {
+    "status": "posted",
+    "ts": 1768413857,
+    "posted_ts": 1768413857
+  },
+  "L:https://tecnoblog.net/noticias/linux-mint-22-3-zena-ja-esta-entre-nos-descubra-as-novidades/": {
+    "status": "posted",
+    "ts": 1768414187,
+    "posted_ts": 1768414187
+  },
+  "H:f1803141e105f3868e748bbc47997454a78fadc9": {
+    "status": "posted",
+    "ts": 1768414187,
+    "posted_ts": 1768414187
+  },
+  "L:https://canaltech.com.br/smartphone/magalu-faz-queima-de-celular-samsung-galaxy-a17-baratinho-no-kit-com-fone/": {
+    "status": "skipped",
+    "ts": 1768413728,
+    "reason": "prefiltro"
+  },
+  "H:d66708af6969b65dc8bf0f81cd5d5d8eea63303f": {
+    "status": "skipped",
+    "ts": 1768413728,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/reviews/tv-no-precinho-modelo-da-aoc-de-43-polegadas-tem-desconto-extra-para-quem-paga-no-pix/": {
+    "status": "skipped",
+    "ts": 1768413729,
+    "reason": "prefiltro"
+  },
+  "H:f8f3f72579302029033671747a65b5cba4d05578": {
+    "status": "skipped",
+    "ts": 1768413729,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/bandcamp-takes-a-stand-against-ai-music-banning-it-from-the-platform/": {
+    "status": "skipped",
+    "ts": 1768413733,
+    "reason": "sem_imagem"
+  },
+  "H:8de26c1023885f2b067e06a438653093eb19694c": {
+    "status": "skipped",
+    "ts": 1768413733,
+    "reason": "sem_imagem"
+  },
+  "L:https://manualdousuario.net/viver-sem-whatsapp-brasil/": {
+    "status": "skipped",
+    "ts": 1768413747,
+    "reason": "ia"
+  },
+  "H:13d93a07e28cb4fa8e9612c808e1e7e97fcbf0ac": {
+    "status": "skipped",
+    "ts": 1768413747,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246206/ps-plus-janeiro-2026-resident-evil-village-lista.html": {
+    "status": "posted",
+    "ts": 1768417787,
+    "posted_ts": 1768417787
+  },
+  "H:5e1a60718975bfacffd5461e0bf2d91c23eae322": {
+    "status": "posted",
+    "ts": 1768417787,
+    "posted_ts": 1768417787
+  },
+  "L:https://www.adrenaline.com.br/nvidia/nvidia-vera-rubin-para-ia-pode-consumir-memoria-equivalente-a-ate-150-milhoes-de-celulares/": {
+    "status": "posted",
+    "ts": 1768417368,
+    "posted_ts": 1768417368
+  },
+  "H:09c0bcb5a9f50eb6f6567e607fd82910ef1bbd45": {
+    "status": "posted",
+    "ts": 1768417368,
+    "posted_ts": 1768417368
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246208/fujifilm-lanca-impressora-instax-mini-link-plus.html": {
+    "status": "posted",
+    "ts": 1768418117,
+    "posted_ts": 1768418117
+  },
+  "H:565deb5d6d4e6ff1313b9d386507c9c76ca74502": {
+    "status": "posted",
+    "ts": 1768418117,
+    "posted_ts": 1768418117
+  },
+  "L:https://www.adrenaline.com.br/games/data-de-forza-horizon-6-foi-revelada-por-anuncio-em-seu-antecessor/": {
+    "status": "posted",
+    "ts": 1768417457,
+    "posted_ts": 1768417457
+  },
+  "H:fc9b383565de0da5fe01d20e72c55c40be3cf2e4": {
+    "status": "posted",
+    "ts": 1768417457,
+    "posted_ts": 1768417457
+  },
+  "L:https://tecnoblog.net/noticias/policia-britanica-baseou-estrategia-de-seguranca-em-dado-falso-gerado-por-ia/": {
+    "status": "posted",
+    "ts": 1768417427,
+    "posted_ts": 1768417427
+  },
+  "H:ebbe7e30b1a5653275f595fcaef5f98f693ae0ab": {
+    "status": "posted",
+    "ts": 1768417427,
+    "posted_ts": 1768417427
+  },
+  "L:https://techcrunch.com/2026/01/14/blackstone-general-atlantic-backed-liftoff-mobile-files-for-ipo/": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "H:d5b0e216106e4cb2318d5ad91afefdc2db2b745e": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/digg-launches-its-new-reddit-rival-to-the-public/": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "H:7c8ab781b0ba0c3273e1a58e3f47f1e2c495f940": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/googles-trends-explore-page-gets-new-gemini-capabilities/": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "H:3aacc21bd44803d306693b551400f800d7e98f87": {
+    "status": "skipped",
+    "ts": 1768417335,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/games/primeiro-flop-de-2026-exclusivo-do-ps5-code-violet-e-massacrado/": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "ia"
+  },
+  "H:76541a80868392acf97b0ab28eaf45ae00b8a6b9": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/smartphone/celular-dobravel-da-samsung-com-desconto-z-flip-7-fe-por-menos-de-r-29-mil/": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "prefiltro"
+  },
+  "H:441969cb6bc25c1ca40f68dcdd12e81c2d9df679": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/apps/app-do-itau-ganha-opcao-para-aumentar-o-limite-do-cartao-com-investimentos/": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "prefiltro"
+  },
+  "H:c408fb35ec479e720d3d13a81219f2ff9401e5e2": {
+    "status": "skipped",
+    "ts": 1768417347,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246214/realme-c71-oferta-hoje-mercado-livre-menos-900.html": {
+    "status": "posted",
+    "ts": 1768421987,
+    "posted_ts": 1768421987
+  },
+  "H:5d8b2e1d3f185fe1063482783df464299cbb4552": {
+    "status": "posted",
+    "ts": 1768421987,
+    "posted_ts": 1768421987
+  },
+  "L:https://www.adrenaline.com.br/games/ex-devs-da-zenimax-formam-ironroot-games-depois-de-demissoes-traumaticas/": {
+    "status": "posted",
+    "ts": 1768421327,
+    "posted_ts": 1768421327
+  },
+  "H:80ccd308dffaca784e08698be6f5c302ea59ee1d": {
+    "status": "posted",
+    "ts": 1768421327,
+    "posted_ts": 1768421327
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-na-steam-em-oferta-por-menos-de-r-10-ate-95-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768420868,
+    "reason": "prefiltro"
+  },
+  "H:07ca3ac91d30b75f7bfeb5e29be6537f97478cf6": {
+    "status": "skipped",
+    "ts": 1768420868,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/achados/smart-tv-4k-samsung-65-tem-32-de-desconto-em-oferta-na-amazon/": {
+    "status": "skipped",
+    "ts": 1768420868,
+    "reason": "prefiltro"
+  },
+  "H:60e6fd5310a7b04de900d6d1496d11eccae5beea": {
+    "status": "skipped",
+    "ts": 1768420868,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n204071/melhor-ipad-para-comprar-guia-do-tudocelular.html": {
+    "status": "posted",
+    "ts": 1768421657,
+    "posted_ts": 1768421657
+  },
+  "H:c95ad1ce010379a6937a0156f605db6086b72939": {
+    "status": "posted",
+    "ts": 1768421657,
+    "posted_ts": 1768421657
+  },
+  "L:https://tecnoblog.net/noticias/microsoft-coloca-ultima-pa-de-cal-no-windows-server-2008/": {
+    "status": "posted",
+    "ts": 1768420967,
+    "posted_ts": 1768420967
+  },
+  "H:12e63ba811b4a26281622173f6a4494673c0178f": {
+    "status": "posted",
+    "ts": 1768420967,
+    "posted_ts": 1768420967
+  },
+  "L:https://canaltech.com.br/seguranca/malware-nativo-da-nuvem-ameaca-sistemas-linux/": {
+    "status": "posted",
+    "ts": 1768420997,
+    "posted_ts": 1768420997
+  },
+  "H:1ea712e01cfdaa3a29823635ef9f8961d321c23e": {
+    "status": "posted",
+    "ts": 1768420997,
+    "posted_ts": 1768420997
+  },
+  "L:https://canaltech.com.br/carros/veja-quais-carros-podem-ficar-mais-baratos-com-acordo-entre-ue-e-mercosul/": {
+    "status": "skipped",
+    "ts": 1768420928,
+    "reason": "prefiltro"
+  },
+  "H:82cf6fb248b02050053d26500e3bfb2bb8569e7b": {
+    "status": "skipped",
+    "ts": 1768420928,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/ai-models-are-starting-to-crack-high-level-math-problems/": {
+    "status": "skipped",
+    "ts": 1768420934,
+    "reason": "sem_imagem"
+  },
+  "H:a82af98f961e62149dfb87ff333538dea7fe6619": {
+    "status": "skipped",
+    "ts": 1768420934,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/reviews/airpods-pro-3-em-oferta-fone-da-apple-com-cancelamento-de-ruido-a-um-preco-especial/": {
+    "status": "skipped",
+    "ts": 1768420947,
+    "reason": "ia"
+  },
+  "H:292c031570fe70827995d090919b9b0543e1f5e5": {
+    "status": "skipped",
+    "ts": 1768420947,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246220/microsoft-copilot-alucina-e-policia-britanica-deixa-passar-erro-grave-no-futebol-europeu.html": {
+    "status": "posted",
+    "ts": 1768424627,
+    "posted_ts": 1768424627
+  },
+  "H:71269ed446aa095ee70e0f15bbd43981b101b7f0": {
+    "status": "posted",
+    "ts": 1768424627,
+    "posted_ts": 1768424627
+  },
+  "L:https://www.adrenaline.com.br/games/gta-online-ganha-marketplace-oficial-de-mods-que-custam-ate-r-21-mil/": {
+    "status": "posted",
+    "ts": 1768424777,
+    "posted_ts": 1768424777
+  },
+  "H:65289b46f0fb8eb5e1a4521879d743aa8a13f0cd": {
+    "status": "posted",
+    "ts": 1768424777,
+    "posted_ts": 1768424777
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/jogos-de-playstation-em-oferta-por-menos-de-r-40-veja-lista-13/": {
+    "status": "skipped",
+    "ts": 1768424468,
+    "reason": "prefiltro"
+  },
+  "H:be792ceecdb22bd66d744b04c801781d06f1d704": {
+    "status": "skipped",
+    "ts": 1768424468,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246215/google-trends-integracao-gemini-explorar.html": {
+    "status": "posted",
+    "ts": 1768424687,
+    "posted_ts": 1768424687
+  },
+  "H:7951046d906140fd54ef8ef2dc73dc39dbb3d1b8": {
+    "status": "posted",
+    "ts": 1768424687,
+    "posted_ts": 1768424687
+  },
+  "L:https://manualdousuario.net/links-do-dia-20260114/": {
+    "status": "skipped",
+    "ts": 1768424488,
+    "reason": "sem_imagem"
+  },
+  "H:82ae90186eebfd46754707c6ea8925cfcea37511": {
+    "status": "skipped",
+    "ts": 1768424488,
+    "reason": "sem_imagem"
+  },
+  "L:https://tecnoblog.net/noticias/wine-11-0-chega-para-melhorar-execucao-de-softwares-windows-no-linux/": {
+    "status": "posted",
+    "ts": 1768425107,
+    "posted_ts": 1768425107
+  },
+  "H:7f837c4ab86bfbb799f5d463a6077c0cf35499b0": {
+    "status": "posted",
+    "ts": 1768425107,
+    "posted_ts": 1768425107
+  },
+  "L:https://canaltech.com.br/hardware/gpus-rtx-50-de-8-gb-sao-o-foco-da-nvidia-de-agora-em-diante/": {
+    "status": "posted",
+    "ts": 1768424747,
+    "posted_ts": 1768424747
+  },
+  "H:fc5b61821b0255e15ca84e40d9ab56a4b56afdd6": {
+    "status": "posted",
+    "ts": 1768424747,
+    "posted_ts": 1768424747
+  },
+  "L:https://olhardigital.com.br/2026/01/14/reviews/robo-aspirador-em-oferta-confira-um-modelo-capaz-de-facilitar-a-faxina-da-sua-casa/": {
+    "status": "skipped",
+    "ts": 1768424528,
+    "reason": "prefiltro"
+  },
+  "H:87927242c5f44d86837f6df4e7b983237d49c0dc": {
+    "status": "skipped",
+    "ts": 1768424528,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/14/netflixs-first-original-video-podcasts-feature-pete-davidson-and-michael-irvin/": {
+    "status": "skipped",
+    "ts": 1768424532,
+    "reason": "sem_imagem"
+  },
+  "H:ce0aac069561d5893117534803e3ad1ce02d9789": {
+    "status": "skipped",
+    "ts": 1768424532,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/app-downloads-declined-again-in-2025-but-consumer-spending-soared-to-nearly-156b/": {
+    "status": "skipped",
+    "ts": 1768424532,
+    "reason": "sem_imagem"
+  },
+  "H:3c5fa5bc163ca21855361e5c62499f73023935dc": {
+    "status": "skipped",
+    "ts": 1768424532,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.engadget.com/deals/save-up-to-78-percent-on-expressvpn-two-year-plans-right-now-180602838.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768424534,
+    "reason": "prefiltro"
+  },
+  "H:ca77712230d6ae579bd1198f6abcac0a90caf4cb": {
+    "status": "skipped",
+    "ts": 1768424534,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/gemini-podera-acessar-gmail-fotos-e-busca-para-personalizar-respostas/": {
+    "status": "posted",
+    "ts": 1768424568,
+    "posted_ts": 1768424568
+  },
+  "H:b614106925034a2068ffb8a9ceca876e15d72737": {
+    "status": "posted",
+    "ts": 1768424568,
+    "posted_ts": 1768424568
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n246226/apple-creative-studio-icones-diferentes-apps.html": {
+    "status": "posted",
+    "ts": 1768434827,
+    "posted_ts": 1768434827
+  },
+  "H:049948f23874d97bdf6e2a600a586c3812d91f4e": {
+    "status": "posted",
+    "ts": 1768434827,
+    "posted_ts": 1768434827
+  },
+  "L:https://tecnoblog.net/noticias/youtube-amplia-controle-parental-sobre-shorts-para-contas-de-adolescentes/": {
+    "status": "skipped",
+    "ts": 1768434524,
+    "reason": "imagem_invalida"
+  },
+  "H:bd9ef80711763054828fab20611f673a8c449ccd": {
+    "status": "skipped",
+    "ts": 1768434524,
+    "reason": "imagem_invalida"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246224/samsung-galaxy-ai-gratis-2026-confirmado-detalhes.html": {
+    "status": "posted",
+    "ts": 1768436177,
+    "posted_ts": 1768436177
+  },
+  "H:ac05f787158160af4b25ea88a5bd525b71aedfc8": {
+    "status": "posted",
+    "ts": 1768436177,
+    "posted_ts": 1768436177
+  },
+  "L:https://tecnoblog.net/achados/volta-as-aulas-notebook-acer-aspire-go-15-tem-25-off-no-mercado-livre/": {
+    "status": "skipped",
+    "ts": 1768434563,
+    "reason": "ia"
+  },
+  "H:260bf4b5e5f0caa00d8de53f9496740419c105a7": {
+    "status": "skipped",
+    "ts": 1768434563,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/seguranca/microsoft-conserta-100-vulnerabilidades-no-windows-incluindo-3-zero-day/": {
+    "status": "queued",
+    "ts": 1768434583,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768438800
+  },
+  "H:98bbda53eb2ec7014ab42c620256f32f9a67e9e3": {
+    "status": "queued",
+    "ts": 1768434583,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768438800
+  },
+  "L:https://olhardigital.com.br/2026/01/14/ciencia-e-espaco/astronautas-deixam-estacao-espacial-em-primeira-evacuacao-medica-de-emergencia-da-historia/": {
+    "status": "posted",
+    "ts": 1768434857,
+    "posted_ts": 1768434857
+  },
+  "H:8589bb893a672665cb3b436a1680d121a9530450": {
+    "status": "posted",
+    "ts": 1768434857,
+    "posted_ts": 1768434857
+  },
+  "L:https://techcrunch.com/2026/01/14/musk-denies-awareness-of-grok-sexual-underage-images-as-california-ag-launches-probe/": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "sem_imagem"
+  },
+  "H:921ada9d1b676b14e173f1b225cfeac189352f72": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/openai-signs-deal-reportedly-worth-10-billion-for-compute-from-cerebras/": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "sem_imagem"
+  },
+  "H:b5465bf9e19348d6e3c5ad924b66ee6a02a9c312": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/tech-policy/2026/01/us-govt-house-sysadmin-stole-200-phones-caught-by-house-it-desk/": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "prefiltro"
+  },
+  "H:3f4208bebd342f656a2b808986ff48236e687c94": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/gadgets/2026/01/federal-data-underscores-meteoric-rise-of-streaming-subscription-prices-in-2025/": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "prefiltro"
+  },
+  "H:cfae92872c0ee9c40936ff27fed988514ed10cb0": {
+    "status": "skipped",
+    "ts": 1768434610,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/hardware/proteja-suas-memorias-ddr5-ladrao-invade-empresa-e-rouba-128-gb/": {
+    "status": "queued",
+    "ts": 1768434623,
+    "urgente": true,
+    "importante": false,
+    "published_ts": 1768429800
+  },
+  "H:ddef2c230949ca74c3b30eca0be7be5080f50734": {
+    "status": "queued",
+    "ts": 1768434623,
+    "urgente": true,
+    "importante": false,
+    "published_ts": 1768429800
+  },
+  "L:https://www.tudocelular.com/seguranca/noticias/n246225/recusar-chamadas-spam-confirma-numero-ativo.html": {
+    "status": "posted",
+    "ts": 1768436507,
+    "posted_ts": 1768436507
+  },
+  "H:82bb443d92e20a57a2e0d20b721f03456420e0c7": {
+    "status": "posted",
+    "ts": 1768436507,
+    "posted_ts": 1768436507
+  },
+  "L:https://canaltech.com.br/inteligencia-artificial/o-gemini-sera-a-nova-ia-do-iphone-veja-como-sera-a-parceria-com-o-google/": {
+    "status": "posted",
+    "ts": 1768434767,
+    "posted_ts": 1768434767
+  },
+  "H:ef418ca5da2b9879bb6d98d67d027f924e628392": {
+    "status": "posted",
+    "ts": 1768434767,
+    "posted_ts": 1768434767
+  },
+  "L:https://www.tudocelular.com/planos/noticias/n246216/euphoria-3-temporada-trailer-salto-temporal.html": {
+    "status": "skipped",
+    "ts": 1768434683,
+    "reason": "ia"
+  },
+  "H:4c71f39e7b801cc1f1de4de020d97e7c0b988f8f": {
+    "status": "skipped",
+    "ts": 1768434683,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246183/analise-tecno-pova-7-4g-review.html": {
+    "status": "skipped",
+    "ts": 1768434683,
+    "reason": "prefiltro"
+  },
+  "H:ac440725963bac453a9a5ada6eec3a46f60ce37a": {
+    "status": "skipped",
+    "ts": 1768434683,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/ciencia-e-espaco/buracos-negros-atuam-como-gangorras-cosmicas-moldando-o-universo-diz-estudo/": {
+    "status": "posted",
+    "ts": 1768435187,
+    "posted_ts": 1768435187
+  },
+  "H:f4d5bcf1b71c98fcdcc062bb991c4ab25a07fdba": {
+    "status": "posted",
+    "ts": 1768435187,
+    "posted_ts": 1768435187
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246221/god-of-war-ator-que-interpretara-krato-amazon.html": {
+    "status": "skipped",
+    "ts": 1768434723,
+    "reason": "ia"
+  },
+  "H:9b5d9e0933a5a67384815b2cc36fcb2675db9fcf": {
+    "status": "skipped",
+    "ts": 1768434723,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/ciencia-e-espaco/nasa-garante-vai-construir-uma-usina-nuclear-na-lua-ate-2030/": {
+    "status": "posted",
+    "ts": 1768435517,
+    "posted_ts": 1768435517
+  },
+  "H:e923fcf79d0f19e22267e98740f80132096ba5a2": {
+    "status": "posted",
+    "ts": 1768435517,
+    "posted_ts": 1768435517
+  },
+  "L:https://olhardigital.com.br/2026/01/14/seguranca/microsoft-derruba-servico-de-golpes-que-usava-ia-para-causou-prejuizo-milionario/": {
+    "status": "posted",
+    "ts": 1768435367,
+    "posted_ts": 1768435367
+  },
+  "H:d1733daf4f1b695d03fa124634921d5f83972f99": {
+    "status": "posted",
+    "ts": 1768435367,
+    "posted_ts": 1768435367
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/14/meta-corta-1500-cargos-da-area-de-metaverso-diz-jornal.ghtml": {
+    "status": "posted",
+    "ts": 1768435488,
+    "posted_ts": 1768435488
+  },
+  "H:6d0927db8a9557f838a568a7140100a54a391f29": {
+    "status": "posted",
+    "ts": 1768435488,
+    "posted_ts": 1768435488
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/14/musk-defende-grok-e-diz-que-ia-se-recusa-a-produzir-imagens-ilegais.ghtml": {
+    "status": "posted",
+    "ts": 1768435427,
+    "posted_ts": 1768435427
+  },
+  "H:163314cbf74045d4ca1c5c18be27efacb709e287": {
+    "status": "posted",
+    "ts": 1768435427,
+    "posted_ts": 1768435427
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246227/nothing-phone-4a-armazenamento-preco-lancamento.html": {
+    "status": "posted",
+    "ts": 1768435847,
+    "posted_ts": 1768435847
+  },
+  "H:b190f4ccea70167f655a0c67814fc4c7305bb0ce": {
+    "status": "posted",
+    "ts": 1768435847,
+    "posted_ts": 1768435847
+  },
+  "L:https://arstechnica.com/culture/2026/01/pentagons-arsenal-of-freedom-tour-borrows-name-from-star-trek-episode-about-killer-ai/": {
+    "status": "skipped",
+    "ts": 1768435310,
+    "reason": "prefiltro"
+  },
+  "H:d70eb437e306e15df0d1ae5b34b932d526f9e65d": {
+    "status": "skipped",
+    "ts": 1768435310,
+    "reason": "prefiltro"
+  },
+  "L:https://www.theverge.com/gadgets/862274/elgato-stream-deck-plus-controller-deal-sale": {
+    "status": "skipped",
+    "ts": 1768435329,
+    "reason": "ia"
+  },
+  "H:af1342c14dc04a13b076426ce18f027058c3bdd0": {
+    "status": "skipped",
+    "ts": 1768435329,
+    "reason": "ia"
+  },
+  "L:https://arstechnica.com/health/2026/01/sc-measles-outbreak-has-gone-berserk-124-cases-since-friday-409-quarantined/": {
+    "status": "skipped",
+    "ts": 1768435349,
+    "reason": "ia"
+  },
+  "H:0a6b4dba43c830bdbd12c645fe15f60d054ddd1f": {
+    "status": "skipped",
+    "ts": 1768435349,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246229/ia-agora-consegue-resolver-matematica-alto-nivel.html": {
+    "status": "posted",
+    "ts": 1768439387,
+    "posted_ts": 1768439387
+  },
+  "H:190b708f20f00d113a529d56c9c7b923876fed97": {
+    "status": "posted",
+    "ts": 1768439387,
+    "posted_ts": 1768439387
+  },
+  "L:https://olhardigital.com.br/2026/01/14/internet-e-redes-sociais/resultado-da-lotofacil-de-hoje-veja-numeros-e-ganhadores-do-concurso-3587-quarta-14-01/": {
+    "status": "skipped",
+    "ts": 1768438851,
+    "reason": "sem_imagem"
+  },
+  "H:aa000d4ec1e22dfeb580cfc2d7681b9e22fe20fc": {
+    "status": "skipped",
+    "ts": 1768438851,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/14/internet-e-redes-sociais/resultado-da-quina-de-hoje-veja-numeros-e-ganhadores-do-concurso-6927-quarta-14-01/": {
+    "status": "skipped",
+    "ts": 1768438851,
+    "reason": "sem_imagem"
+  },
+  "H:442f69703af4ee463e2fe65794a5f5c0d2ce37eb": {
+    "status": "skipped",
+    "ts": 1768438851,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246228/samsung-mobile-gaming-hub-recomendacoes-jogos.html": {
+    "status": "posted",
+    "ts": 1768439717,
+    "posted_ts": 1768439717
+  },
+  "H:4b82a72b9c4b2f6b4c9a84e36315550ec3aa6f28": {
+    "status": "posted",
+    "ts": 1768439717,
+    "posted_ts": 1768439717
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/14/grok-medidas-edicao-de-imagens.ghtml": {
+    "status": "posted",
+    "ts": 1768438967,
+    "posted_ts": 1768438967
+  },
+  "H:d79913fe00f5b8fefd738093f227cd043602de97": {
+    "status": "posted",
+    "ts": 1768438967,
+    "posted_ts": 1768438967
+  },
+  "L:https://www.theverge.com/news/862372/x-grok-ai-policy-update-deepfake-bikini-poses": {
+    "status": "skipped",
+    "ts": 1768438907,
+    "reason": "ia"
+  },
+  "H:834256b06d707b43bc7bc2350ddb5e66576f5f77": {
+    "status": "skipped",
+    "ts": 1768438907,
+    "reason": "ia"
+  },
+  "L:https://g1.globo.com/economia/noticia/2026/01/14/trump-tarifa-chips-de-ia.ghtml": {
+    "status": "posted",
+    "ts": 1768439027,
+    "posted_ts": 1768439027
+  },
+  "H:f7ef32d0e51621301c73d82da633a63a7fc433b6": {
+    "status": "posted",
+    "ts": 1768439027,
+    "posted_ts": 1768439027
+  },
+  "L:https://techcrunch.com/2026/01/14/the-ftcs-data-sharing-order-against-gm-is-finally-settled/": {
+    "status": "skipped",
+    "ts": 1768438928,
+    "reason": "sem_imagem"
+  },
+  "H:5c1854e11caf7b63233ef5ca8d56910a4b69fd72": {
+    "status": "skipped",
+    "ts": 1768438928,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/indias-emversity-doubles-valuation-as-it-scales-workers-ai-cant-replace/": {
+    "status": "skipped",
+    "ts": 1768438928,
+    "reason": "sem_imagem"
+  },
+  "H:fda9afb58c914f8cfd7492916c20e91c45ee456c": {
+    "status": "skipped",
+    "ts": 1768438928,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.theverge.com/news/861956/verizon-is-down-outage-cell-wireless-service-sos-mode": {
+    "status": "posted",
+    "ts": 1768439059,
+    "posted_ts": 1768439059
+  },
+  "H:db0ff811bf999efcd33424622f40ea4229507b07": {
+    "status": "posted",
+    "ts": 1768439059,
+    "posted_ts": 1768439059
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n245552/pocom85g-m8pro-lancamento-promocao-aliexpress.html": {
+    "status": "skipped",
+    "ts": 1768480569,
+    "reason": "prefiltro"
+  },
+  "H:4137beebe35055afa9f8a719cc1bb7954468a095": {
+    "status": "skipped",
+    "ts": 1768480569,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246248/casio-baby-g-hibrido-design-neon-resistencia.html": {
+    "status": "posted",
+    "ts": 1768481379,
+    "posted_ts": 1768481379
+  },
+  "H:f81739fc98d73c55bf6ef58ef585466c6fd17f4d": {
+    "status": "posted",
+    "ts": 1768481379,
+    "posted_ts": 1768481379
+  },
+  "L:https://www.adrenaline.com.br/games/monster-hunter-wilds-comprar-dlcs-pode-melhorar-desempenho-do-jogo-no-pc/": {
+    "status": "posted",
+    "ts": 1768480720,
+    "posted_ts": 1768480720
+  },
+  "H:f0ac7bfcd09ae33f067969a1cad32c6d001510b0": {
+    "status": "posted",
+    "ts": 1768480720,
+    "posted_ts": 1768480720
+  },
+  "L:https://www.tudocelular.com/ios/noticias/n246247/whatsapp-muda-visual-dos-links-no-iphone.html": {
+    "status": "posted",
+    "ts": 1768481710,
+    "posted_ts": 1768481710
+  },
+  "H:30418628bab569505506fa28b4e8ea1c5e82b1c1": {
+    "status": "posted",
+    "ts": 1768481710,
+    "posted_ts": 1768481710
+  },
+  "L:https://www.adrenaline.com.br/nvidia/nvidia-libera-o-dlss-4-5-super-resolution-atualize-agora/": {
+    "status": "posted",
+    "ts": 1768480690,
+    "posted_ts": 1768480690
+  },
+  "H:e06e4e665db8d9e6b19a1bad748ad06c66d41231": {
+    "status": "posted",
+    "ts": 1768480690,
+    "posted_ts": 1768480690
+  },
+  "L:https://tecnoblog.net/noticias/honor-pode-lancar-celular-com-superbateria-no-brasil/": {
+    "status": "posted",
+    "ts": 1768481049,
+    "posted_ts": 1768481049
+  },
+  "H:e4036cd3779a64ee17f736282d3f7f43238ee6a3": {
+    "status": "posted",
+    "ts": 1768481049,
+    "posted_ts": 1768481049
+  },
+  "L:https://olhardigital.com.br/2026/01/15/internet-e-redes-sociais/jogos-de-hoje-15-01-26-onde-assistir-futebol-ao-vivo-e-horarios-das-partidas/": {
+    "status": "skipped",
+    "ts": 1768480651,
+    "reason": "sem_imagem"
+  },
+  "H:aff5acaf89d619a4aea54249387137a6e8cfeb36": {
+    "status": "skipped",
+    "ts": 1768480651,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/ciencia-e-espaco/por-que-animais-mesmo-sexo-fazem-sexo/": {
+    "status": "skipped",
+    "ts": 1768480651,
+    "reason": "prefiltro"
+  },
+  "H:06d0e061ca6e186458c9397274ec1026da3dca72": {
+    "status": "skipped",
+    "ts": 1768480651,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/after-italy-whatsapp-excludes-brazil-from-rival-chatbot-ban/": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "H:d289604d464a7e50357200d7a0abfba940a768cf": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/etherealx-jumps-5-5x-in-valuation-on-spacex-style-reuse-bet-from-india/": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "H:2221d354c51746220121d4eab1efa63f08fb33a9": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/microsoft-taps-indias-varaha-for-asia-first-durable-carbon-removal-offtake/": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "H:6113e1a7dfe2f3ccacbbd4ec7913a4715f08b9ef": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/14/mira-muratis-startup-thinking-machines-lab-is-losing-two-of-its-co-founders-to-openai/": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "H:2de1bb05f76e4da1fb693ea99e62617f659f463e": {
+    "status": "skipped",
+    "ts": 1768480655,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.wired.com/review/asus-rog-falcata/": {
+    "status": "skipped",
+    "ts": 1768480657,
+    "reason": "prefiltro"
+  },
+  "H:9e4ea235b9b72afa15fbeda1c8ce71d3de03ff62": {
+    "status": "skipped",
+    "ts": 1768480657,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/games/ator-que-interpretara-kratos-na-serie-de-god-of-war-e-escolhido/": {
+    "status": "skipped",
+    "ts": 1768480669,
+    "reason": "ia"
+  },
+  "H:1c0312be26c04e4581ba95a9e31b7ca90384bb59": {
+    "status": "skipped",
+    "ts": 1768480669,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/seguranca/noticias/n246260/celulares-ilegais-anatel-impede-vendas-e-lacra-r-12-mil-em-produtos.html": {
+    "status": "posted",
+    "ts": 1768484649,
+    "posted_ts": 1768484649
+  },
+  "H:8a8a15d2992a3e40ab59b5ca8279e6229a97e2f2": {
+    "status": "posted",
+    "ts": 1768484649,
+    "posted_ts": 1768484649
+  },
+  "L:https://www.adrenaline.com.br/intel/core-ultra-200k-plus-e-200hx-plus-podem-chegar-em-marco-ou-abril-como-aposta-da-intel-contra-a-amd/": {
+    "status": "posted",
+    "ts": 1768484289,
+    "posted_ts": 1768484289
+  },
+  "H:aba6bca64a4b04fd9a0ba244fdfe47a5ab081211": {
+    "status": "posted",
+    "ts": 1768484289,
+    "posted_ts": 1768484289
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246258/linux-wine-nova-atualizacao-jogos.html": {
+    "status": "posted",
+    "ts": 1768484980,
+    "posted_ts": 1768484980
+  },
+  "H:9b0eaedf42bc11c1298e444e82c05a254c36ba78": {
+    "status": "posted",
+    "ts": 1768484980,
+    "posted_ts": 1768484980
+  },
+  "L:https://tecnoblog.net/achados/iphone-16-256-gb-tem-39-off-na-melhor-oferta-desde-de-novembro/": {
+    "status": "skipped",
+    "ts": 1768484210,
+    "reason": "prefiltro"
+  },
+  "H:8f2bf219593e017e9d4a81aa2a746e52835b0254": {
+    "status": "skipped",
+    "ts": 1768484210,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/hardware/amd-intel-cpu-servidor-precos/": {
+    "status": "skipped",
+    "ts": 1768484230,
+    "reason": "ia"
+  },
+  "H:ab964cc3c8cb415df688461010d01d717cf4f601": {
+    "status": "skipped",
+    "ts": 1768484230,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/noticias/opera-lanca-one-r3-navegador-com-chatbot-que-entende-videos-do-youtube/": {
+    "status": "posted",
+    "ts": 1768484319,
+    "posted_ts": 1768484319
+  },
+  "H:3889fe6f12e6e6232281ef7010ed7ba859bcd3fe": {
+    "status": "posted",
+    "ts": 1768484319,
+    "posted_ts": 1768484319
+  },
+  "L:https://olhardigital.com.br/2026/01/15/reviews/produtividade-e-conforto-mouse-vertical-da-logitech-esta-com-desconto-especial/": {
+    "status": "skipped",
+    "ts": 1768484251,
+    "reason": "prefiltro"
+  },
+  "H:16a105ca1dc8a8d0ecb41b7fd12fa6ab6b793a22": {
+    "status": "skipped",
+    "ts": 1768484251,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/bully-online-e-tirado-do-ar-somente-um-mes-apos-sua-estreia/": {
+    "status": "skipped",
+    "ts": 1768484270,
+    "reason": "ia"
+  },
+  "H:1d119f9eb6245c545d75927e341eca77b89a62ed": {
+    "status": "skipped",
+    "ts": 1768484270,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/hp-colocou-um-pc-inteiro-dentro-de-um-teclado/": {
+    "status": "skipped",
+    "ts": 1768484270,
+    "reason": "prefiltro"
+  },
+  "H:08b05f2032d3b649583ced038ab1ec994145b753": {
+    "status": "skipped",
+    "ts": 1768484270,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246270/usuarios-acusam-samsung-de-capar-rastreadores.html": {
+    "status": "skipped",
+    "ts": 1768487770,
+    "reason": "ia"
+  },
+  "H:f122f363708e36cebad5ac2731ea507cbb59e0f7": {
+    "status": "skipped",
+    "ts": 1768487770,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/seguranca/documentario-revela-como-abusadores-aliciam-jovens-em-jogos-online-como-roblox/": {
+    "status": "posted",
+    "ts": 1768487920,
+    "posted_ts": 1768487920
+  },
+  "H:bd65d674b71f43ed4cd01a5ae85234c51f28bc05": {
+    "status": "posted",
+    "ts": 1768487920,
+    "posted_ts": 1768487920
+  },
+  "L:https://www.adrenaline.com.br/games/nintendo/pre-venda-mario-tennis-fever-midia-fisica-para-nintendo-switch-2/": {
+    "status": "skipped",
+    "ts": 1768487790,
+    "reason": "prefiltro"
+  },
+  "H:9c69c8397d5b9ef609ea408c28287d61ee6f12c6": {
+    "status": "skipped",
+    "ts": 1768487790,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246261/android-16-qpr3-beta-2-celulares-google-pixel.html": {
+    "status": "posted",
+    "ts": 1768487889,
+    "posted_ts": 1768487889
+  },
+  "H:8df88dfc451af6f5c41aa706eb0ecde4bf88f303": {
+    "status": "posted",
+    "ts": 1768487889,
+    "posted_ts": 1768487889
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246266/xiaomi-lanca-alto-falante-sound-2-pro-novidades.html": {
+    "status": "skipped",
+    "ts": 1768487810,
+    "reason": "prefiltro"
+  },
+  "H:cd8eb964e77c6227238a3e3899e53d1b75e236f9": {
+    "status": "skipped",
+    "ts": 1768487810,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/motorola-prepara-chegada-do-dobravel-razr-70-ao-brasil/": {
+    "status": "posted",
+    "ts": 1768488250,
+    "posted_ts": 1768488250
+  },
+  "H:c9e9d0e789427bc6a0c92335ac39ac12fe659970": {
+    "status": "posted",
+    "ts": 1768488250,
+    "posted_ts": 1768488250
+  },
+  "L:https://tecnoblog.net/achados/galaxy-s25-plus-512-gb-tem-54-de-desconto-com-cupom-no-magalu/": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "prefiltro"
+  },
+  "H:793ec37206bdff9ce41b2c17975c29e45cea491c": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/raspberry-pi-anuncia-placa-ai-hat-2-com-40-tops-para-ia-preco-e-alto/": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "prefiltro"
+  },
+  "H:8d9ee9749020ac03a2ab8de34da5f07e44ca9d34": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/achados/iphone-16e-256-gb-fica-36-mais-barato-em-oferta-na-amazon/": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "imagem_invalida"
+  },
+  "H:84a6121e65297814d99b2165c60fca5633223208": {
+    "status": "skipped",
+    "ts": 1768487830,
+    "reason": "imagem_invalida"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246267/realme-16-5g-vaza-com-espelho-traseiro-para-facilitar-selfies.html": {
+    "status": "posted",
+    "ts": 1768488579,
+    "posted_ts": 1768488579
+  },
+  "H:6ada0c84820f992309f8e1bc4cbb155e9d292fd8": {
+    "status": "posted",
+    "ts": 1768488579,
+    "posted_ts": 1768488579
+  },
+  "L:https://canaltech.com.br/smartphone/magalu-da-desconto-no-galaxy-s25-plus-veja-como-usar-o-cupom/": {
+    "status": "skipped",
+    "ts": 1768487850,
+    "reason": "prefiltro"
+  },
+  "H:2b64c01b2ee3106fe34a90bd86d3702b387cab48": {
+    "status": "skipped",
+    "ts": 1768487850,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/carros/degradacao-da-bateria-dos-carros-eletricos-e-mais-lenta-do-que-se-pensava/": {
+    "status": "skipped",
+    "ts": 1768487850,
+    "reason": "prefiltro"
+  },
+  "H:e9680f9d48ca550d8b80fd0ef271699e12c58dd4": {
+    "status": "skipped",
+    "ts": 1768487850,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/reviews/smartphone-em-promocao-samsung-galaxy-com-256-gb-tem-desconto-extra-no-pix/": {
+    "status": "skipped",
+    "ts": 1768487851,
+    "reason": "prefiltro"
+  },
+  "H:45971ca4bfcb42a20686e5f4bc0fef38eb168592": {
+    "status": "skipped",
+    "ts": 1768487851,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/spotify-raises-its-subscription-prices-in-the-u-s-again/": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "prefiltro"
+  },
+  "H:36fca14ab874cca71cc3e45841fb2d0e23a28305": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/parloa-triples-its-valuation-in-8-months-to-3b-with-350m-raise/": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "sem_imagem"
+  },
+  "H:fa1e15a42596fd9f26678c28ddae7146b6c03a2b": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/tiger-global-loses-india-tax-case-tied-to-walmart-flipkart-deal-in-blow-to-offshore-playbook/": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "sem_imagem"
+  },
+  "H:8c770676de0e45bdbd117229f9b92143b447814a": {
+    "status": "skipped",
+    "ts": 1768487855,
+    "reason": "sem_imagem"
+  },
+  "L:https://manualdousuario.net/oto-music-tocador-mp3-android/": {
+    "status": "skipped",
+    "ts": 1768487870,
+    "reason": "ia"
+  },
+  "H:10ef00085c93a8f1b94dadd95adbbb42119abe9c": {
+    "status": "skipped",
+    "ts": 1768487870,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/planos/noticias/n246279/spotify-lanca-novo-visual-telas-grandes-android.html": {
+    "status": "posted",
+    "ts": 1768491850,
+    "posted_ts": 1768491850
+  },
+  "H:c0b9dc472c93838c213e5f54f6daa064974f3358": {
+    "status": "posted",
+    "ts": 1768491850,
+    "posted_ts": 1768491850
+  },
+  "L:https://www.adrenaline.com.br/games/agora-independente-gog-vai-apostar-na-publicacao-de-games-e-no-linux/": {
+    "status": "posted",
+    "ts": 1768491520,
+    "posted_ts": 1768491520
+  },
+  "H:fc713b07c18a57048223822112a158c672156f56": {
+    "status": "posted",
+    "ts": 1768491520,
+    "posted_ts": 1768491520
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-da-capcom-em-oferta-na-nuuvem-ate-88-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768491390,
+    "reason": "prefiltro"
+  },
+  "H:a99994d89a83387c1e3158065b692f7fe251b3db": {
+    "status": "skipped",
+    "ts": 1768491390,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/windows-phone/noticias/n246278/lenovo-yoga-slim-7i-oferta-cupom-ate-21x-sem-juros.html": {
+    "status": "skipped",
+    "ts": 1768491409,
+    "reason": "ia"
+  },
+  "H:1624adf472d607b8de5972a702e38d3b5549fb01": {
+    "status": "skipped",
+    "ts": 1768491409,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/nvidia/nvidia-adiciona-star-wars-outlaws-e-mais-jogos-ao-geforce-now-nesta-semana/": {
+    "status": "posted",
+    "ts": 1768491489,
+    "posted_ts": 1768491489
+  },
+  "H:28d545901881814b245070df913eeb193f6f15c9": {
+    "status": "posted",
+    "ts": 1768491489,
+    "posted_ts": 1768491489
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246277/prime-video-lara-croft-tomb-raider-primeiras-fotos.html": {
+    "status": "skipped",
+    "ts": 1768491450,
+    "reason": "ia"
+  },
+  "H:4df627fc95bfbf0b58158102c8cdd1cd542af993": {
+    "status": "skipped",
+    "ts": 1768491450,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/madden-nfl-26-esta-de-graca-no-nintendo-switch-2-por-tempo-limitado/": {
+    "status": "skipped",
+    "ts": 1768491451,
+    "reason": "prefiltro"
+  },
+  "H:c9388c3112bc36b0a02e2b846947c15cbe16dbbd": {
+    "status": "skipped",
+    "ts": 1768491451,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/wikimedia-foundation-announces-new-ai-partnerships-with-amazon-meta-microsoft-perplexity-and-others/": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "H:a7650bc1e7006c33600370dfc004421e7a1f2093": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/how-one-startup-is-using-probiotics-to-try-and-ease-the-copper-shortage/": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "H:32d05397f9a411e06f82a795e669bac03748d63f": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/us-senators-demand-answers-from-x-meta-alphabet-on-sexualized-deepfakes/": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "H:e592072bf7859be7bd6a057240b0db8abe34e02d": {
+    "status": "skipped",
+    "ts": 1768491456,
+    "reason": "sem_imagem"
+  },
+  "L:https://tecnoblog.net/noticias/imprensa-dos-eua-processa-google-por-monopolio-em-anuncios/": {
+    "status": "skipped",
+    "ts": 1768491470,
+    "reason": "ia"
+  },
+  "H:1a67db64f63589f5ff37c4ee738cfbd658e9d4ba": {
+    "status": "skipped",
+    "ts": 1768491470,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246284/xbox-game-pass-retro-classics-janeiro-2026.html": {
+    "status": "posted",
+    "ts": 1768495779,
+    "posted_ts": 1768495779
+  },
+  "H:742e195dc7a3f6f18960159868e9280f227d3f4b": {
+    "status": "posted",
+    "ts": 1768495779,
+    "posted_ts": 1768495779
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-para-pc-da-franquia-styx-de-graca-hoje-resgate-agora/": {
+    "status": "posted",
+    "ts": 1768495119,
+    "posted_ts": 1768495119
+  },
+  "H:01356d5d3017e69d3ec877f89fa79ed6bbe9631f": {
+    "status": "posted",
+    "ts": 1768495119,
+    "posted_ts": 1768495119
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246280/azahar-emulador-3ds-android-atualizacao-2124-lag.html": {
+    "status": "posted",
+    "ts": 1768496109,
+    "posted_ts": 1768496109
+  },
+  "H:c1150dcbceabacad10aac2ef8a40a32b1ffe2abf": {
+    "status": "posted",
+    "ts": 1768496109,
+    "posted_ts": 1768496109
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/ps5-pro-pssr-2-0-classicos/": {
+    "status": "posted",
+    "ts": 1768495449,
+    "posted_ts": 1768495449
+  },
+  "H:c408440d1ba04db258af4836c3993682b22c3852": {
+    "status": "posted",
+    "ts": 1768495449,
+    "posted_ts": 1768495449
+  },
+  "L:https://tecnoblog.net/noticias/microsoft-abre-mais-um-codigo-fonte-agora-o-do-xaml-studio/": {
+    "status": "posted",
+    "ts": 1768495089,
+    "posted_ts": 1768495089
+  },
+  "H:9e3c84e91db72bb49e743b7c5633efd292423cdb": {
+    "status": "posted",
+    "ts": 1768495089,
+    "posted_ts": 1768495089
+  },
+  "L:https://techcrunch.com/2026/01/15/openai-invests-in-sam-altmans-brain-computer-interface-startup-merge-labs/": {
+    "status": "skipped",
+    "ts": 1768495057,
+    "reason": "sem_imagem"
+  },
+  "H:0cda5109a66f56d1c3039337593e4ce7f1826a90": {
+    "status": "skipped",
+    "ts": 1768495057,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/how-one-startup-is-using-prebiotics-to-try-and-ease-the-copper-shortage/": {
+    "status": "skipped",
+    "ts": 1768495057,
+    "reason": "sem_imagem"
+  },
+  "H:b6c0551323ddc2e670b3d23f2748c8803c5f86c5": {
+    "status": "skipped",
+    "ts": 1768495057,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/games/batman-arkham-shadow-2-e-cancelado-e-estudio-passa-por-demissoes-em-massa/": {
+    "status": "posted",
+    "ts": 1768496441,
+    "posted_ts": 1768496441
+  },
+  "H:c1c1f3c32895d8d4487f18f9208cf292bacf4a6c": {
+    "status": "posted",
+    "ts": 1768496441,
+    "posted_ts": 1768496441
+  },
+  "L:https://canaltech.com.br/carros/eletrico-barato-da-byd-agora-tem-sensor-lidar-e-aumento-na-potencia/": {
+    "status": "skipped",
+    "ts": 1768495070,
+    "reason": "prefiltro"
+  },
+  "H:5a71c6ca010febf0aba51fa10c76df613a288501": {
+    "status": "skipped",
+    "ts": 1768495070,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246294/subway-surfers-city-lancamento-android-ios.html": {
+    "status": "posted",
+    "ts": 1768499049,
+    "posted_ts": 1768499049
+  },
+  "H:bd4c30fb6abdc3a8ba96ac2ad8d9cb8031f6a895": {
+    "status": "posted",
+    "ts": 1768499049,
+    "posted_ts": 1768499049
+  },
+  "L:https://www.adrenaline.com.br/games/falat-fury-city-of-the-wolves-temporada-2/": {
+    "status": "posted",
+    "ts": 1768498719,
+    "posted_ts": 1768498719
+  },
+  "H:73659846bf8fbe0762bae4a182dee28372c89bf9": {
+    "status": "posted",
+    "ts": 1768498719,
+    "posted_ts": 1768498719
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246292/samsung-one-ui-85-problemas-dobraveis.html": {
+    "status": "posted",
+    "ts": 1768499379,
+    "posted_ts": 1768499379
+  },
+  "H:d70d8eaa650e972ad6afb38d6ce71da6e5d50743": {
+    "status": "posted",
+    "ts": 1768499379,
+    "posted_ts": 1768499379
+  },
+  "L:https://www.adrenaline.com.br/games/sega-sonic-35-anos/": {
+    "status": "skipped",
+    "ts": 1768498630,
+    "reason": "ia"
+  },
+  "H:afa2cc837e074e412cfbcc95d831267d570bdbb1": {
+    "status": "skipped",
+    "ts": 1768498630,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-na-steam-em-oferta-por-menos-de-r-20-ate-90-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768498630,
+    "reason": "prefiltro"
+  },
+  "H:c7113f6ddcba9a0ea9230faecf2e1e4e1344e4ec": {
+    "status": "skipped",
+    "ts": 1768498630,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/google-testa-integracao-de-ia-no-chrome-para-android/": {
+    "status": "posted",
+    "ts": 1768498691,
+    "posted_ts": 1768498691
+  },
+  "H:8ac8d168cbefa58b419e0466eed08a8bd2b0f7ab": {
+    "status": "posted",
+    "ts": 1768498691,
+    "posted_ts": 1768498691
+  },
+  "L:https://tecnoblog.net/achados/galaxy-s24-fe-tem-oferta-com-50-off-por-ate-12x-sem-juros-no-aliexpress/": {
+    "status": "skipped",
+    "ts": 1768498650,
+    "reason": "prefiltro"
+  },
+  "H:a34910ee678fe61fb84a0dabf157dd9730c47257": {
+    "status": "skipped",
+    "ts": 1768498650,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/reviews/para-o-home-office-confira-uma-impressora-a-laser-oferta-especial/": {
+    "status": "skipped",
+    "ts": 1768498653,
+    "reason": "prefiltro"
+  },
+  "H:4a630e0b6fc7eb2f46d92f074005dd5c33ce3b59": {
+    "status": "skipped",
+    "ts": 1768498653,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/cinema-e-streaming/cinema-lancamentos-de-filmes-da-semana-15-de-janeiro/": {
+    "status": "skipped",
+    "ts": 1768498653,
+    "reason": "sem_imagem"
+  },
+  "H:4ead3a1f007751e5b06cd1424da3a290146791be": {
+    "status": "skipped",
+    "ts": 1768498653,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/the-us-imposes-25-tariff-on-nvidias-h200-ai-chips-headed-to-china/": {
+    "status": "skipped",
+    "ts": 1768498661,
+    "reason": "sem_imagem"
+  },
+  "H:83b3c37fa017599f58d54561128cb0aa0b0af770": {
+    "status": "skipped",
+    "ts": 1768498661,
+    "reason": "sem_imagem"
+  },
+  "L:https://manualdousuario.net/celular-alberto-barbosa/": {
+    "status": "skipped",
+    "ts": 1768498670,
+    "reason": "ia"
+  },
+  "H:8dcac5d52f78d744b8999016b36272f07b068ffe": {
+    "status": "skipped",
+    "ts": 1768498670,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/xbox/jogos-de-xbox-em-oferta-por-menos-de-r-20-veja-lista-8/": {
+    "status": "skipped",
+    "ts": 1768502169,
+    "reason": "prefiltro"
+  },
+  "H:6a3b2c0e4f5b21b4fba85f78d24b11425aa1d579": {
+    "status": "skipped",
+    "ts": 1768502169,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246295/google-pixel-10a-lancado-mais-tarde.html": {
+    "status": "posted",
+    "ts": 1768502290,
+    "posted_ts": 1768502290
+  },
+  "H:29259f6e3111b7e44c0064a72a96a50288e37882": {
+    "status": "posted",
+    "ts": 1768502290,
+    "posted_ts": 1768502290
+  },
+  "L:https://www.adrenaline.com.br/games/clair-obscur-pode-perder-a-coroa-do-metacritc-para-um-dos-piores-jogos-do-nintendo-ds/": {
+    "status": "skipped",
+    "ts": 1768502190,
+    "reason": "ia"
+  },
+  "H:6d04820e3586e88103b0f1edbdf0b8f79ad92274": {
+    "status": "skipped",
+    "ts": 1768502190,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246293/epic-games-store-mobile-jogo-sucesso-gratis-janeir.html": {
+    "status": "skipped",
+    "ts": 1768502210,
+    "reason": "ia"
+  },
+  "H:3f86b2dc7157c092ef5ee5b9442874f645cc8b33": {
+    "status": "skipped",
+    "ts": 1768502210,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246290/oferta-power-bank-basike-ba-pow078-10000-mah.html": {
+    "status": "skipped",
+    "ts": 1768502210,
+    "reason": "prefiltro"
+  },
+  "H:8a3ddf754aa1077c38cef7167eeb2f45353145ac": {
+    "status": "skipped",
+    "ts": 1768502210,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/smart-tv/como-otimizar-a-imagem-das-tvs-tcl-para-games/": {
+    "status": "posted",
+    "ts": 1768502319,
+    "posted_ts": 1768502319
+  },
+  "H:bd73cb03ce4bca36025177e2184580aba7d4cc86": {
+    "status": "posted",
+    "ts": 1768502319,
+    "posted_ts": 1768502319
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246288/harry-potter-hbo-compositor-hans-zimmer.html": {
+    "status": "skipped",
+    "ts": 1768502250,
+    "reason": "ia"
+  },
+  "H:732b3dbd28658d09835e3ea3d9bbb2a7819b6195": {
+    "status": "skipped",
+    "ts": 1768502250,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/eletro/samsung-joga-preco-de-ar-condicionado-sem-vento-de-18000-no-chao-veja-parcelas/": {
+    "status": "skipped",
+    "ts": 1768502253,
+    "reason": "prefiltro"
+  },
+  "H:51b892fef75c92861710a6c9d568a87467aae54d": {
+    "status": "skipped",
+    "ts": 1768502253,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/mobile/gigabyte-tambem-pensa-em-fazer-um-portatil-mas-quer-oferecer-algo-diferente/": {
+    "status": "posted",
+    "ts": 1768502649,
+    "posted_ts": 1768502649
+  },
+  "H:5610ea3a151821a84794a2aab0da8e9065ef9555": {
+    "status": "posted",
+    "ts": 1768502649,
+    "posted_ts": 1768502649
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246318/opera-gx-linux-lancamento-oficial-navegador-gamer.html": {
+    "status": "posted",
+    "ts": 1768521156,
+    "posted_ts": 1768521156
+  },
+  "H:c2bd5ce746b474af360e66fdc20eda11303777fd": {
+    "status": "posted",
+    "ts": 1768521156,
+    "posted_ts": 1768521156
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246273/tronsmart-halo-300-analise-review.html": {
+    "status": "skipped",
+    "ts": 1768521036,
+    "reason": "prefiltro"
+  },
+  "H:c0f8a346f9e93c63a2a1122fbd1ceca3854c89bc": {
+    "status": "skipped",
+    "ts": 1768521036,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/showcase-resident-evil-requiem-jogabilidade/": {
+    "status": "posted",
+    "ts": 1768521185,
+    "posted_ts": 1768521185
+  },
+  "H:84dfeff89ffac718b0a7911f09fea1e7d53df065": {
+    "status": "posted",
+    "ts": 1768521185,
+    "posted_ts": 1768521185
+  },
+  "L:https://www.tudocelular.com/android/noticias/n200249/melhor-smart-tv-compacta-comprar-guia-tudocelular.html": {
+    "status": "skipped",
+    "ts": 1768521076,
+    "reason": "ia"
+  },
+  "H:275efe19d973eda0c31b92e92b7b163771cc1cfb": {
+    "status": "skipped",
+    "ts": 1768521076,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/valorant-por-que-resistimos/": {
+    "status": "skipped",
+    "ts": 1768521095,
+    "reason": "ia"
+  },
+  "H:a21b2e946ab4fdf5a72fa73e2b609cb10f54c881": {
+    "status": "skipped",
+    "ts": 1768521095,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246309/paramount-warner-bros-discovery-julgamento-justica.html": {
+    "status": "skipped",
+    "ts": 1768521115,
+    "reason": "ia"
+  },
+  "H:757525bc4e7cc4186f7a92d39e3d343d3bb4c93a": {
+    "status": "skipped",
+    "ts": 1768521115,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/achados/volta-as-aulas-monitor-lg-24-full-hd-de-180-hz-tem-43-off-em-ate-10x/": {
+    "status": "skipped",
+    "ts": 1768521120,
+    "reason": "prefiltro"
+  },
+  "H:f10aa5ccead7cb00eada1246342cd039527fb4bf": {
+    "status": "skipped",
+    "ts": 1768521120,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/the-ai-lab-revolving-door-spins-ever-faster/": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "H:6e483f027e212534fd21e9ad3825feb0c293c4e6": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/taiwan-to-invest-250b-in-us-semiconductor-manufacturing/": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "H:1ff2de306093b2bfcb92731f9658fe0e41d0ffc3": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/ai-video-startup-higgsfield-founded-by-ex-snap-exec-lands-1-3b-valuation/": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "H:e000241920a3b0e112d28ef3b7e476872812afb2": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/irans-internet-shutdown-is-now-one-of-its-longest-ever-as-protests-continue/": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "H:7ad7638d8fb445332adaacf1a0df9602e58993dc": {
+    "status": "skipped",
+    "ts": 1768521132,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/gadgets/2026/01/spotify-to-raise-subscription-prices-by-up-to-2-in-february/": {
+    "status": "skipped",
+    "ts": 1768521133,
+    "reason": "prefiltro"
+  },
+  "H:e13feb781af16a8dee980ccfca2258fca9f4812f": {
+    "status": "skipped",
+    "ts": 1768521133,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/hardware/promocao-msi-gpu-rtx-5090-lightning/": {
+    "status": "skipped",
+    "ts": 1768521135,
+    "reason": "ia"
+  },
+  "H:f083b7476148be5a728dfda8290d8be63940bc1d": {
+    "status": "skipped",
+    "ts": 1768521135,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/jogos-de-playstation-em-oferta-por-menos-de-r-45-veja-lista-12/": {
+    "status": "skipped",
+    "ts": 1768521136,
+    "reason": "prefiltro"
+  },
+  "H:91fddfb7ef0ee8c7f0f4e1766b12b83d16822d86": {
+    "status": "skipped",
+    "ts": 1768521136,
+    "reason": "prefiltro"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/cisco_fixes_cve_2025_20393/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:01b342017686b1ab596578ce064f44718e660a53": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/sifive_nvidia_nvlink/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:42f76a051bf97786e3d173ab2338ea6f2962f50e": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/half_ai_projects_shelved/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:c8c1b9f0fbfcf214b4be621c865d5fb1dfc54562": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/chinese_spies_used_maduros_capture/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:c09472bcf6a60ee3ae65dd49309f4735a801d70b": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/stackwarp_bug_amd_cpus/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:d0ec487fda83fe9c1185a034f5229966b3e8f171": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/15/oracle_faces_class_action_over/": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "H:b842c56395d086e545227fca0fb04eac11f358a3": {
+    "status": "skipped",
+    "ts": 1768521152,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246319/raspberry-pi-ai-hat-2-ia-generativa-local.html": {
+    "status": "posted",
+    "ts": 1768522160,
+    "posted_ts": 1768522160
+  },
+  "H:a4f7fe6258d43b2516ec9f0fd66107f9241561be": {
+    "status": "posted",
+    "ts": 1768522160,
+    "posted_ts": 1768522160
+  },
+  "L:https://www.adrenaline.com.br/games/anthem-pode-voltar-ao-ar-servidores-privados-parecem-ser-possibilidade/": {
+    "status": "skipped",
+    "ts": 1768522029,
+    "reason": "games_irrelevante"
+  },
+  "H:2bba6c0fe341610e7a6f4a1eef9c325ce829673b": {
+    "status": "skipped",
+    "ts": 1768522029,
+    "reason": "games_irrelevante"
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n145210/melhor-tv-box-para-comprar.html": {
+    "status": "skipped",
+    "ts": 1768522049,
+    "reason": "ia"
+  },
+  "H:8fd8239b6e1640e7909f9923511b34505ea067c5": {
+    "status": "skipped",
+    "ts": 1768522049,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/codigos-clash-royale-de-janeiro-de-2026-como-resgatar-gratis/": {
+    "status": "skipped",
+    "ts": 1768522069,
+    "reason": "ia"
+  },
+  "H:70b03a19d47949fa3a8281ff7843addc092eb234": {
+    "status": "skipped",
+    "ts": 1768522069,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/roblox-raiva-e-revolucao-protestos-virtuais-no-jogo-atacam-restricao-de-idade/": {
+    "status": "skipped",
+    "ts": 1768522089,
+    "reason": "ia"
+  },
+  "H:8e5c586a064cf05fd97c56f00d4f89d30361d77a": {
+    "status": "skipped",
+    "ts": 1768522089,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/metas-layoffs-supernatural-fitness-users/": {
+    "status": "skipped",
+    "ts": 1768522109,
+    "reason": "ia"
+  },
+  "H:42af3da9673f03e805a619dcab09253406967806": {
+    "status": "skipped",
+    "ts": 1768522109,
+    "reason": "ia"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/gootloader-now-uses-1-000-part-zip-archives-for-stealthy-delivery/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:ef90efece4d42e3638ddbb79fe3d0d31b1567ba2": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/grubhub-confirms-hackers-stole-data-in-recent-security-breach/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:ab99c20ecb755fc6c9bff19d04ca00780665efe9": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/hackers-exploit-modular-ds-wordpress-plugin-flaw-for-admin-access/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:114070cfe0de8980b1d655bd724e0c017068936c": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/mobile/verizon-blames-nationwide-outage-on-a-software-issue/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:ac2347bb0edee88f686922f5755b6c254fccc1a3": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/microsoft/microsoft-copilot-studio-extension-for-vs-code-now-publicly-available/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:43db7d5b21a0203c0ffac4332209f61b8da425bd": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/critical-flaw-lets-hackers-track-eavesdrop-via-bluetooth-audio-devices/": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "H:77867aaedf66b6745cbcc054cc518d3e8417640e": {
+    "status": "skipped",
+    "ts": 1768522116,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246320/deezer-novo-aplicativo-android-tv-experiencia-2026.html": {
+    "status": "posted",
+    "ts": 1768523315,
+    "posted_ts": 1768523315
+  },
+  "H:eeef5120873b3fb804521ec2a5c393cc26b2b456": {
+    "status": "posted",
+    "ts": 1768523315,
+    "posted_ts": 1768523315
+  },
+  "L:https://olhardigital.com.br/2026/01/15/inteligencia-artificial/openai-aposta-em-interface-cerebro-computador/": {
+    "status": "posted",
+    "ts": 1768523345,
+    "posted_ts": 1768523345
+  },
+  "H:8ecac83d820e701469c31986f474b9dc160fb407": {
+    "status": "posted",
+    "ts": 1768523345,
+    "posted_ts": 1768523345
+  },
+  "L:https://canaltech.com.br/games/classico-slashout-sera-jogavel-em-yakuza-kiwami-3-dark-ties/": {
+    "status": "skipped",
+    "ts": 1768523206,
+    "reason": "games_irrelevante"
+  },
+  "H:9509833f8d38499eeffbdec88507109cd2641fb5": {
+    "status": "skipped",
+    "ts": 1768523206,
+    "reason": "games_irrelevante"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/ciencia-e-espaco/o-anel-de-ouro-com-jesus-que-uma-mulher-comum-perdeu-na-suecia-ha-600-anos/": {
+    "status": "skipped",
+    "ts": 1768523227,
+    "reason": "ia"
+  },
+  "H:4e270eaa2b266f713baf451a4c6a88dc59231e74": {
+    "status": "skipped",
+    "ts": 1768523227,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/seguranca/microsoft-copilot-entra-na-mira-de-ciberataques-com-roubo-de-dados/": {
+    "status": "skipped",
+    "ts": 1768523246,
+    "reason": "ia"
+  },
+  "H:ed5d23880fcab26560278b3c47dd972b83277774": {
+    "status": "skipped",
+    "ts": 1768523246,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/15/ciencia-e-espaco/geologos-ouvem-o-batimento-cardiaco-da-terra-sob-a-africa-que-esta-partindo-o-continente/": {
+    "status": "skipped",
+    "ts": 1768523266,
+    "reason": "ia"
+  },
+  "H:c7b4b8dee00eefe92d697343753de6e8c7063dce": {
+    "status": "skipped",
+    "ts": 1768523266,
+    "reason": "ia"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/chatgpt-is-now-more-reliable-at-finding-and-remembering-your-past-chat/": {
+    "status": "skipped",
+    "ts": 1768523279,
+    "reason": "sem_imagem"
+  },
+  "H:f2d776b323af40c1f43318b5fecf14ecba7f6159": {
+    "status": "skipped",
+    "ts": 1768523279,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/openai_merge_labs_brain_interface_investment/": {
+    "status": "skipped",
+    "ts": 1768523284,
+    "reason": "sem_imagem"
+  },
+  "H:b3b293bbbd8b871ec7b3e55ebe6e6246d6db8fa5": {
+    "status": "skipped",
+    "ts": 1768523284,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246350/redmi-15-com-bateria-infinita-aparece-com-grande-desconto-em-oferta-do-mercado-livre.html": {
+    "status": "skipped",
+    "ts": 1768571226,
+    "reason": "prefiltro"
+  },
+  "H:445a0e8e898abac665f88142af83db9d9d852461": {
+    "status": "skipped",
+    "ts": 1768571226,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/asus/noticias/n246348/asus-desmente-fim-rtx-5070-ti.html": {
+    "status": "posted",
+    "ts": 1768571436,
+    "posted_ts": 1768571436
+  },
+  "H:5fbeb568b6c6f518aab48e05774371d992ea3f38": {
+    "status": "posted",
+    "ts": 1768571436,
+    "posted_ts": 1768571436
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246349/samsung-galaxy-s25-oferta-topo-linha-compacto.html": {
+    "status": "skipped",
+    "ts": 1768571227,
+    "reason": "prefiltro"
+  },
+  "H:3cfe1e7c7a52585b52aaa00309f526ed7819ec34": {
+    "status": "skipped",
+    "ts": 1768571227,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246340/tecno-spark-go-3-chamadas-offline-tela-120hz.html": {
+    "status": "skipped",
+    "ts": 1768571227,
+    "reason": "prefiltro"
+  },
+  "H:188da9ce79ae09750dad9c5acfe630ae0fc57135": {
+    "status": "skipped",
+    "ts": 1768571227,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/final-fantasy-vii-remake-vai-ganhar-grande-update-no-pc-e-no-ps5/": {
+    "status": "skipped",
+    "ts": 1768571247,
+    "reason": "games_irrelevante"
+  },
+  "H:20aa630038e19b70b85be83fdcfa3bc456600e99": {
+    "status": "skipped",
+    "ts": 1768571247,
+    "reason": "games_irrelevante"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246347/google-mudar-endereco-gmail-sem-perder-dados.html": {
+    "status": "posted",
+    "ts": 1768571406,
+    "posted_ts": 1768571406
+  },
+  "H:822ef4aa8a58c7d0824aea6276ed9adc964432c6": {
+    "status": "posted",
+    "ts": 1768571406,
+    "posted_ts": 1768571406
+  },
+  "L:https://www.adrenaline.com.br/games/servidores-de-new-world-aeternum-serao-desligados-em-janeiro-de-2027/": {
+    "status": "skipped",
+    "ts": 1768571287,
+    "reason": "games_irrelevante"
+  },
+  "H:992dca216544f34ac5c6fbff3791e3707614f682": {
+    "status": "skipped",
+    "ts": 1768571287,
+    "reason": "games_irrelevante"
+  },
+  "L:https://tecnoblog.net/noticias/bug-faz-windows-11-reiniciar-em-vez-de-desligar-apos-atualizacao/": {
+    "status": "posted",
+    "ts": 1768571347,
+    "posted_ts": 1768571347
+  },
+  "H:fb20eb33d7601164dc1704b0efeade6e0df78987": {
+    "status": "posted",
+    "ts": 1768571347,
+    "posted_ts": 1768571347
+  },
+  "L:https://canaltech.com.br/smartwatch/novo-g-shock-chega-ao-brasil-com-design-inspirado-em-arte-japonesa-veja/": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "H:952925cdb8e8c2b0c03093872bcd05cba618f8f8": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/produtos/xiaomi-lanca-caixa-de-som-hi-fi-com-preco-acessivel-veja-as-especificacoes/": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "H:26a3d7d1867192fc2e11e89d62095de4dd01eaed": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/reviews/com-cancelamento-de-ruido-e-audio-de-alta-qualidade-fones-qcy-melobuds-pro-em-oferta/": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "H:9e20cacef9e508d488b416c3b96a5035ab5edcba": {
+    "status": "skipped",
+    "ts": 1768571310,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/reviews/tablet-com-caneta-lenovo-idea-tab-de-11-polegadas-tem-desconto-extra-no-pix/": {
+    "status": "skipped",
+    "ts": 1768571311,
+    "reason": "prefiltro"
+  },
+  "H:69c8db1ef7faf88c16fc21132840988f0739818c": {
+    "status": "skipped",
+    "ts": 1768571311,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/15/anthropic-taps-former-microsoft-india-md-to-lead-bengaluru-expansion/": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "H:a0a2f3b3cd41b617bdca417d7825a9168f6e492e": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/silicon-valleys-messiest-breakout-is-definitely-headed-to-court/": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "H:a56c905f365b1e14d925876fff45c281e4b0c578": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/15/ai-journalism-startup-symbolic-ai-signs-deal-with-rupert-murdochs-news-corp/": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "H:29e9e725840ec0d1e228ad736d418906c2a41cb4": {
+    "status": "skipped",
+    "ts": 1768571319,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.wired.com/story/how-does-the-hive-mind-work-in-pluribus/": {
+    "status": "skipped",
+    "ts": 1768571321,
+    "reason": "prefiltro"
+  },
+  "H:eb999dbe159088bd29d8f541f277f1ee1d5d47b7": {
+    "status": "skipped",
+    "ts": 1768571321,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/review/dji-action-6/": {
+    "status": "skipped",
+    "ts": 1768571321,
+    "reason": "prefiltro"
+  },
+  "H:c08756901f791bf0de6bb0d9607a5de437447b35": {
+    "status": "skipped",
+    "ts": 1768571321,
+    "reason": "prefiltro"
+  },
+  "L:https://www.engadget.com/deals/disney-and-hulu-deal-get-the-bundle-for-only-10-for-one-month-192814913.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768571322,
+    "reason": "prefiltro"
+  },
+  "H:f80f4733ccdc1a63733f8e6f95dd7afb8b432c9e": {
+    "status": "skipped",
+    "ts": 1768571322,
+    "reason": "prefiltro"
+  },
+  "L:https://www.engadget.com/social-media/tiktok-tightens-age-verification-across-europe-130000847.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768571323,
+    "reason": "prefiltro"
+  },
+  "H:1d6f8ba65718548f05ce2cce24f63f2ac2791616": {
+    "status": "skipped",
+    "ts": 1768571323,
+    "reason": "prefiltro"
+  },
+  "L:https://www.bleepingcomputer.com/news/microsoft/microsoft-windows-11-update-causes-outlook-freezes-for-pop-users/": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "H:995b01f855e90952126173d530f72c86c5d228de": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/hackers-now-exploiting-critical-fortinet-fortisiem-vulnerability-in-attacks/": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "H:eaaa797bf411d06bf358062654bdde17423655ca": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/cisco-finally-fixes-asyncos-zero-day-exploited-since-november/": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "H:feb84cf680c4a36bad2dd5890b59bdf0cc83f5a3": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/microsoft-some-windows-pcs-fail-to-shut-down-after-january-update/": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "H:bc128b3fe3e2e23292cbd8c46c43ba108d4c9ba1": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/technology/google-now-lets-you-change-your-gmailcom-address-rolling-out/": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "H:6ad2b5db2ac95845e88ed06c1c1eb568a47d3087": {
+    "status": "skipped",
+    "ts": 1768571324,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/jogar-games-excessivamente-pode-prejudicar-sua-saude-afirma-novo-estudo/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "ia"
+  },
+  "H:7c443aba6abbd893ab27806e0d0978978efdebf6": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "ia"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/ftc_trump_mobile/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:f5168914e9a29267c137eb0d075d1ff53d9cbbf2": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/rondodox_botnet_hpe_oneview/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:0471055cd0bdfd6343676125173bae79df94c345": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/nasa_science_budget/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:7683d6a9e811166d92706d41322b56cc7832d32d": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/datacenter_lifecycle_study/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:50b82a71ca652b46b0512bbd4ac0736012eb6e3b": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/bankrupt_scooter_startup_key/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:683821a5a92c359547c08cfa00d988acf335ff55": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/linus_torvalds_vibe_coding/": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "H:ff407639885df2944f2fd7e134400b062632df78": {
+    "status": "skipped",
+    "ts": 1768571327,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246359/enem-2025-resultado-notas.html": {
+    "status": "skipped",
+    "ts": 1768574748,
+    "reason": "ia"
+  },
+  "H:693d0a7d90db04e3dea9f069f953c98d5db26655": {
+    "status": "skipped",
+    "ts": 1768574748,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/precos-de-hdds-aumentaram-em-media-46-nos-ultimos-meses/": {
+    "status": "skipped",
+    "ts": 1768574768,
+    "reason": "ia"
+  },
+  "H:331409c0d3cdd7b80618f06cafc77f4ec77a2cf1": {
+    "status": "skipped",
+    "ts": 1768574768,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246354/samsung-internet-one-ui-8-5-uso-uma-mao.html": {
+    "status": "queued",
+    "ts": 1768574788,
+    "urgente": false,
+    "importante": false,
+    "published_ts": 1768563060
+  },
+  "H:e5f2217312456b67f297c9349571baf49372e3cb": {
+    "status": "queued",
+    "ts": 1768574788,
+    "urgente": false,
+    "importante": false,
+    "published_ts": 1768563060
+  },
+  "L:https://www.adrenaline.com.br/microsoft/extensao-microslop-microsoft/": {
+    "status": "posted",
+    "ts": 1768574868,
+    "posted_ts": 1768574868
+  },
+  "H:da04ad5f573d887bfb3a6cc1b7ac9cd9262ad52f": {
+    "status": "posted",
+    "ts": 1768574868,
+    "posted_ts": 1768574868
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246358/vivo-x300-ultra-promete-ser-rei-das-cameras.html": {
+    "status": "queued",
+    "ts": 1768574828,
+    "urgente": false,
+    "importante": true,
+    "published_ts": 1768562640
+  },
+  "H:68432511f6a9bf8d1990be840a808392a7ba067e": {
+    "status": "queued",
+    "ts": 1768574828,
+    "urgente": false,
+    "importante": true,
+    "published_ts": 1768562640
+  },
+  "L:https://tecnoblog.net/achados/ar-condicionado-samsung-inverter-windfree-ai-12-000-btus-cai-14-com-cupom/": {
+    "status": "skipped",
+    "ts": 1768574832,
+    "reason": "prefiltro"
+  },
+  "H:cc79c6927e1d9f879ced05afc3f4c7e9f30f03e8": {
+    "status": "skipped",
+    "ts": 1768574832,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/veiculos/reduzir-velocidade-para-olhar-acidente-em-rodovias-pode-virar-infracao-grave/": {
+    "status": "skipped",
+    "ts": 1768574834,
+    "reason": "prefiltro"
+  },
+  "H:1466184d62517ecc5c0ec00c9db1fa059c09dff2": {
+    "status": "skipped",
+    "ts": 1768574834,
+    "reason": "prefiltro"
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/16/ia-ajuda-a-resolver-misterio-de-alpinista-desaparecido-e-vira-esperanca-para-equipes-de-resgate-em-montanhas.ghtml": {
+    "status": "skipped",
+    "ts": 1768574835,
+    "reason": "prefiltro"
+  },
+  "H:62d9035b1945a1af0ebcfa65a611e2ffc50aa130": {
+    "status": "skipped",
+    "ts": 1768574835,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/16/the-rise-of-micro-apps-non-developers-are-writing-apps-instead-of-buying-them/": {
+    "status": "skipped",
+    "ts": 1768574838,
+    "reason": "sem_imagem"
+  },
+  "H:fabae294d7f363d2fd2f5a490aaf0e5acd751b0b": {
+    "status": "skipped",
+    "ts": 1768574838,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/asus/asus-nao-vai-descontinuar-a-rtx-5070-ti-diz-seu-novo-comunicado-oficial/": {
+    "status": "posted",
+    "ts": 1768574898,
+    "posted_ts": 1768574898
+  },
+  "H:7b9bcfc1bd3536046cd502fbf0c851a3a4678916": {
+    "status": "posted",
+    "ts": 1768574898,
+    "posted_ts": 1768574898
+  },
+  "L:https://www.cisa.gov/news-events/ics-advisories/icsa-26-015-01": {
+    "status": "skipped",
+    "ts": 1768574849,
+    "reason": "sem_imagem"
+  },
+  "H:ca33bbc7d461328d70b7e6ca5476cf5c7b11fc2f": {
+    "status": "skipped",
+    "ts": 1768574849,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/meta_quest_horizon_workrooms/": {
+    "status": "skipped",
+    "ts": 1768574852,
+    "reason": "sem_imagem"
+  },
+  "H:a5765188f42d3dcf2e74cbb4f55744da501d473d": {
+    "status": "skipped",
+    "ts": 1768574852,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/hyperscales_and_vendor_fund_trillion/": {
+    "status": "skipped",
+    "ts": 1768574852,
+    "reason": "sem_imagem"
+  },
+  "H:e5a4ec35db0411c13bb7a2f133bc355399976b8b": {
+    "status": "skipped",
+    "ts": 1768574852,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-da-ubisoft-em-oferta-na-nuuvem-ate-85-de-desconto-5/": {
+    "status": "skipped",
+    "ts": 1768576696,
+    "reason": "prefiltro"
+  },
+  "HS:46ed035675cbf3822c7bc1630e8241f1f14b5e8a": {
+    "status": "skipped",
+    "ts": 1768576696,
+    "reason": "prefiltro"
+  },
+  "HG:be7c3aaff575b51a518e97600fc242cddb585741": {
+    "status": "skipped",
+    "ts": 1768576696,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246362/samsung-galaxy-s26-plus-vazamento-design-bordas.html": {
+    "status": "posted",
+    "ts": 1768576877,
+    "posted_ts": 1768576877
+  },
+  "HS:b5622a980caf07c6bdb8af2df544006f55dddd0b": {
+    "status": "posted",
+    "ts": 1768576877,
+    "posted_ts": 1768576877
+  },
+  "HG:e1ee0420cd49ec9156fd02c646c99a7bfeb823eb": {
+    "status": "posted",
+    "ts": 1768576877,
+    "posted_ts": 1768576877
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246363/com-30000-mah-powerbank-basike-oferta-menos-de-170.html": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "prefiltro"
+  },
+  "HS:276ec79d8755ba5d12f262cdebdac205032fe61d": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "prefiltro"
+  },
+  "HG:c74f82f72d7fd975a6e417d50c3854bc5931e074": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/pesquisadores-acham-falha-em-protocolo-usado-por-diversos-fones-de-ouvido/": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "imagem_invalida"
+  },
+  "HS:73438d71c7addd2804e705202f0c5e3a3118fa0c": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "imagem_invalida"
+  },
+  "HG:3d776dde0a0f889098d681ca4be1e46ecf76960c": {
+    "status": "skipped",
+    "ts": 1768576697,
+    "reason": "imagem_invalida"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246357/sbt-direitos-copa-nordeste-2026.html": {
+    "status": "skipped",
+    "ts": 1768576716,
+    "reason": "ia"
+  },
+  "HS:f6ead3dbe4be2600354b5fa2d69ec2e8154b802d": {
+    "status": "skipped",
+    "ts": 1768576716,
+    "reason": "ia"
+  },
+  "HG:36c8c58ed3812ac5b0be982e24630851fcca4a54": {
+    "status": "skipped",
+    "ts": 1768576716,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/responde/o-que-e-o-google-conheca-a-historia-e-os-produtos-da-empresa-de-tecnologia/": {
+    "status": "posted",
+    "ts": 1768576817,
+    "posted_ts": 1768576817
+  },
+  "HS:d20ac98abec05708ae7db1b24317e187bbf9b571": {
+    "status": "posted",
+    "ts": 1768576817,
+    "posted_ts": 1768576817
+  },
+  "HG:33c189bef01a33d7bcd7bde6c6c7b237cca771a4": {
+    "status": "posted",
+    "ts": 1768576817,
+    "posted_ts": 1768576817
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246356/area-cobertura-4g-brasil-zona-rural-2026.html": {
+    "status": "posted",
+    "ts": 1768577237,
+    "posted_ts": 1768577237
+  },
+  "HS:ac5079494cb17b022af0b508713591363202ad59": {
+    "status": "posted",
+    "ts": 1768577237,
+    "posted_ts": 1768577237
+  },
+  "HG:94c5d1ffad1a3784d88b1f64a918639ac618808c": {
+    "status": "posted",
+    "ts": 1768577237,
+    "posted_ts": 1768577237
+  },
+  "L:https://tecnoblog.net/noticias/a-disputa-de-r-72-milhoes-entre-dell-broadcom-e-mais-empresas/": {
+    "status": "posted",
+    "ts": 1768576907,
+    "posted_ts": 1768576907
+  },
+  "HS:e4d17e91ac511a74b2d6d3d4f4c1703a7dd1bfa4": {
+    "status": "posted",
+    "ts": 1768576907,
+    "posted_ts": 1768576907
+  },
+  "HG:825eccb40c998fb647bc52c3f13e3f0c362c0fd4": {
+    "status": "posted",
+    "ts": 1768576907,
+    "posted_ts": 1768576907
+  },
+  "L:https://olhardigital.com.br/2026/01/16/reviews/ofertas-do-dia-iphone-galaxy-watch-smart-tv-e-mais-produtos-em-promocao/": {
+    "status": "skipped",
+    "ts": 1768576777,
+    "reason": "prefiltro"
+  },
+  "HS:8dc01b1049ceb14052ce9c40be2e16086975d1b4": {
+    "status": "skipped",
+    "ts": 1768576777,
+    "reason": "prefiltro"
+  },
+  "HG:b1ef2ade9a816ed17355f7dc55ef1d3ebab96604": {
+    "status": "skipped",
+    "ts": 1768576777,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/16/italy-investigates-activision-blizzard-for-pushing-in-game-purchases/": {
+    "status": "skipped",
+    "ts": 1768576782,
+    "reason": "sem_imagem"
+  },
+  "HS:5d519dc6d8af74e8507d2d151bc173ad56c3664f": {
+    "status": "skipped",
+    "ts": 1768576782,
+    "reason": "sem_imagem"
+  },
+  "HG:361688a337b30486589b0057e2514815c4bd8205": {
+    "status": "skipped",
+    "ts": 1768576782,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/games/fim-de-semana-de-jogos-gratis-tem-ea-sports-fc-26-f1-25-e-classicos/": {
+    "status": "skipped",
+    "ts": 1768576797,
+    "reason": "ia"
+  },
+  "HS:efd6bafc256003db45baf7e526b58969094b7315": {
+    "status": "skipped",
+    "ts": 1768576797,
+    "reason": "ia"
+  },
+  "HG:9ef68629964d557f84d9e97b28c6a390f48f87db": {
+    "status": "skipped",
+    "ts": 1768576797,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/noticias/novo-golpe-do-ipva-sites-falsos-imitam-o-detran-com-fidelidade-e-prometem-descontos/": {
+    "status": "skipped",
+    "ts": 1768597804,
+    "reason": "ia"
+  },
+  "H:bd6a1f7e31d43f4c61c864ae464740bca1c6420f": {
+    "status": "skipped",
+    "ts": 1768597804,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/fallout-vai-ganhar-reality-show-com-abrigos-subterraneos-inspirados-nos-games/": {
+    "status": "skipped",
+    "ts": 1768597830,
+    "reason": "games_irrelevante"
+  },
+  "H:a48e3124352873f8d544d69186db09d5e553d482": {
+    "status": "skipped",
+    "ts": 1768597830,
+    "reason": "games_irrelevante"
+  },
+  "L:https://canaltech.com.br/carros/lavar-o-carro-do-jeito-errado-pode-sair-caro-saiba-o-que-evitar/": {
+    "status": "skipped",
+    "ts": 1768597830,
+    "reason": "prefiltro"
+  },
+  "H:edd5e5577e93848dded7c7ff23f3bc86f81c26ba": {
+    "status": "skipped",
+    "ts": 1768597830,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/16/epa-rules-that-xais-natural-gas-generators-were-illegally-used/": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "H:45778fdda0207bce0093c56ce021655278edf169": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/from-openais-offices-to-a-deal-with-eli-lilly-how-chai-discovery-became-one-of-the-flashiest-names-in-ai-drug-development/": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "H:8123255dad028917416008042e1fe866cd7a469e": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/supreme-court-hacker-posted-stolen-government-data-on-instagram/": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "H:936b23cb33afed2350896bf14d696ae859cc5a4f": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/chatgpt-users-are-about-to-get-hit-with-targeted-ads/": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "prefiltro"
+  },
+  "H:752647e9ad36cbb0676582367ea6b55c5e491bf9": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/16/trump-administration-wants-tech-companies-to-buy-15b-of-power-plants-they-may-not-use/": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "H:0b1f9780c35447d048675e6855b7ab16d2b3a6bd": {
+    "status": "skipped",
+    "ts": 1768597837,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/cars/2026/01/driven-the-ferrari-12cilindri-spider-is-open-top-grand-touring-bliss/": {
+    "status": "skipped",
+    "ts": 1768597838,
+    "reason": "prefiltro"
+  },
+  "H:e5260949bdae3fe0e9961767e8698f8a94874625": {
+    "status": "skipped",
+    "ts": 1768597838,
+    "reason": "prefiltro"
+  },
+  "L:https://www.engadget.com/deals/get-up-to-78-percent-off-expressvpn-two-year-plans-180602525.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768597841,
+    "reason": "prefiltro"
+  },
+  "H:4eff5b851e385f81128c6ffa7d3bdb48d881d1f9": {
+    "status": "skipped",
+    "ts": 1768597841,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/achados/notebook-lenovo-yoga-slim-7i-em-ate-24x-tem-29-off-antes-da-volta-as-aulas/": {
+    "status": "skipped",
+    "ts": 1768597854,
+    "reason": "ia"
+  },
+  "H:2e712289a33b0bc0ee2139435b4bf4d5feeb8e73": {
+    "status": "skipped",
+    "ts": 1768597854,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/achados/galaxy-ring-despenca-64-em-ate-10x-em-promocao-na-amazon/": {
+    "status": "skipped",
+    "ts": 1768597854,
+    "reason": "prefiltro"
+  },
+  "H:e81a7b1f455e93e1bb08995ba71a46eb3f10759a": {
+    "status": "skipped",
+    "ts": 1768597854,
+    "reason": "prefiltro"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/stealc-hackers-hacked-as-researchers-hijack-malware-control-panels/": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "H:600ee0ce2ba4575f852f610fa3667c753074585c": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/black-basta-boss-makes-it-onto-interpols-red-notice-list/": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "H:33850c56f9fb537a6752e31e98efcfe6a5ec8768": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/china-linked-hackers-exploited-sitecore-zero-day-for-initial-access/": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "H:3e4e116c3b3f0724d8bd0808b45f99727834409d": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/mobile/verizon-starts-issuing-20-credits-after-nationwide-outage/": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "H:743ad53116254a4e84eee6b4332a734d4eda6e87": {
+    "status": "skipped",
+    "ts": 1768597866,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/patch_tuesday_secure_launch_bug_no_shutdown/": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "H:12813cd56f37fcd1b0a7b4c2ef061d2781e1c670": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/microsoft_windows_backup/": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "H:6e86df63fc82f2a81e93e6553a9be32423820136": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/linux_mint_223_zena_officially_release/": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "H:e80505e9b7f6fc87e40fd57d8eb8dda9dbd81f09": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/black_basta_boss_wanted/": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "H:59f091cc9139a32c588a2c47676a0edd68dae488": {
+    "status": "skipped",
+    "ts": 1768597871,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-na-steam-em-oferta-por-menos-de-r-30-ate-90-de-desconto/": {
+    "status": "skipped",
+    "ts": 1768610834,
+    "reason": "prefiltro"
+  },
+  "H:993e02218e80af570a40f15312c5787687bef3ad": {
+    "status": "skipped",
+    "ts": 1768610834,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/curiosidade/noticias/n246404/lego-zelda-ocarina-of-time-set-lancado-pre-venda.html": {
+    "status": "skipped",
+    "ts": 1768610835,
+    "reason": "ia"
+  },
+  "H:91a515a80ca32aaced3cb966c4b7f79d18ef229e": {
+    "status": "skipped",
+    "ts": 1768610835,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/tech/maiores-reservas-litio/": {
+    "status": "skipped",
+    "ts": 1768610855,
+    "reason": "ia"
+  },
+  "H:62003923fd56c95122ce2679f7797656b80e57db": {
+    "status": "skipped",
+    "ts": 1768610855,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/jogos-de-playstation-em-oferta-por-menos-de-r-50-veja-lista-13/": {
+    "status": "skipped",
+    "ts": 1768610855,
+    "reason": "prefiltro"
+  },
+  "H:0342db618487bee52164727bec2e27d5aa868129": {
+    "status": "skipped",
+    "ts": 1768610855,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246291/xiaomi17max-iphone18design-galaxys26plus-plantaotc.html": {
+    "status": "skipped",
+    "ts": 1768610875,
+    "reason": "ia"
+  },
+  "H:d7579240d085b1a91945cac79a0649307da0d324": {
+    "status": "skipped",
+    "ts": 1768610875,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/qualcomm-fala-de-desktops-da-nova-geracao-em-novo-teaser-para-o-snadpragon-x2/": {
+    "status": "skipped",
+    "ts": 1768610895,
+    "reason": "ia"
+  },
+  "H:d89cd2aae342970a02742b9c7d5ba51afdd710cf": {
+    "status": "skipped",
+    "ts": 1768610895,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246402/amd-prepara-recurso-instalacao-driver-adrenalin-ia.html": {
+    "status": "skipped",
+    "ts": 1768610915,
+    "reason": "ia"
+  },
+  "H:8326acd2d66fa8f4580dcefdcd5d23ebbf4a138b": {
+    "status": "skipped",
+    "ts": 1768610915,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/internet-e-redes-sociais/resultado-da-lotofacil-de-hoje-veja-numeros-e-ganhadores-do-concurso-3589-sexta-16-01/": {
+    "status": "skipped",
+    "ts": 1768610919,
+    "reason": "sem_imagem"
+  },
+  "H:ff659e4c36d6301436e46407d32611c248fff943": {
+    "status": "skipped",
+    "ts": 1768610919,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/internet-e-redes-sociais/resultado-da-quina-de-hoje-veja-numeros-e-ganhadores-do-concurso-6929-sexta-16-01/": {
+    "status": "skipped",
+    "ts": 1768610919,
+    "reason": "sem_imagem"
+  },
+  "H:3d1487f9bd65aa51c12d4c5793f714107ed06f8f": {
+    "status": "skipped",
+    "ts": 1768610919,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/ai-cloud-startup-runpod-hits-120m-in-arr-and-it-started-with-a-reddit-post/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "H:08172d10c8b56440b0eded95f36cf5281b03a443": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/california-ag-sends-musks-xai-a-cease-and-desist-order-over-sexual-deepfakes/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "H:617cfbfa6a07b5623ddc2364aa677a9f026c70bf": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/16/snowflake-databricks-challenger-clickhouse-hits-15b-valuation/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "H:1a2c9de265e3dbba3f2cd8e40dac164107e4aea5": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/16/tiktok-quietly-launches-a-micro-drama-app-called-pinedrama/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "H:7bcf18febef4d94b19f7f7536addcd8fcad96525": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/information-technology/2026/01/rackspace-raises-email-hosting-prices-by-as-much-as-706-percent/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "H:b8828e97db6fd3e0d1e1bfb8981c47b42b8d1bba": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/science/2026/01/archaeologists-find-a-supersized-medieval-shipwreck-in-denmark/": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "H:40cd74de82f68df30b62d4dd6a80e9b2b1323fd4": {
+    "status": "skipped",
+    "ts": 1768610923,
+    "reason": "prefiltro"
+  },
+  "L:https://arstechnica.com/information-technology/2026/01/openai-to-test-ads-in-chatgpt-as-it-burns-through-billions/": {
+    "status": "skipped",
+    "ts": 1768610924,
+    "reason": "prefiltro"
+  },
+  "H:cd8541af9191cda29d31cf7f779b25a3f1ebbe9f": {
+    "status": "skipped",
+    "ts": 1768610924,
+    "reason": "prefiltro"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/chatgpt-go-subscription-rolls-out-worldwide-at-8-but-itll-show-you-ads/": {
+    "status": "skipped",
+    "ts": 1768610928,
+    "reason": "sem_imagem"
+  },
+  "H:36158d043d7076e878f225f8b1e5ae7522305b89": {
+    "status": "skipped",
+    "ts": 1768610928,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/openai-says-its-new-chatgpt-ads-wont-influence-answers/": {
+    "status": "skipped",
+    "ts": 1768610928,
+    "reason": "sem_imagem"
+  },
+  "H:4bb8c4b7785c8d8a0e3f9e83c853fd250ae253b4": {
+    "status": "skipped",
+    "ts": 1768610928,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/17/openai_chatgpt_ads/": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "H:9ff8bc9173bdbf604421f82147c982b406bb49ec": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/17/trump_wants_big_tech_pay_power_plants/": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "H:2d5090efbab2710b7df54f17b66cedaab5e34c5e": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/axlerod_ai_saves_insurance_agents_time/": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "H:71163eaea64bc0c789e73c3c582c88a0014ff228": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/16/micron_fab_breaks_ground/": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "H:d76d614df0e7a32f255f4f7cecf1ac5475db75a9": {
+    "status": "skipped",
+    "ts": 1768610931,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/vanran-soulslike-indie-coreano-revela-trailer-brutal-de-gameplay/": {
+    "status": "skipped",
+    "ts": 1768610935,
+    "reason": "ia"
+  },
+  "H:5656b6b7610d1b7ff325921f7afb4ac04a593ebb": {
+    "status": "skipped",
+    "ts": 1768610935,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246401/youtube-novas-regras-monetizacao-temas-polemicos.html": {
+    "status": "skipped",
+    "ts": 1768613038,
+    "reason": "ia"
+  },
+  "H:c0c0303430a7c3694d95c6fcdc22327c4dd2910f": {
+    "status": "skipped",
+    "ts": 1768613038,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246405/canada-reduz-tarifa-carros-eletricos-chineses.html": {
+    "status": "skipped",
+    "ts": 1768613068,
+    "reason": "ia"
+  },
+  "H:e36b5501c60659c8f97f82920a24315f31c4ffdb": {
+    "status": "skipped",
+    "ts": 1768613068,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/novo-jogo-de-life-is-strange-sera-revelado-oficialmente-em-breve/": {
+    "status": "skipped",
+    "ts": 1768613098,
+    "reason": "ia"
+  },
+  "H:e5b8287934840cdd1ea8d050bc2991d031dc3e1d": {
+    "status": "skipped",
+    "ts": 1768613098,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/videos/confira-o-olhar-digital-news-na-integra-16-01-2026/": {
+    "status": "skipped",
+    "ts": 1768613099,
+    "reason": "sem_imagem"
+  },
+  "H:e568e31d0fbc65b9a0c637a82c206a4236af93b9": {
+    "status": "skipped",
+    "ts": 1768613099,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/16/videos/olhar-espacial-e-possivel-produzir-agua-na-lua/": {
+    "status": "skipped",
+    "ts": 1768613099,
+    "reason": "sem_imagem"
+  },
+  "H:b32a82abaf70ec2f2dacbaa5700ff02287795fbd": {
+    "status": "skipped",
+    "ts": 1768613099,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246398/microsoft-atualiza-media-creation-tool-windows-11.html": {
+    "status": "posted",
+    "ts": 1768613158,
+    "posted_ts": 1768613158
+  },
+  "H:e80360aa47c6b7c599cad5b0a9a3a1f3eee71e42": {
+    "status": "posted",
+    "ts": 1768613158,
+    "posted_ts": 1768613158
+  },
+  "L:https://canaltech.com.br/carros/novo-taos-2026-da-volkswagen-chega-com-precos-abaixo-do-esperado/": {
+    "status": "skipped",
+    "ts": 1768615032,
+    "reason": "ia"
+  },
+  "H:cd36868101a95299507da03aebab1b044184c24d": {
+    "status": "skipped",
+    "ts": 1768615032,
+    "reason": "ia"
+  },
+  "L:https://www.theverge.com/22399419/apple-macbook-air-pro-mac-mini-imac-deals": {
+    "status": "skipped",
+    "ts": 1768615066,
+    "reason": "ia"
+  },
+  "H:7ca0be767946811706d32ab33ba6e519c4e990b2": {
+    "status": "skipped",
+    "ts": 1768615066,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/seguranca/spyware-predator-monitora-usos-da-ferramenta-pelo-usuario-diz-analise/": {
+    "status": "skipped",
+    "ts": 1768615102,
+    "reason": "ia"
+  },
+  "H:fe418cdb0e0cd718d44260f62b388411ff0e0ae3": {
+    "status": "skipped",
+    "ts": 1768615102,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/cybersecurity/vpn/cyberghost-vpn-review-despite-its-flaws-the-value-is-hard-to-beat-200000250.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768615105,
+    "reason": "prefiltro"
+  },
+  "H:4f8c83b31f6aae32914d099379daadd99621c2f7": {
+    "status": "skipped",
+    "ts": 1768615105,
+    "reason": "prefiltro"
+  },
+  "L:https://www.theverge.com/news/863710/google-search-antitrust-monopoly-appeal": {
+    "status": "posted",
+    "ts": 1768615151,
+    "posted_ts": 1768615151
+  },
+  "H:48ff9bbbf9bc108c25a49436c1900a7655b23a0c": {
+    "status": "posted",
+    "ts": 1768615151,
+    "posted_ts": 1768615151
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246406/ubuntu-25-04-eol-como-atualizar-ubuntu-25-10.html": {
+    "status": "posted",
+    "ts": 1768618751,
+    "posted_ts": 1768618751
+  },
+  "H:96d86817b5e85e37c9c0829ea24fde74764025c9": {
+    "status": "posted",
+    "ts": 1768618751,
+    "posted_ts": 1768618751
+  },
+  "L:https://canaltech.com.br/games/disney-remove-14-de-seus-proprios-jogos-do-steam/": {
+    "status": "skipped",
+    "ts": 1768618667,
+    "reason": "ia"
+  },
+  "H:72948210ac83720857002d7bfb957add350daf5f": {
+    "status": "skipped",
+    "ts": 1768618667,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/thinking-machines-lab-cofounder-office-relationship-firing-openai/": {
+    "status": "skipped",
+    "ts": 1768618701,
+    "reason": "ia"
+  },
+  "H:944bf43e90e1315e4d5abb4f0cfcb5a855b86cdc": {
+    "status": "skipped",
+    "ts": 1768618701,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/cybersecurity/vpn/best-vpn-130004396.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768618736,
+    "reason": "ia"
+  },
+  "H:ac9d11c46b8df805d0bf350f23a03dfd438d99a1": {
+    "status": "skipped",
+    "ts": 1768618736,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/perifericos/gulikit-anuncia-novos-controles-com-joysticks-tmr-de-tensao-ajustavel/": {
+    "status": "skipped",
+    "ts": 1768619722,
+    "reason": "prefiltro"
+  },
+  "H:5e293efa4cfb195a472d22e04813c27cf5d0da78": {
+    "status": "skipped",
+    "ts": 1768619722,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/atualizacao-do-windows-11-faz-outlook-parar-de-funcionar/": {
+    "status": "posted",
+    "ts": 1768619903,
+    "posted_ts": 1768619903
+  },
+  "H:0b5d67e65cf24f353e2c3aa6b956121ba78f811f": {
+    "status": "posted",
+    "ts": 1768619903,
+    "posted_ts": 1768619903
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/17/como-funcionam-tecnologias-que-extraem-dados-de-celulares-e-que-a-pf-tem-usado-no-brasil.ghtml": {
+    "status": "posted",
+    "ts": 1768619842,
+    "posted_ts": 1768619842
+  },
+  "H:8fc8b6115b9bf0ed45c8ed05eb596c5450435544": {
+    "status": "posted",
+    "ts": 1768619842,
+    "posted_ts": 1768619842
+  },
+  "L:https://tecnoblog.net/noticias/e-oficial-chatgpt-vai-exibir-anuncios-em-breve/": {
+    "status": "posted",
+    "ts": 1768620262,
+    "posted_ts": 1768620262
+  },
+  "H:a2e6e1203b42efd30ab504aff34a0277e5159997": {
+    "status": "posted",
+    "ts": 1768620262,
+    "posted_ts": 1768620262
+  },
+  "L:https://g1.globo.com/tecnologia/noticia/2026/01/17/me-senti-humilhada-mae-de-filho-de-elon-musk-processa-empresa-de-ia-de-bilionario-por-montagens-sexualizadas.ghtml": {
+    "status": "posted",
+    "ts": 1768619933,
+    "posted_ts": 1768619933
+  },
+  "H:f0ee7349cd8771a4b927d626869fe17d76cdb013": {
+    "status": "posted",
+    "ts": 1768619933,
+    "posted_ts": 1768619933
+  },
+  "L:https://www.wired.com/story/the-campaign-to-destroy-renee-good/": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "ia"
+  },
+  "H:b0ea2818c0a4c43980a0488f95d8d78ca19bbd35": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/jackery-explorer-300-plus-deal-126/": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "prefiltro"
+  },
+  "H:fe2394a72a0d53dfebc0e19483e2a6ec83311792": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/story/openai-testing-ads-us/": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "prefiltro"
+  },
+  "H:a6118ceed2b3658c8d2309b8c25c68270f271ee2": {
+    "status": "skipped",
+    "ts": 1768619803,
+    "reason": "prefiltro"
+  },
+  "L:https://www.engadget.com/social-media/x-is-fully-online-after-going-down-for-most-of-the-morning-171843711.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768619823,
+    "reason": "ia"
+  },
+  "H:768c50703622de80f47277e297d6433fff8275a1": {
+    "status": "skipped",
+    "ts": 1768619823,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/former-usds-leaders-launch-tech-reform-project-doge/": {
+    "status": "skipped",
+    "ts": 1768623324,
+    "reason": "ia"
+  },
+  "H:fb27cce000063acb8a8c78ceea3532282d25d76f": {
+    "status": "skipped",
+    "ts": 1768623324,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/made-in-china-chinese-time-of-my-life/": {
+    "status": "skipped",
+    "ts": 1768623344,
+    "reason": "ia"
+  },
+  "H:ba0b14d01849edc5d72dea60142b36a8ad0ae5be": {
+    "status": "skipped",
+    "ts": 1768623344,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/big-tech/google-is-appealing-the-ruling-from-its-search-antitrust-case-to-avoid-sharing-data-with-rivals-215107905.html?src=rss": {
+    "status": "posted",
+    "ts": 1768623414,
+    "posted_ts": 1768623414
+  },
+  "H:12e7e4553467480db2ac79c87f99beb004474366": {
+    "status": "posted",
+    "ts": 1768623414,
+    "posted_ts": 1768623414
+  },
+  "L:https://www.engadget.com/ai/anthropic-opens-up-its-claude-cowork-feature-to-anyone-with-a-20-subscription-194000021.html?src=rss": {
+    "status": "posted",
+    "ts": 1768623472,
+    "posted_ts": 1768623472
+  },
+  "H:b2d61c0ce74df4974ddfb786e51e0ceff5da9f96": {
+    "status": "posted",
+    "ts": 1768623472,
+    "posted_ts": 1768623472
+  },
+  "L:https://www.adrenaline.com.br/hardware/placas-estao-sumindo-crise-hardware/": {
+    "status": "skipped",
+    "ts": 1768700485,
+    "reason": "prefiltro"
+  },
+  "H:81184ad456c487042bb6110b20574f80efb36a6a": {
+    "status": "skipped",
+    "ts": 1768700485,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246388/xiaomi-17-ultra-global-vazamento-geekbench.html": {
+    "status": "posted",
+    "ts": 1768700606,
+    "posted_ts": 1768700606
+  },
+  "H:4f5b50267aba04dabaf079bd28c3aaccad84d35f": {
+    "status": "posted",
+    "ts": 1768700606,
+    "posted_ts": 1768700606
+  },
+  "L:https://www.adrenaline.com.br/games/ea-sports-fc-26-selecao-do-ano/": {
+    "status": "skipped",
+    "ts": 1768700505,
+    "reason": "ia"
+  },
+  "H:49b33146f602ba05815a7a7d37eb954290714745": {
+    "status": "skipped",
+    "ts": 1768700505,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n246385/ios-26-4-novos-emojis-iphone-lista-apple.html": {
+    "status": "posted",
+    "ts": 1768700665,
+    "posted_ts": 1768700665
+  },
+  "H:bd6d0c68be5eb61994ef835cc8a79543e7f587f4": {
+    "status": "posted",
+    "ts": 1768700665,
+    "posted_ts": 1768700665
+  },
+  "L:https://www.adrenaline.com.br/games/pubg-2026-projetos-krafton/": {
+    "status": "skipped",
+    "ts": 1768700546,
+    "reason": "games_irrelevante"
+  },
+  "H:f7cab7667fb88268fad57ee02ac61b0d556a1334": {
+    "status": "skipped",
+    "ts": 1768700546,
+    "reason": "games_irrelevante"
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/jogos-de-corrida-para-playstation-em-oferta-veja-lista-8/": {
+    "status": "skipped",
+    "ts": 1768700546,
+    "reason": "prefiltro"
+  },
+  "H:24f2e9b2961f5ef00476d53a6caa02505f83de87": {
+    "status": "skipped",
+    "ts": 1768700546,
+    "reason": "prefiltro"
+  },
+  "L:https://tecnoblog.net/noticias/medida-do-brasil-pode-elevar-custo-da-fibra-optica-vinda-da-china/": {
+    "status": "posted",
+    "ts": 1768700695,
+    "posted_ts": 1768700695
+  },
+  "H:7be3b5423e930236bc0277d1533212d7dd95a734": {
+    "status": "posted",
+    "ts": 1768700695,
+    "posted_ts": 1768700695
+  },
+  "L:https://olhardigital.com.br/2026/01/17/internet-e-redes-sociais/resultado-da-quina-de-hoje-veja-numeros-e-ganhadores-do-concurso-6930-sabado-17-01/": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "H:017d2ed30a381ae93b9e102152ea22ea2b7ef984": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/17/internet-e-redes-sociais/resultado-da-lotofacil-de-hoje-veja-numeros-e-ganhadores-do-concurso-3590-sabado-17-01/": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "H:2dd256fb0e83ff650878e2b4a6dc2e0f593e00f6": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/17/internet-e-redes-sociais/resultado-da-mega-sena-de-hoje-veja-numeros-e-ganhadores-do-concurso-2961-sabado-17-01/": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "H:4cfcf2b4d78007d363ac25fa296a5be2ac89f98a": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/17/pro/ia-faz-preco-de-memoria-ram-disparar-e-voce-vai-pagar-a-conta/": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "prefiltro"
+  },
+  "H:f3f246ae29b5123eb1906471c793f684eff11f5d": {
+    "status": "skipped",
+    "ts": 1768700567,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/17/why-silicon-valley-is-really-talking-about-fleeing-california-its-not-the-5/": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "H:28bf58c300023dbd44d21031aebef89a43cf55ff": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/17/who-gets-to-inherit-the-stars-a-space-ethicist-on-what-were-not-talking-about/": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "H:b9a4c407f3445ea81c50487960dec46a0cb92727": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/17/trump-administrations-legal-setbacks-are-good-news-for-offshore-wind-and-the-grid/": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "H:21beee7e23330802f35e0f353abc731ffa179dc5": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/17/oshen-built-the-first-ocean-robot-to-collect-data-in-a-category-5-hurricane/": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "H:711ffb90e7d5d82277bbcc6ea4f462749d0da87a": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/17/musk-wants-up-to-134b-in-openai-lawsuit-despite-700b-fortune/": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "H:a14fa38ed328ea5502916ffeb11829db12d6f473": {
+    "status": "skipped",
+    "ts": 1768700575,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/gadgets/2026/01/metas-layoffs-leave-supernatural-fitness-users-in-mourning/": {
+    "status": "skipped",
+    "ts": 1768700576,
+    "reason": "prefiltro"
+  },
+  "H:62dfce092046fc77ac93791e9ad80017665da4e0": {
+    "status": "skipped",
+    "ts": 1768700576,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/story/paris-hilton-cookware-reddit/": {
+    "status": "skipped",
+    "ts": 1768700577,
+    "reason": "prefiltro"
+  },
+  "H:bab32e69cb52290f27046840862f86186a05e261": {
+    "status": "skipped",
+    "ts": 1768700577,
+    "reason": "prefiltro"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/17/fast_pair_flaw/": {
+    "status": "skipped",
+    "ts": 1768700583,
+    "reason": "sem_imagem"
+  },
+  "H:35a6a5d95db4aa82039fd458bb9e76f1bd14dfc9": {
+    "status": "skipped",
+    "ts": 1768700583,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/17/uk_water_company_gets_in/": {
+    "status": "skipped",
+    "ts": 1768700584,
+    "reason": "sem_imagem"
+  },
+  "H:891640045a9f8d3b466ae5b297b8536228b1664a": {
+    "status": "skipped",
+    "ts": 1768700584,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-gratis-na-epic-sao-otima-divulgacao-para-promocoes-na-steam-diz-produtor/": {
+    "status": "skipped",
+    "ts": 1768700586,
+    "reason": "ia"
+  },
+  "H:36db4088a5e4b862fad58db3cfba003a00482a2a": {
+    "status": "skipped",
+    "ts": 1768700586,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/pc-games/jogos-de-pc-em-oferta-na-nuuvem-por-menos-de-r-20/": {
+    "status": "skipped",
+    "ts": 1768700586,
+    "reason": "prefiltro"
+  },
+  "H:7ca7c3322e117f8dd34d0d766f93cc5ac298c303": {
+    "status": "skipped",
+    "ts": 1768700586,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/google/noticias/n246408/google-keep-migracao-tarefas-mudanca-atualizacao.html": {
+    "status": "posted",
+    "ts": 1768704265,
+    "posted_ts": 1768704265
+  },
+  "H:20a3e4f9b357d77f38135d4a662b6e3c45ce5a86": {
+    "status": "posted",
+    "ts": 1768704265,
+    "posted_ts": 1768704265
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246407/novo-vlokswagen-taos-veja-detalhes-brasil.html": {
+    "status": "skipped",
+    "ts": 1768704105,
+    "reason": "ia"
+  },
+  "H:056d340e4e2048d3d813efbf0dd06ffcee75f072": {
+    "status": "skipped",
+    "ts": 1768704105,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/apps/o-que-aconteceu-com-o-msn-entenda-o-fim-do-fenomeno-dos-anos-2000/": {
+    "status": "posted",
+    "ts": 1768704205,
+    "posted_ts": 1768704205
+  },
+  "H:8ed3dae244dddb02766be5553f93bd4df024a3ad": {
+    "status": "posted",
+    "ts": 1768704205,
+    "posted_ts": 1768704205
+  },
+  "L:https://www.tudocelular.com/planos/noticias/n246223/netflix-prime-video-melhores-filme-serie-dez-2025.html": {
+    "status": "skipped",
+    "ts": 1768704145,
+    "reason": "ia"
+  },
+  "H:5a7df85402ad80e4479a40960999e515f750dcd8": {
+    "status": "skipped",
+    "ts": 1768704145,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/dos-games-aos-cinemas-resident-evil-e-silent-hill-replicam-rivalidade-em-2026/": {
+    "status": "skipped",
+    "ts": 1768704166,
+    "reason": "ia"
+  },
+  "H:cf98ceed737498fc09d0372d6d1e00ddcafb1577": {
+    "status": "skipped",
+    "ts": 1768704166,
+    "reason": "ia"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/google-chrome-now-lets-you-turn-off-on-device-ai-model-powering-scam-detection/": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "H:d2df0feefbd67557a7ebc169bac7108b91d999db": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/credential-stealing-chrome-extensions-target-enterprise-hr-platforms/": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "H:d9f8531545714d75a0d6fc620de76f9eb7994de6": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/malicious-ghostposter-browser-extensions-found-with-840-000-installs/": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "H:79a78421ad14522629c8225a640614341addb09f": {
+    "status": "skipped",
+    "ts": 1768704171,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246051/novidades-netflix-prime-video-17012026.html": {
+    "status": "skipped",
+    "ts": 1768704185,
+    "reason": "ia"
+  },
+  "H:c0818f7bc92a0efa31d2eca0597af2ee24ec7e9b": {
+    "status": "skipped",
+    "ts": 1768704185,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/carros/3-acoes-simples-no-transito-que-rendem-multa-e-quase-ninguem-percebe/": {
+    "status": "skipped",
+    "ts": 1768707686,
+    "reason": "ia"
+  },
+  "H:2c55ae4b5500f0a11a1d50020645171967d9cdf3": {
+    "status": "skipped",
+    "ts": 1768707686,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/10-jogos-incriveis-que-rodam-bem-ate-em-pcs-fracos/": {
+    "status": "skipped",
+    "ts": 1768707706,
+    "reason": "ia"
+  },
+  "H:4cc65fe209dd0c6d9a93d17d916cfeda5e6b2c90": {
+    "status": "skipped",
+    "ts": 1768707706,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/best-portable-external-storage-drives/": {
+    "status": "posted",
+    "ts": 1768708135,
+    "posted_ts": 1768708135
+  },
+  "H:fb93e9888236125cb93a5496768a070f4c4985db": {
+    "status": "posted",
+    "ts": 1768708135,
+    "posted_ts": 1768708135
+  },
+  "L:https://canaltech.com.br/smartphone/areia-da-praia-estraga-o-celular-entenda-os-riscos-e-saiba-como-se-proteger/": {
+    "status": "posted",
+    "ts": 1768707805,
+    "posted_ts": 1768707805
+  },
+  "H:e00f35830c7fcf1e81551658661798d69acdbe77": {
+    "status": "posted",
+    "ts": 1768707805,
+    "posted_ts": 1768707805
+  },
+  "L:https://www.wired.com/story/best-shows-amazon-prime/": {
+    "status": "skipped",
+    "ts": 1768707766,
+    "reason": "ia"
+  },
+  "H:cc177aad7867b9ffb6a83e0f1f885ac7abc1138c": {
+    "status": "skipped",
+    "ts": 1768707766,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/games/por-que-o-ps-vita-deu-errado/": {
+    "status": "skipped",
+    "ts": 1768707786,
+    "reason": "ia"
+  },
+  "H:ec111ee6997c8d1ae71cca8ad4cd137d1541ce78": {
+    "status": "skipped",
+    "ts": 1768707786,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/asus/diretor-da-asus-confirma-parada-em-celulares-e-all-in-em-ia/": {
+    "status": "skipped",
+    "ts": 1768750389,
+    "reason": "prefiltro"
+  },
+  "H:803fd1b79194408de54e53405d61407254014f3c": {
+    "status": "skipped",
+    "ts": 1768750389,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/windows-phone/noticias/n246422/atualizacao-windows-11-desligar-reiniciar-correcao.html": {
+    "status": "queued",
+    "ts": 1768750389,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768738500
+  },
+  "H:318ed939de0f956017e04edf2c86aa97f040efde": {
+    "status": "queued",
+    "ts": 1768750389,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768738500
+  },
+  "L:https://www.adrenaline.com.br/games/remake-de-resident-evil-code-veronica-sera-anunciado-neste-ano-diz-insider/": {
+    "status": "skipped",
+    "ts": 1768750409,
+    "reason": "ia"
+  },
+  "H:96a4cc01e3ffb4e9223213381f228ed8a1e5c1cb": {
+    "status": "skipped",
+    "ts": 1768750409,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/data-centers-devem-consumir-ate-70-de-toda-a-memoria-produzida-em-2026/": {
+    "status": "skipped",
+    "ts": 1768750409,
+    "reason": "prefiltro"
+  },
+  "H:8d6c10437b49f4652f61944bc4f4a45d5a585954": {
+    "status": "skipped",
+    "ts": 1768750409,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246423/telabrasil-streaming-publico-governogratis-lancado.html": {
+    "status": "skipped",
+    "ts": 1768750430,
+    "reason": "ia"
+  },
+  "H:47783fcae1e68a6e33bc72660d04520d69b17012": {
+    "status": "skipped",
+    "ts": 1768750430,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/eletro/chuveiro-eletrico-de-7500-w-so-na-energia-solar-quantas-placas-voce-precisa/": {
+    "status": "queued",
+    "ts": 1768750451,
+    "urgente": false,
+    "importante": true,
+    "published_ts": 1768759200
+  },
+  "H:f31198d609f1b93190dc1bf65a0812ab4d0d446b": {
+    "status": "queued",
+    "ts": 1768750451,
+    "urgente": false,
+    "importante": true,
+    "published_ts": 1768759200
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246416/xiaomi18-vazamento-hyperos4-specs-chip-.html": {
+    "status": "queued",
+    "ts": 1768750470,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768736820
+  },
+  "H:b08c2dd933eef0451d22ebc37cf13a599a3f4de1": {
+    "status": "queued",
+    "ts": 1768750470,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768736820
+  },
+  "L:https://olhardigital.com.br/2026/01/18/colunistas/quando-a-tecnologia-realmente-melhora-a-experiencia-do-cliente/": {
+    "status": "skipped",
+    "ts": 1768750471,
+    "reason": "sem_imagem"
+  },
+  "H:ab5491c664eee49fcd074a3d83a46fea09b3890a": {
+    "status": "skipped",
+    "ts": 1768750471,
+    "reason": "sem_imagem"
+  },
+  "L:https://olhardigital.com.br/2026/01/18/internet-e-redes-sociais/jogos-de-hoje-18-01-26-onde-assistir-futebol-ao-vivo-e-horarios-das-partidas/": {
+    "status": "skipped",
+    "ts": 1768750471,
+    "reason": "sem_imagem"
+  },
+  "H:b1aa03507621002c92c1611c1b1bbcd6e1f637bb": {
+    "status": "skipped",
+    "ts": 1768750471,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/18/moxie-marlinspike-has-a-privacy-conscious-alternative-to-chatgpt/": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "sem_imagem"
+  },
+  "H:55da26821670c6068deb6068e7fc52f8eba5d8aa": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/science/2026/01/ocean-damage-nearly-doubles-the-cost-of-climate-change/": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "prefiltro"
+  },
+  "H:ad9cb8001f01884032fb6044151f7dab551db15b": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/review/jones-hovercraft-20-snowboard/": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "prefiltro"
+  },
+  "H:049f746774a2eb5bcf1c1b2891fbba21db260216": {
+    "status": "skipped",
+    "ts": 1768750476,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/review/personal-comfort-rejuvenate/": {
+    "status": "skipped",
+    "ts": 1768750477,
+    "reason": "prefiltro"
+  },
+  "H:715546071e61e241eb7e029732582463940d47c2": {
+    "status": "skipped",
+    "ts": 1768750477,
+    "reason": "prefiltro"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/18/nvidia_fp64_emulation/": {
+    "status": "skipped",
+    "ts": 1768750481,
+    "reason": "sem_imagem"
+  },
+  "H:7a4401ab9ed79e890bf1222715ccf0177247a6e9": {
+    "status": "skipped",
+    "ts": 1768750481,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/18/openslopware_is_back/": {
+    "status": "skipped",
+    "ts": 1768750481,
+    "reason": "sem_imagem"
+  },
+  "H:e9ed1836c35777f0e7ad784cee454e4a06bdc99f": {
+    "status": "skipped",
+    "ts": 1768750481,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/apps/quando-o-android-17-vai-chegar-confira-previsao-de-lancamento/": {
+    "status": "queued",
+    "ts": 1768750490,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768755600
+  },
+  "H:5804e7a5dc288c492f6bb38f926ff65257026c64": {
+    "status": "queued",
+    "ts": 1768750490,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768755600
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246420/redmi15c-oferta-amazon-cupom-256gb-.html": {
+    "status": "skipped",
+    "ts": 1768750491,
+    "reason": "prefiltro"
+  },
+  "H:9f851f4af99d0d1dee6565279edf6fa59edf57ea": {
+    "status": "skipped",
+    "ts": 1768750491,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246418/galaxys26ultra-cores-confirmadas-fotos-cameras-.html": {
+    "status": "queued",
+    "ts": 1768750511,
+    "urgente": true,
+    "importante": false,
+    "published_ts": 1768734180
+  },
+  "H:1e0c8c845a5a9446b0f2e7b35ad893d988ef24c2": {
+    "status": "queued",
+    "ts": 1768750511,
+    "urgente": true,
+    "importante": false,
+    "published_ts": 1768734180
+  },
+  "L:https://canaltech.com.br/games/10-vezes-que-a-rockstar-adiou-jogos-como-gta-e-red-dead-redemption/": {
+    "status": "skipped",
+    "ts": 1768750530,
+    "reason": "ia"
+  },
+  "H:49a3bbee5195a0adabae6ec6e2a8d1c58447fe64": {
+    "status": "skipped",
+    "ts": 1768750530,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246414/whatsapp-nome-usuario-foto-capa-perfil-privado.html": {
+    "status": "posted",
+    "ts": 1768751095,
+    "posted_ts": 1768751095
+  },
+  "H:79d93ec4e8ff5b37b1ed666eefd0153818535b1d": {
+    "status": "posted",
+    "ts": 1768751095,
+    "posted_ts": 1768751095
+  },
+  "L:https://canaltech.com.br/software/por-que-o-macos-tem-versao-nova-todo-ano-e-o-windows-nao/": {
+    "status": "queued",
+    "ts": 1768750570,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768750200
+  },
+  "H:e5f1e130eba572e4ae97735abadfb42a512ce9e9": {
+    "status": "queued",
+    "ts": 1768750570,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768750200
+  },
+  "L:https://www.wired.com/gallery/best-electric-bikes/": {
+    "status": "skipped",
+    "ts": 1768750590,
+    "reason": "ia"
+  },
+  "H:c292676f956006a14501fc0e4abed1d85f4981da": {
+    "status": "skipped",
+    "ts": 1768750590,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/tablet/quanto-vale-a-pena-pagar-no-galaxy-tab-s10-fe-em-2026/": {
+    "status": "skipped",
+    "ts": 1768750610,
+    "reason": "ia"
+  },
+  "H:3e292584d29ed40bd112d4beedbbe0b3c2315ae8": {
+    "status": "skipped",
+    "ts": 1768750610,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/veiculos/analise/review-maverick-tremor-picape-da-ford-e-bruta-mas-tecnologica/": {
+    "status": "skipped",
+    "ts": 1768750610,
+    "reason": "prefiltro"
+  },
+  "H:84b7b9f77e50c20a17aa7b775028516309f98a4b": {
+    "status": "skipped",
+    "ts": 1768750610,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/gallery/best-water-leak-detectors/": {
+    "status": "skipped",
+    "ts": 1768750630,
+    "reason": "ia"
+  },
+  "H:a74c2ac32e1cfb399582f1f4c75497aa43a40981": {
+    "status": "skipped",
+    "ts": 1768750630,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/gaming/the-plan-for-a-gaming-themed-atari-hotel-in-las-vegas-has-reportedly-been-scrapped-214212269.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768750650,
+    "reason": "ia"
+  },
+  "H:6ded70ea67916295c47542ffe40f5f872fcab631": {
+    "status": "skipped",
+    "ts": 1768750650,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/people-still-arent-into-buying-cars-online/": {
+    "status": "skipped",
+    "ts": 1768750670,
+    "reason": "ia"
+  },
+  "H:e2899dde9d0abf23fb02cc3aeaaec7dd77b51dcc": {
+    "status": "skipped",
+    "ts": 1768750670,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/entertainment/tv-movies/amazons-live-action-god-of-war-adaptation-adds-teresa-palmer-201604602.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768750690,
+    "reason": "ia"
+  },
+  "H:4c29540f731e227d17caf51be041fa81539a2a52": {
+    "status": "skipped",
+    "ts": 1768750690,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/gallery/the-best-juicer/": {
+    "status": "skipped",
+    "ts": 1768750710,
+    "reason": "ia"
+  },
+  "H:3a12c5dfc7cdaf73cc003ad3925671c37f3cc250": {
+    "status": "skipped",
+    "ts": 1768750710,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/entertainment/tv-movies/tiktoks-latest-spinoff-app-feels-a-lot-like-quibi-but-with-shorter-and-cornier-content-185702010.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768750730,
+    "reason": "ia"
+  },
+  "H:31b9e90c054a28cac6f86f1e8e98970e8dcdf494": {
+    "status": "skipped",
+    "ts": 1768750730,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246425/joviv50-512gb-ram-ip69-promocao-cupom.html": {
+    "status": "skipped",
+    "ts": 1768750731,
+    "reason": "prefiltro"
+  },
+  "H:f06cb18def8db956b04072700f905ebe59695230": {
+    "status": "skipped",
+    "ts": 1768750731,
+    "reason": "prefiltro"
+  },
+  "L:https://www.engadget.com/mobile/tablets/its-the-last-day-to-get-up-to-90-off-remarkable-e-ink-tablet-bundles-150242090.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768750750,
+    "reason": "ia"
+  },
+  "H:bd29e1554b7e61b0e7db1069e79dee428b698c56": {
+    "status": "skipped",
+    "ts": 1768750750,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/deals/get-nba-league-pass-for-up-to-55-percent-off-right-now-163421800.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768750770,
+    "reason": "ia"
+  },
+  "H:c29acdb15dea18a80475a839e982aff040cf0fbd": {
+    "status": "skipped",
+    "ts": 1768750770,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/big-tech/elon-musk-is-looking-for-a-134-billion-payout-from-openai-and-microsoft-171824945.html?src=rss": {
+    "status": "queued",
+    "ts": 1768750791,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768681104
+  },
+  "H:766490d33b15fdbe5deb6fb23e01d6d93323742d": {
+    "status": "queued",
+    "ts": 1768750791,
+    "urgente": true,
+    "importante": true,
+    "published_ts": 1768681104
+  },
+  "L:https://canaltech.com.br/carros/3-dicas-para-ajustar-o-banco-do-carro-na-posicao-ideal/": {
+    "status": "skipped",
+    "ts": 1768754485,
+    "reason": "prefiltro"
+  },
+  "H:2379d1503382f938c910185b3751d579ec08f7ae": {
+    "status": "skipped",
+    "ts": 1768754485,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/18/reviews/por-r-750-no-pix-tablet-baratinho-da-samsung-esta-com-desconto-arrasador/": {
+    "status": "skipped",
+    "ts": 1768754486,
+    "reason": "prefiltro"
+  },
+  "H:4b6d5ab75a786a83dc11f69ee90abfd57487e586": {
+    "status": "skipped",
+    "ts": 1768754486,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/apple/noticias/n246419/iphone18pro-camera-canto-faceid-tela-design.html": {
+    "status": "posted",
+    "ts": 1768754605,
+    "posted_ts": 1768754605
+  },
+  "H:e2166883d5273104f35d0f05c180895dd56e8c25": {
+    "status": "posted",
+    "ts": 1768754605,
+    "posted_ts": 1768754605
+  },
+  "L:https://olhardigital.com.br/2026/01/18/ciencia-e-espaco/quais-sao-as-serpentes-mais-peconhentas-do-brasil-e-onde-elas-vivem-2/": {
+    "status": "skipped",
+    "ts": 1768754506,
+    "reason": "ia"
+  },
+  "H:0cfe0d18e30275d684298a078cb14b2eb66dd57e": {
+    "status": "skipped",
+    "ts": 1768754506,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/android/noticias/n246424/redmagic-11-air-snapdragon-8-elite-7000-mah.html": {
+    "status": "posted",
+    "ts": 1768754635,
+    "posted_ts": 1768754635
+  },
+  "H:af5a8fa1795c05884b09a36028283cdcc519d332": {
+    "status": "posted",
+    "ts": 1768754635,
+    "posted_ts": 1768754635
+  },
+  "L:https://olhardigital.com.br/2026/01/18/ciencia-e-espaco/gigante-e-bizarro-esse-ser-vivo-de-milhoes-de-anos-atras-intriga-a-ciencia/": {
+    "status": "skipped",
+    "ts": 1768754546,
+    "reason": "ia"
+  },
+  "H:ca4069453d2c570da756e73358e20ddd93768b47": {
+    "status": "skipped",
+    "ts": 1768754546,
+    "reason": "ia"
+  },
+  "L:https://www.theverge.com/gadgets/863660/best-buy-winter-sale-2026-oled-tvs-headphones-fitness-trackers-deal-sale": {
+    "status": "skipped",
+    "ts": 1768754566,
+    "reason": "ia"
+  },
+  "H:a58139f058bf19bde84188cf3746e4adf6010878": {
+    "status": "skipped",
+    "ts": 1768754566,
+    "reason": "ia"
+  },
+  "L:https://techcrunch.com/2026/01/18/how-yc-backed-bucket-robotics-survived-its-first-ces/": {
+    "status": "skipped",
+    "ts": 1768754566,
+    "reason": "sem_imagem"
+  },
+  "H:e74ade899daad0e44007e5da5aaacb817fc65b57": {
+    "status": "skipped",
+    "ts": 1768754566,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.engadget.com/deals/disney-and-hulu-deal-get-one-month-of-the-bundle-for-only-10-192814033.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768754568,
+    "reason": "prefiltro"
+  },
+  "H:71fc81820feddcb8136057537cc42b482091ac6d": {
+    "status": "skipped",
+    "ts": 1768754568,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/18/ciencia-e-espaco/lua-hoje-confira-a-fase-da-lua-neste-domingo-18-01-2026/": {
+    "status": "skipped",
+    "ts": 1768754586,
+    "reason": "ia"
+  },
+  "H:0086a42216de08925b3c3ccb50f53817fd91676c": {
+    "status": "skipped",
+    "ts": 1768754586,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246421/galaxys27ultra-inedito-sistema-com-exynos-.html": {
+    "status": "posted",
+    "ts": 1768758895,
+    "posted_ts": 1768758895
+  },
+  "H:e2494728c5fa405bceaded9f5d5bfb3d17c438d7": {
+    "status": "posted",
+    "ts": 1768758895,
+    "posted_ts": 1768758895
+  },
+  "L:https://tecnoblog.net/noticias/elon-musk-e-ceo-da-ryanair-trocam-farpas-sobre-starlink-em-avioes/": {
+    "status": "posted",
+    "ts": 1768758235,
+    "posted_ts": 1768758235
+  },
+  "H:5d3d6cc5a8fa376a6d0810b600d84206a638e9a1": {
+    "status": "posted",
+    "ts": 1768758235,
+    "posted_ts": 1768758235
+  },
+  "L:https://canaltech.com.br/games/o-que-e-drm-e-como-isso-afeta-seus-jogos-de-pc/": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "ia"
+  },
+  "H:f089328835fc2b40124f4b1503a0b2964edb8008": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "ia"
+  },
+  "L:https://techcrunch.com/2026/01/18/techcrunch-mobility-physical-ai-enters-the-hype-machine/": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "prefiltro"
+  },
+  "H:89ee3e54b3a8c2e8342ed253d1e3f398dfd5c380": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/18/threads-edges-out-x-in-daily-mobile-users-new-data-shows/": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "sem_imagem"
+  },
+  "H:b514475d00cb8fcbd8bfa004e8ca9760bbd47262": {
+    "status": "skipped",
+    "ts": 1768758126,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.theverge.com/news/864032/microsofts-out-of-band-windows-11-update-bug": {
+    "status": "posted",
+    "ts": 1768758205,
+    "posted_ts": 1768758205
+  },
+  "H:cb4534fc330ff50002376775f12a1d8cd213afa6": {
+    "status": "posted",
+    "ts": 1768758205,
+    "posted_ts": 1768758205
+  },
+  "L:https://www.engadget.com/apps/new-users-can-get-a-year-of-one-of-our-favorite-budgeting-apps-for-only-50-204507576.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768758166,
+    "reason": "ia"
+  },
+  "H:160d7d2281ae2bae87fc6cf27e807ff60901556c": {
+    "status": "skipped",
+    "ts": 1768758166,
+    "reason": "ia"
+  },
+  "L:https://www.theverge.com/news/864003/korg-kaoss-pad-v-namm": {
+    "status": "posted",
+    "ts": 1768758566,
+    "posted_ts": 1768758566
+  },
+  "H:d8ade9996cc09c2dad715819340be570fcf2070b": {
+    "status": "posted",
+    "ts": 1768758566,
+    "posted_ts": 1768758566
+  },
+  "L:https://www.adrenaline.com.br/games/dragon-ball-z-kakarot-daima-parte-2/": {
+    "status": "skipped",
+    "ts": 1768761686,
+    "reason": "ia"
+  },
+  "H:871b0b4932379b9dd31ae9f58a729ecd40f940f6": {
+    "status": "skipped",
+    "ts": 1768761686,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/placa-de-video-pequena-vale-a-pena/": {
+    "status": "skipped",
+    "ts": 1768761686,
+    "reason": "prefiltro"
+  },
+  "H:e4aed1898de21b3feaf5cec1f75447926e34a9c8": {
+    "status": "skipped",
+    "ts": 1768761686,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/games/yakuza-3-remastered-nao-sera-mais-vendido-sozinho-depois-da-estreia-de-kiwami/": {
+    "status": "skipped",
+    "ts": 1768761706,
+    "reason": "games_irrelevante"
+  },
+  "H:a71fdc0e0871d96f2b16f04fc46f52138830fa6f": {
+    "status": "skipped",
+    "ts": 1768761706,
+    "reason": "games_irrelevante"
+  },
+  "L:https://canaltech.com.br/smartphone/quanto-voce-economiza-trazendo-um-iphone-16-dos-eua/": {
+    "status": "skipped",
+    "ts": 1768761726,
+    "reason": "ia"
+  },
+  "H:3ca409466bf78f569b3b16579c16b955a7499e24": {
+    "status": "skipped",
+    "ts": 1768761726,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/lancamentos-de-jogos-entre-19-e-23-de-janeiro-veja-lista/": {
+    "status": "skipped",
+    "ts": 1768761746,
+    "reason": "ia"
+  },
+  "H:209a3e876add81e4a0c036797bbba19a55b27efd": {
+    "status": "skipped",
+    "ts": 1768761746,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/18/ciencia-e-espaco/predio-mais-alto-do-mundo-se-aproxima-de-marca-importante-em-sua-construcao/": {
+    "status": "skipped",
+    "ts": 1768761766,
+    "reason": "ia"
+  },
+  "H:5d0c799d5fdd99fc3391b3b86d2b979fdacb6265": {
+    "status": "skipped",
+    "ts": 1768761766,
+    "reason": "ia"
+  },
+  "L:https://www.bleepingcomputer.com/news/microsoft/microsoft-releases-oob-windows-updates-to-fix-shutdown-cloud-pc-bugs/": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "H:1c9d572e1e1e5432403ef3ccdae6fe2b7053e236": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/ciro-data-breach-last-year-exposed-info-on-750-000-canadian-investors/": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "H:a767632f5921a00b544b3ae2224f50355e43367e": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/google-chrome-tests-gemini-powered-ai-skills/": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "H:d88bfdaaf158821794c8692f87e5ab7dd2890e9f": {
+    "status": "skipped",
+    "ts": 1768761769,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.theverge.com/policy/864008/senate-clarity-act-coinbase-crypto-market": {
+    "status": "skipped",
+    "ts": 1768761786,
+    "reason": "ia"
+  },
+  "H:597bd1ae893c62d6b2a83d20c56681f440924cfc": {
+    "status": "skipped",
+    "ts": 1768761786,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/playstation/jogos-de-luta-para-playstation-em-oferta-veja-lista-11/": {
+    "status": "skipped",
+    "ts": 1768763428,
+    "reason": "prefiltro"
+  },
+  "H:694410642c34069163321c8393ae409d39da0918": {
+    "status": "skipped",
+    "ts": 1768763428,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/games/10-jogos-incriveis-que-se-passam-no-brasil/": {
+    "status": "skipped",
+    "ts": 1768763429,
+    "reason": "prefiltro"
+  },
+  "H:0e4278d4c46658e18dd76085ff5beb5dacbfd332": {
+    "status": "skipped",
+    "ts": 1768763429,
+    "reason": "prefiltro"
+  },
+  "L:https://www.theverge.com/column/863502/grok-deepfake-musk": {
+    "status": "skipped",
+    "ts": 1768763429,
+    "reason": "ia"
+  },
+  "H:d8f1ed1884a456587d55784406c3c6d3ce76d370": {
+    "status": "skipped",
+    "ts": 1768763429,
+    "reason": "ia"
+  },
+  "L:https://www.theverge.com/news/863980/disney-deleted-anti-fascist-thread": {
+    "status": "skipped",
+    "ts": 1768763449,
+    "reason": "ia"
+  },
+  "H:c0323997403bd1d47dc3012159e16fa00117ed85": {
+    "status": "skipped",
+    "ts": 1768763449,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/deals/three-months-of-audible-is-on-sale-for-3-right-now-193859793.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768763469,
+    "reason": "ia"
+  },
+  "H:0f635f4b44debac635db4ad7fef041c480bf88cd": {
+    "status": "skipped",
+    "ts": 1768763469,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/deals/this-ugreen-3-in-1-wireless-charger-is-32-percent-off-right-now-214707378.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768763489,
+    "reason": "ia"
+  },
+  "H:ebdaa73c4ddbe8ddcd4a11873677ba009adde79c": {
+    "status": "skipped",
+    "ts": 1768763489,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/cybersecurity/washington-is-the-latest-state-pursuing-an-age-verification-law-for-porn-sites-174423529.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768763509,
+    "reason": "ia"
+  },
+  "H:425f074da14d4337f9e2ccd66e81eea8ca5970dc": {
+    "status": "skipped",
+    "ts": 1768763509,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/deals/apples-latest-25w-magsafe-charger-is-on-sale-for-30-141707297.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768763530,
+    "reason": "ia"
+  },
+  "H:7db119953396197371ba82dcd56584d70a59c6ea": {
+    "status": "skipped",
+    "ts": 1768763530,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/microsoft/windows/update-do-windows-11-de-2026-causa-falha-critica-e-faz-computadores-nao-desligarem/": {
+    "status": "posted",
+    "ts": 1768767179,
+    "posted_ts": 1768767179
+  },
+  "H:12d4a752da3c43cde5bc5d88c4762d996419baa5": {
+    "status": "posted",
+    "ts": 1768767179,
+    "posted_ts": 1768767179
+  },
+  "L:https://canaltech.com.br/apps/estudantes-brasileiros-criam-app-para-agilizar-primeiros-socorros-em-emergencias/": {
+    "status": "posted",
+    "ts": 1768767119,
+    "posted_ts": 1768767119
+  },
+  "H:91dbc6b525f74dd9de24c5e01ddf9cd1c3905379": {
+    "status": "posted",
+    "ts": 1768767119,
+    "posted_ts": 1768767119
+  },
+  "L:https://www.adrenaline.com.br/games/arknights-endfield-passa-de-35-milhoes-de-pre-registros-e-ganha-novos-trailers/": {
+    "status": "skipped",
+    "ts": 1768767069,
+    "reason": "ia"
+  },
+  "H:b92ef5773964ae3db5862b46628b0caaef79c867": {
+    "status": "skipped",
+    "ts": 1768767069,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/18/reviews/iphone-em-oferta-aproveite-para-comprar-o-smartphone-da-apple-com-um-desconto-incrivel/": {
+    "status": "skipped",
+    "ts": 1768767088,
+    "reason": "ia"
+  },
+  "H:12a1e7889b9a462b708c3f184ee10f721901a541": {
+    "status": "skipped",
+    "ts": 1768767088,
+    "reason": "ia"
+  },
+  "L:https://www.engadget.com/computing/microsoft-issues-emergency-fix-afer-a-security-update-left-some-windows-11-devices-unable-to-shut-down-192216734.html?src=rss": {
+    "status": "posted",
+    "ts": 1768767239,
+    "posted_ts": 1768767239
+  },
+  "H:130eb3351a9b3eec86b58b4f0d5ff5b2d652787f": {
+    "status": "posted",
+    "ts": 1768767239,
+    "posted_ts": 1768767239
+  },
+  "L:https://www.adrenaline.com.br/tech/elon-musk-revela-plano-de-lancar-novos-chips-de-ia-a-cada-9-meses-superando-nvidia-e-amd/": {
+    "status": "posted",
+    "ts": 1768768041,
+    "posted_ts": 1768768041
+  },
+  "H:24a52e1792cad851158d34f9eefa1b3953683334": {
+    "status": "posted",
+    "ts": 1768768041,
+    "posted_ts": 1768768041
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246452/oneplus-16-vazamento-bateria-9000mah-glacier.html": {
+    "status": "posted",
+    "ts": 1768827951
+  },
+  "H:5193108d30328855c75fcaabe8ed73e4bfd19bdc": {
+    "status": "posted",
+    "ts": 1768827951
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246451/matt-damon-mudancas-nos-roteiros-da-netflix.html": {
+    "status": "skipped",
+    "ts": 1768827021,
+    "reason": "prefiltro"
+  },
+  "H:b741f5b2d3b975eeebed50713b5e0a428df29a45": {
+    "status": "skipped",
+    "ts": 1768827021,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/motorola/noticias/n246453/motorola-motowatch40-promocao-preco-amazon.html": {
+    "status": "skipped",
+    "ts": 1768827021,
+    "reason": "prefiltro"
+  },
+  "H:a60a55edb675e3e389246a5178accab3db46fabd": {
+    "status": "skipped",
+    "ts": 1768827021,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/hardware/modder-constroi-console-que-reune-playstation-5-xbox-series-x-e-switch-2-em-um-so-lugar/": {
+    "status": "posted",
+    "ts": 1768827624
+  },
+  "H:91a47e41e0f94fec6861050e215025fd564ad598": {
+    "status": "posted",
+    "ts": 1768827624
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246445/200-mp-em-dose-dupla-oppo-e-vivo-elevam-disputa-por-melhores-cameras-de-celular.html": {
+    "status": "queued",
+    "ts": 1768827061
+  },
+  "H:48593db5e8c8efc6c2cbe87a477a115614e96d9b": {
+    "status": "queued",
+    "ts": 1768827061
+  },
+  "L:https://www.adrenaline.com.br/hardware/tarifa-100-dram-nand-producao-eua/": {
+    "status": "queued",
+    "ts": 1768827081
+  },
+  "H:1b45f18be540994fb5a7815d9580294abbf484f5": {
+    "status": "queued",
+    "ts": 1768827081
+  },
+  "L:https://tecnoblog.net/noticias/mpf-recomenda-retomada-do-prefixo-0303-para-combater-telemarketing/": {
+    "status": "skipped",
+    "ts": 1768827101,
+    "reason": "ia"
+  },
+  "H:ba9324573d001fc295f3bb3198da35f77ff5c9eb": {
+    "status": "skipped",
+    "ts": 1768827101,
+    "reason": "ia"
+  },
+  "L:https://olhardigital.com.br/2026/01/19/internet-e-redes-sociais/jogos-de-hoje-19-01-26-onde-assistir-futebol-ao-vivo-e-horarios-das-partidas/": {
+    "status": "skipped",
+    "ts": 1768827101,
+    "reason": "sem_imagem"
+  },
+  "H:f0fb72be444905e2ca468f9f693004113260cd68": {
+    "status": "skipped",
+    "ts": 1768827101,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/18/sequoia-to-invest-in-anthropic-breaking-vc-taboo-on-backing-rivals-ft/": {
+    "status": "skipped",
+    "ts": 1768827103,
+    "reason": "sem_imagem"
+  },
+  "H:b95f2b785cc933b73d9bf13bcd33dd5702147dc4": {
+    "status": "skipped",
+    "ts": 1768827103,
+    "reason": "sem_imagem"
+  },
+  "L:https://arstechnica.com/information-technology/2026/01/10-things-i-learned-from-burning-myself-out-with-ai-coding-agents/": {
+    "status": "skipped",
+    "ts": 1768827104,
+    "reason": "prefiltro"
+  },
+  "H:98061707caf793cf6b534f04f9648554d341fbd3": {
+    "status": "skipped",
+    "ts": 1768827104,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/story/how-to-clean-keurig/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "prefiltro"
+  },
+  "H:104fa9d9ad0df291ad6373f045004cd8abbc8752": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/story/dumbphone-owners-have-literally-lost-their-minds/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "H:04bb25426aabb3c8fb8129316bcaf297279e9173": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.wired.com/story/the-search-for-alien-artifacts-is-coming-into-focus/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "H:a9918d6c803d408205801909c59ddf9c4ebd8779": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.wired.com/story/best-streaming-deals-and-streaming-bundles/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "prefiltro"
+  },
+  "H:7a836ff5635911d85c1ac83831c87bd31909000d": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "prefiltro"
+  },
+  "L:https://www.wired.com/story/capturing-the-moment-a-white-dwarf-exploded/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "H:4867fdd991add88ba2fa6892ef679730bfbdeaef": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.wired.com/story/europe-race-us-deepseek-sovereign-ai/": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "H:6343a7f468b13e2ea8bc048264eeb919cb23e6aa": {
+    "status": "skipped",
+    "ts": 1768827105,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.engadget.com/deals/expressvpn-two-year-plans-are-up-to-78-percent-off-180602104.html?src=rss": {
+    "status": "skipped",
+    "ts": 1768827106,
+    "reason": "prefiltro"
+  },
+  "H:e872d5130665f94e464dda6959edc2bd3e2ce92a": {
+    "status": "skipped",
+    "ts": 1768827106,
+    "reason": "prefiltro"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/openai-hostname-hints-at-a-new-chatgpt-feature-codenamed-sonata/": {
+    "status": "skipped",
+    "ts": 1768827107,
+    "reason": "sem_imagem"
+  },
+  "H:172b9d65b488e0b47e1e6c773fc03391bc61f77f": {
+    "status": "skipped",
+    "ts": 1768827107,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/artificial-intelligence/new-openai-leak-hints-at-upcoming-chatgpt-features/": {
+    "status": "skipped",
+    "ts": 1768827107,
+    "reason": "sem_imagem"
+  },
+  "H:3063c36754d49264460f60c0182a21691d058f84": {
+    "status": "skipped",
+    "ts": 1768827107,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/copper_chief_cops_it_after/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:813edca583cccc2dee1cb4bf958e12b3800c3441": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/ingram_micro_ransomware_affects/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:0344f63397ddeb539fb1219ae53a3225be771f89": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/uk_social_media_children_ban_prime_minister/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:78f980f51ed5ca707c85e2fe8e4315065f1a4df3": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/higham_lane_school_reopens/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:08f95c15b48385354a958945c5fdd6f2b91bfb9c": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/price_battery_life_performance_pc/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:a96202ea5be0e13f2ce37000aa3bc5d258ce4c10": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/helicopter_drone_for_royal_navy/": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "H:1a4cf3b5e9cf6e8d9cde701ff293f3717c2bd71f": {
+    "status": "skipped",
+    "ts": 1768827109,
+    "reason": "sem_imagem"
+  },
+  "L:https://canaltech.com.br/produtos/xiaomi-vai-fabricar-processadores-para-carros-eletricos-e-notebooks/": {
+    "status": "posted",
+    "ts": 1768827141
+  },
+  "H:b1ade5cb149e29439c12d83bda886f83f782c16e": {
+    "status": "posted",
+    "ts": 1768827141
+  },
+  "L:https://canaltech.com.br/apps/o-chatgpt-tera-anuncios-no-brasil-entenda-o-caso/": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "H:e1d8a36cb14b35a57b86c6226918548887a721f7": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/carros/estudo-revela-problema-ambiental-grave-dos-carros-hibridos-plug-in-no-uso-real/": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "H:63353deafbf19f7c6562eb1021e1f27f3ba517b8": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/smartphone/zenfone-acabou-asus-confirma-que-desistiu-dos-celulares-por-causa-de-ia/": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "H:d032181498c2976c247007210aec6d8d5d664cda": {
+    "status": "skipped",
+    "ts": 1768827121,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/noticias/core-ultra-9-290hx-plus-aparece-no-passmark-com-desempenho-proximo-ao-core-ultra-9-285k/": {
+    "status": "skipped",
+    "ts": 1768829007,
+    "reason": "ia"
+  },
+  "H:66d81a75dae51dd416c064b88bb9611cbc92bcc1": {
+    "status": "skipped",
+    "ts": 1768829007,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246455/smartwatches-garmin-atualizados-navega.html": {
+    "status": "skipped",
+    "ts": 1768829027,
+    "reason": "ia"
+  },
+  "H:a700848db52a0e6b042451d0753cfdb7065d7a54": {
+    "status": "skipped",
+    "ts": 1768829027,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/games/destaque-de-highguard-no-game-awards-foi-escolha-de-geoff-keighley/": {
+    "status": "skipped",
+    "ts": 1768829047,
+    "reason": "ia"
+  },
+  "H:1cb08c37fd40d038c990af3f649c7f77865e8e99": {
+    "status": "skipped",
+    "ts": 1768829047,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246459/qualcomm-e-mediatek-preparam-chips-de-2-nm.html": {
+    "status": "skipped",
+    "ts": 1768829067,
+    "reason": "ia"
+  },
+  "H:12e273c01c2b3634d1d0085649485348fa27b262": {
+    "status": "skipped",
+    "ts": 1768829067,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/hardware/i7-4790k-ddr3-cyberpunk-300-memorias-ddr5/": {
+    "status": "skipped",
+    "ts": 1768829087,
+    "reason": "ia"
+  },
+  "H:4e76db26dcef32e73929cf92fc3bf2351df27962": {
+    "status": "skipped",
+    "ts": 1768829087,
+    "reason": "ia"
+  },
+  "L:https://www.wired.com/story/whats-going-on-with-the-dji-drone-ban/": {
+    "status": "skipped",
+    "ts": 1768829092,
+    "reason": "sem_imagem"
+  },
+  "H:4682744480e0fb058891503c1b843f0f50add1a5": {
+    "status": "skipped",
+    "ts": 1768829092,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/windows_11_shutdown_bug/": {
+    "status": "skipped",
+    "ts": 1768829096,
+    "reason": "sem_imagem"
+  },
+  "H:7e8777f09d7e772ebf2a47300f118e25f5f422d2": {
+    "status": "skipped",
+    "ts": 1768829096,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246454/fim-da-linha-nao-xperia-1-iv-e-5-iv-ganham-android-16-via-lineageos.html": {
+    "status": "skipped",
+    "ts": 1768829107,
+    "reason": "ia"
+  },
+  "H:eabe663666f9bea6aa6dc62b03edb9bb4816d99d": {
+    "status": "skipped",
+    "ts": 1768829107,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/novos-produtos/noticias/n246444/lava-blaze-duo-3-lancamento-preco-ficha-tecnica.html": {
+    "status": "skipped",
+    "ts": 1768829107,
+    "reason": "prefiltro"
+  },
+  "H:40e395668e1fc328dedf8f21f56c1ad0edcd9fa6": {
+    "status": "skipped",
+    "ts": 1768829107,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/software/noticias/n246466/huawei-watch-ultimate-2-detecta-risco-cardiaco.html": {
+    "status": "skipped",
+    "ts": 1768832606,
+    "reason": "ia"
+  },
+  "H:61b643df641a68a1e89603968e2a10ebd6e51c7c": {
+    "status": "skipped",
+    "ts": 1768832606,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/samsung/noticias/n246468/samsung-galaxy-a17-com-256-gb-por-menos-de-1200.html": {
+    "status": "skipped",
+    "ts": 1768832606,
+    "reason": "prefiltro"
+  },
+  "H:2d26e706ef0f1397c16350b03f937b32225b75f9": {
+    "status": "skipped",
+    "ts": 1768832606,
+    "reason": "prefiltro"
+  },
+  "L:https://www.adrenaline.com.br/asus/asus-mostra-novo-uefi-bios-neo-da-serie-amd-800-com-visual-hd-e-rom-de-64mb/": {
+    "status": "skipped",
+    "ts": 1768832626,
+    "reason": "ia"
+  },
+  "H:6832bd655afe70e78e74f8ae391744ef20d84c04": {
+    "status": "skipped",
+    "ts": 1768832626,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/jogos/noticias/n246467/palworld-segundo-ano-novos-pals.html": {
+    "status": "skipped",
+    "ts": 1768832647,
+    "reason": "ia"
+  },
+  "H:8eafdce5589f1f0899b7fbdf230c0f57607ed771": {
+    "status": "skipped",
+    "ts": 1768832647,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/microsoft/windows/microsoft-libera-correcao-de-emergencia-para-bug-que-impedia-windows-11-de-desligar/": {
+    "status": "skipped",
+    "ts": 1768832666,
+    "reason": "ia"
+  },
+  "H:1ae707604f349b59c6fc8d9ef1926e846b47ac34": {
+    "status": "skipped",
+    "ts": 1768832666,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/rumores/noticias/n246460/tecno-pova-curve-2-5g-vaza-bateria-7750mah-android.html": {
+    "status": "skipped",
+    "ts": 1768832686,
+    "reason": "ia"
+  },
+  "H:a51f5a80a14e2cf4a1bffe51dee9085e3cfef123": {
+    "status": "skipped",
+    "ts": 1768832686,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/achados/iphone-15-128-gb-sai-com-46-de-desconto-com-cupom-no-mercado-livre/": {
+    "status": "skipped",
+    "ts": 1768832688,
+    "reason": "prefiltro"
+  },
+  "H:a7dcc33fb7e5ee605b30aa5ec140e03b798fa2e5": {
+    "status": "skipped",
+    "ts": 1768832688,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/tablet/quanto-vale-a-pena-pagar-no-galaxy-tab-s10-fe-plus-em-2026/": {
+    "status": "skipped",
+    "ts": 1768832689,
+    "reason": "prefiltro"
+  },
+  "H:b07cf4b5ab178960d802e835454edfb970ff8bda": {
+    "status": "skipped",
+    "ts": 1768832689,
+    "reason": "prefiltro"
+  },
+  "L:https://canaltech.com.br/carros/china-testa-pela-1a-vez-aeronave-cargueira-100-nacional-com-ia/": {
+    "status": "skipped",
+    "ts": 1768832689,
+    "reason": "prefiltro"
+  },
+  "H:d11da6a0d16849b4e9562acdc38c177eaa90feb9": {
+    "status": "skipped",
+    "ts": 1768832689,
+    "reason": "prefiltro"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/ingram-micro-says-ransomware-attack-affected-42-000-people/": {
+    "status": "skipped",
+    "ts": 1768832695,
+    "reason": "sem_imagem"
+  },
+  "H:18a81558426c770d866a103b2cd9ea98e51a09e8": {
+    "status": "skipped",
+    "ts": 1768832695,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/microsoft_intune_deadline/": {
+    "status": "skipped",
+    "ts": 1768832698,
+    "reason": "sem_imagem"
+  },
+  "H:dededa7c5b71376d21397f3b886182f7a8416e70": {
+    "status": "skipped",
+    "ts": 1768832698,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/dont_underestimate_prorussia_hacktivists_warns/": {
+    "status": "skipped",
+    "ts": 1768832698,
+    "reason": "sem_imagem"
+  },
+  "H:340945f1e2549da695807aceb8d7191edfcc2d17": {
+    "status": "skipped",
+    "ts": 1768832698,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.adrenaline.com.br/games/criadora-de-gta-rockstar-north-foi-afetada-por-explosao-em-seu-escritorio/": {
+    "status": "skipped",
+    "ts": 1768832706,
+    "reason": "ia"
+  },
+  "H:015352a90cc9142018ff21a768051f6291cad02b": {
+    "status": "skipped",
+    "ts": 1768832706,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246475/apple-iphone-17-oferta-tela-120-camera-48-mp.html": {
+    "status": "skipped",
+    "ts": 1768835146,
+    "reason": "prefiltro"
+  },
+  "H:67abaab8ee581191f680b9bef3ef5f065eaf1241": {
+    "status": "skipped",
+    "ts": 1768835146,
+    "reason": "prefiltro"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246472/casio-g-shock-harbin-citty-edition.html": {
+    "status": "skipped",
+    "ts": 1768835147,
+    "reason": "ia"
+  },
+  "H:97083a7f5c98f5124084402b4969b485385ddeb7": {
+    "status": "skipped",
+    "ts": 1768835147,
+    "reason": "ia"
+  },
+  "L:https://www.adrenaline.com.br/intel/intel-bartlett-lake-vaza-usando-apenas-p-cores-core-9-273pqe-traz-12-nucleos-e-ate-59ghz/": {
+    "status": "skipped",
+    "ts": 1768835168,
+    "reason": "ia"
+  },
+  "H:e6169bb68450a8e994ef32d4d785cf5db55e3343": {
+    "status": "skipped",
+    "ts": 1768835168,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/noticias/samsung-deixa-escapar-detalhes-da-linha-s26/": {
+    "status": "skipped",
+    "ts": 1768835169,
+    "reason": "sem_imagem"
+  },
+  "H:2061510339149f43792cb9c6a6f56148d0e2cb53": {
+    "status": "skipped",
+    "ts": 1768835169,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.tudocelular.com/tech/noticias/n246469/whatsapp-chamadas-voz-video-grupo-navegador.html": {
+    "status": "skipped",
+    "ts": 1768835187,
+    "reason": "ia"
+  },
+  "H:7970d5c73aaac0c58c02f3d3ad34ea0699d4306b": {
+    "status": "skipped",
+    "ts": 1768835187,
+    "reason": "ia"
+  },
+  "L:https://tecnoblog.net/responde/qual-e-a-historia-da-apple-saiba-quem-foi-o-criador-da-empresa-dona-do-iphone/": {
+    "status": "skipped",
+    "ts": 1768835207,
+    "reason": "ia"
+  },
+  "H:45a8e3450791f430758814fb5841606d72545b33": {
+    "status": "skipped",
+    "ts": 1768835207,
+    "reason": "ia"
+  },
+  "L:https://www.tudocelular.com/mercado/noticias/n246464/ta-dominado-linha-iphone-17-vende-concorrentes.html": {
+    "status": "skipped",
+    "ts": 1768835228,
+    "reason": "ia"
+  },
+  "H:2c74bfae2b7dd3fb00fe6b86685188f46c875c07": {
+    "status": "skipped",
+    "ts": 1768835228,
+    "reason": "ia"
+  },
+  "L:https://canaltech.com.br/telecom/mpf-pressiona-anatel-para-a-volta-do-0303-para-ligacoes-de-telemarketing/": {
+    "status": "skipped",
+    "ts": 1768835228,
+    "reason": "prefiltro"
+  },
+  "H:54e8c66dd877de25a46320a9545333381088b024": {
+    "status": "skipped",
+    "ts": 1768835228,
+    "reason": "prefiltro"
+  },
+  "L:https://olhardigital.com.br/2026/01/19/reviews/ofertas-do-dia-ar-condicionado-robo-aspirador-smartphone-e-mais-itens-em-promocao/": {
+    "status": "skipped",
+    "ts": 1768835229,
+    "reason": "prefiltro"
+  },
+  "H:a70757aa7996a9a447ea785c9708e9136038663a": {
+    "status": "skipped",
+    "ts": 1768835229,
+    "reason": "prefiltro"
+  },
+  "L:https://techcrunch.com/2026/01/19/looking-ahead-to-2026-whats-next-for-startup-battlefield-200/": {
+    "status": "skipped",
+    "ts": 1768835235,
+    "reason": "sem_imagem"
+  },
+  "H:761d5896e872159b0a448f90464568e27ba90d03": {
+    "status": "skipped",
+    "ts": 1768835235,
+    "reason": "sem_imagem"
+  },
+  "L:https://techcrunch.com/2026/01/19/biotics-ai-battlefield-2023-gains-fda-approval-for-its-ai-powered-fetal-ultrasound-product/": {
+    "status": "skipped",
+    "ts": 1768835235,
+    "reason": "sem_imagem"
+  },
+  "H:5c103424f05f8f8303b16dfa4399b05330fd9221": {
+    "status": "skipped",
+    "ts": 1768835235,
+    "reason": "sem_imagem"
+  },
+  "L:https://www.bleepingcomputer.com/news/security/jordanian-pleads-guilty-to-selling-access-to-50-corporate-networks/": {
+    "status": "skipped",
+    "ts": 1768835238,
+    "reason": "sem_imagem"
+  },
+  "H:34e1e197ac5529b16f0837fd6762bbe5955fb769": {
+    "status": "skipped",
+    "ts": 1768835238,
+    "reason": "sem_imagem"
+  },
+  "L:https://go.theregister.com/feed/www.theregister.com/2026/01/19/nasa_artemis_ii/": {
+    "status": "skipped",
+    "ts": 1768835240,
+    "reason": "sem_imagem"
+  },
+  "H:3914d00011318d18d303b55aadbb919762c5106a": {
+    "status": "skipped",
+    "ts": 1768835240,
+    "reason": "sem_imagem"
+  },
+  "L:https://tecnoblog.net/noticias/data-centers-de-ia-vao-consumir-70-dos-chips-de-memoria/": {
+    "status": "skipped",
+    "ts": 1768835248,
+    "reason": "ia"
+  },
+  "H:fa711e2cc817f8642a1febecb6d0907c2cc4aa8c": {
+    "status": "skipped",
+    "ts": 1768835248,
+    "reason": "ia"
+  }
+}

@@ -34,9 +34,6 @@ STATUS_EPHEMERAL = os.getenv("STATUS_EPHEMERAL", "1").strip() == "1"
 ARQUIVO_HISTORICO = os.getenv("ARQUIVO_HISTORICO", "notices_history.json")
 ARQUIVO_CACHE_FEEDS = os.getenv("ARQUIVO_CACHE_FEEDS", "feed_cache.json")
 
-# IMAGEM PADRÃO (FALLBACK)
-DEFAULT_IMAGE = "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop"
-
 # IA
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "550")) 
@@ -66,11 +63,11 @@ MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE (ATUALIZADAS PARA 65) ---
-NOTA_MIN_APROVACAO = 65  
-NOTA_IMPORTANTE = 80
-NOTA_URGENTE = 93       # Subiu para 93 conforme seu prompt
-NOTA_MIN_GAMES = 65     # Alinhado com a nota mínima
+# --- NOTAS DE CORTE (MAIS RIGOROSAS) ---
+NOTA_MIN_APROVACAO = 70  # Subiu para 70 (Filtra mais)
+NOTA_IMPORTANTE = 85
+NOTA_URGENTE = 93       
+NOTA_MIN_GAMES = 70     
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -207,7 +204,7 @@ GAMES_VALOR_RE = re.compile(
 def games_eh_relevante(titulo: str, texto: str, nota: int, urgente: bool) -> bool:
     blob = f"{titulo}\n{texto}".strip()
     if urgente: return True
-    if GAMES_VALOR_RE.search(blob) and nota >= 55: return True
+    if GAMES_VALOR_RE.search(blob) and nota >= 65: return True
     if nota < NOTA_MIN_GAMES: return False
     if GAMES_RUIDO_RE.search(blob): return False
     return True
@@ -578,7 +575,7 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
-    # === PROMPT V10: JORNALISTA CHEFE (CREDIBILIDADE + FILTRO 65) ===
+    # === PROMPT V11: JORNALISTA CHEFE (CREDIBILIDADE + FILTRO 70) ===
     prompt = f"""
 Você é um jornalista chefe de Tecnologia focado em INOVAÇÃO, RELEVÂNCIA e CREDIBILIDADE. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa para o público saber.
 
@@ -615,10 +612,10 @@ OUTRAS CATEGORIAS (ACEITAR SE TIVER IMPACTO):
 - Games: Apenas AAA, grandes eventos (TGA, E3, Direct), aquisições ou demissões em massa. (RECUSAR: skins, patch notes, eventos semanais).
 
 CRITÉRIO DE NOTA (0-100):
-- 93-100: URGENTE (Crise de segurança, Lançamento Global de iPhone/Galaxy S, Vazamento grave).
-- 85-92: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
+- 95-100: CATÁSTROFE/MUNDIAL (Queda global de internet, Hack bancário, Algo que vai afetar o mundo inteiro).
+- 85-94: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
 - 70-84: RELEVANTE (Interessante para entusiastas, curiosidades tech).
-- < 65: IRRELEVANTE (skip=true).
+- < 70: IRRELEVANTE (skip=true).
 
 RESUMO (PT-BR) — RIGOROSO:
 - Exatamente 3 paragráfos detalhados, mas sem ficar inventando coisa.
@@ -670,7 +667,10 @@ async def postar_noticia(item: dict) -> bool:
     
     if not channel: return False
 
-    img_url = item.get("imagem") or DEFAULT_IMAGE
+    # === FILTRO DE IMAGEM ===
+    # Se não tem imagem (e não achou nem no sniper), ABORTA O POST.
+    if not item.get("imagem"):
+        return False
 
     cat = item.get("categoria", "Outros")
     emoji = EMOJIS_CATEGORIA.get(cat, "🔌")
@@ -684,7 +684,7 @@ async def postar_noticia(item: dict) -> bool:
     
     embed = discord.Embed(title=titulo, url=item.get("link"), description=resumo, color=cor)
     embed.set_author(name=f"Via {item.get('site')} • {cat} {emoji}", icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png")
-    embed.set_image(url=img_url)
+    embed.set_image(url=item.get("imagem"))
     embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({item.get('link')})**", inline=False)
     
     footer = "Notícia resumida por IA"
@@ -736,7 +736,12 @@ async def processar_fonte(nome_site: str, url_feed: str, historico: dict, sem_fe
                     historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                     continue
                 
+                # TENTA PEGAR IMAGEM
                 img = await extrair_imagem_inteligente(entry, url_feed)
+                # SE NÃO CONSEGUIR IMAGEM, PULA A NOTÍCIA
+                if not img:
+                    historico_set_duplo(historico, link_norm, dedupe, "skipped", {"reason": "sem_imagem"})
+                    continue
                 
                 if not await consumir_budget_ia(): continue
                 
@@ -810,16 +815,23 @@ async def postar_da_fila():
     if queue_noticias.empty(): return
     
     got = await queue_noticias.get()
-    prio, _, _, item = got
+    prio, nota, _, item = got # Desempacota a nota também
+    nota = abs(nota) # A nota vem negativa da fila de prioridade
     
     urgente = bool(item.get("urgente"))
     
     # Horário Comercial
     agora_br = datetime.now(FUSO_HORARIO_BR)
     hora = agora_br.hour
-    if not urgente and (hora < JANELA_INICIO or hora >= JANELA_FIM):
-        await queue_noticias.put(got)
-        return
+    
+    # Se estiver fora do horário (23h-10h), só posta se for EXTREMAMENTE URGENTE (Nota > 95)
+    # Urgentes "normais" (Nota 90-94) esperam até as 10h.
+    fora_horario = (hora < JANELA_INICIO or hora >= JANELA_FIM)
+    
+    if fora_horario:
+        if not urgente or (urgente and nota < 95):
+            await queue_noticias.put(got)
+            return
 
     # Anti-Flood Inteligente
     now_utc = datetime.now(timezone.utc)
@@ -840,7 +852,11 @@ async def postar_da_fila():
         
         log.warning(f"📨 Postado: {item['titulo']}")
     else:
-        await queue_noticias.put(got)
+        # Se falhou (ex: sem imagem), descarta
+        # Como o filtro de imagem já foi feito na coleta, aqui é só garantia
+        queue_noticias.task_done()
+        return 
+
     queue_noticias.task_done()
 
 @tree.command(name="status")

@@ -1,0 +1,100 @@
+{
+  "Adrenaline::https://adrenaline.com.br/feed/": {
+    "etag": "W/\"3338a5730ca8cb5cc40f4dbf7b9c0054\"",
+    "last_modified": "Mon, 19 Jan 2026 14:41:03 GMT",
+    "ts": 1768835146
+  },
+  "Tecnoblog::https://tecnoblog.net/feed/": {
+    "etag": "\"1eb9daee5237929e17ff78aa87b2ed11\"",
+    "last_modified": "Mon, 19 Jan 2026 14:31:22 GMT",
+    "ts": 1768835168
+  },
+  "Manual do Usuário::https://manualdousuario.net/feed/": {
+    "etag": "W/\"81f1105e7b503e48d493124737987d13\"",
+    "last_modified": "Thu, 15 Jan 2026 20:50:57 GMT",
+    "ts": 1768511077
+  },
+  "Olhar Digital::https://olhardigital.com.br/rss/": {
+    "etag": "\"4a940761d56771c30effcc2a01103dda\"",
+    "last_modified": "Mon, 19 Jan 2026 14:18:58 GMT",
+    "ts": 1768835229
+  },
+  "G1 Tecnologia::https://g1.globo.com/dynamo/tecnologia/rss2.xml": {
+    "etag": "\"c1fc608fa5cf8cc07b2fb0eb9ff72060e6c59b54\"",
+    "ts": 1768832690
+  },
+  "The Verge::https://www.theverge.com/rss/index.xml": {
+    "etag": "W/\"81bf6af69c1d1bd872d887bc52da693a\"",
+    "ts": 1768835230
+  },
+  "TechCrunch::https://techcrunch.com/feed/": {
+    "etag": "W/\"405e21ccdf15fc065b8da86adf882392\"",
+    "last_modified": "Sat, 17 Jan 2026 18:53:30 GMT",
+    "ts": 1768835235
+  },
+  "Ars Technica::https://feeds.arstechnica.com/arstechnica/index": {
+    "last_modified": "Mon, 19 Jan 2026 12:35:40 GMT",
+    "ts": 1768827104
+  },
+  "KrebsOnSecurity::https://krebsonsecurity.com/feed/": {
+    "last_modified": "Thu, 15 Jan 2026 02:07:39 GMT",
+    "ts": 1768521150
+  },
+  "The Register::https://www.theregister.com/headlines.atom": {
+    "last_modified": "Mon, 19 Jan 2026 15:00:43 GMT",
+    "ts": 1768835240
+  },
+  "Google Security Blog::https://security.googleblog.com/feeds/posts/default?alt=rss": {
+    "last_modified": "Mon, 19 Jan 2026 12:43:55 GMT",
+    "ts": 1768835240
+  },
+  "BleepingComputer::https://www.bleepingcomputer.com/feed/": {
+    "etag": "0b216774d239d5341bb83068b697997a",
+    "last_modified": "Mon, 19 Jan 2026 14:52:15 GMT",
+    "ts": 1768835238
+  },
+  "SITE::Adrenaline": {
+    "active_url": "https://adrenaline.com.br/feed/",
+    "ts": 1768576696
+  },
+  "NotebookCheck::https://www.notebookcheck.net/News.152.100.html": {
+    "last_modified": "Fri, 16 Jan 2026 14:47:11 GMT",
+    "ts": 1768574831
+  },
+  "SITE::NotebookCheck": {
+    "active_url": "https://www.notebookcheck.net/News.152.100.html",
+    "ts": 1768574831
+  },
+  "SITE::Tecnoblog": {
+    "active_url": "https://tecnoblog.net/feed/",
+    "ts": 1768576696
+  },
+  "SITE::Olhar Digital": {
+    "active_url": "https://olhardigital.com.br/rss/",
+    "ts": 1768576777
+  },
+  "SITE::TechCrunch": {
+    "active_url": "https://techcrunch.com/feed/",
+    "ts": 1768576782
+  },
+  "SITE::Ars Technica": {
+    "active_url": "https://feeds.arstechnica.com/arstechnica/index",
+    "ts": 1768574839
+  },
+  "SITE::Google Security Blog": {
+    "active_url": "https://security.googleblog.com/feeds/posts/default?alt=rss",
+    "ts": 1768576790
+  },
+  "MSRC::https://api.msrc.microsoft.com/update-guide/rss": {
+    "last_modified": "Wed, 14 Jan 2026 21:35:26 GMT",
+    "ts": 1768574851
+  },
+  "SITE::MSRC": {
+    "active_url": "https://api.msrc.microsoft.com/update-guide/rss",
+    "ts": 1768574851
+  },
+  "SITE::The Register": {
+    "active_url": "https://www.theregister.com/headlines.atom",
+    "ts": 1768576791
+  }
+}
