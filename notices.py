@@ -36,9 +36,7 @@ ARQUIVO_CACHE_FEEDS = os.getenv("ARQUIVO_CACHE_FEEDS", "feed_cache.json")
 
 # IA
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MAX_TOKENS = int(
-    os.getenv("GROQ_MAX_TOKENS", "800")
-)  # Aumentei tokens para caber o resumo maior
+GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "800"))
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
@@ -65,11 +63,11 @@ MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE (RÉGUA ALTA) ---
-NOTA_MIN_APROVACAO = 75  # Subiu para 75 (Só coisa boa)
+# --- NOTAS DE CORTE ---
+NOTA_MIN_APROVACAO = 75  # Alta qualidade
 NOTA_IMPORTANTE = 85
 NOTA_URGENTE = 93
-NOTA_MIN_GAMES = 75  # Games alinhado
+NOTA_MIN_GAMES = 75
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -79,8 +77,8 @@ FEED_HTTP_TIMEOUT_SEC = int(os.getenv("FEED_HTTP_TIMEOUT_SEC", "15"))
 FEED_FAIL_COOLDOWN_MIN = int(os.getenv("FEED_FAIL_COOLDOWN_MIN", "30"))
 FEED_COOLDOWN_LOG_EVERY_SEC = int(os.getenv("FEED_COOLDOWN_LOG_EVERY_SEC", "300"))
 
-# Anti-dup
-SIMHASH_TTL_HORAS = int(os.getenv("SIMHASH_TTL_HORAS", "36"))
+# Anti-dup (AUMENTADO PARA 72H)
+SIMHASH_TTL_HORAS = 72
 SIMHASH_HAMMING_MAX = int(os.getenv("SIMHASH_HAMMING_MAX", "3"))
 
 LOG_LEVEL = (os.getenv("LOG_LEVEL", "WARNING") or "WARNING").upper()
@@ -627,10 +625,7 @@ def formatar_resumo_5_blocos_uma_linha(resumo: str) -> str:
     if not s:
         return ""
     s = s.replace("\r\n", "\n").replace("\r", "\n").strip()
-
-    # Remove quebras para deixar tudo em uma linha
     s = re.sub(r"\s*\n+\s*", " ", s).strip()
-
     return s
 
 
@@ -748,6 +743,12 @@ async def url_eh_imagem(url: str) -> bool:
                 return True
             if r.status in (401, 403, 429):
                 return looks_like
+
+            # NOVO: Checa tamanho para evitar pixel de rastreamento (1x1)
+            cl = r.headers.get("Content-Length")
+            if cl and int(cl) < 1500:  # Rejeita se menor que 1.5KB
+                return False
+
     except:
         pass
     return looks_like
@@ -765,7 +766,7 @@ def gerar_resumo_ia_sync(
     if not texto_base.strip():
         return None
 
-    # === PROMPT V12: RESUMO DETALHADO + NOTA 75 ===
+    # === PROMPT V13: JORNALISTA CHEFE RIGOROSO ===
     prompt = f"""
 Você é um jornalista chefe de Tecnologia focado em INOVAÇÃO, RELEVÂNCIA e CREDIBILIDADE. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa para o público saber.
 
@@ -804,7 +805,7 @@ OUTRAS CATEGORIAS (ACEITAR SE TIVER IMPACTO):
 CRITÉRIO DE NOTA (0-100):
 - 95-100: CATÁSTROFE/MUNDIAL (Queda global de internet, Hack bancário, Lançamento iPhone).
 - 85-94: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
-- 75-84: RELEVANTE (Inovação, recurso novo útil).
+- 75-84: RELEVANTE (Interessante para entusiastas, curiosidades tech).
 - < 75: IRRELEVANTE (skip=true).
 
 RESUMO (PT-BR) — RIGOROSO:
@@ -873,8 +874,7 @@ async def postar_noticia(item: dict) -> bool:
     if not channel:
         return False
 
-    # === FILTRO DE IMAGEM RIGOROSO ===
-    # Se não tem imagem (mesmo depois do sniper), REJEITA e não posta.
+    # === FILTRO DE IMAGEM BLINDADO ===
     if not item.get("imagem"):
         return False
 
@@ -996,9 +996,9 @@ async def processar_fonte(
                     )
                     continue
 
-                # TENTA PEGAR IMAGEM
+                # BUSCA IMAGEM (AGORA COM CHECAGEM DE TAMANHO)
                 img = await extrair_imagem_inteligente(entry, url_feed)
-                # SE NÃO CONSEGUIR IMAGEM, PULA A NOTÍCIA NA COLETA
+                # SE NÃO CONSEGUIR IMAGEM (OU FOR PEQUENA DEMAIS), PULA
                 if not img:
                     historico_set_duplo(
                         historico,
