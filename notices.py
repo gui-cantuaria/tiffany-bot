@@ -36,7 +36,7 @@ ARQUIVO_CACHE_FEEDS = os.getenv("ARQUIVO_CACHE_FEEDS", "feed_cache.json")
 
 # IA
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "800")) # Aumentei tokens para caber o resumo maior
+GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "1024")) # Aumentado para suportar resumos maiores
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
 
 # --- INTERVALO E HORÁRIOS ---
@@ -63,11 +63,11 @@ MAX_IA_CALLS_PER_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "10"))
 MIN_TEXTO_CHARS = int(os.getenv("MIN_TEXTO_CHARS", "100"))
 MOSTRAR_ORIGINAL_EN = os.getenv("MOSTRAR_ORIGINAL_EN", "1").strip() == "1"
 
-# --- NOTAS DE CORTE (RÉGUA ALTA) ---
-NOTA_MIN_APROVACAO = 75  # Subiu para 75 (Só coisa boa)
+# --- NOTAS DE CORTE ---
+NOTA_MIN_APROVACAO = 75  
 NOTA_IMPORTANTE = 85
 NOTA_URGENTE = 93       
-NOTA_MIN_GAMES = 75      # Games alinhado
+NOTA_MIN_GAMES = 75     
 
 MAX_POR_FONTE_POR_CICLO = int(os.getenv("MAX_POR_FONTE_POR_CICLO", "2"))
 
@@ -77,9 +77,9 @@ FEED_HTTP_TIMEOUT_SEC = int(os.getenv("FEED_HTTP_TIMEOUT_SEC", "15"))
 FEED_FAIL_COOLDOWN_MIN = int(os.getenv("FEED_FAIL_COOLDOWN_MIN", "30"))
 FEED_COOLDOWN_LOG_EVERY_SEC = int(os.getenv("FEED_COOLDOWN_LOG_EVERY_SEC", "300"))
 
-# Anti-dup
-SIMHASH_TTL_HORAS = int(os.getenv("SIMHASH_TTL_HORAS", "72")) # Memória de 3 dias
-SIMHASH_HAMMING_MAX = int(os.getenv("SIMHASH_HAMMING_MAX", "3"))
+# --- ANTI-DUP REFORÇADO ---
+SIMHASH_TTL_HORAS = 120 # Lembra por 5 dias
+SIMHASH_HAMMING_MAX = 4 # Mais agressivo na detecção de similaridade (texto parecido será barrado)
 
 LOG_LEVEL = (os.getenv("LOG_LEVEL", "WARNING") or "WARNING").upper()
 
@@ -559,9 +559,9 @@ async def url_eh_imagem(url: str) -> bool:
             if r.status < 400 and "image/" in r.headers.get("Content-Type", "").lower(): return True
             if r.status in (401, 403, 429): return looks_like 
             
-            # NOVO: Checa tamanho para evitar pixel de rastreamento (1x1)
+            # FILTRO DE TAMANHO (5KB) PARA EVITAR ÍCONES/PLACEHOLDERS
             cl = r.headers.get("Content-Length")
-            if cl and int(cl) < 1500: # Rejeita se menor que 1.5KB
+            if cl and int(cl) < 5000:
                 return False
                 
     except: pass
@@ -573,7 +573,7 @@ def gerar_resumo_ia_sync(texto_base: str, titulo_original: str, nome_site: str, 
     if not groq_client: return None
     if not texto_base.strip(): return None
 
-    # === PROMPT V12: RESUMO DETALHADO + NOTA 75 + TÍTULOS EXPLICATIVOS ===
+    # === PROMPT V14: 5 FRASES COMPLETAS ===
     prompt = f"""
 Você é um jornalista chefe de Tecnologia focado em INOVAÇÃO, RELEVÂNCIA e CREDIBILIDADE. Sua missão é filtrar o que é irrelevante e destacar apenas o que realmente importa para o público saber.
 
@@ -612,18 +612,14 @@ OUTRAS CATEGORIAS (ACEITAR SE TIVER IMPACTO):
 CRITÉRIO DE NOTA (0-100):
 - 95-100: CATÁSTROFE/MUNDIAL (Queda global de internet, Hack bancário, Lançamento iPhone).
 - 85-94: ALTA RELEVÂNCIA (Grandes novidades, impacto amplo).
-- 75-84: RELEVANTE (Inovação, recurso novo útil).
+- 75-84: RELEVANTE (Interessante para entusiastas, curiosidades tech).
 - < 75: IRRELEVANTE (skip=true).
 
-TÍTULO (PT-BR):
-- Reescreva o título se o original for vago ou apenas um nome.
-- O título deve explicar o que aconteceu. Ex: "Dragon Ball Age 1000" -> "Novo jogo Dragon Ball Age 1000 anunciado para 2027".
-
 RESUMO (PT-BR) — RIGOROSO:
-- Exatamente 5 paragráfos detalhados explicando a notícia, mas sem ficar inventando coisa.
+- Escreva um resumo completo com EXATAMENTE 5 FRASES/PARÁGRAFOS longos e detalhados.
 - Mesma linha (sem quebra).
 - Termine cada frase com ponto final ".".
-- Estrutura: Explicar exatamente a notícia para que mesmo usuários leigos a experientes recebam o conteúdo e entendam o impacto.
+- O texto deve ser substancial e explicativo.
 
 Fonte: {nome_site}
 Título: {titulo_original}
@@ -669,7 +665,7 @@ async def postar_noticia(item: dict) -> bool:
     
     if not channel: return False
 
-    # === FILTRO DE IMAGEM BLINDADO (DUPLA CHECAGEM) ===
+    # === FILTRO DE IMAGEM BLINDADO ===
     if not item.get("imagem"):
         return False
 
