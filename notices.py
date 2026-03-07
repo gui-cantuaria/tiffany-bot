@@ -7,11 +7,11 @@ import asyncio
 import re
 import logging
 from datetime import datetime, timedelta
-import pytz  # Fuso horário brasileiro
+import pytz
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-# Logs para acompanhar o que acontece na Discloud
+# Configuração de Logs
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -21,19 +21,19 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Configurações de IDs e Horários
 CANAL_NOTICIAS_ID = 1420835598733938849
 ID_CARGO_PARA_MARCAR = 1460323314357501952
+
 HORA_INICIO = 8
 HORA_FIM = 18
-FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")  # Garante o horário de Goiânia
+FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")
 
-# Listas de Estilo e Fontes
 CORES_CATEGORIA = {
     "Hardware": 0xE03E3E,
     "IA": 0x00FFFF,
     "Games": 0x9146FF,
     "Segurança": 0x00FF00,
+    "Sistemas Operacionais": 0x00A4EF,
     "Mobile": 0xFFA500,
     "Business": 0x000080,
     "Science": 0x808080,
@@ -76,6 +76,7 @@ FONTES_RSS = {
     "ZDNet": "https://www.zdnet.com/news/rss.xml",
 }
 
+# Lista exata das fontes que vão receber a tag "Fonte em inglês"
 FONTES_INGLES = [
     "The Verge",
     "TechCrunch",
@@ -98,7 +99,7 @@ ai_client = (
 )
 
 
-# --- FUNÇÕES DE APOIO ---
+# --- FUNÇÕES ---
 def load_history():
     if not os.path.exists(HISTORY_FILE):
         return {}
@@ -111,7 +112,6 @@ def load_history():
 
 
 def save_history(history_dict):
-    # Limpeza: Mantém apenas os últimos 7 dias para não pesar o arquivo
     limite = datetime.now(FUSO_HORARIO) - timedelta(days=7)
     historico_limpo = {
         k: v
@@ -142,12 +142,32 @@ def extrair_imagem(entry):
 async def gerar_analise_ia(texto_base, titulo_original, nome_site):
     if not ai_client:
         return None
-    prompt = f"""Você é um jornalista estilo Filipe Deschamps. Retorne APENAS um JSON.
-    Regras: Parágrafo único, comece com minúscula, termine com 'As informações são do site {nome_site}.'
-    {{ "pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..." }}
-    Fonte: {nome_site} | Título: {titulo_original} | Texto: {texto_base[:1500]}"""
 
-    for _ in range(3):  # 3 tentativas
+    prompt = f"""Você é um jornalista de tecnologia sênior. Sua tarefa é analisar a notícia e retornar APENAS um JSON válido.
+
+REGRAS OBRIGATÓRIAS:
+1. TRADUÇÃO: Traduza tudo para o Português do Brasil (PT-BR) com gramática impecável.
+2. TÍTULOS: Crie um título claro, jornalístico e autoexplicativo (Evite clickbaits ou títulos genéricos muito curtos).
+3. RESUMO (O mais importante): Escreva UM ÚNICO PARÁGRAFO longo, denso e bem detalhado. Use formatação de texto normal (comece com letra maiúscula). Explique o contexto, o que aconteceu e o impacto para que qualquer pessoa entenda. O texto deve ter de 4 a 6 frases. NUNCA faça resumos de apenas uma linha.
+4. CATEGORIA: Escolha a que melhor se encaixa: Hardware, Inteligência Artificial, Games, Segurança, Sistemas Operacionais, Mobile, Business, Science ou Outros.
+5. NOTA: Dê uma nota de relevância de 0 a 100.
+6. PULAR: Marque "pular": true apenas se for cupom de desconto, oferta de loja, rumor fraco ou notícia repetitiva.
+
+FORMATO ESPERADO DO JSON:
+{{
+  "pular": false,
+  "titulo": "Microsoft testa melhorias de segurança em arquivos batch do Windows 11",
+  "nota": 85,
+  "categoria": "Sistemas Operacionais",
+  "resumo": "A Microsoft está lançando novas builds de pré-visualização do Windows 11 Insider que visam melhorar a segurança e o desempenho durante a execução de arquivos batch ou scripts CMD. Essas melhorias são parte dos esforços contínuos da empresa para proteger os usuários contra ameaças de segurança e garantir uma experiência mais segura no sistema operacional. Além disso, as melhorias de desempenho também contribuirão para uma experiência mais rápida. A atualização demonstra o compromisso da empresa em manter o sistema confiável."
+}}
+
+Fonte: {nome_site}
+Título Original: {titulo_original}
+Texto Base: {texto_base[:2000]}
+"""
+
+    for _ in range(3):
         try:
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
@@ -156,7 +176,7 @@ async def gerar_analise_ia(texto_base, titulo_original, nome_site):
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                timeout=25.0,
+                timeout=30.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
@@ -167,15 +187,15 @@ async def gerar_analise_ia(texto_base, titulo_original, nome_site):
     return None
 
 
-# --- TAREFA PRINCIPAL ---
 @tasks.loop(minutes=30)
 async def verificar_feeds():
     await discord_client.wait_until_ready()
 
-    # 🕒 Agora usando fuso horário correto
     agora = datetime.now(FUSO_HORARIO)
     if not (HORA_INICIO <= agora.hour < HORA_FIM):
-        logging.info(f"Standby: {agora.strftime('%H:%M')} fora do horário comercial.")
+        logging.info(
+            f"Standby: {agora.strftime('%H:%M')} fora do horário comercial (08h-18h)."
+        )
         return
 
     channel = discord_client.get_channel(CANAL_NOTICIAS_ID)
@@ -187,7 +207,6 @@ async def verificar_feeds():
 
     for nome_site, url_feed in FONTES_RSS.items():
         try:
-            # Timeout de 10s para cada site não travar o bot
             feed = await asyncio.to_thread(feedparser.parse, url_feed)
             if not feed or not feed.entries:
                 continue
@@ -230,6 +249,8 @@ async def verificar_feeds():
 
     if fila:
         campea = sorted(fila, key=lambda x: x["nota"], reverse=True)[0]
+        emoji = EMOJIS_CATEGORIA.get(campea["categoria"], "🔌")
+
         embed = discord.Embed(
             title=f"{'🚨 ' if campea['nota'] >= 90 else ''}{campea['titulo']}",
             url=campea["link"],
@@ -237,16 +258,22 @@ async def verificar_feeds():
             color=CORES_CATEGORIA.get(campea["categoria"], COR_PADRAO),
         )
         embed.set_author(
-            name=f"Via {campea['site']} • {campea['categoria']} {EMOJIS_CATEGORIA.get(campea['categoria'], '🔌')}"
+            name=f"Via {campea['site']} • {campea['categoria']} {emoji}",
+            icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png",
         )
         embed.set_image(url=campea["imagem"])
         embed.add_field(
             name="",
             value=f"👉 **[Clique aqui para ler a matéria completa]({campea['link']})**",
+            inline=False,
         )
-        embed.set_footer(
-            text=f"Resumido por IA {'• Fonte em inglês' if campea['is_eng'] else ''}"
-        )
+
+        # Lógica exata do rodapé que você pediu
+        texto_rodape = "Notícia resumida por IA"
+        if campea["is_eng"]:
+            texto_rodape += " • Fonte em inglês"
+
+        embed.set_footer(text=texto_rodape)
 
         msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>", embed=embed)
         try:
