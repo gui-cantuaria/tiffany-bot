@@ -149,7 +149,7 @@ REGRAS OBRIGATÓRIAS:
 1. TRADUÇÃO: Traduza tudo para o Português do Brasil (PT-BR) com gramática impecável.
 2. TÍTULOS: Crie um título claro, jornalístico e autoexplicativo (Evite clickbaits ou títulos genéricos muito curtos).
 3. RESUMO (O mais importante): Escreva UM ÚNICO PARÁGRAFO longo, denso e bem detalhado. Use formatação de texto normal (comece com letra maiúscula). Explique o contexto, o que aconteceu e o impacto para que qualquer pessoa entenda. O texto deve ter de 4 a 6 frases. NUNCA faça resumos de apenas uma linha.
-4. CATEGORIA: Escolha a que melhor se encaixa: Hardware, Inteligência Artificial, Games, Segurança, Sistemas Operacionais, Mobile, Business, Science ou Outros.
+4. CATEGORIA: Escolha a que melhor se encaixa: Hardware, Inteligência Artificial, Games, Segurança, Sistemas Operacionais, Mobile, Big Techs, Ciência ou Outros.
 5. NOTA: Dê uma nota de relevância de 0 a 100.
 6. PULAR: Marque "pular": true apenas se for cupom de desconto, oferta de loja, rumor fraco ou notícia repetitiva.
 
