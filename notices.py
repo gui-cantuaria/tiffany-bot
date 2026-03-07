@@ -5,34 +5,59 @@ import os
 import json
 import asyncio
 import re
+import logging
+from datetime import datetime, timedelta
+import pytz  # Fuso horário brasileiro
 from dotenv import load_dotenv
-from openai import AsyncOpenAI  
+from openai import AsyncOpenAI
 
-# --- CONFIGURAÇÕES INICIAIS ---
+# Logs para acompanhar o que acontece na Discloud
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 load_dotenv()
 
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') 
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# --- CONFIGURAÇÃO DE IDs FIXOS ---
+# Configurações de IDs e Horários
 CANAL_NOTICIAS_ID = 1420835598733938849
-CARGO_MENTION_ID = 1460323314357501952 
 ID_CARGO_PARA_MARCAR = 1460323314357501952
+HORA_INICIO = 8
+HORA_FIM = 18
+FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")  # Garante o horário de Goiânia
 
-# --- CORES POR CATEGORIA ---
+# Listas de Estilo e Fontes
 CORES_CATEGORIA = {
-    "Hardware": 0xE03E3E,   
-    "IA": 0x00FFFF,         
-    "Games": 0x9146FF,      
-    "Segurança": 0x00FF00,  
-    "Mobile": 0xFFA500,     
-    "Business": 0x000080,   
-    "Science": 0x808080     
+    "Hardware": 0xE03E3E,
+    "IA": 0x00FFFF,
+    "Games": 0x9146FF,
+    "Segurança": 0x00FF00,
+    "Mobile": 0xFFA500,
+    "Business": 0x000080,
+    "Science": 0x808080,
 }
-COR_PADRAO = 0xFFD700       
-COR_URGENTE = 0xFF0000      
+COR_PADRAO = 0xFFD700
 
-# --- FONTES (AMPLIADAS COM SITES DE ALTO NÍVEL) ---
+EMOJIS_CATEGORIA = {
+    "Hardware": "🖥️",
+    "Smartphones": "📱",
+    "Inteligência Artificial": "🤖",
+    "Games": "🎮",
+    "Cibersegurança": "🛡️",
+    "Software & Apps": "💾",
+    "Big Techs": "💼",
+    "Ciência & Espaço": "🚀",
+    "Curiosidade Tech": "💡",
+    "Sistemas Operacionais": "🪟",
+    "Internet & Redes": "🌐",
+    "Cloud & DevOps": "☁️",
+    "Programação & Dev": "🧑‍💻",
+    "Mídia & Streaming": "📺",
+    "Outros": "🔌",
+}
+
 FONTES_RSS = {
     "Adrenaline": "https://adrenaline.com.br/feed/",
     "TudoCelular": "https://www.tudocelular.com/rss/",
@@ -45,270 +70,199 @@ FONTES_RSS = {
     "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
     "Wired": "https://www.wired.com/feed/rss",
     "Engadget": "https://www.engadget.com/rss.xml",
-    "KrebsOnSecurity": "https://krebsonsecurity.com/feed/",
     "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
-    "Google Security Blog": "https://security.googleblog.com/feeds/posts/default?alt=rss",
-    "The Register": "https://www.theregister.com/headlines.atom",
     "9to5Mac": "https://9to5mac.com/feed/",
     "9to5Google": "https://9to5google.com/feed/",
-    "ZDNet": "https://www.zdnet.com/news/rss.xml"
+    "ZDNet": "https://www.zdnet.com/news/rss.xml",
 }
 
 FONTES_INGLES = [
-    "The Verge", "TechCrunch", "Ars Technica", "Wired", "Engadget", 
-    "KrebsOnSecurity", "BleepingComputer", "Google Security Blog", 
-    "The Register", "9to5Mac", "9to5Google", "ZDNet"
+    "The Verge",
+    "TechCrunch",
+    "Ars Technica",
+    "Wired",
+    "Engadget",
+    "BleepingComputer",
+    "9to5Mac",
+    "9to5Google",
+    "ZDNet",
 ]
-
-# --- CATEGORIAS E EMOJIS (VISUAL DISCORD) ---
-EMOJIS_CATEGORIA = {
-    "Hardware": "🖥️", "Smartphones": "📱", "Inteligência Artificial": "🤖",
-    "Games": "🎮", "Cibersegurança": "🛡️", "Software & Apps": "💾",
-    "Big Techs": "💼", "Ciência & Espaço": "🚀", "Curiosidade Tech": "💡",
-    "Sistemas Operacionais": "🪟", "Internet & Redes": "🌐", 
-    "Cloud & DevOps": "☁️", "Programação & Dev": "🧑‍💻", 
-    "Mídia & Streaming": "📺", "Outros": "🔌"
-}
-
 HISTORY_FILE = "notices_history.json"
 
 intents = discord.Intents.default()
-intents.message_content = True
 discord_client = discord.Client(intents=intents)
+ai_client = (
+    AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+    if OPENROUTER_API_KEY
+    else None
+)
 
-if OPENROUTER_API_KEY:
-    ai_client = AsyncOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
-    )
-else:
-    ai_client = None
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES DE APOIO ---
 def load_history():
-    if not os.path.exists(HISTORY_FILE): return {}
+    if not os.path.exists(HISTORY_FILE):
+        return {}
     try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except json.JSONDecodeError: return {}
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except:
+        return {}
+
 
 def save_history(history_dict):
-    try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history_dict, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Erro ao salvar histórico: {e}")
+    # Limpeza: Mantém apenas os últimos 7 dias para não pesar o arquivo
+    limite = datetime.now(FUSO_HORARIO) - timedelta(days=7)
+    historico_limpo = {
+        k: v
+        for k, v in history_dict.items()
+        if isinstance(v, dict) and datetime.fromisoformat(v["data"]) > limite
+    }
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(historico_limpo, f, indent=4, ensure_ascii=False)
+
 
 def extrair_imagem(entry):
     try:
-        if 'media_content' in entry and len(entry.media_content) > 0: 
-            return entry.media_content[0]['url']
-        if 'media_thumbnail' in entry and len(entry.media_thumbnail) > 0: 
-            return entry.media_thumbnail[0]['url']
-        if 'links' in entry:
-            for link in entry.links:
-                if 'image' in link.get('type', ''): return link.href
-        
-        content = getattr(entry, 'content', [{}])[0].get('value', '')
-        summary = getattr(entry, 'summary', '')
-        
-        match = re.search(r'<img[^>]+src="([^">]+\.(?:jpg|jpeg|png|webp)[^">]*)"', content, re.IGNORECASE) or \
-                re.search(r'<img[^>]+src="([^">]+\.(?:jpg|jpeg|png|webp)[^">]*)"', summary, re.IGNORECASE)
-        if match: 
-            return match.group(1)
-    except: 
-        pass
+        if "media_content" in entry and entry.media_content:
+            return entry.media_content[0]["url"]
+        content = getattr(entry, "content", [{}])[0].get("value", "") + getattr(
+            entry, "summary", ""
+        )
+        match = re.search(
+            r'<img[^>]+src="([^">]+\.(?:jpg|jpeg|png|webp)[^">]*)"',
+            content,
+            re.IGNORECASE,
+        )
+        return match.group(1) if match else None
+    except:
+        return None
+
+
+async def gerar_analise_ia(texto_base, titulo_original, nome_site):
+    if not ai_client:
+        return None
+    prompt = f"""Você é um jornalista estilo Filipe Deschamps. Retorne APENAS um JSON.
+    Regras: Parágrafo único, comece com minúscula, termine com 'As informações são do site {nome_site}.'
+    {{ "pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..." }}
+    Fonte: {nome_site} | Título: {titulo_original} | Texto: {texto_base[:1500]}"""
+
+    for _ in range(3):  # 3 tentativas
+        try:
+            response = await ai_client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[
+                    {"role": "system", "content": "JSON API mode."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                timeout=25.0,
+            )
+            resp = response.choices[0].message.content.strip()
+            match = re.search(r"\{.*\}", resp, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except:
+            await asyncio.sleep(2)
     return None
 
-# --- FUNÇÃO DE IA ---
-async def gerar_analise_ia(texto_base, titulo_original, nome_site):
-    if not ai_client or not texto_base: return None
-    
-    print(f"🤖 IA analisando: {nome_site}...")
-    
-    prompt = f"""Sua missão é filtrar o irrelevante e reescrever a notícia em um formato específico, retornando APENAS JSON.
 
-REGRAS OBRIGATÓRIAS:
-1. TRADUÇÃO: Se a fonte for estrangeira, traduza tudo para Português do Brasil.
-2. TÍTULOS EXPLICATIVOS: Crie um título claro que conte o fato principal, sem clickbait. (Ex: "Microsoft testa melhorias de segurança em arquivos batch do Windows 11").
-3. O CORPO DO TEXTO (ESTILO DESCHAMPS MISTO):
-   - Escreva UM ÚNICO PARÁGRAFO contínuo, longo e denso.
-   - COMECE O TEXTO NORMALMENTE COM LETRA MAIÚSCULA.
-   - Explique a notícia para que leigos e experientes entendam o impacto da informação.
-   - A ÚLTIMA FRASE DEVE SER RIGOROSAMENTE ESTA: "As informações são do site {nome_site}."
-4. CATEGORIA: Use uma da lista: Hardware, Smartphones, Inteligência Artificial, Games, Cibersegurança, Software & Apps, Big Techs, Ciência & Espaço, Internet & Redes, Cloud & DevOps, Programação & Dev, Mídia & Streaming, Curiosidade Tech, Sistemas Operacionais, Outros.
-5. NOTA: Dê uma nota de 0 a 100. Somente notícias com nota >= 75 serão aprovadas.
-6. PULAR: Se for oferta/cupom, review ou celular de entrada sem inovação, marque "pular": true.
-
-FORMATO DO JSON:
-{{
-  "pular": false,
-  "titulo": "Título Explicativo Aqui",
-  "nota": 85,
-  "categoria": "Sistemas Operacionais",
-  "resumo": "A empresa está lançando novas builds de pré-visualização do Windows 11 Insider que visam melhorar a segurança durante a execução de scripts. Essas melhorias são cruciais para manter a segurança do sistema contra ataques maliciosos, além de contribuírem para uma experiência mais rápida. As informações são do site {nome_site}."
-}}
-
-Fonte: {nome_site}
-Título Original: {titulo_original}
-Texto: {texto_base[:1500]}
-"""
-
-    try:
-        response = await ai_client.chat.completions.create(
-            model="meta-llama/llama-3.3-70b-instruct", 
-            messages=[
-                # Regra de sistema ABSOLUTA para forçar o output JSON
-                {"role": "system", "content": "Você é uma API de processamento de dados. Você responde EXCLUSIVAMENTE em formato JSON. Não adicione nenhuma saudação, aviso ou texto fora das chaves {...}."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=800,
-        )
-        resp_text = response.choices[0].message.content.strip()
-        
-        # Garra Extratora de JSON: Puxa só o que está entre as chaves {}
-        match = re.search(r'\{.*\}', resp_text, re.DOTALL)
-        if match:
-            resp_text = match.group(0)
-        else:
-            print(f"❌ Erro: IA não retornou um JSON identificável.")
-            return None
-            
-        dados = json.loads(resp_text)
-        
-        if dados.get("pular", False) or int(dados.get("nota", 0)) < 75:
-            return "SKIP"
-            
-        return {
-            "titulo": dados.get("titulo", titulo_original).strip(),
-            "nota": int(dados.get("nota", 75)),
-            "categoria": dados.get("categoria", "Outros").strip(),
-            "resumo": dados.get("resumo", "").strip()
-        }
-
-    # Catching específico para ver o erro se acontecer de novo
-    except json.JSONDecodeError:
-        print(f"❌ Erro ao decodificar JSON. Resposta crua da IA foi: {resp_text[:150]}...")
-        return None
-    except Exception as e:
-        print(f"❌ Erro na IA (OpenRouter): {e}")
-        return None
-
-# --- LOOP PRINCIPAL ---
+# --- TAREFA PRINCIPAL ---
 @tasks.loop(minutes=30)
 async def verificar_feeds():
     await discord_client.wait_until_ready()
-    
-    channel = discord_client.get_channel(CANAL_NOTICIAS_ID)
-    if not channel: 
-        print(f"Erro: Canal {CANAL_NOTICIAS_ID} não encontrado.")
+
+    # 🕒 Agora usando fuso horário correto
+    agora = datetime.now(FUSO_HORARIO)
+    if not (HORA_INICIO <= agora.hour < HORA_FIM):
+        logging.info(f"Standby: {agora.strftime('%H:%M')} fora do horário comercial.")
         return
-    
-    await discord_client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tech News"))
+
+    channel = discord_client.get_channel(CANAL_NOTICIAS_ID)
+    if not channel:
+        return
 
     history = load_history()
-    print("\n--- 📡 Buscando Notícias ---")
-    
-    fila = [] 
+    fila = []
 
     for nome_site, url_feed in FONTES_RSS.items():
-        await asyncio.sleep(2) 
         try:
-            feed = await asyncio.to_thread(feedparser.parse, url_feed, agent="Mozilla/5.0")
-            if not feed.entries: continue
+            # Timeout de 10s para cada site não travar o bot
+            feed = await asyncio.to_thread(feedparser.parse, url_feed)
+            if not feed or not feed.entries:
+                continue
 
-            for entry in feed.entries[:3]:
-                link = entry.link
-                
-                if link in history.values() or link in history:
-                    continue
-                
-                url_imagem = extrair_imagem(entry)
-                if not url_imagem:
-                    history[link] = "sem_imagem"
-                    save_history(history)
-                    continue
+            entry = feed.entries[0]
+            if entry.link in history:
+                continue
 
-                texto = getattr(entry, 'summary', getattr(entry, 'description', entry.title))
-                
-                res = await gerar_analise_ia(texto, entry.title, nome_site)
+            img = extrair_imagem(entry)
+            if not img:
+                history[entry.link] = {
+                    "status": "sem_imagem",
+                    "data": datetime.now(FUSO_HORARIO).isoformat(),
+                }
+                continue
 
-                if res == "SKIP":
-                    history[link] = "rejeitada_pela_ia"
-                    save_history(history)
-                elif isinstance(res, dict):
-                    print(f"✅ Aprovada: {res['titulo']} ({res['nota']})")
-                    
-                    is_eng = nome_site in FONTES_INGLES
-                    
-                    fila.append({
+            res = await gerar_analise_ia(entry.summary, entry.title, nome_site)
+            if (
+                isinstance(res, dict)
+                and not res.get("pular")
+                and res.get("nota", 0) >= 75
+            ):
+                fila.append(
+                    {
+                        **res,
+                        "link": entry.link,
                         "site": nome_site,
-                        "link": link,
-                        "titulo": res['titulo'],
-                        "resumo": res['resumo'],
-                        "nota": res['nota'],
-                        "categoria": res['categoria'],
-                        "imagem": url_imagem,
-                        "is_eng": is_eng
-                    })
-                    
-                    history[link] = "na_fila"
-                    save_history(history) 
-                    break 
-                
+                        "imagem": img,
+                        "is_eng": nome_site in FONTES_INGLES,
+                    }
+                )
+                history[entry.link] = {
+                    "status": "postado",
+                    "data": datetime.now(FUSO_HORARIO).isoformat(),
+                }
+                save_history(history)
+                break
         except Exception as e:
-            print(f"Erro no site {nome_site}: {e}")
+            logging.error(f"Erro em {nome_site}: {e}")
 
     if fila:
-        fila.sort(key=lambda x: x['nota'], reverse=True)
-        campea = fila[0]
-        
-        print(f"🚀 Postando a Vencedora: {campea['titulo']}")
-
-        urgente = campea['nota'] >= 90
-        importante = campea['nota'] >= 85 and not urgente
-        
-        badge = "🚨 " if urgente else ("🔥 " if importante else "")
-        titulo_final = f"{badge}{campea['titulo']}"
-        
-        cor_final = 0xFF0000 if urgente else (0xFFA500 if importante else 0x00FFFF)
-        
-        emoji_cat = EMOJIS_CATEGORIA.get(campea['categoria'], "🔌")
-
+        campea = sorted(fila, key=lambda x: x["nota"], reverse=True)[0]
         embed = discord.Embed(
-            title=titulo_final,
-            url=campea['link'],
-            description=campea['resumo'],
-            color=cor_final
+            title=f"{'🚨 ' if campea['nota'] >= 90 else ''}{campea['titulo']}",
+            url=campea["link"],
+            description=campea["resumo"],
+            color=CORES_CATEGORIA.get(campea["categoria"], COR_PADRAO),
         )
-        
-        embed.set_author(name=f"Via {campea['site']} • {campea['categoria']} {emoji_cat}", icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png")
-        embed.add_field(name="", value=f"👉 **[Clique aqui para ler a matéria completa]({campea['link']})**", inline=False)
-        embed.set_image(url=campea['imagem'])
-        
-        footer_text = "Notícia resumida por IA"
-        if campea['is_eng']:
-            footer_text += " • Fonte em inglês"
-        embed.set_footer(text=footer_text)
-        
-        msg_content = f"<@&{ID_CARGO_PARA_MARCAR}>" if ID_CARGO_PARA_MARCAR else ""
-        
-        msg = await channel.send(content=msg_content, embed=embed)
-        
+        embed.set_author(
+            name=f"Via {campea['site']} • {campea['categoria']} {EMOJIS_CATEGORIA.get(campea['categoria'], '🔌')}"
+        )
+        embed.set_image(url=campea["imagem"])
+        embed.add_field(
+            name="",
+            value=f"👉 **[Clique aqui para ler a matéria completa]({campea['link']})**",
+        )
+        embed.set_footer(
+            text=f"Resumido por IA {'• Fonte em inglês' if campea['is_eng'] else ''}"
+        )
+
+        msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>", embed=embed)
         try:
-            nome_topico = f"💬 {campea['categoria']}: {campea['titulo']}"
-            await msg.create_thread(name=nome_topico[:95], auto_archive_duration=1440)
+            await msg.create_thread(
+                name=f"💬 {campea['categoria']}: {campea['titulo'][:80]}",
+                auto_archive_duration=1440,
+            )
         except:
             pass
-        
-    else:
-        print("💤 Nenhuma notícia relevante nova neste ciclo.")
+
 
 @discord_client.event
 async def on_ready():
-    print(f'🤖 Bot Online: {discord_client.user}')
+    logging.info(f"🤖 Tiffany Online: {discord_client.user}")
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 
-if DISCORD_TOKEN:
-    discord_client.run(DISCORD_TOKEN)
+
+discord_client.run(DISCORD_TOKEN)
