@@ -3,5 +3,5 @@ feedparser
 requests
 beautifulsoup4
 python-dotenv
-groq
 aiohttp
+openai
