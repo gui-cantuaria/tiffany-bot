@@ -1,8 +1,5 @@
 discord.py
 feedparser
-requests
-beautifulsoup4
 python-dotenv
 aiohttp
 openai
-pytz
