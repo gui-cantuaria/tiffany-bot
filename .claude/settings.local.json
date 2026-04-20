@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK: syntax valid''\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(py -3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(py -3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''Syntax OK''\\)\")"
+    ]
+  }
+}
