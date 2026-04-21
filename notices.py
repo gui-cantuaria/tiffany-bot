@@ -783,7 +783,7 @@ async def verificar_feeds():
                 continue
 
             # Validação de imagem via HTTP HEAD
-            img = await extrair_imagem_completa(entry, url_feed)
+            img = await extrair_imagem_completa(entry, FONTES_RSS.get(nome_site, ""))
             if not img:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "sem_imagem"})
                 total_sem_imagem += 1
