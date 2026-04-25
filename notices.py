@@ -460,7 +460,11 @@ def title_add(h: dict, titulo: str) -> None:
 IMG_EXT_RE = re.compile(r"\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)", re.IGNORECASE)
 IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
 OG_IMG_RE = re.compile(
-    r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+    r'<meta[^>]+(?:property|name|itemprop)=["\']og:image(?::\w+)?["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE | re.DOTALL,
+)
+OG_IMG_RE_ALT = re.compile(
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name|itemprop)=["\']og:image(?::\w+)?["\']',
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -515,7 +519,7 @@ async def fetch_og_image(url: str) -> str | None:
             if r.status != 200:
                 return None
             html = await r.text()
-            m = OG_IMG_RE.search(html)
+            m = OG_IMG_RE.search(html) or OG_IMG_RE_ALT.search(html)
             if m:
                 return _norm_img_url(m.group(1), url)
     except:
@@ -539,8 +543,8 @@ async def validar_imagem(url: str) -> bool:
                 return False
             ct = r.headers.get("Content-Type", "").lower()
             cl = r.headers.get("Content-Length")
-            # Rejeitar imagens < 5KB (ícones/placeholders)
-            if cl and int(cl) < 5000:
+            # Rejeitar imagens < 3KB (ícones/placeholders)
+            if cl and int(cl) < 3000:
                 return False
             if "image/" in ct:
                 return True
