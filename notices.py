@@ -630,7 +630,7 @@ Texto Base: {texto_base[:2000]}
     for attempt in range(3):
         try:
             response = await ai_client.chat.completions.create(
-                model="google/gemini-2.5-flash-preview",
+                model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
                     {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON."},
                     {"role": "user", "content": prompt},
