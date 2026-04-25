@@ -1,5 +1,5 @@
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 import feedparser
 import os
 import re
@@ -7,8 +7,10 @@ import json
 import time
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
 import html as html_lib
 import hashlib
+import atexit
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 
@@ -51,20 +53,34 @@ TITLE_IDX_TTL_HORAS = 72
 MAX_IDADE_HORAS = 12
 
 HISTORY_FILE = "notices_history.json"
+METRICS_FILE = "notices_metrics.json"
+QUEUE_FILE = "notices_queue.json"
 
 # =========================
 # LOGGING
 # =========================
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+_log_fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_log_fmt)
+
+_file_handler = RotatingFileHandler(
+    "tiffany-bot.log", maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
+_file_handler.setFormatter(_log_fmt)
+
 log = logging.getLogger("tiffany-bot")
+log.setLevel(logging.INFO)
+log.addHandler(_console_handler)
+log.addHandler(_file_handler)
 
 # =========================
 # DISCORD + IA CLIENT
 # =========================
+GUILD_ID = int(os.getenv("GUILD_ID", "0"))
+
 intents = discord.Intents.default()
-discord_client = discord.Client(intents=intents)
+discord_client = commands.Bot(command_prefix="!", intents=intents)
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     if OPENROUTER_API_KEY
@@ -258,7 +274,7 @@ def normalizar_url(url: str) -> str:
               if not k.lower().startswith(TRACKING_PREFIXES)
               and k.lower() not in TRACKING_KEYS]
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q2, doseq=True), ""))
-    except:
+    except Exception:
         return url
 
 # =========================
@@ -315,7 +331,8 @@ def load_history() -> dict:
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, dict) else {}
-    except:
+    except Exception as e:
+        log.warning(f"Erro ao carregar histórico: {e}")
         return {}
 
 def save_history(h: dict) -> None:
@@ -339,7 +356,7 @@ def save_history(h: dict) -> None:
                 dt = datetime.fromisoformat(v["data"])
                 if dt.timestamp() > cutoff:
                     novo[k] = v
-            except:
+            except Exception:
                 novo[k] = v
         else:
             novo[k] = v
@@ -347,6 +364,55 @@ def save_history(h: dict) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(novo, f, ensure_ascii=False, indent=2)
     os.replace(tmp, HISTORY_FILE)
+
+# =========================
+# MÉTRICAS PERSISTENTES
+# =========================
+def load_metrics() -> dict:
+    if not os.path.exists(METRICS_FILE):
+        return {}
+    try:
+        with open(METRICS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_metrics(m: dict) -> None:
+    tmp = f"{METRICS_FILE}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(m, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, METRICS_FILE)
+
+def metric_inc(m: dict, key: str, amount: int = 1) -> None:
+    hoje = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+    if "_date" not in m or m["_date"] != hoje:
+        # Novo dia: resetar contadores diários, preservar totais
+        m["_date"] = hoje
+        for k in ("posts_hoje", "ia_aprovadas_hoje", "ia_rejeitadas_hoje", "ia_calls_hoje"):
+            m[k] = 0
+    m[key] = m.get(key, 0) + amount
+    total_key = key.replace("_hoje", "_total")
+    if total_key != key:
+        m[total_key] = m.get(total_key, 0) + amount
+
+# =========================
+# FILA DE APROVADOS (persistência entre ciclos)
+# =========================
+def load_queue() -> list:
+    if not os.path.exists(QUEUE_FILE):
+        return []
+    try:
+        with open(QUEUE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+def save_queue(q: list) -> None:
+    tmp = f"{QUEUE_FILE}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(q, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, QUEUE_FILE)
 
 def _hist_payload(status: str, extra: dict | None = None) -> dict:
     payload = {"status": status, "ts": int(time.time())}
@@ -407,9 +473,16 @@ def _get_simhash_index(h: dict) -> dict[str, int]:
     idx = h.get("_simhash_idx")
     return idx if isinstance(idx, dict) else {}
 
+MAX_SIMHASH_INDEX = 500
+
 def _simhash_prune(idx: dict[str, int]) -> dict[str, int]:
     cutoff = int(time.time()) - (SIMHASH_TTL_HORAS * 3600)
-    return {k: ts for k, ts in idx.items() if ts >= cutoff}
+    pruned = {k: ts for k, ts in idx.items() if ts >= cutoff}
+    # Limitar tamanho: manter apenas os mais recentes
+    if len(pruned) > MAX_SIMHASH_INDEX:
+        sorted_items = sorted(pruned.items(), key=lambda x: x[1], reverse=True)
+        pruned = dict(sorted_items[:MAX_SIMHASH_INDEX])
+    return pruned
 
 def simhash_is_dup(h: dict, sh: int) -> bool:
     if sh == 0:
@@ -419,7 +492,7 @@ def simhash_is_dup(h: dict, sh: int) -> bool:
         try:
             if _hamming(sh, int(hexv, 16)) <= SIMHASH_HAMMING_MAX:
                 return True
-        except:
+        except Exception:
             continue
     return False
 
@@ -477,7 +550,7 @@ def _norm_img_url(img: str, base: str | None = None) -> str | None:
     if base and u.startswith("/"):
         try:
             u = urljoin(base, u)
-        except:
+        except Exception:
             pass
     return u
 
@@ -502,28 +575,32 @@ def extrair_imagem_rss(entry, feed_url: str) -> str | None:
             m = IMG_SRC_RE.search(content) or IMG_SRC_RE.search(summary)
             if m:
                 img = _norm_img_url(m.group(1), feed_url)
-    except:
-        pass
+    except Exception as e:
+        log.debug(f"Erro extraindo imagem RSS: {e}")
     return img
 
-async def fetch_og_image(url: str) -> str | None:
-    """Busca og:image da página como fallback."""
+async def fetch_og_image(url: str, retries: int = 2) -> str | None:
+    """Busca og:image da página como fallback, com retry."""
     if not http_session:
         return None
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        }
-        async with http_session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as r:
-            if r.status != 200:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    for attempt in range(retries):
+        try:
+            async with http_session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                if r.status != 200:
+                    return None
+                html = await r.text()
+                m = OG_IMG_RE.search(html) or OG_IMG_RE_ALT.search(html)
+                if m:
+                    return _norm_img_url(m.group(1), url)
                 return None
-            html = await r.text()
-            m = OG_IMG_RE.search(html) or OG_IMG_RE_ALT.search(html)
-            if m:
-                return _norm_img_url(m.group(1), url)
-    except:
-        pass
+        except Exception as e:
+            log.debug(f"og:image tentativa {attempt+1}/{retries} falhou para {url}: {e}")
+            if attempt < retries - 1:
+                await asyncio.sleep(1)
     return None
 
 async def validar_imagem(url: str) -> bool:
@@ -548,8 +625,8 @@ async def validar_imagem(url: str) -> bool:
                 return False
             if "image/" in ct:
                 return True
-    except:
-        pass
+    except Exception as e:
+        log.debug(f"Erro validando imagem {url}: {e}")
     return looks_like
 
 async def extrair_imagem_completa(entry, feed_url: str) -> str | None:
@@ -660,7 +737,7 @@ def entry_datetime_utc(entry) -> datetime | None:
         return None
     try:
         return datetime.fromtimestamp(time.mktime(st), tz=timezone.utc)
-    except:
+    except Exception:
         return None
 
 def noticia_eh_recente(entry_dt: datetime | None) -> bool:
@@ -670,11 +747,62 @@ def noticia_eh_recente(entry_dt: datetime | None) -> bool:
     return entry_dt >= datetime.now(timezone.utc) - timedelta(hours=MAX_IDADE_HORAS)
 
 # =========================
+# POSTAR NOTÍCIA (extraído para reuso)
+# =========================
+async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
+    """Posta uma notícia no canal. Retorna True se postou com sucesso."""
+    emoji = EMOJIS_CATEGORIA.get(noticia["categoria"], "🔌")
+
+    embed = discord.Embed(
+        title=f"{'🚨 ' if noticia['nota'] >= NOTA_URGENTE else ''}{noticia['titulo']}",
+        url=noticia["link"],
+        description=noticia["resumo"],
+        color=CORES_CATEGORIA.get(noticia["categoria"], COR_PADRAO),
+    )
+    embed.set_author(
+        name=f"Via {noticia['site']} • {noticia['categoria']} {emoji}",
+        icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png",
+    )
+    embed.set_image(url=noticia["imagem"])
+    embed.add_field(
+        name="",
+        value=f"👉 **[Clique aqui para ler a matéria completa]({noticia['link']})**",
+        inline=False,
+    )
+
+    texto_rodape = "Notícia resumida por IA"
+    if noticia["is_eng"]:
+        texto_rodape += " • Fonte em inglês"
+    embed.set_footer(text=texto_rodape)
+
+    try:
+        msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>", embed=embed)
+        try:
+            await msg.create_thread(
+                name=f"💬 {noticia['categoria']}: {noticia['titulo'][:80]}",
+                auto_archive_duration=1440,
+            )
+        except Exception as e:
+            log.warning(f"Erro ao criar thread: {e}")
+
+        historico_set(history, noticia["link_norm"], noticia["dedupe"], "posted")
+        metric_inc(metrics, "posts_hoje")
+        log.info(f"  📨 Postado: {noticia['titulo'][:60]}")
+        return True
+    except Exception as e:
+        log.error(f"  Erro ao postar: {e}")
+        return False
+
+# =========================
 # PIPELINE PRINCIPAL
 # =========================
+# Estado global para /status
+_last_cycle_time: str = "Nunca"
+_last_cycle_stats: dict = {}
+
 @tasks.loop(minutes=30)
 async def verificar_feeds():
-    global _ai_calls_this_cycle, http_session
+    global _ai_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
@@ -689,14 +817,44 @@ async def verificar_feeds():
     if not channel:
         try:
             channel = await discord_client.fetch_channel(CANAL_NOTICIAS_ID)
-        except:
-            log.error("Canal de notícias não encontrado.")
+        except Exception as e:
+            log.error(f"Canal de notícias não encontrado: {e}")
             return
     if not channel:
         return
 
     _ai_calls_this_cycle = 0
     history = load_history()
+    metrics = load_metrics()
+
+    # ===== FASE 0: Postar da fila de ciclos anteriores =====
+    queue = load_queue()
+    posts_feitos = 0
+    if queue:
+        log.info(f"═══ FASE 0: Postando {len(queue)} da fila ═══")
+        nova_queue = []
+        for item in queue:
+            if posts_feitos >= MAX_POSTS_POR_CICLO:
+                nova_queue.append(item)
+                continue
+            if not item.get("imagem"):
+                log.warning(f"  ✗ Item da fila sem imagem, descartando: {item.get('titulo', '?')[:60]}")
+                continue
+            if await _postar_noticia(channel, item, history, metrics):
+                posts_feitos += 1
+                if posts_feitos < MAX_POSTS_POR_CICLO:
+                    await asyncio.sleep(POST_SPACING_SEC)
+            else:
+                nova_queue.append(item)
+        save_queue(nova_queue)
+        save_history(history)
+        save_metrics(metrics)
+
+        if posts_feitos >= MAX_POSTS_POR_CICLO:
+            _last_cycle_time = agora.strftime("%H:%M:%S")
+            _last_cycle_stats = {"posts": posts_feitos, "fonte": "fila"}
+            log.info(f"Limite de posts atingido via fila. Coleta adiada para próximo ciclo.")
+            return
 
     # ===== FASE 1: Coleta paralela + Pré-filtro (sem IA) =====
     log.info("═══ FASE 1: Coleta + Pré-filtro ═══")
@@ -707,7 +865,10 @@ async def verificar_feeds():
             return nome_site, None
         try:
             feed = await asyncio.wait_for(
-                asyncio.to_thread(feedparser.parse, url_feed),
+                asyncio.to_thread(
+                    feedparser.parse, url_feed,
+                    agent="TiffanyBot/2.0 (+https://discord.gg)"
+                ),
                 timeout=15,
             )
             return nome_site, feed
@@ -720,12 +881,11 @@ async def verificar_feeds():
         *[_fetch_feed(n, u) for n, u in FONTES_RSS.items()]
     )
 
-    # Filtrar candidatos
-    candidatos = []
+    # Filtrar candidatos (sem validação de imagem ainda)
+    pre_candidatos = []
     total_examinados = 0
     total_prefiltrados = 0
     total_dedup = 0
-    total_sem_imagem = 0
     total_antigas = 0
     contagem_por_fonte: dict[str, int] = {}
 
@@ -786,27 +946,44 @@ async def verificar_feeds():
             if contagem_por_fonte.get(nome_site, 0) >= MAX_CANDIDATOS_POR_FONTE:
                 continue
 
-            # Validação de imagem via HTTP HEAD
-            img = await extrair_imagem_completa(entry, FONTES_RSS.get(nome_site, ""))
-            if not img:
-                historico_set(history, link_norm, dedupe, "skipped", {"reason": "sem_imagem"})
-                total_sem_imagem += 1
-                continue
-
-            candidatos.append({
+            pre_candidatos.append({
                 "entry": entry,
                 "nome_site": nome_site,
                 "link": link,
                 "link_norm": link_norm,
                 "title": title,
                 "texto_raw": texto_raw,
-                "img": img,
                 "is_eng": is_eng,
                 "dedupe": dedupe,
                 "simhash": sh,
+                "feed_url": FONTES_RSS.get(nome_site, ""),
             })
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
+
+    # ===== Validação de imagem em batch (paralelo com semáforo) =====
+    total_sem_imagem = 0
+    candidatos = []
+
+    if pre_candidatos:
+        _img_semaphore = asyncio.Semaphore(5)
+
+        async def _validar_img(cand):
+            async with _img_semaphore:
+                img = await extrair_imagem_completa(cand["entry"], cand["feed_url"])
+                return cand, img
+
+        resultados_img = await asyncio.gather(
+            *[_validar_img(c) for c in pre_candidatos]
+        )
+
+        for cand, img in resultados_img:
+            if not img:
+                historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem"})
+                total_sem_imagem += 1
+                continue
+            cand["img"] = img
+            candidatos.append(cand)
 
     log.info(
         f"Fase 1 concluída: {total_examinados} examinados, "
@@ -828,10 +1005,12 @@ async def verificar_feeds():
             break
 
         _ai_calls_this_cycle += 1
+        metric_inc(metrics, "ia_calls_hoje")
         res = await gerar_analise_ia(cand["texto_raw"], cand["title"], cand["nome_site"])
 
         if not isinstance(res, dict) or res.get("pular"):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "ia_rejeitou"})
+            metric_inc(metrics, "ia_rejeitadas_hoje")
             log.info(f"  ✗ IA rejeitou: [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
@@ -842,6 +1021,7 @@ async def verificar_feeds():
         min_nota = NOTA_MIN_GAMES if categoria == "Games" else NOTA_MIN_APROVACAO
         if nota < min_nota:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"nota_baixa_{nota}"})
+            metric_inc(metrics, "ia_rejeitadas_hoje")
             log.info(f"  ✗ Nota baixa ({nota}): [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
@@ -863,6 +1043,7 @@ async def verificar_feeds():
             log.info(f"  ✗ Sem imagem (Fase 2): [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
+        metric_inc(metrics, "ia_aprovadas_hoje")
         aprovados.append({
             "titulo": res.get("titulo", cand["title"]),
             "resumo": res.get("resumo", ""),
@@ -882,77 +1063,70 @@ async def verificar_feeds():
 
     if not aprovados:
         save_history(history)
+        save_metrics(metrics)
         return
 
-    # ===== FASE 3: Postar a melhor notícia do ciclo =====
-    log.info("═══ FASE 3: Selecionando a melhor notícia ═══")
+    # ===== FASE 3: Postar as melhores + enfileirar restantes =====
+    log.info("═══ FASE 3: Postando melhores notícias ═══")
 
-    # Ordenar por nota (maior primeiro) e pegar a campeã
+    # Ordenar por nota (maior primeiro)
     aprovados.sort(key=lambda x: x["nota"], reverse=True)
 
-    # TRAVA FINAL: só postar notícia com imagem válida
-    campea = None
-    for candidata in aprovados:
-        if candidata.get("imagem"):
-            campea = candidata
-            break
-        else:
-            log.warning(f"  ✗ Sem imagem na hora de postar, pulando: {candidata['titulo'][:60]}")
-
-    if not campea:
+    # Filtrar sem imagem
+    com_imagem = [a for a in aprovados if a.get("imagem")]
+    if not com_imagem:
         log.warning("Nenhuma notícia aprovada possui imagem válida. Nada será postado.")
         save_history(history)
+        save_metrics(metrics)
         return
 
-    log.info(f"  🏆 Campeã (nota {campea['nota']}): [{campea['site']}] {campea['titulo'][:60]}")
+    # Postar até o limite, enfileirar o restante
+    posts_restantes = MAX_POSTS_POR_CICLO - posts_feitos
+    para_postar = com_imagem[:posts_restantes]
+    para_fila = com_imagem[posts_restantes:]
 
-    # Montar embed (layout frozen — idêntico ao V16)
-    emoji = EMOJIS_CATEGORIA.get(campea["categoria"], "🔌")
+    for i, noticia in enumerate(para_postar):
+        log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
+        await _postar_noticia(channel, noticia, history, metrics)
+        if i < len(para_postar) - 1:
+            await asyncio.sleep(POST_SPACING_SEC)
 
-    embed = discord.Embed(
-        title=f"{'🚨 ' if campea['nota'] >= NOTA_URGENTE else ''}{campea['titulo']}",
-        url=campea["link"],
-        description=campea["resumo"],
-        color=CORES_CATEGORIA.get(campea["categoria"], COR_PADRAO),
-    )
-    embed.set_author(
-        name=f"Via {campea['site']} • {campea['categoria']} {emoji}",
-        icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png",
-    )
-    embed.set_image(url=campea["imagem"])
-    embed.add_field(
-        name="",
-        value=f"👉 **[Clique aqui para ler a matéria completa]({campea['link']})**",
-        inline=False,
-    )
-
-    texto_rodape = "Notícia resumida por IA"
-    if campea["is_eng"]:
-        texto_rodape += " • Fonte em inglês"
-    embed.set_footer(text=texto_rodape)
-
-    try:
-        msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>", embed=embed)
-        try:
-            await msg.create_thread(
-                name=f"💬 {campea['categoria']}: {campea['titulo'][:80]}",
-                auto_archive_duration=1440,
-            )
-        except:
-            pass
-
-        historico_set(history, campea["link_norm"], campea["dedupe"], "posted")
-        log.info(f"  📨 Postado: {campea['titulo'][:60]}")
-    except Exception as e:
-        log.error(f"  Erro ao postar: {e}")
+    # Enfileirar restantes para próximo ciclo
+    if para_fila:
+        queue_atual = load_queue()
+        queue_atual.extend(para_fila)
+        # Limitar fila a 10 itens (evitar acúmulo infinito)
+        queue_atual = sorted(queue_atual, key=lambda x: x.get("nota", 0), reverse=True)[:10]
+        save_queue(queue_atual)
+        log.info(f"  📋 {len(para_fila)} notícias enfileiradas para próximo ciclo (fila total: {len(queue_atual)})")
 
     save_history(history)
+    save_metrics(metrics)
+    _last_cycle_time = agora.strftime("%H:%M:%S")
+    _last_cycle_stats = {
+        "examinados": total_examinados,
+        "candidatos_ia": len(candidatos),
+        "aprovados": len(aprovados),
+        "posts": posts_feitos + len(para_postar),
+        "fila": len(load_queue()),
+    }
     log.info("Ciclo concluído.")
 
 
 @discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
+    # Sync slash commands
+    try:
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            discord_client.tree.copy_global_to(guild=guild)
+            await discord_client.tree.sync(guild=guild)
+        else:
+            await discord_client.tree.sync()
+        log.info("Slash commands sincronizados.")
+    except Exception as e:
+        log.warning(f"Erro ao sincronizar slash commands: {e}")
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 
@@ -964,5 +1138,105 @@ async def on_close():
         http_session = None
     log.info("🔌 Sessão HTTP fechada. Bot desligando.")
 
+# =========================
+# SLASH COMMAND: /status
+# =========================
+@discord_client.tree.command(name="status", description="Exibe o status atual do bot Tiffany")
+async def cmd_status(interaction: discord.Interaction):
+    agora = datetime.now(FUSO_HORARIO_BR)
+    metrics = load_metrics()
+    queue = load_queue()
+
+    # Feeds em cooldown
+    feeds_cooldown = [nome for nome in FONTES_RSS if _feed_em_cooldown(nome)]
+
+    em = discord.Embed(
+        title="📊 Status — Tiffany Bot",
+        color=0x00FFFF,
+        timestamp=agora,
+    )
+    em.add_field(
+        name="⏰ Horário (SP)",
+        value=agora.strftime("%H:%M:%S"),
+        inline=True,
+    )
+    em.add_field(
+        name="🔄 Último ciclo",
+        value=_last_cycle_time,
+        inline=True,
+    )
+    em.add_field(
+        name="📡 Modo",
+        value="Ativo" if HORA_INICIO <= agora.hour < HORA_FIM else "Standby",
+        inline=True,
+    )
+    em.add_field(
+        name="📨 Posts hoje",
+        value=str(metrics.get("posts_hoje", 0)),
+        inline=True,
+    )
+    em.add_field(
+        name="🤖 IA calls hoje",
+        value=str(metrics.get("ia_calls_hoje", 0)),
+        inline=True,
+    )
+    em.add_field(
+        name="✅ Aprovadas / ❌ Rejeitadas",
+        value=f"{metrics.get('ia_aprovadas_hoje', 0)} / {metrics.get('ia_rejeitadas_hoje', 0)}",
+        inline=True,
+    )
+    em.add_field(
+        name="📋 Fila",
+        value=f"{len(queue)} notícias aguardando",
+        inline=True,
+    )
+    em.add_field(
+        name="📰 Feeds em cooldown",
+        value=", ".join(feeds_cooldown) if feeds_cooldown else "Nenhum",
+        inline=False,
+    )
+
+    if _last_cycle_stats:
+        stats = _last_cycle_stats
+        em.add_field(
+            name="📈 Último ciclo",
+            value=(
+                f"Examinados: {stats.get('examinados', '?')} · "
+                f"Para IA: {stats.get('candidatos_ia', '?')} · "
+                f"Aprovados: {stats.get('aprovados', '?')} · "
+                f"Postados: {stats.get('posts', '?')}"
+            ),
+            inline=False,
+        )
+
+    em.add_field(
+        name="📊 Totais",
+        value=(
+            f"Posts: {metrics.get('posts_total', 0)} · "
+            f"IA calls: {metrics.get('ia_calls_total', 0)} · "
+            f"Aprovadas: {metrics.get('ia_aprovadas_total', 0)} · "
+            f"Rejeitadas: {metrics.get('ia_rejeitadas_total', 0)}"
+        ),
+        inline=False,
+    )
+
+    em.set_footer(text="Tiffany Bot v18")
+    await interaction.response.send_message(embed=em, ephemeral=True)
+
+
+async def _shutdown_cleanup():
+    """Cleanup garantido para http_session em qualquer cenário de shutdown."""
+    global http_session
+    if http_session:
+        await http_session.close()
+        http_session = None
+        log.info("🔌 Sessão HTTP fechada no shutdown.")
+
+def _sync_cleanup():
+    """Cleanup síncrono de emergência via atexit."""
+    if http_session and not http_session.closed:
+        log.warning("⚠️ http_session não foi fechada gracefully (atexit).")
+
+atexit.register(_sync_cleanup)
 
 discord_client.run(DISCORD_TOKEN)
