@@ -109,6 +109,7 @@ FONTES_RSS = {
     "Olhar Digital": "https://olhardigital.com.br/rss/",
     "G1 Tecnologia": "https://g1.globo.com/dynamo/tecnologia/rss2.xml",
     "Giz Brasil": "https://gizmodo.uol.com.br/feed/",
+    "Convergência Digital": "https://convergenciadigital.com.br/feed/",
     # EN — Geral
     "The Verge": "https://www.theverge.com/rss/index.xml",
     "TechCrunch": "https://techcrunch.com/feed/",
@@ -120,23 +121,30 @@ FONTES_RSS = {
     "ZDNet": "https://www.zdnet.com/news/rss.xml",
     "The Register": "https://www.theregister.com/headlines.atom",
     "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
+    "Axios Tech": "https://api.axios.com/feed/technology",
+    "IEEE Spectrum": "https://spectrum.ieee.org/rss",
     # EN — Segurança
     "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
     "KrebsOnSecurity": "https://krebsonsecurity.com/feed/",
     "The Hacker News": "https://feeds.feedburner.com/TheHackersNews",
     "Dark Reading": "https://www.darkreading.com/rss.xml",
+    "Socket": "https://socket.dev/blog/rss.xml",
     # EN — IA / Dev
     "MIT Technology Review": "https://www.technologyreview.com/feed/",
     "OpenAI Blog": "https://openai.com/blog/rss.xml",
+    "Anthropic Blog": "https://www.anthropic.com/rss/index.xml",
     "GitHub Blog": "https://github.blog/feed/",
+    "Cloudflare Blog": "https://blog.cloudflare.com/rss/",
+    "Simon Willison": "https://simonwillison.net/atom/everything/",
 }
 
 FONTES_INGLES = {
     "The Verge", "TechCrunch", "Ars Technica", "Wired", "Engadget",
     "BleepingComputer", "9to5Mac", "9to5Google", "ZDNet",
-    "The Register", "Tom's Hardware",
-    "KrebsOnSecurity", "The Hacker News", "Dark Reading",
-    "MIT Technology Review", "OpenAI Blog", "GitHub Blog",
+    "The Register", "Tom's Hardware", "Axios Tech", "IEEE Spectrum",
+    "KrebsOnSecurity", "The Hacker News", "Dark Reading", "Socket",
+    "MIT Technology Review", "OpenAI Blog", "Anthropic Blog",
+    "GitHub Blog", "Cloudflare Blog", "Simon Willison",
 }
 
 # =========================
@@ -645,6 +653,25 @@ async def extrair_imagem_completa(entry, feed_url: str) -> str | None:
 # =========================
 # ANÁLISE IA (OpenRouter)
 # =========================
+def _fix_sentence_case(text: str) -> str:
+    """Converte Title Case para sentence case quando detectado."""
+    words = text.split()
+    if not words:
+        return text
+    long_words = [w for w in words if len(w) > 3 and not w[0].isdigit()]
+    if not long_words:
+        return text
+    capitalized_ratio = sum(1 for w in long_words if w[0].isupper()) / len(long_words)
+    if capitalized_ratio < 0.6:
+        return text  # Não é Title Case, não mexe
+    # Converte para sentence case: minúsculas, depois capitaliza após pontuação de fim de frase
+    result = text.lower()
+    result = result[0].upper() + result[1:] if result else result
+    for punct in [". ", "! ", "? "]:
+        parts = result.split(punct)
+        result = punct.join(p[0].upper() + p[1:] if p else p for p in parts)
+    return result
+
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
 
@@ -695,8 +722,8 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
   Frase 1-2: CONTEXTO (quem, o que, quando — situe o leitor).
   Frase 3-4: FATO (o que aconteceu de concreto, com detalhes técnicos relevantes).
   Frase 5: IMPACTO (por que isso importa, o que muda para o usuário/mercado).
-- Comece com letra maiúscula. Gramática impecável em PT-BR.
-- O texto deve ser denso e substancial — nunca genérico ou superficial.
+- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case (ex: ERRADO: "A Empresa Divulgou Um Incidente"; CORRETO: "A empresa divulgou um incidente").
+- Gramática impecável em PT-BR. O texto deve ser denso e substancial — nunca genérico ou superficial.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -722,7 +749,10 @@ Texto Base: {texto_base[:2000]}
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
             if match:
-                return json.loads(match.group(0))
+                data = json.loads(match.group(0))
+                if isinstance(data.get("resumo"), str):
+                    data["resumo"] = _fix_sentence_case(data["resumo"])
+                return data
         except Exception as e:
             log.warning(f"IA tentativa {attempt+1}/3 falhou: {e}")
             await asyncio.sleep(2)
