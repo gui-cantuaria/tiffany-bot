@@ -1,5 +1,8 @@
-discord.py
+discord.py[voice]>=2.5.0,<3
+discord-ext-voice-recv>=0.5.2a179
 feedparser
 python-dotenv
 aiohttp
 openai
+yt-dlp
+SpeechRecognition

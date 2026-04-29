@@ -18,6 +18,8 @@ import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+import tiffany_voice
+
 # =========================
 # CONFIGURAÇÕES
 # =========================
@@ -32,6 +34,7 @@ ID_CARGO_PARA_MARCAR = int(os.getenv("ID_CARGO_PARA_MARCAR", "0"))
 HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
+MINUTO_PRE_AQUECIMENTO = 45
 
 # --- Pipeline ---
 SCAN_POR_FEED = 5
@@ -80,7 +83,9 @@ log.addHandler(_file_handler)
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
 intents = discord.Intents.default()
+intents.voice_states = True
 discord_client = commands.Bot(command_prefix="!", intents=intents)
+tiffany_voice.register_voice(discord_client)
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     if OPENROUTER_API_KEY
@@ -672,6 +677,35 @@ def _fix_sentence_case(text: str) -> str:
         result = punct.join(p[0].upper() + p[1:] if p else p for p in parts)
     return result
 
+
+def _normalize_news_title(title: str) -> str:
+    """Padroniza títulos para formato jornalístico direto (sentence case)."""
+    t = re.sub(r"\s+", " ", (title or "").strip())
+    if not t:
+        return t
+    # Remove emoji/símbolos no começo para evitar duplicar marcador de urgência no embed.
+    t = re.sub(r"^[^\wÀ-ÿ]+", "", t).strip()
+    # Remove aspas e pontuação soltas no início/fim.
+    t = t.strip(" -:;,.!?\"'`")
+    # Limpa padrões comuns de clickbait.
+    t = re.sub(r"(?i)\b(voc[eê] n[aã]o vai acreditar|imperd[ií]vel|chocante|surpreendente)\b", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = _fix_sentence_case(t)
+    # Mantém siglas comuns em caixa alta após normalização
+    acronyms = ("IA", "EUA", "UE", "UK", "API", "CVE", "CEO", "GPU", "CPU", "AI")
+    for ac in acronyms:
+        t = re.sub(rf"\b{ac.lower()}\b", ac, t, flags=re.IGNORECASE)
+    # Limita tamanho mantendo leitura natural.
+    if len(t) > 110:
+        cut = t[:110]
+        last_space = cut.rfind(" ")
+        if last_space >= 70:
+            cut = cut[:last_space]
+        t = cut.rstrip(" ,;:-") + "..."
+    if t:
+        t = t[0].upper() + t[1:]
+    return t
+
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
 
@@ -714,6 +748,8 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 ═══ TÍTULO ═══
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
 - Traduza para PT-BR. Sem clickbait, sem "Você não vai acreditar", sem títulos genéricos curtos.
+- Use sentence case natural em português: somente a primeira palavra e nomes próprios/siglas em maiúscula.
+- Limite de até 110 caracteres, direto ao ponto e sem exagero de adjetivos.
 
 ═══ RESUMO (campo mais importante) ═══
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
@@ -752,6 +788,8 @@ Texto Base: {texto_base[:2000]}
                 data = json.loads(match.group(0))
                 if isinstance(data.get("resumo"), str):
                     data["resumo"] = _fix_sentence_case(data["resumo"])
+                if isinstance(data.get("titulo"), str):
+                    data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
         except Exception as e:
             log.warning(f"IA tentativa {attempt+1}/3 falhou: {e}")
@@ -829,15 +867,38 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 # Estado global para /status
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
+_last_run_slot: tuple[int, int, int] | None = None
 
-@tasks.loop(minutes=30)
+def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
+    """Permite coleta no horário comercial e no pré-aquecimento antes das 8h."""
+    if HORA_INICIO <= agora.hour < HORA_FIM:
+        return True
+    return agora.hour == (HORA_INICIO - 1) and agora.minute >= MINUTO_PRE_AQUECIMENTO
+
+
+def _deve_rodar_slot(agora: datetime) -> bool:
+    """Roda somente em slots fixos (xx:00 e xx:30) e apenas uma vez por slot."""
+    global _last_run_slot
+    if agora.minute not in (0, 30):
+        return False
+    slot = (agora.year * 10000 + agora.month * 100 + agora.day, agora.hour, agora.minute)
+    if _last_run_slot == slot:
+        return False
+    _last_run_slot = slot
+    return True
+
+
+@tasks.loop(minutes=1)
 async def verificar_feeds():
     global _ai_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
-    if not (HORA_INICIO <= agora.hour < HORA_FIM):
-        log.info(f"Standby: {agora.strftime('%H:%M')} fora do horário comercial (08h-18h).")
+    if not _deve_rodar_slot(agora):
+        return
+
+    if not _janela_ativa_ou_pre_aquecimento(agora):
+        log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:45 + 08h-18h).")
         return
 
     if not http_session:
@@ -857,10 +918,11 @@ async def verificar_feeds():
     history = load_history()
     metrics = load_metrics()
 
-    # ===== FASE 0: Postar da fila de ciclos anteriores =====
+    # ===== FASE 0: Postar da fila de ciclos anteriores (apenas em horário ativo) =====
     queue = load_queue()
     posts_feitos = 0
-    if queue:
+    em_horario_ativo = HORA_INICIO <= agora.hour < HORA_FIM
+    if queue and em_horario_ativo:
         log.info(f"═══ FASE 0: Postando {len(queue)} da fila ═══")
         nova_queue = []
         for item in queue:
@@ -1075,7 +1137,7 @@ async def verificar_feeds():
 
         metric_inc(metrics, "ia_aprovadas_hoje")
         aprovados.append({
-            "titulo": res.get("titulo", cand["title"]),
+            "titulo": _normalize_news_title(res.get("titulo", cand["title"])),
             "resumo": res.get("resumo", ""),
             "nota": nota,
             "categoria": categoria,
@@ -1110,10 +1172,10 @@ async def verificar_feeds():
         save_metrics(metrics)
         return
 
-    # Postar até o limite, enfileirar o restante
+    # Postar até o limite (somente horário ativo), enfileirar o restante
     posts_restantes = MAX_POSTS_POR_CICLO - posts_feitos
-    para_postar = com_imagem[:posts_restantes]
-    para_fila = com_imagem[posts_restantes:]
+    para_postar = com_imagem[:posts_restantes] if em_horario_ativo else []
+    para_fila = com_imagem[posts_restantes:] if em_horario_ativo else com_imagem
 
     for i, noticia in enumerate(para_postar):
         log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
