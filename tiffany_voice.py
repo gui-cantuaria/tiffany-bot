@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import audioop
+import importlib
 import io
 import logging
 import os
@@ -121,7 +122,11 @@ def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
 
 
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    import speech_recognition as sr
+    try:
+        sr = importlib.import_module("speech_recognition")
+    except ModuleNotFoundError:
+        log.warning("Pacote SpeechRecognition não instalado; STT desativado.")
+        return None
 
     r = sr.Recognizer()
     r.dynamic_energy_threshold = True
