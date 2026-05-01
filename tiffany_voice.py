@@ -485,7 +485,8 @@ def register_voice(bot: commands.Bot) -> None:
                 _voice_listen_loop(gid, vc, bot),
                 name=f"tiffany-voice-{gid}",
             )
-        except Exception:
+        except Exception as e:
+            log.warning("Falha ao iniciar escuta: %s", e)
             session.listen_task = None
 
         session.music_task = asyncio.create_task(
@@ -494,6 +495,7 @@ def register_voice(bot: commands.Bot) -> None:
         )
         _sessions[gid] = session
 
+        log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
         await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
         return session, vc
 
@@ -509,7 +511,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         if not query:
-            await ctx.send("🎵 Use: `$p <link do YouTube/Spotify>` ou `$p <nome da musica>`")
+            await ctx.send("🎵 Use: `$play <link do YouTube/Spotify>` ou `$play <nome da música>`")
             return
         sess, vc = await _ensure_connected(ctx)
         if not sess:
@@ -519,8 +521,20 @@ def register_voice(bot: commands.Bot) -> None:
             pass
         elif not re.match(r"^https?://", q):
             q = f"ytsearch1:{q}"
+        
+        # Debug: log queue state
+        log.info("Play cmd: putting query '%s' into queue (size before: %d)", q, sess.music_queue.qsize())
         await sess.music_queue.put(q)
-        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
+        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}** (fila: {sess.music_queue.qsize()})")
+        
+        # Ensure worker is running
+        gid = ctx.guild.id
+        if sess.music_task is None or sess.music_task.done():
+            log.warning("Music worker not running, restarting...")
+            sess.music_task = asyncio.create_task(
+                _play_worker(gid, vc, bot),
+                name=f"tiffany-music-{gid}",
+            )
 
     @bot.command(name="rm", help="Toca uma musica aleatoria: $rm")
     async def cmd_rm(ctx: commands.Context):
