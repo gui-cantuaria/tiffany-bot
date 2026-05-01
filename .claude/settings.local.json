@@ -4,7 +4,15 @@
       "Bash(python -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK: syntax valid''\\)\")",
       "Bash(python3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK''\\)\")",
       "Bash(py -3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''OK''\\)\")",
-      "Bash(py -3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''Syntax OK''\\)\")"
+      "Bash(py -3 -c \"import py_compile; py_compile.compile\\(''notices.py'', doraise=True\\); print\\(''Syntax OK''\\)\")",
+      "Bash(python -m py_compile notices.py)",
+      "Bash(python -m py_compile launcher.py)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(python3 -m py_compile notices.py)",
+      "Bash(python3 -m py_compile launcher.py)",
+      "WebSearch",
+      "Bash(py -m py_compile \"C:\\\\Users\\\\T-GAMER\\\\OneDrive\\\\Documentos\\\\Cursor\\\\Tiffany Bot\\\\notices.py\")"
     ]
   }
 }
