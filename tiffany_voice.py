@@ -257,6 +257,7 @@ class _YTSource(PCMVolumeTransformer):
 
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
+    log.info("Music worker started guild=%s", guild_id)
     try:
         while vc.is_connected():
             session = _sessions.get(guild_id)
@@ -301,6 +302,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     pass
     except asyncio.CancelledError:
         raise
+    finally:
+        log.info("Music worker stopped guild=%s", guild_id)
 
 
 async def _voice_listen_loop(
