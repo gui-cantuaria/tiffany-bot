@@ -1,6 +1,6 @@
 """
-Comandos de voz estilo assistente: /tiffany entra na call, ouve o áudio e
-interpreta frases como «Tiffany, toca ...». Reprodução via yt-dlp (YouTube
+Comandos de voz estilo assistente: $tiffany entra na call, ouve o audio e
+interpreta frases como «Tiffany, toca ...». Reproducao via yt-dlp (YouTube
 busca ou URL Spotify/YouTube). Requer FFmpeg no PATH e PyNaCl.
 """
 
@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import discord
 import yt_dlp
-from discord import FFmpegPCMAudio, PCMVolumeTransformer, app_commands
+from discord import FFmpegPCMAudio, PCMVolumeTransformer
 from discord.ext import commands, voice_recv
 
 log = logging.getLogger("tiffany-bot.voice")
@@ -35,13 +35,11 @@ def _resolve_ffmpeg_executable() -> Optional[str]:
         if by_name:
             return by_name
 
-    # Busca padrão no PATH (Linux/macOS/Windows).
     for candidate in ("ffmpeg", "ffmpeg.exe"):
         found = shutil.which(candidate)
         if found:
             return found
 
-    # Alguns caminhos comuns no Windows quando o binário foi extraído manualmente.
     if os.name == "nt":
         roots = [os.getenv("ProgramFiles"), os.getenv("ProgramFiles(x86)"), os.getenv("LOCALAPPDATA")]
         for root in roots:
@@ -51,7 +49,6 @@ def _resolve_ffmpeg_executable() -> Optional[str]:
             if os.path.isfile(candidate):
                 return candidate
 
-    # Fallback opcional se imageio-ffmpeg estiver instalado no ambiente.
     try:
         imageio_ffmpeg = importlib.import_module("imageio_ffmpeg")
         candidate = imageio_ffmpeg.get_ffmpeg_exe()
@@ -66,7 +63,6 @@ def _resolve_ffmpeg_executable() -> Optional[str]:
 FFMPEG_EXECUTABLE = _resolve_ffmpeg_executable()
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 
-# Discord voice pode ficar pendente indefinidamente se UDP estiver bloqueado (comum em alguns PaaS).
 def _voice_connect_timeout_sec() -> float:
     try:
         return max(5.0, min(float(os.getenv("VOICE_CONNECT_TIMEOUT_SEC", "25")), 120.0))
@@ -74,7 +70,6 @@ def _voice_connect_timeout_sec() -> float:
         return 25.0
 
 
-# ~1.5s de PCM estéreo 48kHz s16le antes de tentar STT
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.5)
 
 YDL_OPTS: dict[str, Any] = {
@@ -116,23 +111,19 @@ def _normalize_transcript(t: str) -> str:
 
 
 def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
-    """
-    Retorna (ação, argumento).
-    ação: 'play' | 'stop' | 'none'
-    """
     t = _normalize_transcript(text)
     if "tiffany" not in t and "tifani" not in t:
         return "none", None
 
     if re.search(
-        r"tiffany\s*,?\s*(para|parar|stop|pause|pausa)\b|"
-        r"tifani\s*,?\s*(para|parar|stop|pause|pausa)\b",
+        r"tiffany\s*,\s*(para|parar|stop|pause|pausa)\b|"
+        r"tifani\s*,\s*(para|parar|stop|pause|pausa)\b",
         t,
     ):
         return "stop", None
 
     m = re.search(
-        r"(?:tiffany|tifani)\s*,?\s*(?:toca|reproduz|play|coloca)\s+(.+)",
+        r"(?:tiffany|tifani)\s*,\s*(?:toca|reproduz|play|coloca)\s+(.+)",
         t,
         re.IGNORECASE,
     )
@@ -181,7 +172,7 @@ def _extract_audio(info: dict[str, Any]) -> tuple[Optional[str], str]:
         return None, "?"
     if "entries" in info and info["entries"]:
         info = info["entries"][0]
-    title = info.get("title") or info.get("id") or "áudio"
+    title = info.get("title") or info.get("id") or "audio"
     url = info.get("url")
     if url:
         return url, title
@@ -285,7 +276,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         await _notify(
                             bot,
                             session.text_channel_id,
-                            f"❌ Não consegui achar áudio para: `{query[:80]}`",
+                            f"❌ Não consegui achar audio para: `{query[:80]}`",
                         )
                         session.music_queue.task_done()
                         continue
@@ -320,7 +311,6 @@ async def _voice_listen_loop(
     session = _sessions.get(guild_id)
     if not session:
         return
-    # Avisa no texto que estou ouvindo
     await _notify(bot, session.text_channel_id, "🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
     _last_heard_notify = 0.0
     _last_audio_time = asyncio.get_event_loop().time()
@@ -330,17 +320,19 @@ async def _voice_listen_loop(
             await asyncio.sleep(5.0)
             if not vc.is_connected():
                 break
-            # Diagnóstico: se passou 60s sem receber nenhum áudio, avisa
+            if vc.is_playing():
+                continue
+
+            # Diagnóstico: se passou 60s sem receber nenhum audio, avisa
             if not _warned_no_audio and (asyncio.get_event_loop().time() - _last_audio_time) > 60:
                 await _notify(
                     bot,
                     session.text_channel_id,
-                    "⚠️ Não recebi nenhum áudio após 60s. Seu host pode estar bloqueando UDP (comum na Discloud). "
+                    "⚠️ Não recebi nenhum audio após 60s. Seu host pode estar bloqueando UDP (comum na Discloud). "
                     "Comandos por fala podem não funcionar — use comandos de texto ou um VPS.",
                 )
                 _warned_no_audio = True
-            if vc.is_playing():
-                continue
+
             pcm = _drain_loudest_user_pcm(session)
             if len(pcm) < MIN_PCM_BYTES:
                 continue
@@ -348,10 +340,9 @@ async def _voice_listen_loop(
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
-                # Feedback ocasional de que ouviu mas não entendeu fala
                 agora = asyncio.get_event_loop().time()
                 if agora - _last_heard_notify > 60:
-                    await _notify(bot, session.text_channel_id, "🎙️ Ouvido, mas não entendi. Tente: **«Tiffany, toca <música>»**")
+                    await _notify(bot, session.text_channel_id, "🎙️ Ouvido, mas não entendi. Tente: **«Tiffany, toca <musica>»**")
                     _last_heard_notify = agora
                 continue
             action, arg = _parse_voice_command(text)
@@ -398,7 +389,6 @@ async def _join_voice_recv_client(
     guild: discord.Guild,
     channel: discord.VoiceChannel,
 ) -> voice_recv.VoiceRecvClient:
-    """Conecta ou move o cliente VoiceRecv para o canal."""
     vc_existing = guild.voice_client
     if (
         vc_existing
@@ -420,226 +410,18 @@ async def _join_voice_recv_client(
 
 
 def register_voice(bot: commands.Bot) -> None:
-    @bot.tree.command(
-        name="tiffany",
-        description="Adiciona a Tiffany ao seu canal de voz (call). Depois você pode pedir música por voz.",
-    )
-    @app_commands.guild_only()
-    async def cmd_tiffany(interaction: discord.Interaction) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member):
-            await interaction.response.send_message("Use este comando dentro de um servidor.", ephemeral=True)
-            return
-        guild = interaction.guild
-        member = interaction.user
-        if not member.voice or not member.voice.channel:
-            await interaction.response.send_message(
-                "Entre em um **canal de voz** antes de usar `/tiffany`.",
-                ephemeral=True,
-            )
-            return
-        channel = member.voice.channel
-        if not isinstance(channel, discord.VoiceChannel):
-            await interaction.response.send_message("Canal de palco não suportado para este modo.", ephemeral=True)
-            return
-
-        bot_member = guild.me or (guild.get_member(bot.user.id) if bot.user else None)
-        if bot_member is None:
-            await interaction.response.send_message(
-                "Não consegui validar as permissões do bot neste servidor. Tente novamente em alguns segundos.",
-                ephemeral=True,
-            )
-            return
-        perms = channel.permissions_for(bot_member)
-        missing: list[str] = []
-        if not perms.view_channel:
-            missing.append("Ver Canal")
-        if not perms.connect:
-            missing.append("Conectar")
-        if not perms.speak:
-            missing.append("Falar")
-        if missing:
-            await interaction.response.send_message(
-                "Não tenho permissão suficiente para entrar na call.\n"
-                f"Faltando em **{channel.name}**: `{', '.join(missing)}`.",
-                ephemeral=True,
-            )
-            return
-
-        if not _ffmpeg_available():
-            await interaction.response.send_message(
-                "FFmpeg não foi encontrado no host.\n"
-                f"Defina `FFMPEG_PATH` corretamente ou adicione `ffmpeg` ao PATH. Valor atual: `{FFMPEG_PATH}`.",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            await _ensure_opus()
-        except Exception as e:
-            log.warning("Opus: %s", e)
-
-        gid = guild.id
-
-        prev = _sessions.get(gid)
-        if prev:
-            if prev.listen_task:
-                prev.listen_task.cancel()
-            if prev.music_task:
-                prev.music_task.cancel()
-
-        timeout = _voice_connect_timeout_sec()
-        try:
-            log.info(
-                "Conectando voice: guild=%s channel=%s timeout=%ss",
-                guild.id,
-                channel.id,
-                timeout,
-            )
-            vc = await asyncio.wait_for(
-                _join_voice_recv_client(guild, channel),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            log.warning(
-                "Timeout voice connect guild=%s channel=%s após %ss",
-                guild.id,
-                channel.id,
-                timeout,
-            )
-            vc_left = guild.voice_client
-            if vc_left and vc_left.is_connected():
-                try:
-                    await vc_left.disconnect(force=True)
-                except Exception:
-                    pass
-            await interaction.followup.send(
-                "⏱️ **Tempo esgotado** ao conectar no canal de voz.\n\n"
-                "O Discord fica em *“Tiffany is thinking…”* enquanto a conexão de **voz** não termina. "
-                "Se isso demora e falha, muitas vezes o host **bloqueia UDP** usado pelo voice.\n\n"
-                "**Na Discloud:** confirme no suporte se o seu plano permite **Discord Voice** (saída UDP). "
-                "Se não permitir, a feature de call só roda de forma confiável em **PC local** ou **VPS**.\n\n"
-                f"Você pode ajustar o limite com `VOICE_CONNECT_TIMEOUT_SEC` (atual: **{timeout:g}s**).",
-                ephemeral=True,
-            )
-            return
-        except Exception as e:
-            await interaction.followup.send(
-                f"Não consegui entrar no canal de voz: `{e}`\n"
-                "Verifique conectividade com o Discord Voice Gateway e permissões do canal.",
-                ephemeral=True,
-            )
-            return
-
-        session = _GuildVoiceSession(text_channel_id=interaction.channel_id)
-        sink = _PCMBufferSink(session)
-        captura_ok = True
-        try:
-            vc.listen(sink)
-            session.listen_task = asyncio.create_task(
-                _voice_listen_loop(gid, vc, bot),
-                name=f"tiffany-voice-{gid}",
-            )
-        except Exception as e:
-            captura_ok = False
-            # Em alguns hosts, conectar funciona mas a recepção de voz (UDP/Opus) falha.
-            log.exception("Falha ao iniciar captura de voz guild=%s: %s", gid, e)
-            session.listen_task = None
-
-        session.music_task = asyncio.create_task(
-            _play_worker(gid, vc, bot),
-            name=f"tiffany-music-{gid}",
-        )
-        _sessions[gid] = session
-
-        aviso_captura = ""
-        if not captura_ok:
-            aviso_captura = (
-                "\n\n⚠️ Consegui entrar na call, mas a **captura de voz** falhou neste host. "
-                "A reprodução por fila/comandos ainda funciona, porém comandos por fala podem não funcionar."
-            )
-
-        await interaction.followup.send(
-            f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.\n\n"
-            "Enquanto estiver na call, você pode falar, por exemplo: "
-            "**«Tiffany, toca …»** (nome da música ou link do YouTube/Spotify).\n"
-            "Use **`/tiffany_sair`** para eu sair do canal."
-            f"{aviso_captura}",
-            ephemeral=True,
-        )
-
-    @bot.tree.command(name="tiffany_sair", description="Desconecta a Tiffany do canal de voz.")
-    @app_commands.guild_only()
-    async def cmd_tiffany_sair(interaction: discord.Interaction) -> None:
-        if not interaction.guild:
-            await interaction.response.send_message("Use em um servidor.", ephemeral=True)
-            return
-        gid = interaction.guild.id
-        vc = interaction.guild.voice_client
-        if not vc or not vc.is_connected():
-            await interaction.response.send_message("Não estou em nenhum canal de voz.", ephemeral=True)
-            return
-        sess = _sessions.pop(gid, None)
-        if sess:
-            if sess.listen_task:
-                sess.listen_task.cancel()
-            if sess.music_task:
-                sess.music_task.cancel()
-        await vc.disconnect(force=True)
-        await interaction.response.send_message("Saí do canal de voz.", ephemeral=True)
-
-    @bot.tree.command(name="next", description="Pula a faixa atual e toca a próxima da fila.")
-    @app_commands.guild_only()
-    async def cmd_next(interaction: discord.Interaction) -> None:
-        if not interaction.guild:
-            await interaction.response.send_message("Use em um servidor.", ephemeral=True)
-            return
-
-        guild = interaction.guild
-        vc = guild.voice_client
-        if not vc or not vc.is_connected():
-            await interaction.response.send_message("Não estou em nenhum canal de voz.", ephemeral=True)
-            return
-
-        session = _sessions.get(guild.id)
-        if not session:
-            await interaction.response.send_message("A sessão de voz não está ativa no momento.", ephemeral=True)
-            return
-
-        if not vc.is_playing():
-            await interaction.response.send_message("Não tem faixa tocando agora.", ephemeral=True)
-            return
-
-        prox_na_fila = session.music_queue.qsize()
-        vc.stop_playing()
-        if prox_na_fila > 0:
-            await interaction.response.send_message(
-                f"⏭️ Faixa pulada. Tocando a próxima (restantes na fila: {prox_na_fila}).",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                "⏭️ Faixa pulada. Não há próximas músicas na fila.",
-                ephemeral=True,
-            )
-
-    # =========================
-    # COMANDOS DE CHAT (música)
-    # =========================
     _RANDOM_SONGS = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Astley - Never Gonna Give You Up
-        "https://www.youtube.com/watch?v=9bZkp7q19f0",  # PSY - GANGNAM STYLE
-        "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Luis Fonsi - Despacito
-        "https://www.youtube.com/watch?v=RgKAFK5djSk",  # Wiz Khalifa - See You Again
-        "https://www.youtube.com/watch?v=JGwWNGJdvx8",  # Ed Sheeran - Shape of You
-        "https://www.youtube.com/watch?v=YR3nmjxJY74",  # Mark Ronson - Uptown Funk
-        "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Adele - Hello
-        "https://www.youtube.com/watch?v=ru0K8uYEZWw",  # Taylor Swift - Shake It Off
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
+        "https://www.youtube.com/watch?v=RgKAFK5djSk",
+        "https://www.youtube.com/watch?v=JGwWNGJdvx8",
+        "https://www.youtube.com/watch?v=YR3nmjxJY74",
+        "https://www.youtube.com/watch?v=YQHsXMglC9A",
+        "https://www.youtube.com/watch?v=ru0K8uYEZWw",
     ]
 
     async def _ensure_connected(ctx: commands.Context) -> tuple:
-        """Garante que o bot está no canal de voz do usuário. Retorna (session, vc) ou (None, None)."""
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
             await ctx.send("⚠️ Use este comando em um servidor.")
             return None, None
@@ -657,9 +439,17 @@ def register_voice(bot: commands.Bot) -> None:
         sess = _sessions.get(gid)
         vc = guild.voice_client
         if sess and vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
-            return sess, vc
+            if vc.channel.id == channel.id:
+                return sess, vc
+            # Se está em outro canal, move
+            try:
+                await vc.move_to(channel)
+                return sess, vc
+            except Exception as e:
+                await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
+                return None, None
 
-        # Verificar permissões
+        # Verificar permissoes
         bot_member = guild.me
         if bot_member:
             perms = channel.permissions_for(bot_member)
@@ -707,12 +497,19 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
         return session, vc
 
-    @bot.command(name="p", help="Toca música do link: $p <url> ou $p <nome>")
+    @bot.command(name="tiffany", help="Adiciona a Tiffany ao seu canal de voz. Depois você pode pedir musica por voz.")
+    async def cmd_tiffany(ctx: commands.Context):
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        await ctx.send("🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
+
+    @bot.command(name="p", help="Toca musica: $p <url> ou $p <nome>")
     async def cmd_p(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
         if not query:
-            await ctx.send("🎵 Use: `$p <link do YouTube/Spotify>` ou `$p <nome da música>`")
+            await ctx.send("🎵 Use: `$p <link do YouTube/Spotify>` ou `$p <nome da musica>`")
             return
         sess, vc = await _ensure_connected(ctx)
         if not sess:
@@ -725,7 +522,7 @@ def register_voice(bot: commands.Bot) -> None:
         await sess.music_queue.put(q)
         await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
 
-    @bot.command(name="rm", help="Toca uma música aleatória: $rm")
+    @bot.command(name="rm", help="Toca uma musica aleatoria: $rm")
     async def cmd_rm(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -735,6 +532,47 @@ def register_voice(bot: commands.Bot) -> None:
         import random
         url = random.choice(_RANDOM_SONGS)
         await sess.music_queue.put(url)
-        await ctx.send(f"🎲 Música aleatória adicionada à fila!")
+        await ctx.send("🎲 Musica aleatoria adicionada à fila!")
 
-    log.info("Comandos de voz (/tiffany, /tiffany_sair, /next) e chat (@p, @rm) registrados.")
+    @bot.command(name="tiffany_sair", help="Desconecta a Tiffany do canal de voz.")
+    async def cmd_tiffany_sair(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        gid = ctx.guild.id
+        sess = _sessions.pop(gid, None)
+        if sess:
+            if sess.listen_task:
+                sess.listen_task.cancel()
+            if sess.music_task:
+                sess.music_task.cancel()
+        vc = ctx.guild.voice_client
+        if vc and vc.is_connected():
+            await vc.disconnect(force=True)
+            await ctx.send("👋 **Tiffany saiu** do canal de voz.")
+        else:
+            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+
+    @bot.command(name="next", help="Pula a faixa atual e toca a proxima da fila.")
+    async def cmd_next(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        guild = ctx.guild
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
+            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            return
+        session = _sessions.get(guild.id)
+        if not session:
+            await ctx.send("⚠️ A sessão de voz não está ativa no momento.")
+            return
+        if not vc.is_playing():
+            await ctx.send("⚠️ Não tem faixa tocando agora.")
+            return
+        prox_na_fila = session.music_queue.qsize()
+        vc.stop_playing()
+        if prox_na_fila > 0:
+            await ctx.send(f"⏭️ Faixa pulada. Tocando a proxima (restantes na fila: {prox_na_fila}).")
+        else:
+            await ctx.send("⏭️ Faixa pulada. Não há proximas musicas na fila.")
+
+    log.info("Comandos de voz registrados: $tiffany, $p, $rm, $tiffany_sair, $next")
