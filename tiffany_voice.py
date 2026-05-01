@@ -12,6 +12,7 @@ import io
 import logging
 import os
 import re
+import shutil
 import threading
 import wave
 from dataclasses import dataclass, field
@@ -25,6 +26,14 @@ from discord.ext import commands, voice_recv
 log = logging.getLogger("tiffany-bot.voice")
 
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
+
+# Discord voice pode ficar pendente indefinidamente se UDP estiver bloqueado (comum em alguns PaaS).
+def _voice_connect_timeout_sec() -> float:
+    try:
+        return max(5.0, min(float(os.getenv("VOICE_CONNECT_TIMEOUT_SEC", "25")), 120.0))
+    except ValueError:
+        return 25.0
+
 
 # ~1.5s de PCM estéreo 48kHz s16le antes de tentar STT
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.5)
@@ -42,6 +51,13 @@ FFMPEG_OPTS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-vn",
 }
+
+
+def _ffmpeg_available() -> bool:
+    # Suporta FFMPEG_PATH absoluto (ex.: C:\ffmpeg\bin\ffmpeg.exe) ou via PATH.
+    if os.path.isabs(FFMPEG_PATH):
+        return os.path.isfile(FFMPEG_PATH)
+    return shutil.which(FFMPEG_PATH) is not None
 
 
 @dataclass
@@ -314,6 +330,31 @@ async def _voice_listen_loop(
                 removed.music_task.cancel()
 
 
+async def _join_voice_recv_client(
+    guild: discord.Guild,
+    channel: discord.VoiceChannel,
+) -> voice_recv.VoiceRecvClient:
+    """Conecta ou move o cliente VoiceRecv para o canal."""
+    vc_existing = guild.voice_client
+    if (
+        vc_existing
+        and vc_existing.is_connected()
+        and isinstance(vc_existing, voice_recv.VoiceRecvClient)
+    ):
+        try:
+            vc_existing.stop_listening()
+        except Exception:
+            pass
+        await vc_existing.move_to(channel)
+        return vc_existing
+    if vc_existing and vc_existing.is_connected():
+        await vc_existing.disconnect(force=True)
+    return await channel.connect(
+        cls=voice_recv.VoiceRecvClient,
+        self_deaf=False,
+    )
+
+
 def register_voice(bot: commands.Bot) -> None:
     @bot.tree.command(
         name="tiffany",
@@ -324,6 +365,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("Use este comando dentro de um servidor.", ephemeral=True)
             return
+        guild = interaction.guild
         member = interaction.user
         if not member.voice or not member.voice.channel:
             await interaction.response.send_message(
@@ -336,6 +378,37 @@ def register_voice(bot: commands.Bot) -> None:
             await interaction.response.send_message("Canal de palco não suportado para este modo.", ephemeral=True)
             return
 
+        bot_member = guild.me or (guild.get_member(bot.user.id) if bot.user else None)
+        if bot_member is None:
+            await interaction.response.send_message(
+                "Não consegui validar as permissões do bot neste servidor. Tente novamente em alguns segundos.",
+                ephemeral=True,
+            )
+            return
+        perms = channel.permissions_for(bot_member)
+        missing: list[str] = []
+        if not perms.view_channel:
+            missing.append("Ver Canal")
+        if not perms.connect:
+            missing.append("Conectar")
+        if not perms.speak:
+            missing.append("Falar")
+        if missing:
+            await interaction.response.send_message(
+                "Não tenho permissão suficiente para entrar na call.\n"
+                f"Faltando em **{channel.name}**: `{', '.join(missing)}`.",
+                ephemeral=True,
+            )
+            return
+
+        if not _ffmpeg_available():
+            await interaction.response.send_message(
+                "FFmpeg não foi encontrado no host.\n"
+                f"Defina `FFMPEG_PATH` corretamente ou adicione `ffmpeg` ao PATH. Valor atual: `{FFMPEG_PATH}`.",
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -343,7 +416,6 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception as e:
             log.warning("Opus: %s", e)
 
-        guild = interaction.guild
         gid = guild.id
 
         prev = _sessions.get(gid)
@@ -353,30 +425,45 @@ def register_voice(bot: commands.Bot) -> None:
             if prev.music_task:
                 prev.music_task.cancel()
 
+        timeout = _voice_connect_timeout_sec()
         try:
-            vc_existing = guild.voice_client
-            if (
-                vc_existing
-                and vc_existing.is_connected()
-                and isinstance(vc_existing, voice_recv.VoiceRecvClient)
-            ):
+            log.info(
+                "Conectando voice: guild=%s channel=%s timeout=%ss",
+                guild.id,
+                channel.id,
+                timeout,
+            )
+            vc = await asyncio.wait_for(
+                _join_voice_recv_client(guild, channel),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "Timeout voice connect guild=%s channel=%s após %ss",
+                guild.id,
+                channel.id,
+                timeout,
+            )
+            vc_left = guild.voice_client
+            if vc_left and vc_left.is_connected():
                 try:
-                    vc_existing.stop_listening()
+                    await vc_left.disconnect(force=True)
                 except Exception:
                     pass
-                await vc_existing.move_to(channel)
-                vc = vc_existing
-            else:
-                if vc_existing and vc_existing.is_connected():
-                    await vc_existing.disconnect(force=True)
-                vc = await channel.connect(
-                    cls=voice_recv.VoiceRecvClient,
-                    self_deaf=False,
-                )
+            await interaction.followup.send(
+                "⏱️ **Tempo esgotado** ao conectar no canal de voz.\n\n"
+                "O Discord fica em *“Tiffany is thinking…”* enquanto a conexão de **voz** não termina. "
+                "Se isso demora e falha, muitas vezes o host **bloqueia UDP** usado pelo voice.\n\n"
+                "**Na Discloud:** confirme no suporte se o seu plano permite **Discord Voice** (saída UDP). "
+                "Se não permitir, a feature de call só roda de forma confiável em **PC local** ou **VPS**.\n\n"
+                f"Você pode ajustar o limite com `VOICE_CONNECT_TIMEOUT_SEC` (atual: **{timeout:g}s**).",
+                ephemeral=True,
+            )
+            return
         except Exception as e:
             await interaction.followup.send(
                 f"Não consegui entrar no canal de voz: `{e}`\n"
-                "Verifique permissões (Conectar, Falar) e se o host tem **FFmpeg**.",
+                "Verifique conectividade com o Discord Voice Gateway e permissões do canal.",
                 ephemeral=True,
             )
             return
