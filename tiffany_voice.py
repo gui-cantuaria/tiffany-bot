@@ -26,6 +26,44 @@ from discord.ext import commands, voice_recv
 
 log = logging.getLogger("tiffany-bot.voice")
 
+def _resolve_ffmpeg_executable() -> Optional[str]:
+    env_path = (os.getenv("FFMPEG_PATH") or "").strip()
+    if env_path:
+        if os.path.isabs(env_path) and os.path.isfile(env_path):
+            return env_path
+        by_name = shutil.which(env_path)
+        if by_name:
+            return by_name
+
+    # Busca padrão no PATH (Linux/macOS/Windows).
+    for candidate in ("ffmpeg", "ffmpeg.exe"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+
+    # Alguns caminhos comuns no Windows quando o binário foi extraído manualmente.
+    if os.name == "nt":
+        roots = [os.getenv("ProgramFiles"), os.getenv("ProgramFiles(x86)"), os.getenv("LOCALAPPDATA")]
+        for root in roots:
+            if not root:
+                continue
+            candidate = os.path.join(root, "ffmpeg", "bin", "ffmpeg.exe")
+            if os.path.isfile(candidate):
+                return candidate
+
+    # Fallback opcional se imageio-ffmpeg estiver instalado no ambiente.
+    try:
+        imageio_ffmpeg = importlib.import_module("imageio_ffmpeg")
+        candidate = imageio_ffmpeg.get_ffmpeg_exe()
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    except Exception:
+        pass
+
+    return None
+
+
+FFMPEG_EXECUTABLE = _resolve_ffmpeg_executable()
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 
 # Discord voice pode ficar pendente indefinidamente se UDP estiver bloqueado (comum em alguns PaaS).
@@ -55,10 +93,7 @@ FFMPEG_OPTS = {
 
 
 def _ffmpeg_available() -> bool:
-    # Suporta FFMPEG_PATH absoluto (ex.: C:\ffmpeg\bin\ffmpeg.exe) ou via PATH.
-    if os.path.isabs(FFMPEG_PATH):
-        return os.path.isfile(FFMPEG_PATH)
-    return shutil.which(FFMPEG_PATH) is not None
+    return FFMPEG_EXECUTABLE is not None
 
 
 @dataclass
@@ -226,7 +261,7 @@ class _YTSource(PCMVolumeTransformer):
         url, _title = await loop.run_in_executor(None, lambda: _blocking_ytdl_extract(query))
         if not url:
             return None
-        src = FFmpegPCMAudio(url, executable=FFMPEG_PATH, **FFMPEG_OPTS)
+        src = FFmpegPCMAudio(url, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, **FFMPEG_OPTS)
         return cls(src, volume=volume)
 
 

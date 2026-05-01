@@ -5,4 +5,5 @@ python-dotenv
 aiohttp
 openai
 yt-dlp
+imageio-ffmpeg
 SpeechRecognition
