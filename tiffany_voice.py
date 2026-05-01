@@ -320,23 +320,47 @@ async def _voice_listen_loop(
     session = _sessions.get(guild_id)
     if not session:
         return
+    # Avisa no texto que estou ouvindo
+    await _notify(bot, session.text_channel_id, "🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
+    _last_heard_notify = 0.0
+    _last_audio_time = asyncio.get_event_loop().time()
+    _warned_no_audio = False
     try:
         while vc.is_connected():
             await asyncio.sleep(5.0)
             if not vc.is_connected():
                 break
+            # Diagnóstico: se passou 60s sem receber nenhum áudio, avisa
+            if not _warned_no_audio and (asyncio.get_event_loop().time() - _last_audio_time) > 60:
+                await _notify(
+                    bot,
+                    session.text_channel_id,
+                    "⚠️ Não recebi nenhum áudio após 60s. Seu host pode estar bloqueando UDP (comum na Discloud). "
+                    "Comandos por fala podem não funcionar — use comandos de texto ou um VPS.",
+                )
+                _warned_no_audio = True
             if vc.is_playing():
                 continue
             pcm = _drain_loudest_user_pcm(session)
             if len(pcm) < MIN_PCM_BYTES:
                 continue
+            _last_audio_time = asyncio.get_event_loop().time()
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
+                # Feedback ocasional de que ouviu mas não entendeu fala
+                agora = asyncio.get_event_loop().time()
+                if agora - _last_heard_notify > 60:
+                    await _notify(bot, session.text_channel_id, "🎙️ Ouvido, mas não entendi. Tente: **«Tiffany, toca <música>»**")
+                    _last_heard_notify = agora
                 continue
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "none":
+                agora = asyncio.get_event_loop().time()
+                if agora - _last_heard_notify > 30:
+                    await _notify(bot, session.text_channel_id, f"🎙️ Entendi: «{text[:60]}», mas não é um comando. Diga: **«Tiffany, toca ...»**")
+                    _last_heard_notify = agora
                 continue
             if action == "stop":
                 vc.stop_playing()
@@ -510,6 +534,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         session = _GuildVoiceSession(text_channel_id=interaction.channel_id)
         sink = _PCMBufferSink(session)
+        captura_ok = True
         try:
             vc.listen(sink)
             session.listen_task = asyncio.create_task(
@@ -517,6 +542,7 @@ def register_voice(bot: commands.Bot) -> None:
                 name=f"tiffany-voice-{gid}",
             )
         except Exception as e:
+            captura_ok = False
             # Em alguns hosts, conectar funciona mas a recepção de voz (UDP/Opus) falha.
             log.exception("Falha ao iniciar captura de voz guild=%s: %s", gid, e)
             session.listen_task = None
@@ -528,7 +554,7 @@ def register_voice(bot: commands.Bot) -> None:
         _sessions[gid] = session
 
         aviso_captura = ""
-        if session.listen_task is None:
+        if not captura_ok:
             aviso_captura = (
                 "\n\n⚠️ Consegui entrar na call, mas a **captura de voz** falhou neste host. "
                 "A reprodução por fila/comandos ainda funciona, porém comandos por fala podem não funcionar."
