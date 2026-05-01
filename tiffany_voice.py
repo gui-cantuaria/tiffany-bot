@@ -509,23 +509,37 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         session = _GuildVoiceSession(text_channel_id=interaction.channel_id)
-        _sessions[gid] = session
         sink = _PCMBufferSink(session)
-        vc.listen(sink)
-        session.listen_task = asyncio.create_task(
-            _voice_listen_loop(gid, vc, bot),
-            name=f"tiffany-voice-{gid}",
-        )
+        try:
+            vc.listen(sink)
+            session.listen_task = asyncio.create_task(
+                _voice_listen_loop(gid, vc, bot),
+                name=f"tiffany-voice-{gid}",
+            )
+        except Exception as e:
+            # Em alguns hosts, conectar funciona mas a recepção de voz (UDP/Opus) falha.
+            log.exception("Falha ao iniciar captura de voz guild=%s: %s", gid, e)
+            session.listen_task = None
+
         session.music_task = asyncio.create_task(
             _play_worker(gid, vc, bot),
             name=f"tiffany-music-{gid}",
         )
+        _sessions[gid] = session
+
+        aviso_captura = ""
+        if session.listen_task is None:
+            aviso_captura = (
+                "\n\n⚠️ Consegui entrar na call, mas a **captura de voz** falhou neste host. "
+                "A reprodução por fila/comandos ainda funciona, porém comandos por fala podem não funcionar."
+            )
 
         await interaction.followup.send(
             f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.\n\n"
             "Enquanto estiver na call, você pode falar, por exemplo: "
             "**«Tiffany, toca …»** (nome da música ou link do YouTube/Spotify).\n"
-            "Use **`/tiffany_sair`** para eu sair do canal.",
+            "Use **`/tiffany_sair`** para eu sair do canal."
+            f"{aviso_captura}",
             ephemeral=True,
         )
 

@@ -706,6 +706,83 @@ def _normalize_news_title(title: str) -> str:
         t = t[0].upper() + t[1:]
     return t
 
+
+_INSTITUTION_NOUNS = (
+    "governo",
+    "ministério",
+    "ministerio",
+    "justiça",
+    "justica",
+    "anatel",
+    "anpd",
+    "cade",
+    "congresso",
+    "supremo",
+    "tribunal",
+    "prefeitura",
+    "agência",
+    "agencia",
+    "administração",
+    "administracao",
+)
+
+
+def _corrigir_prefixos_estranhos(frase: str) -> str:
+    s = re.sub(r"\s+", " ", (frase or "").strip())
+    if not s:
+        return ""
+
+    # Evita construções semânticas ruins como "A empresa governo federal".
+    if re.match(rf"(?i)^a empresa\s+(?:{'|'.join(_INSTITUTION_NOUNS)})\b", s):
+        s = re.sub(r"(?i)^a empresa\s+", "O ", s, count=1)
+    if re.match(rf"(?i)^a startup\s+(?:{'|'.join(_INSTITUTION_NOUNS)})\b", s):
+        s = re.sub(r"(?i)^a startup\s+", "O ", s, count=1)
+
+    return s
+
+
+def _limitar_palavras(frase: str, max_palavras: int = 10) -> str:
+    tokens = [t for t in (frase or "").split() if t]
+    if len(tokens) <= max_palavras:
+        return frase.strip()
+    return " ".join(tokens[:max_palavras]).rstrip(",:;")
+
+
+def _normalizar_resumo_final(texto: str) -> str:
+    """
+    Garante resumo em 5 frases, com no máximo 10 palavras por frase
+    e remove construções semânticas estranhas.
+    """
+    bruto = re.sub(r"\s+", " ", (texto or "").strip())
+    if not bruto:
+        return ""
+
+    partes = [p.strip() for p in re.split(r"[.!?]+", bruto) if p.strip()]
+    if not partes:
+        return ""
+
+    conectores = {
+        1: "Nesse cenário,",
+        2: "Na prática,",
+        3: "Além disso,",
+        4: "Com isso,",
+    }
+
+    frases = []
+    for idx, parte in enumerate(partes[:5]):
+        frase = _corrigir_prefixos_estranhos(parte)
+        frase = _fix_sentence_case(frase)
+        # Deixa o fluxo mais humano entre contexto -> fato -> impacto.
+        if idx in conectores:
+            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso)\b", frase):
+                frase = f"{conectores[idx]} {frase}"
+        frase = _limitar_palavras(frase, max_palavras=10).strip()
+        if frase:
+            frase = frase[0].upper() + frase[1:]
+            frases.append(f"{frase}.")
+
+    return " ".join(frases)
+
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
 
@@ -758,8 +835,13 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
   Frase 1-2: CONTEXTO (quem, o que, quando — situe o leitor).
   Frase 3-4: FATO (o que aconteceu de concreto, com detalhes técnicos relevantes).
   Frase 5: IMPACTO (por que isso importa, o que muda para o usuário/mercado).
+- Cada frase deve ter NO MÁXIMO 10 palavras.
+- Mesmo com frases curtas, inclua contexto concreto (ator, ação, tempo e consequência).
+- Escreva de forma mais humana e fluida, evitando tom telegráfico.
+- Use conectores naturais para ligar contexto, fato e impacto.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case (ex: ERRADO: "A Empresa Divulgou Um Incidente"; CORRETO: "A empresa divulgou um incidente").
 - Gramática impecável em PT-BR. O texto deve ser denso e substancial — nunca genérico ou superficial.
+- Não use construções semânticas inválidas como "a empresa governo federal".
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -787,7 +869,7 @@ Texto Base: {texto_base[:2000]}
             if match:
                 data = json.loads(match.group(0))
                 if isinstance(data.get("resumo"), str):
-                    data["resumo"] = _fix_sentence_case(data["resumo"])
+                    data["resumo"] = _normalizar_resumo_final(data["resumo"])
                 if isinstance(data.get("titulo"), str):
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
