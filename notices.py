@@ -85,7 +85,7 @@ GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.message_content = True
-discord_client = commands.Bot(command_prefix="!", intents=intents)
+discord_client = commands.Bot(command_prefix="$", intents=intents)
 tiffany_voice.register_voice(discord_client)
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)

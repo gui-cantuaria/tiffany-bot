@@ -665,12 +665,12 @@ def register_voice(bot: commands.Bot) -> None:
             return sess, vc
         return None, None
 
-    @bot.command(name="p", help="Toca música do link: @p <url> ou @p <nome>")
+    @bot.command(name="r", help="Toca música do link: $r <url> ou $r <nome>")
     async def cmd_p(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
         if not query:
-            await ctx.send("🎵 Use: `@p <link do YouTube/Spotify>` ou `@p <nome da música>`")
+            await ctx.send("🎵 Use: `$r <link do YouTube/Spotify>` ou `$r <nome da música>`")
             return
         sess, vc = await _get_session_for_chat(ctx.guild, bot)
         if not sess:
@@ -684,7 +684,7 @@ def register_voice(bot: commands.Bot) -> None:
         await sess.music_queue.put(q)
         await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
 
-    @bot.command(name="rm", help="Toca uma música aleatória: @rm")
+    @bot.command(name="rm", help="Toca uma música aleatória: $rm")
     async def cmd_rm(ctx: commands.Context):
         if not ctx.guild:
             return
