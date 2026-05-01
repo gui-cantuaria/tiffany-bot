@@ -504,8 +504,8 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send("🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
 
-    @bot.command(name="p", help="Toca musica: $p <url> ou $p <nome>")
-    async def cmd_p(ctx: commands.Context, *, query: str = ""):
+    @bot.command(name="play", help="Toca música: $play <url> ou $play <nome>")
+    async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
         if not query:
@@ -534,8 +534,8 @@ def register_voice(bot: commands.Bot) -> None:
         await sess.music_queue.put(url)
         await ctx.send("🎲 Musica aleatoria adicionada à fila!")
 
-    @bot.command(name="tiffany_sair", help="Desconecta a Tiffany do canal de voz.")
-    async def cmd_tiffany_sair(ctx: commands.Context):
+    @bot.command(name="leave", help="Desconecta a Tiffany do canal de voz.")
+    async def cmd_leave(ctx: commands.Context):
         if not ctx.guild:
             return
         gid = ctx.guild.id
@@ -575,4 +575,4 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send("⏭️ Faixa pulada. Não há proximas musicas na fila.")
 
-    log.info("Comandos de voz registrados: $tiffany, $p, $rm, $tiffany_sair, $next")
+    log.info("Comandos de voz registrados: $tiffany, $play/$p, $rm, $leave, $next")
