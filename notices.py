@@ -777,7 +777,7 @@ def _normalizar_resumo_final(texto: str) -> str:
         if idx in conectores:
             if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso)\b", frase):
                 frase = f"{conectores[idx]} {frase}"
-        frase = _limitar_palavras(frase, max_palavras=10).strip()
+        frase = _limitar_palavras(frase, max_palavras=20).strip()
         if frase:
             frase = frase[0].upper() + frase[1:]
             frases.append(f"{frase}.")
@@ -836,10 +836,11 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
   Frase 1-2: CONTEXTO (quem, o que, quando — situe o leitor).
   Frase 3-4: FATO (o que aconteceu de concreto, com detalhes técnicos relevantes).
   Frase 5: IMPACTO (por que isso importa, o que muda para o usuário/mercado).
-- Cada frase deve ter NO MÁXIMO 10 palavras.
-- Mesmo com frases curtas, inclua contexto concreto (ator, ação, tempo e consequência).
+- Cada frase deve ter entre 12 e 20 palavras, sendo densa e informativa.
+- Inclua contexto concreto (ator, ação, tempo e consequência) detalhado em cada frase.
 - Escreva de forma mais humana e fluida, evitando tom telegráfico.
 - Use conectores naturais para ligar contexto, fato e impacto.
+- O parágrafo final deve ter entre 70 e 100 palavras no total.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case (ex: ERRADO: "A Empresa Divulgou Um Incidente"; CORRETO: "A empresa divulgou um incidente").
 - Gramática impecável em PT-BR. O texto deve ser denso e substancial — nunca genérico ou superficial.
 - Não use construções semânticas inválidas como "a empresa governo federal".
