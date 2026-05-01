@@ -620,14 +620,15 @@ async def validar_imagem(url: str) -> bool:
     """HEAD request para verificar se URL é imagem válida (>5KB)."""
     if not url:
         return False
-    looks_like = bool(IMG_EXT_RE.search(url))
     if not http_session:
-        return looks_like
+        # Sem sessão HTTP: aceita apenas por extensão (menos seguro)
+        return bool(IMG_EXT_RE.search(url))
     try:
         async with http_session.head(
             url,
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=aiohttp.ClientTimeout(total=5),
+            allow_redirects=True,
         ) as r:
             if r.status >= 400 and r.status not in (401, 403, 429):
                 return False
@@ -636,11 +637,10 @@ async def validar_imagem(url: str) -> bool:
             # Rejeitar imagens < 3KB (ícones/placeholders)
             if cl and int(cl) < 3000:
                 return False
-            if "image/" in ct:
-                return True
+            return "image/" in ct
     except Exception as e:
         log.debug(f"Erro validando imagem {url}: {e}")
-    return looks_like
+    return False
 
 async def extrair_imagem_completa(entry, feed_url: str) -> str | None:
     """Pipeline completo: RSS → validação HTTP → fallback og:image."""
@@ -901,6 +901,12 @@ def noticia_eh_recente(entry_dt: datetime | None) -> bool:
 # =========================
 async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
     """Posta uma notícia no canal. Retorna True se postou com sucesso."""
+    # Trava de segurança: nunca postar sem imagem
+    img = noticia.get("imagem")
+    if not img:
+        log.error(f"Tentativa de postar sem imagem, abortando: {noticia.get('titulo', '')[:60]}")
+        return False
+
     emoji = EMOJIS_CATEGORIA.get(noticia["categoria"], "🔌")
 
     embed = discord.Embed(
@@ -1011,8 +1017,13 @@ async def verificar_feeds():
             if posts_feitos >= MAX_POSTS_POR_CICLO:
                 nova_queue.append(item)
                 continue
-            if not item.get("imagem"):
+            img = item.get("imagem")
+            if not img:
                 log.warning(f"  ✗ Item da fila sem imagem, descartando: {item.get('titulo', '?')[:60]}")
+                continue
+            # Revalidar imagem da fila (URLs podem ter morrido)
+            if not await validar_imagem(img):
+                log.warning(f"  ✗ Imagem inválida na fila, descartando: {item.get('titulo', '?')[:60]}")
                 continue
             if await _postar_noticia(channel, item, history, metrics):
                 posts_feitos += 1
@@ -1260,6 +1271,12 @@ async def verificar_feeds():
     para_fila = com_imagem[posts_restantes:] if em_horario_ativo else com_imagem
 
     for i, noticia in enumerate(para_postar):
+        # Revalidar imagem no momento do post (URLs podem ter morrido)
+        img = noticia.get("imagem")
+        if not img or not await validar_imagem(img):
+            log.warning(f"  ✗ Imagem inválida ao postar, descartando: {noticia.get('titulo', '?')[:60]}")
+            historico_set(history, noticia["link_norm"], noticia["dedupe"], "skipped", {"reason": "sem_imagem_post"})
+            continue
         log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
         await _postar_noticia(channel, noticia, history, metrics)
         if i < len(para_postar) - 1:
