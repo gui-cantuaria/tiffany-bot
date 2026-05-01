@@ -63,6 +63,9 @@ def _resolve_ffmpeg_executable() -> Optional[str]:
 FFMPEG_EXECUTABLE = _resolve_ffmpeg_executable()
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 
+def _voice_enabled() -> bool:
+    return os.getenv("VOICE_ENABLED", "1").strip() == "1"
+
 def _voice_connect_timeout_sec() -> float:
     try:
         return max(5.0, min(float(os.getenv("VOICE_CONNECT_TIMEOUT_SEC", "25")), 120.0))
@@ -473,7 +476,7 @@ def register_voice(bot: commands.Bot) -> None:
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            await ctx.send("⏱️ Tempo esgotado ao conectar no canal de voz. Verifique se o host permite UDP.")
+            await ctx.send("⏱️ Tempo esgotado ao conectar no canal de voz. Verifique se o host permite UDP (bloqueio comum na Discloud).")
             return None, None
         except Exception as e:
             await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
@@ -504,6 +507,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="tiffany", help="Adiciona a Tiffany ao seu canal de voz. Depois você pode pedir musica por voz.")
     async def cmd_tiffany(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
@@ -511,6 +517,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="play", help="Toca música: $play <url> ou $play <nome>")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
         if not ctx.guild:
             return
         if not query:
@@ -541,6 +550,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="rm", help="Toca uma musica aleatoria: $rm")
     async def cmd_rm(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
         if not ctx.guild:
             return
         sess, vc = await _ensure_connected(ctx)
@@ -553,6 +565,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="leave", help="Desconecta a Tiffany do canal de voz.")
     async def cmd_leave(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
         if not ctx.guild:
             return
         gid = ctx.guild.id
@@ -571,6 +586,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="next", help="Pula a faixa atual e toca a proxima da fila.")
     async def cmd_next(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
         if not ctx.guild:
             return
         guild = ctx.guild
