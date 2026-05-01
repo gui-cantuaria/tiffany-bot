@@ -638,43 +638,84 @@ def register_voice(bot: commands.Bot) -> None:
         "https://www.youtube.com/watch?v=ru0K8uYEZWw",  # Taylor Swift - Shake It Off
     ]
 
-    async def _get_session_for_chat(guild: discord.Guild, bot: commands.Bot) -> tuple:
-        """Retorna (session, vc) se houver sessão ativa; senão cria uma nova."""
+    async def _ensure_connected(ctx: commands.Context) -> tuple:
+        """Garante que o bot está no canal de voz do usuário. Retorna (session, vc) ou (None, None)."""
+        if not ctx.guild or not isinstance(ctx.author, discord.Member):
+            await ctx.send("⚠️ Use este comando em um servidor.")
+            return None, None
+
+        user_vc = ctx.author.voice
+        if not user_vc or not user_vc.channel:
+            await ctx.send("⚠️ Você precisa estar em um **canal de voz** primeiro.")
+            return None, None
+
+        guild = ctx.guild
         gid = guild.id
+        channel = user_vc.channel
+
+        # Já está conectado?
         sess = _sessions.get(gid)
         vc = guild.voice_client
-        if sess and vc and vc.is_connected():
+        if sess and vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
             return sess, vc
-        # Tenta recuperar de algum canal de voz onde o bot esteja
-        if vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
-            sess = _GuildVoiceSession(text_channel_id=0)
-            sink = _PCMBufferSink(sess)
-            try:
-                vc.listen(sink)
-                sess.listen_task = asyncio.create_task(
-                    _voice_listen_loop(gid, vc, bot),
-                    name=f"tiffany-voice-{gid}",
-                )
-            except Exception:
-                sess.listen_task = None
-            sess.music_task = asyncio.create_task(
-                _play_worker(gid, vc, bot),
-                name=f"tiffany-music-{gid}",
-            )
-            _sessions[gid] = sess
-            return sess, vc
-        return None, None
 
-    @bot.command(name="r", help="Toca música do link: $r <url> ou $r <nome>")
+        # Verificar permissões
+        bot_member = guild.me
+        if bot_member:
+            perms = channel.permissions_for(bot_member)
+            if not perms.connect or not perms.speak:
+                await ctx.send("⚠️ Não tenho permissão para entrar ou falar neste canal de voz.")
+                return None, None
+
+        # Conectar
+        try:
+            await _ensure_opus()
+        except Exception:
+            pass
+
+        try:
+            timeout = _voice_connect_timeout_sec()
+            vc = await asyncio.wait_for(
+                _join_voice_recv_client(guild, channel),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            await ctx.send("⏱️ Tempo esgotado ao conectar no canal de voz. Verifique se o host permite UDP.")
+            return None, None
+        except Exception as e:
+            await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
+            return None, None
+
+        # Criar sessão
+        session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
+        sink = _PCMBufferSink(session)
+        try:
+            vc.listen(sink)
+            session.listen_task = asyncio.create_task(
+                _voice_listen_loop(gid, vc, bot),
+                name=f"tiffany-voice-{gid}",
+            )
+        except Exception:
+            session.listen_task = None
+
+        session.music_task = asyncio.create_task(
+            _play_worker(gid, vc, bot),
+            name=f"tiffany-music-{gid}",
+        )
+        _sessions[gid] = session
+
+        await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
+        return session, vc
+
+    @bot.command(name="p", help="Toca música do link: $p <url> ou $p <nome>")
     async def cmd_p(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
         if not query:
-            await ctx.send("🎵 Use: `$r <link do YouTube/Spotify>` ou `$r <nome da música>`")
+            await ctx.send("🎵 Use: `$p <link do YouTube/Spotify>` ou `$p <nome da música>`")
             return
-        sess, vc = await _get_session_for_chat(ctx.guild, bot)
+        sess, vc = await _ensure_connected(ctx)
         if not sess:
-            await ctx.send("⚠️ Entre em um canal de voz primeiro ou use `/tiffany`.")
             return
         q = query.strip()
         if "open.spotify.com" in q or q.startswith("spotify:"):
@@ -688,9 +729,8 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_rm(ctx: commands.Context):
         if not ctx.guild:
             return
-        sess, vc = await _get_session_for_chat(ctx.guild, bot)
+        sess, vc = await _ensure_connected(ctx)
         if not sess:
-            await ctx.send("⚠️ Entre em um canal de voz primeiro ou use `/tiffany`.")
             return
         import random
         url = random.choice(_RANDOM_SONGS)
