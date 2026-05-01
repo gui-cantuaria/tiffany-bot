@@ -624,4 +624,77 @@ def register_voice(bot: commands.Bot) -> None:
                 ephemeral=True,
             )
 
-    log.info("Comandos de voz (/tiffany, /tiffany_sair, /next) registrados.")
+    # =========================
+    # COMANDOS DE CHAT (música)
+    # =========================
+    _RANDOM_SONGS = [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Astley - Never Gonna Give You Up
+        "https://www.youtube.com/watch?v=9bZkp7q19f0",  # PSY - GANGNAM STYLE
+        "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Luis Fonsi - Despacito
+        "https://www.youtube.com/watch?v=RgKAFK5djSk",  # Wiz Khalifa - See You Again
+        "https://www.youtube.com/watch?v=JGwWNGJdvx8",  # Ed Sheeran - Shape of You
+        "https://www.youtube.com/watch?v=YR3nmjxJY74",  # Mark Ronson - Uptown Funk
+        "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Adele - Hello
+        "https://www.youtube.com/watch?v=ru0K8uYEZWw",  # Taylor Swift - Shake It Off
+    ]
+
+    async def _get_session_for_chat(guild: discord.Guild, bot: commands.Bot) -> tuple:
+        """Retorna (session, vc) se houver sessão ativa; senão cria uma nova."""
+        gid = guild.id
+        sess = _sessions.get(gid)
+        vc = guild.voice_client
+        if sess and vc and vc.is_connected():
+            return sess, vc
+        # Tenta recuperar de algum canal de voz onde o bot esteja
+        if vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
+            sess = _GuildVoiceSession(text_channel_id=0)
+            sink = _PCMBufferSink(sess)
+            try:
+                vc.listen(sink)
+                sess.listen_task = asyncio.create_task(
+                    _voice_listen_loop(gid, vc, bot),
+                    name=f"tiffany-voice-{gid}",
+                )
+            except Exception:
+                sess.listen_task = None
+            sess.music_task = asyncio.create_task(
+                _play_worker(gid, vc, bot),
+                name=f"tiffany-music-{gid}",
+            )
+            _sessions[gid] = sess
+            return sess, vc
+        return None, None
+
+    @bot.command(name="p", help="Toca música do link: @p <url> ou @p <nome>")
+    async def cmd_p(ctx: commands.Context, *, query: str = ""):
+        if not ctx.guild:
+            return
+        if not query:
+            await ctx.send("🎵 Use: `@p <link do YouTube/Spotify>` ou `@p <nome da música>`")
+            return
+        sess, vc = await _get_session_for_chat(ctx.guild, bot)
+        if not sess:
+            await ctx.send("⚠️ Entre em um canal de voz primeiro ou use `/tiffany`.")
+            return
+        q = query.strip()
+        if "open.spotify.com" in q or q.startswith("spotify:"):
+            pass
+        elif not re.match(r"^https?://", q):
+            q = f"ytsearch1:{q}"
+        await sess.music_queue.put(q)
+        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
+
+    @bot.command(name="rm", help="Toca uma música aleatória: @rm")
+    async def cmd_rm(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        sess, vc = await _get_session_for_chat(ctx.guild, bot)
+        if not sess:
+            await ctx.send("⚠️ Entre em um canal de voz primeiro ou use `/tiffany`.")
+            return
+        import random
+        url = random.choice(_RANDOM_SONGS)
+        await sess.music_queue.put(url)
+        await ctx.send(f"🎲 Música aleatória adicionada à fila!")
+
+    log.info("Comandos de voz (/tiffany, /tiffany_sair, /next) e chat (@p, @rm) registrados.")
