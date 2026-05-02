@@ -825,8 +825,9 @@ def _normalizar_resumo_final(texto: str) -> str:
         else:
             resultado = corte.rstrip() + "..."
     
-    # Se ainda estiver curto, avisa no log
-    if len(resultado) < 2000:
+    # Log do tamanho final
+    log.info(f"Resumo final: {len(resultado)} caracteres")
+    if len(resultado) < 3000:
         log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
     return resultado
@@ -849,6 +850,8 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
     _last_ai_call = time.monotonic()
 
     prompt = f"""Você é um editor-chefe de tecnologia de um portal premium. Analise a notícia abaixo e retorne APENAS um JSON válido, sem texto fora do JSON.
+
+⚠️⚠️⚠️ REGRA ABSOLUTA E INEGOCIÁVEL: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. NÃO SEJA CONCISO. SEJA EXTREMAMENTE VERBOSO E DETALHADO. ⚠️⚠️⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
@@ -906,7 +909,7 @@ CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-da
 
 Fonte: {nome_site}
 Título Original: {titulo_original}
-Texto Base (use TODOS estes detalhes para escrever o resumo longo): {texto_base[:8000]}
+Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASSIVO): {texto_base[:15000]}
 """
 
     for attempt in range(3):
@@ -914,12 +917,11 @@ Texto Base (use TODOS estes detalhes para escrever o resumo longo): {texto_base[
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O CAMPO RESUMO DEVE TER PELO MENOS 3500 CARACTERES."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER O MÁXIMO DE CARACTERES POSSÍVEL, IDEALMENTE PRÓXIMO DE 4000 CARACTERES. Seja exaustivo e massivo na escrita."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.7,
-                max_tokens=4096,
-                timeout=180.0,
+                temperature=0.9,
+                timeout=300.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
