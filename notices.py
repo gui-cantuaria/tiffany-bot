@@ -850,102 +850,6 @@ def _normalizar_resumo_final(texto: str) -> str:
     return resultado if len(resultado) >= 50 else ""
 
 
-async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
-    """Gera um resumo massivo dividindo em contexto, fato e impacto."""
-    if not ai_client:
-        return ""
-    
-    partes = []
-    prompts = [
-        (f"""Escreva APENAS o CONTEXTO da notícia abaixo. 
-        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 1500 CARACTERES. SEJA EXTREMAMENTE EXAUSTIVO no contexto histórico, quem, quando, por que, antecedentes.
-        Texto: {texto_base[:10000]}
-        Título: {titulo}
-        Fonte: {nome_site}
-        
-        Lembre-se: O texto DEVE ter NO MÍNIMO 1500 caracteres. Seja massivo e detalhado no contexto.
-        
-        EXEMPLO DE TAMANHO: "Em um desenvolvimento que remonta aos esforços iniciais de 2019 quando a empresa anunciou seus primeiros planos para expansão global, a corporação multinacional de tecnologia anunciou hoje uma nova iniciativa que promete transformar radicalmente o mercado de inteligência artificial em escala global, envolvendo investimentos bilionários e parcerias estratégicas com governos e instituições de pesquisa..." (continua por mais 1400 caracteres).""",
-         "contexto"),
-        
-        (f"""Escreva APENAS os FATOS concretos da notícia abaixo.
-        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 2200 CARACTERES. Seja EXTREMAMENTE exaustivo nos detalhes técnicos, números, versões, nomes, especificações.
-        Texto: {texto_base[:10000]}
-        Título: {titulo}
-        Fonte: {nome_site}
-        
-        Lembre-se: O texto DEVE ter NO MÍNIMO 2200 caracteres. Seja massivo e denso.
-        
-        EXEMPLO DE TAMANHO: "A empresa divulgou hoje que o novo processador possui 128 núcleos de última geração, com arquitetura Zen 5 personalizada, 256 threads de execução simultânea e capacidade de processar 1.2 trilhões de operações por segundo, representando um avanço de 340% em relação à geração anterior, com consumo de energia reduzido em 45% através de nova técnica de voltagem dinâmica..." (continua por mais 2100 caracteres).""",
-         "fatos"),
-        
-        (f"""Escreva APENAS o IMPACTO da notícia abaixo.
-        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 1000 CARACTERES. Analise repercussões imediatas e de longo prazo, mudanças para usuários/mercado, reações.
-        Texto: {texto_base[:10000]}
-        Título: {titulo}
-        Fonte: {nome_site}
-        
-        Lembre-se: O texto DEVE ter NO MÍNIMO 1000 caracteres. Seja exaustivo no impacto.
-        
-        EXEMPLO DE TAMANHO: "Especialistas afirmam que esta mudança representa um marco histórico para a indústria, com previsões de crescimento de 250% no setor nos próximos 24 meses, enquanto analistas de mercado apontam que empresas concorrentes perderão 15% de participação até 2027, forçando uma reestruturação global que afetará diretamente 450 mil trabalhadores..." (continua por mais 900 caracteres).""",
-         "impacto"),
-    ]
-    
-    for prompt, nome_parte in prompts:
-        try:
-            response = await ai_client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.9,
-                timeout=120.0,
-            )
-            parte = response.choices[0].message.content.strip()
-            log.info(f"Parte {nome_parte}: {len(parte)} chars")
-            partes.append(parte)
-        except Exception as e:
-            log.warning(f"Erro ao gerar parte {nome_parte}: {e}")
-    
-    resultado = " ".join(partes)
-    log.info(f"Resumo combinado (partes): {len(resultado)} chars")
-    return resultado if len(resultado) > 2000 else ""
-
-
-async def _expandir_resumo(resumo_curto: str, texto_base: str, titulo: str, nome_site: str) -> str:
-    """Expande um resumo curto para torná-lo massivo e detalhado."""
-    if not ai_client:
-        return resumo_curto
-    
-    prompt_expansao = f"""O resumo abaixo está muito curto (menos de 3000 caracteres).
-    Expanda-o drasticamente para ter ENTRE 3800 E 4000 CARACTERES, adicionando TODOS os detalhes técnicos, históricos e de impacto que faltam.
-    Mantenha o formato de UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
-    Adicione MAIS frases, MAIS detalhes técnicos, MAIS números, MAIS citações, MAIS contexto histórico.
-    SEJA EXAUSTIVO. O resultado deve ser uma matéria completa em parágrafo único.
-    
-    Título: {titulo}
-    Resumo Atual (Curto): {resumo_curto}
-    Texto Base para Expandir: {texto_base[:10000]}
-    
-    Lembre-se: O resultado DEVE ter entre 3800 e 4000 caracteres. Seja massivo e detalhado."""
-
-    try:
-        response = await ai_client.chat.completions.create(
-            model="meta-llama/llama-3.3-70b-instruct",
-            messages=[
-                {"role": "system", "content": "Responda APENAS com o texto expandido, sem JSON, sem markdown."},
-                {"role": "user", "content": prompt_expansao},
-            ],
-            temperature=0.9,
-            timeout=300.0,
-        )
-        expandido = response.choices[0].message.content.strip()
-        if len(expandido) > len(resumo_curto):
-            log.info(f"Resumo expandido: {len(resumo_curto)} -> {len(expandido)} chars")
-            return expandido
-    except Exception as e:
-        log.warning(f"Falha ao expandir resumo: {e}")
-    
-    return resumo_curto
-
 
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
@@ -962,22 +866,10 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         await asyncio.sleep(wait)
     _last_ai_call = time.monotonic()
 
-    # Estratégia: super-prompt direto para resumo de ate 1000 chars
-    resumo = await _gerar_resumo_super_prompt(texto_base, titulo_original, nome_site)
-    if resumo and 100 <= len(resumo) <= 1000:
-        log.info(f"Resumo gerado (super-prompt): {len(resumo)} chars")
-        nota_estimada = 80
-        categoria_estimada = "Big Techs"
-        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo}
-    
-    # Se falhar, usa prompt completo
-    log.warning(f"Super-prompt falhou, usando prompt completo...")
-
-    prompt = """
-⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER NO MÁXIMO 500 CARACTERES. ⚠️
+    prompt = f"""Analise a notícia abaixo e responda APENAS com JSON válido, sem markdown.
 
 RESPONDA EM UM DOS DOIS FORMATOS:
-1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
+1. SE REJEITAR: {{"pular": true, "reason": "motivo curto"}}
 2. SE APROVAR: {{"pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..."}}
 
 ═══ REGRAS DE BLOQUEIO IMEDIATO (pular=true) ═══
@@ -987,42 +879,37 @@ RESPONDA EM UM DOS DOIS FORMATOS:
 - Ciência genérica sem relação com tech (biologia, paleontologia, arqueologia, astronomia pura).
 - Conteúdo vago, clickbait sem substância, rumor sem fonte, notícia repetitiva.
 - Smartphones intermediários/entrada: Galaxy A/M, Moto G/E, Redmi Note, POCO básico, "chegou ao Brasil" sem inovação.
-- Games: skins, cosméticos, patch notes menores, eventos semanais, item shop.
+- Games: reviews, skins, cosméticos, patch notes menores, eventos semanais, item shop, preços, promoções de jogos.
 
 ═══ CATEGORIAS (use exatamente uma destas) ═══
 Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operacionais | Smartphones | Big Techs | Ciência & Espaço | Software & Apps | Cloud & DevOps | Programação & Dev | Internet & Redes | Mídia & Streaming | Curiosidade Tech | Outros
 
-═══ ESCALA DE NOTAS (seja rigoroso e consistente) ═══
+═══ ESCALA DE NOTAS (seja rigoroso) ═══
 - 95-100: CATÁSTROFE ou MARCO MUNDIAL. Queda global de serviço, hack massivo, lançamento de nova geração (iPhone, Windows, GPT novo).
 - 85-94: ALTA RELEVÂNCIA. Grandes novidades confirmadas, vulnerabilidade crítica (CVE alto), aquisição bilionária, demissão em massa.
 - 75-84: RELEVANTE. Interessante para entusiastas de tech, atualização significativa, nova feature de grande plataforma.
-- <75: IRRELEVANTE — marque pular=true. Notícia menor, atualização incremental, conteúdo genérico.
+- <75: IRRELEVANTE — marque pular=true.
 
 ═══ TÍTULO ═══
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
-- Traduza para PT-BR. Sem clickbait, sem "Você não vai acreditar", sem títulos genéricos curtos.
-- Use sentence case natural em português: somente a primeira palavra e nomes próprios/siglas em maiúscula.
-- Limite de até 90 caracteres (máximo 1,5 linhas), direto ao ponto e sem exagero de adjetivos.
-- Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
+- Traduza para PT-BR. Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
+- Máximo 90 caracteres.
 
-═══ RESUMO (campo mais importante) ═══
-⚠️ REGRA ABSOLUTA: O RESUMO DEVE TER NO MÁXIMO 500 CARACTERES. SEJA CONCISO. ⚠️
-- UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- MÁXIMO de 2-3 frases curtas e densas (máximo 500 caracteres no total).
-- Estrutura: FATO PRINCIPAL + IMPACTO (tudo no limite de 500 caracteres).
-- Inclua APENAS o essencial: quem, o que, impacto principal.
-- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula.
-- Gramática impecável em PT-BR. Texto direto e substantivo, sem excesso de adjetivos.
-- Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
+═══ RESUMO ═══
+⚠️ LIMITE ABSOLUTO: MÁXIMO 500 CARACTERES. NÃO ULTRAPASSE. ⚠️
+- Um único parágrafo, 2-3 frases densas e diretas.
+- Estrutura: FATO PRINCIPAL + IMPACTO.
+- Sem bullet points, sem quebras de linha.
+- Em PT-BR com gramática impecável.
 
-═══ FILTROS ESPECIAIS POR CATEGORIA ═══
-SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
-GAMES: Aceitar APENAS AAA, grandes eventos (TGA, E3, Direct, Gamescom), aquisições, ou demissões em massa. Rejeitar skins, cosméticos, patch notes, eventos semanais.
-CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-day, exploit ativo. Nota ≥85 para esses.
+═══ FILTROS ESPECIAIS ═══
+SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real.
+GAMES: Aceitar APENAS grandes lançamentos AAA, grandes eventos (TGA, E3, Direct), aquisições ou demissões em massa.
+CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-day. Nota ≥85.
 
 Fonte: {nome_site}
 Título Original: {titulo_original}
-Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASSIVO): {texto_base[:15000]}
+Texto da Notícia: {texto_base[:8000]}
 """
 
     for attempt in range(3):
@@ -1030,25 +917,18 @@ Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASS
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER NO MÁXIMO 500 CARACTERES. Seja conciso e direto."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O campo 'resumo' deve ter NO MÁXIMO 500 caracteres."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.9,
-                timeout=300.0,
+                temperature=0.4,
+                timeout=120.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
             if match:
                 data = json.loads(match.group(0))
                 if isinstance(data.get("resumo"), str):
-                    resumo_bruto = data["resumo"]
-                    # Se resumo curto, tenta expandir
-                    if len(resumo_bruto) < 3000 and attempt == 2:  # Na última tentativa
-                        log.warning(f"Resumo curto ({len(resumo_bruto)} chars), tentando expandir...")
-                        resumo_expandido = await _expandir_resumo(resumo_bruto, texto_base, titulo_original, nome_site)
-                        if resumo_expandido and len(resumo_expandido) > len(resumo_bruto):
-                            resumo_bruto = resumo_expandido
-                    data["resumo"] = _normalizar_resumo_final(resumo_bruto)
+                    data["resumo"] = _normalizar_resumo_final(data["resumo"])
                 if isinstance(data.get("titulo"), str):
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
