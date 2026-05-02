@@ -832,6 +832,44 @@ def _normalizar_resumo_final(texto: str) -> str:
     
     return resultado
 
+
+async def _expandir_resumo(resumo_curto: str, texto_base: str, titulo: str, nome_site: str) -> str:
+    """Expande um resumo curto para torná-lo massivo e detalhado."""
+    if not ai_client:
+        return resumo_curto
+    
+    prompt_expansao = f"""O resumo abaixo está muito curto (menos de 3000 caracteres).
+    Expanda-o drasticamente para ter ENTRE 3800 E 4000 CARACTERES, adicionando TODOS os detalhes técnicos, históricos e de impacto que faltam.
+    Mantenha o formato de UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
+    Adicione MAIS frases, MAIS detalhes técnicos, MAIS números, MAIS citações, MAIS contexto histórico.
+    SEJA EXAUSTIVO. O resultado deve ser uma matéria completa em parágrafo único.
+    
+    Título: {titulo}
+    Resumo Atual (Curto): {resumo_curto}
+    Texto Base para Expandir: {texto_base[:10000]}
+    
+    Lembre-se: O resultado DEVE ter entre 3800 e 4000 caracteres. Seja massivo e detalhado."""
+
+    try:
+        response = await ai_client.chat.completions.create(
+            model="meta-llama/llama-3.3-70b-instruct",
+            messages=[
+                {"role": "system", "content": "Responda APENAS com o texto expandido, sem JSON, sem markdown."},
+                {"role": "user", "content": prompt_expansao},
+            ],
+            temperature=0.9,
+            timeout=300.0,
+        )
+        expandido = response.choices[0].message.content.strip()
+        if len(expandido) > len(resumo_curto):
+            log.info(f"Resumo expandido: {len(resumo_curto)} -> {len(expandido)} chars")
+            return expandido
+    except Exception as e:
+        log.warning(f"Falha ao expandir resumo: {e}")
+    
+    return resumo_curto
+
+
     return " ".join(frases)
 
 _last_ai_call = 0.0
@@ -928,7 +966,14 @@ Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASS
             if match:
                 data = json.loads(match.group(0))
                 if isinstance(data.get("resumo"), str):
-                    data["resumo"] = _normalizar_resumo_final(data["resumo"])
+                    resumo_bruto = data["resumo"]
+                    # Se resumo curto, tenta expandir
+                    if len(resumo_bruto) < 3000 and attempt == 2:  # Na última tentativa
+                        log.warning(f"Resumo curto ({len(resumo_bruto)} chars), tentando expandir...")
+                        resumo_expandido = await _expandir_resumo(resumo_bruto, texto_base, titulo_original, nome_site)
+                        if resumo_expandido and len(resumo_expandido) > len(resumo_bruto):
+                            resumo_bruto = resumo_expandido
+                    data["resumo"] = _normalizar_resumo_final(resumo_bruto)
                 if isinstance(data.get("titulo"), str):
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
