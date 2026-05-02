@@ -815,10 +815,14 @@ def _normalizar_resumo_final(texto: str) -> str:
             frases.append(frase)
     
     resultado = " ".join(frases)
-    # Usa TOD0 o limite do Discord (4096 caracteres), cortando graciosamente
+    
+    # NÃO corta mais - deixa a IA escrever o máximo possível
+    # O Discord vai truncar naturalmente se passar de 4096 chars
+    # Mas tentamos ser graciosos se estiver muito longo
     if len(resultado) > 4096:
+        log.warning(f"Resumo muito longo: {len(resultado)} chars - será cortado pelo Discord")
+        # Tenta cortar no final de uma frase para não quebrar no meio
         corte = resultado[:4096]
-        # Tenta cortar no final de uma frase
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
         if ultimo_ponto > 3500:
             resultado = corte[:ultimo_ponto + 1]
@@ -827,7 +831,7 @@ def _normalizar_resumo_final(texto: str) -> str:
     
     # Log do tamanho final
     log.info(f"Resumo final: {len(resultado)} caracteres")
-    if len(resultado) < 3000:
+    if len(resultado) < 3500:
         log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
     return resultado
