@@ -694,15 +694,30 @@ def _normalize_news_title(title: str) -> str:
     t = re.sub(r"(?i)\b(voc[eê] n[aã]o vai acreditar|imperd[ií]vel|chocante|surpreendente)\b", "", t)
     t = re.sub(r"\s+", " ", t).strip()
     t = _fix_sentence_case(t)
+    
     # Mantém siglas comuns em caixa alta após normalização
     acronyms = ("IA", "EUA", "UE", "UK", "API", "CVE", "CEO", "GPU", "CPU", "AI")
     for ac in acronyms:
         t = re.sub(rf"\b{ac.lower()}\b", ac, t, flags=re.IGNORECASE)
-    # Limita tamanho mantendo leitura natural.
-    if len(t) > 110:
-        cut = t[:110]
+    
+    # Nomes próprios que devem ser capitalizados (marcas/produtos)
+    proper_names = (
+        "Xbox", "Windows", "PlayStation", "Playstation", "Nintendo", "Switch",
+        "iPhone", "iPad", "MacBook", "Macbook", "Android", "iOS",
+        "Google", "Microsoft", "Apple", "Amazon", "Meta", "Tesla",
+        "Facebook", "Instagram", "WhatsApp", "Twitter", "LinkedIn",
+        "Discord", "Spotify", "Netflix", "YouTube", "Zoom",
+        "Intel", "AMD", "Nvidia", "Samsung", "LG", "Sony",
+        "Reddit", "TikTok", "Snapchat", "Pinterest",
+    )
+    for name in proper_names:
+        t = re.sub(rf"\b{name.lower()}\b", name, t, flags=re.IGNORECASE)
+    
+    # Limita tamanho para ~1,5 linhas (90 caracteres)
+    if len(t) > 90:
+        cut = t[:90]
         last_space = cut.rfind(" ")
-        if last_space >= 70:
+        if last_space >= 50:
             cut = cut[:last_space]
         t = cut.rstrip(" ,;:-") + "..."
     if t:
@@ -829,7 +844,8 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
 - Traduza para PT-BR. Sem clickbait, sem "Você não vai acreditar", sem títulos genéricos curtos.
 - Use sentence case natural em português: somente a primeira palavra e nomes próprios/siglas em maiúscula.
-- Limite de até 110 caracteres, direto ao ponto e sem exagero de adjetivos.
+- Limite de até 90 caracteres (máximo 1,5 linhas), direto ao ponto e sem exagero de adjetivos.
+- Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ RESUMO (campo mais importante) ═══
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
@@ -838,14 +854,15 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
   Frase 1-2: CONTEXTO (quem, o que, quando — situe o leitor).
   Frase 3-4: FATO (o que aconteceu de concreto, com detalhes técnicos relevantes).
   Frase 5: IMPACTO (por que isso importa, o que muda para o usuário/mercado).
-- Cada frase deve ter entre 18 e 25 palavras, sendo densa, informativa e com detalhes técnicos.
+- Cada frase deve ter entre 20 e 25 palavras, sendo densa, informativa e com detalhes técnicos.
 - Inclua contexto concreto (ator, ação, tempo e consequência) detalhado em cada frase.
-- Escreva de forma mais humana e fluida, evitando tom telegráfico.
+- Escreva de forma objetiva e direta, sem enrolação, mas com detalhes técnicos essenciais.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O parágrafo final deve ter entre 100 e 125 palavras no total, sendo denso e substancial.
+- O parágrafo final deve ter entre 110 e 125 palavras no total, denso e substancial.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case (ex: ERRADO: "A Empresa Divulgou Um Incidente"; CORRETO: "A empresa divulgou um incidente").
 - Gramática impecável em PT-BR. O texto deve ser denso e substancial — nunca genérico ou superficial.
 - NÃO USE frases curtas ou vagas. Seja específico com nomes, números, tecnologias e impactos reais.
+- Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
