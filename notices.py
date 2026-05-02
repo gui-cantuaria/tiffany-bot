@@ -827,7 +827,7 @@ def _normalizar_resumo_final(texto: str) -> str:
     
     # Log do tamanho final
     log.info(f"Resumo final: {len(resultado)} caracteres")
-    if len(resultado) < 2000:
+    if len(resultado) < 2500:
         log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
     return resultado
@@ -838,23 +838,23 @@ async def _gerar_resumo_super_prompt(texto_base: str, titulo: str, nome_site: st
     if not ai_client:
         return ""
     
-    super_prompt = f"""Escreva um resumo detalhado e substancial da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
+    super_prompt = f"""Escreva um resumo denso e abrangente da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
 
-⚠️ REGRA: O TEXTO DEVE TER ENTRE 2000 E 2500 CARACTERES. Seja denso e informativo. ⚠️
+⚠️ REGRA: O TEXTO DEVE TER ENTRE 2500 E 3000 CARACTERES. Seja substancial. ⚠️
 
-ESTRUTURA OBRIGATÓRIA (5 a 8 frases):
-1. CONTEXTO (quem, o que, quando, por que) - 2-3 frases densas
-2. FATOS (detalhes técnicos, números, nomes) - 2-3 frases com substância
-3. IMPACTO (por que importa, o que muda) - 1-2 frases claras
+ESTRUTURA OBRIGATÓRIA (8 a 12 frases):
+1. CONTEXTO HISTÓRICO (quem, o que, quando, por que, antecedentes) - 3-4 frases densas
+2. FATOS TÉCNICOS (detalhes, números, versões, nomes, especificações) - 4-5 frases com muita substância
+3. IMPACTO (por que importa, o que muda, repercussões) - 2-3 frases detalhadas
 
-Use conectores naturais. Seja objetivo mas inclua detalhes relevantes.
-NÃO seja superficial, mas também NÃO seja prolixo demais.
+Use conectores naturais. Inclua TODOS os detalhes relevantes: nomes, números, tecnologias, datas.
+NÃO seja superficial. Seja exaustivo dentro do limite.
 
-Texto Base: {texto_base[:10000]}
+Texto Base: {texto_base[:12000]}
 Título: {titulo}
 Fonte: {nome_site}
 
-LEMBRE-SE: 2000-2500 CARACTERES. Substancial mas legível."""
+LEMBRE-SE: 2500-3000 CARACTERES. Denso e abrangente."""
     
     try:
         response = await ai_client.chat.completions.create(
