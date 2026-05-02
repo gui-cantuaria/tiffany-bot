@@ -682,7 +682,7 @@ def _fix_sentence_case(text: str) -> str:
 
 
 def _normalize_news_title(title: str) -> str:
-    """Padroniza títulos para formato jornalístico direto (sentence case)."""
+    """Padroniza títulos para formato jornalístico direto (max 90 chars, sentence case)."""
     t = re.sub(r"\s+", " ", (title or "").strip())
     if not t:
         return t
@@ -700,18 +700,54 @@ def _normalize_news_title(title: str) -> str:
     for ac in acronyms:
         t = re.sub(rf"\b{ac.lower()}\b", ac, t, flags=re.IGNORECASE)
     
-    # Nomes próprios que devem ser capitalizados (marcas/produtos)
-    proper_names = (
-        "Xbox", "Windows", "PlayStation", "Playstation", "Nintendo", "Switch",
-        "iPhone", "iPad", "MacBook", "Macbook", "Android", "iOS",
-        "Google", "Microsoft", "Apple", "Amazon", "Meta", "Tesla",
-        "Facebook", "Instagram", "WhatsApp", "Twitter", "LinkedIn",
-        "Discord", "Spotify", "Netflix", "YouTube", "Zoom",
-        "Intel", "AMD", "Nvidia", "Samsung", "LG", "Sony",
-        "Reddit", "TikTok", "Snapchat", "Pinterest",
-    )
-    for name in proper_names:
-        t = re.sub(rf"\b{name.lower()}\b", name, t, flags=re.IGNORECASE)
+    # Nomes próprios que devem ser TRADUZIDOS ou capitalizados
+    proper_names = {
+        "xbox": "Xbox",
+        "windows": "Windows",
+        "playstation": "PlayStation",
+        "nintendo": "Nintendo",
+        "iphone": "iPhone",
+        "ipad": "iPad",
+        "macbook": "MacBook",
+        "android": "Android",
+        "ios": "iOS",
+        "google": "Google",
+        "microsoft": "Microsoft",
+        "apple": "Apple",
+        "amazon": "Amazon",
+        "meta": "Meta",
+        "tesla": "Tesla",
+        "facebook": "Facebook",
+        "instagram": "Instagram",
+        "whatsapp": "WhatsApp",
+        "twitter": "Twitter",
+        "linkedin": "LinkedIn",
+        "discord": "Discord",
+        "spotify": "Spotify",
+        "netflix": "Netflix",
+        "youtube": "YouTube",
+        "zoom": "Zoom",
+        "intel": "Intel",
+        "amd": "AMD",
+        "nvidia": "Nvidia",
+        "samsung": "Samsung",
+        "sony": "Sony",
+        "reddit": "Reddit",
+        "tiktok": "TikTok",
+        "snapchat": "Snapchat",
+        "pinterest": "Pinterest",
+        # Nomes de jogos/personagens (traduzir)
+        "mr. karate": "Senhor Karatê",
+        "mr.karate": "Senhor Karatê",
+        "fatal fury": "Fatal Fury",
+        "city of the wolves": "Cidade dos Lobos",
+        "pragmata": "Pragmata",
+        "re requiem": "RE: Requiem",
+        "phantom blade zero": "Phantom Blade Zero",
+        "gamescom": "Gamescom",
+    }
+    for lower_name, correct_name in proper_names.items():
+        t = re.sub(rf"\b{lower_name}\b", correct_name, t, flags=re.IGNORECASE)
     
     # Limita tamanho para ~1,5 linhas (90 caracteres)
     if len(t) > 90:
@@ -830,55 +866,7 @@ def _normalizar_resumo_final(texto: str) -> str:
     if len(resultado) < 2500:
         log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
-    return resultado
-
-
-async def _gerar_resumo_super_prompt(texto_base: str, titulo: str, nome_site: str) -> str:
-    """Gera um resumo substancial único usando super-prompt."""
-    if not ai_client:
-        return ""
-    
-    super_prompt = f"""Escreva um resumo objetivo e direto da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
-
-⚠️ REGRA: O TEXTO DEVE TER ENTRE 600 E 900 CARACTERES. Seja denso mas conciso. ⚠️
-
-ESTRUTURA (3 a 5 frases):
-1. CONTEXTO (o que aconteceu, quem, quando) - 1-2 frases
-2. FATOS (detalhes técnicos relevantes, números, nomes) - 1-2 frases
-3. IMPACTO (por que importa) - 1 frase
-
-Use conectores naturais. Seja objetivo e direto. Inclua detalhes relevantes mas NÃO seja prolixo.
-Evite repetições e enrolação. Vá direto ao ponto.
-
-Texto Base: {texto_base[:8000]}
-Título: {titulo}
-Fonte: {nome_site}
-
-LEMBRE-SE: 600-900 CARACTERES. Objetivo e direto."""
-    
-    try:
-        response = await ai_client.chat.completions.create(
-            model="meta-llama/llama-3.3-70b-instruct",
-            messages=[{"role": "user", "content": super_prompt}],
-            temperature=0.9,
-            timeout=300.0,
-        )
-        resultado = response.choices[0].message.content.strip()
-        log.info(f"Super-prompt resultado: {len(resultado)} chars")
-        # Aceita se tiver entre 600-900 chars (senão fallback)
-        if 600 <= len(resultado) <= 900:
-            return resultado
-        # Se estiver muito longo, tenta cortar graciosamente
-        if len(resultado) > 900:
-            corte = resultado[:900]
-            ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
-            if ultimo_ponto > 600:
-                return corte[:ultimo_ponto + 1]
-            return corte.rstrip() + "..."
-        return ""
-    except Exception as e:
-        log.warning(f"Erro no super-prompt: {e}")
-        return ""
+    return resultado if len(resultado) >= 500 else ""
 
 
 async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
@@ -995,16 +983,17 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         await asyncio.sleep(wait)
     _last_ai_call = time.monotonic()
 
-    # Estratégia: Super-prompt único para resumo massivo
-    resumo_massivo = await _gerar_resumo_super_prompt(texto_base, titulo_original, nome_site)
-    if resumo_massivo and len(resumo_massivo) > 3000:
-        log.info(f"Resumo super-prompt gerado: {len(resumo_massivo)} chars")
+    # Estratégia: APENAS super-prompt de 500-700 chars
+    resumo = await _gerar_resumo_super_prompt(texto_base, titulo_original, nome_site)
+    if resumo and 500 <= len(resumo) <= 700:
+        log.info(f"Resumo gerado (super-prompt): {len(resumo)} chars")
         nota_estimada = 80
         categoria_estimada = "Big Techs"
-        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo_massivo}
+        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo}
     
-    # Fallback
-    prompt = f"""Você é um editor-chefe de tecnologia de um portal premium. Analise a notícia abaixo e retorne APENAS um JSON válido, sem texto fora do JSON.
+    # Se falhar, retorna None para pular a notícia
+    log.warning(f"Falha ao gerar resumo (tamanho: {len(resumo) if resumo else 0} chars)")
+    return None
 
 ⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. ⚠️
 
