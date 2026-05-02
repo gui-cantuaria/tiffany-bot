@@ -822,11 +822,11 @@ def _normalizar_resumo_final(texto: str) -> str:
     if not bruto[-1] in ".!?":
         bruto += "."
     
-    # Limita a 1000 caracteres, cortando graciosamente no último ponto
-    if len(bruto) > 1000:
-        corte = bruto[:1000]
+    # Limita a 500 caracteres, cortando graciosamente no último ponto
+    if len(bruto) > 500:
+        corte = bruto[:500]
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
-        if ultimo_ponto > 500:
+        if ultimo_ponto > 200:
             bruto = corte[:ultimo_ponto + 1]
         else:
             bruto = corte.rstrip() + "..."
@@ -847,7 +847,7 @@ def _normalizar_resumo_final(texto: str) -> str:
     resultado = " ".join(frases)
     log.info(f"Resumo final: {len(resultado)} caracteres")
     
-    return resultado if len(resultado) >= 100 else ""
+    return resultado if len(resultado) >= 50 else ""
 
 
 async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
@@ -974,7 +974,7 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
     log.warning(f"Super-prompt falhou, usando prompt completo...")
 
     prompt = """
-⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER NO MÁXIMO 1000 CARACTERES. ⚠️
+⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER NO MÁXIMO 500 CARACTERES. ⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
@@ -1006,13 +1006,13 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ RESUMO (campo mais importante) ═══
-⚠️ REGRA ABSOLUTA: O RESUMO DEVE TER NO MÁXIMO 1000 CARACTERES. SEJA DENSO MAS CONCISO. ⚠️
+⚠️ REGRA ABSOLUTA: O RESUMO DEVE TER NO MÁXIMO 500 CARACTERES. SEJA CONCISO. ⚠️
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- MÁXIMO de 4-6 frases densas (máximo 1000 caracteres no total).
-- Estrutura: CONTEXTO + FATO + IMPACTO (tudo no limite de 1000 caracteres).
-- Inclua detalhes importantes: quem, o que, quando, como, impacto principal.
+- MÁXIMO de 2-3 frases curtas e densas (máximo 500 caracteres no total).
+- Estrutura: FATO PRINCIPAL + IMPACTO (tudo no limite de 500 caracteres).
+- Inclua APENAS o essencial: quem, o que, impacto principal.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula.
-- Gramática impecável em PT-BR. Texto denso e substantivo, sem excesso de adjetivos.
+- Gramática impecável em PT-BR. Texto direto e substantivo, sem excesso de adjetivos.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
@@ -1030,7 +1030,7 @@ Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASS
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER NO MÁXIMO 1000 CARACTERES. Seja denso e direto."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER NO MÁXIMO 500 CARACTERES. Seja conciso e direto."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.9,
