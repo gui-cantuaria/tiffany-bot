@@ -846,7 +846,9 @@ async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) 
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: O texto DEVE ter NO MÍNIMO 1500 caracteres. Seja massivo e detalhado no contexto.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 1500 caracteres. Seja massivo e detalhado no contexto.
+        
+        EXEMPLO DE TAMANHO: "Em um desenvolvimento que remonta aos esforços iniciais de 2019 quando a empresa anunciou seus primeiros planos para expansão global, a corporação multinacional de tecnologia anunciou hoje uma nova iniciativa que promete transformar radicalmente o mercado de inteligência artificial em escala global, envolvendo investimentos bilionários e parcerias estratégicas com governos e instituições de pesquisa..." (continua por mais 1400 caracteres).""",
          "contexto"),
         
         (f"""Escreva APENAS os FATOS concretos da notícia abaixo.
@@ -855,7 +857,9 @@ async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) 
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: O texto DEVE ter NO MÍNIMO 2200 caracteres. Seja massivo e denso.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 2200 caracteres. Seja massivo e denso.
+        
+        EXEMPLO DE TAMANHO: "A empresa divulgou hoje que o novo processador possui 128 núcleos de última geração, com arquitetura Zen 5 personalizada, 256 threads de execução simultânea e capacidade de processar 1.2 trilhões de operações por segundo, representando um avanço de 340% em relação à geração anterior, com consumo de energia reduzido em 45% através de nova técnica de voltagem dinâmica..." (continua por mais 2100 caracteres).""",
          "fatos"),
         
         (f"""Escreva APENAS o IMPACTO da notícia abaixo.
@@ -864,7 +868,9 @@ async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) 
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: O texto DEVE ter NO MÍNIMO 1000 caracteres. Seja exaustivo no impacto.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 1000 caracteres. Seja exaustivo no impacto.
+        
+        EXEMPLO DE TAMANHO: "Especialistas afirmam que esta mudança representa um marco histórico para a indústria, com previsões de crescimento de 250% no setor nos próximos 24 meses, enquanto analistas de mercado apontam que empresas concorrentes perderão 15% de participação até 2027, forçando uma reestruturação global que afetará diretamente 450 mil trabalhadores..." (continua por mais 900 caracteres).""",
          "impacto"),
     ]
     
