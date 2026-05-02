@@ -833,6 +833,60 @@ def _normalizar_resumo_final(texto: str) -> str:
     return resultado
 
 
+async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
+    """Gera um resumo massivo dividindo em contexto, fato e impacto."""
+    if not ai_client:
+        return ""
+    
+    partes = []
+    prompts = [
+        (f"""Escreva APENAS o CONTEXTO da notícia abaixo. 
+        Regra: DEVE TER NO MÍNIMO 1200 CARACTERES. Seja exaustivo no contexto histórico, quem, quando, por que.
+        Texto: {texto_base[:7000]}
+        Título: {titulo}
+        Fonte: {nome_site}
+        
+        Lembre-se: NO MÍNIMO 1200 caracteres de contexto puro.""",
+         "contexto"),
+        
+        (f"""Escreva APENAS os FATOS concretos da notícia abaixo.
+        Regra: DEVE TER NO MÍNIMO 2000 CARACTERES. Inclua TODOS os detalhes técnicos, números, versões, nomes.
+        Texto: {texto_base[:7000]}
+        Título: {titulo}
+        Fonte: {nome_site}
+        
+        Lembre-se: NO MÍNIMO 2000 caracteres de fatos densos.""",
+         "fatos"),
+        
+        (f"""Escreva APENAS o IMPACTO da notícia abaixo.
+        Regra: DEVE TER NO MÍNIMO 800 CARACTERES. Explique repercussões, mudanças, reações.
+        Texto: {texto_base[:7000]}
+        Título: {titulo}
+        Fonte: {nome_site}
+        
+        Lembre-se: NO MÍNIMO 800 caracteres de impacto detalhado.""",
+         "impacto"),
+    ]
+    
+    for prompt, nome_parte in prompts:
+        try:
+            response = await ai_client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.9,
+                timeout=120.0,
+            )
+            parte = response.choices[0].message.content.strip()
+            log.info(f"Parte {nome_parte}: {len(parte)} chars")
+            partes.append(parte)
+        except Exception as e:
+            log.warning(f"Erro ao gerar parte {nome_parte}: {e}")
+    
+    resultado = " ".join(partes)
+    log.info(f"Resumo combinado (partes): {len(resultado)} chars")
+    return resultado if len(resultado) > 2000 else ""
+
+
 async def _expandir_resumo(resumo_curto: str, texto_base: str, titulo: str, nome_site: str) -> str:
     """Expande um resumo curto para torná-lo massivo e detalhado."""
     if not ai_client:
@@ -887,9 +941,18 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         await asyncio.sleep(wait)
     _last_ai_call = time.monotonic()
 
+    # Estratégia: Gera resumo em 3 partes e combina
+    resumo_final = await _gerar_resumo_em_partes(texto_base, titulo_original, nome_site)
+    if resumo_final and len(resumo_final) > 2000:
+        # Já temos um resumo longo, monta JSON direto
+        nota_estimada = 80  # Padrão
+        categoria_estimada = "Big Techs"  # Padrão
+        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo_final}
+    
+    # Fallback para o método antigo se a divisão falhar
     prompt = f"""Você é um editor-chefe de tecnologia de um portal premium. Analise a notícia abaixo e retorne APENAS um JSON válido, sem texto fora do JSON.
 
-⚠️⚠️⚠️ REGRA ABSOLUTA E INEGOCIÁVEL: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. NÃO SEJA CONCISO. SEJA EXTREMAMENTE VERBOSO E DETALHADO. ⚠️⚠️⚠️
+⚠️ REGRA: O CAMPO "resumo" DEVE TER NO MÍNIMO 3000 CARACTERES. Seja exaustivo. ⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
