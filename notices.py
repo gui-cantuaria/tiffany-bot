@@ -875,23 +875,24 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ RESUMO (campo mais importante) ═══
+⚠️ OBRIGATÓRIO: O RESUMO DEVE TER NO MÍNIMO 3500 CARACTERES (CERCA DE 600-800 PALAVRAS) ⚠️
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
 - NÃO HÁ LIMITE DE FRASES. Escreva o máximo de frases necessárias para cobrir TODO o conteúdo relevante da notícia.
 - Estrutura narrativa obrigatória:
   CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes).
   FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas).
   IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações).
-- Cada frase deve ter entre 40 e 50 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
+- Cada frase deve ter entre 40 e 60 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
 - Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES) detalhado em CADA frase.
 - Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O parágrafo final deve ter NO MÍNIMO 1000 palavras, podendo chegar a 1500 ou mais palavras, sendo massivamente denso e substancial.
+- O resumo deve usar QUASE TODO o espaço disponível no Discord (até 4096 caracteres).
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
 - Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
 - NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
-- IMPORTANTE: NÃO CORTE INFORMAÇÕES. Seja exaustivo. O resumo deve ser uma matéria completa em parágrafo único.
+- REGRA DE OURO: Se o resumo tiver menos de 3500 caracteres, VOCÊ FALHOU. Escreva mais. Seja exaustivo.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -908,12 +909,12 @@ Texto Base: {texto_base[:2000]}
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O CAMPO RESUMO DEVE TER PELO MENOS 3500 CARACTERES."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.6,
-                max_tokens=3000,
-                timeout=120.0,
+                temperature=0.7,
+                max_tokens=4096,
+                timeout=180.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
