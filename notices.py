@@ -838,23 +838,23 @@ async def _gerar_resumo_super_prompt(texto_base: str, titulo: str, nome_site: st
     if not ai_client:
         return ""
     
-    super_prompt = f"""Escreva um resumo denso e abrangente da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
+    super_prompt = f"""Escreva um resumo objetivo e direto da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
 
-⚠️ REGRA: O TEXTO DEVE TER ENTRE 2500 E 3000 CARACTERES. Seja substancial. ⚠️
+⚠️ REGRA: O TEXTO DEVE TER ENTRE 600 E 900 CARACTERES. Seja denso mas conciso. ⚠️
 
-ESTRUTURA OBRIGATÓRIA (8 a 12 frases):
-1. CONTEXTO HISTÓRICO (quem, o que, quando, por que, antecedentes) - 3-4 frases densas
-2. FATOS TÉCNICOS (detalhes, números, versões, nomes, especificações) - 4-5 frases com muita substância
-3. IMPACTO (por que importa, o que muda, repercussões) - 2-3 frases detalhadas
+ESTRUTURA (3 a 5 frases):
+1. CONTEXTO (o que aconteceu, quem, quando) - 1-2 frases
+2. FATOS (detalhes técnicos relevantes, números, nomes) - 1-2 frases
+3. IMPACTO (por que importa) - 1 frase
 
-Use conectores naturais. Inclua TODOS os detalhes relevantes: nomes, números, tecnologias, datas.
-NÃO seja superficial. Seja exaustivo dentro do limite.
+Use conectores naturais. Seja objetivo e direto. Inclua detalhes relevantes mas NÃO seja prolixo.
+Evite repetições e enrolação. Vá direto ao ponto.
 
-Texto Base: {texto_base[:12000]}
+Texto Base: {texto_base[:8000]}
 Título: {titulo}
 Fonte: {nome_site}
 
-LEMBRE-SE: 2500-3000 CARACTERES. Denso e abrangente."""
+LEMBRE-SE: 600-900 CARACTERES. Objetivo e direto."""
     
     try:
         response = await ai_client.chat.completions.create(
@@ -865,7 +865,17 @@ LEMBRE-SE: 2500-3000 CARACTERES. Denso e abrangente."""
         )
         resultado = response.choices[0].message.content.strip()
         log.info(f"Super-prompt resultado: {len(resultado)} chars")
-        return resultado if len(resultado) > 3000 else ""
+        # Aceita se tiver entre 600-900 chars (senão fallback)
+        if 600 <= len(resultado) <= 900:
+            return resultado
+        # Se estiver muito longo, tenta cortar graciosamente
+        if len(resultado) > 900:
+            corte = resultado[:900]
+            ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
+            if ultimo_ponto > 600:
+                return corte[:ultimo_ponto + 1]
+            return corte.rstrip() + "..."
+        return ""
     except Exception as e:
         log.warning(f"Erro no super-prompt: {e}")
         return ""
