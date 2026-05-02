@@ -12,13 +12,19 @@ import html as html_lib
 import hashlib
 import atexit
 from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 
 import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-import tiffany_voice
+try:
+    import tiffany_voice
+    _voice_available = True
+except Exception:
+    tiffany_voice = None
+    _voice_available = False
 
 # =========================
 # CONFIGURAÇÕES
@@ -88,13 +94,14 @@ if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
 discord_client = commands.Bot(command_prefix="$", intents=intents)
-tiffany_voice.register_voice(discord_client)
+if _voice_available and tiffany_voice:
+    tiffany_voice.register_voice(discord_client)
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     if OPENROUTER_API_KEY
     else None
 )
-http_session: aiohttp.ClientSession | None = None
+http_session: Optional[aiohttp.ClientSession] = None
 
 # --- Feed cooldown state ---
 _feed_cooldown_until: dict[str, float] = {}
@@ -430,13 +437,13 @@ def save_queue(q: list) -> None:
         json.dump(q, f, ensure_ascii=False, indent=2)
     os.replace(tmp, QUEUE_FILE)
 
-def _hist_payload(status: str, extra: dict | None = None) -> dict:
+def _hist_payload(status: str, extra: Optional[dict] = None) -> dict:
     payload = {"status": status, "ts": int(time.time())}
     if extra:
         payload.update(extra)
     return payload
 
-def historico_check(h: dict, link_norm: str, dedupe_hash: str | None) -> bool:
+def historico_check(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool:
     """Retorna True se já foi processado (dedup por URL ou hash)."""
     # Checar formato V17 (L: / H:)
     if _hist_key_link(link_norm) in h:
@@ -448,7 +455,7 @@ def historico_check(h: dict, link_norm: str, dedupe_hash: str | None) -> bool:
         return True
     return False
 
-def historico_set(h: dict, link_norm: str, dedupe_hash: str | None, status: str, extra: dict | None = None) -> None:
+def historico_set(h: dict, link_norm: str, dedupe_hash: Optional[str], status: str, extra: Optional[dict] = None) -> None:
     payload = _hist_payload(status, extra)
     h[_hist_key_link(link_norm)] = payload
     if dedupe_hash:
@@ -557,7 +564,7 @@ OG_IMG_RE_ALT = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-def _norm_img_url(img: str, base: str | None = None) -> str | None:
+def _norm_img_url(img: str, base: Optional[str] = None) -> Optional[str]:
     if not img:
         return None
     u = img.strip()
@@ -570,7 +577,7 @@ def _norm_img_url(img: str, base: str | None = None) -> str | None:
             pass
     return u
 
-def extrair_imagem_rss(entry, feed_url: str) -> str | None:
+def extrair_imagem_rss(entry, feed_url: str) -> Optional[str]:
     """Extrai URL de imagem do entry RSS (sem HTTP)."""
     img = None
     try:
@@ -595,7 +602,7 @@ def extrair_imagem_rss(entry, feed_url: str) -> str | None:
         log.debug(f"Erro extraindo imagem RSS: {e}")
     return img
 
-async def fetch_og_image(url: str, retries: int = 2) -> str | None:
+async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
     """Busca og:image da página como fallback, com retry."""
     if not http_session:
         return None
@@ -645,7 +652,7 @@ async def validar_imagem(url: str) -> bool:
         log.debug(f"Erro validando imagem {url}: {e}")
     return False
 
-async def extrair_imagem_completa(entry, feed_url: str) -> str | None:
+async def extrair_imagem_completa(entry, feed_url: str) -> Optional[str]:
     """Pipeline completo: RSS → validação HTTP → fallback og:image."""
     img = extrair_imagem_rss(entry, feed_url)
     if img and await validar_imagem(img):
@@ -966,12 +973,10 @@ async def _expandir_resumo(resumo_curto: str, texto_base: str, titulo: str, nome
     return resumo_curto
 
 
-    return " ".join(frases)
-
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
 
-async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str) -> dict | None:
+async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str) -> Optional[dict]:
     global _last_ai_call
     if not ai_client:
         return None
@@ -991,10 +996,10 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         categoria_estimada = "Big Techs"
         return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo}
     
-    # Se falhar, retorna None para pular a notícia
-    log.warning(f"Falha ao gerar resumo (tamanho: {len(resumo) if resumo else 0} chars)")
-    return None
+    # Se falhar, continua com prompt completo
+    log.warning(f"Falha ao gerar resumo super-prompt, tentando análise completa...")
 
+    prompt = """
 ⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. ⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
@@ -1091,7 +1096,7 @@ Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASS
 # =========================
 # ENTRY UTILS
 # =========================
-def entry_datetime_utc(entry) -> datetime | None:
+def entry_datetime_utc(entry) -> Optional[datetime]:
     st = entry.get("published_parsed") or entry.get("updated_parsed")
     if not st:
         return None
@@ -1100,7 +1105,7 @@ def entry_datetime_utc(entry) -> datetime | None:
     except Exception:
         return None
 
-def noticia_eh_recente(entry_dt: datetime | None) -> bool:
+def noticia_eh_recente(entry_dt: Optional[datetime]) -> bool:
     """Retorna True apenas se a notícia tem data e é recente. Sem data = rejeitar."""
     if not entry_dt:
         return False
@@ -1165,7 +1170,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 # Estado global para /status
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
-_last_run_slot: tuple[int, int, int] | None = None
+_last_run_slot: Optional[Tuple[int, int, int]] = None
 
 def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
     """Permite coleta no horário comercial e no pré-aquecimento antes das 8h."""
