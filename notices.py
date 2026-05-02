@@ -768,7 +768,7 @@ def _limitar_palavras(frase: str, max_palavras: int = 35) -> str:
 
 def _normalizar_resumo_final(texto: str) -> str:
     """
-    Garante resumo em exatamente 20 a 25 frases, com 30-40 palavras por frase.
+    Processa o resumo para garantir formato correto e usar TODO o limite do Discord (4096 chars).
     Remove construções semânticas estranhas e garante fluxo contexto->fato->impacto.
     """
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
@@ -798,17 +798,33 @@ def _normalizar_resumo_final(texto: str) -> str:
     }
 
     frases = []
-    for idx, parte in enumerate(partes[:25]):
+    for idx, parte in enumerate(partes):  # Sem limite de frases
         frase = _corrigir_prefixos_estranhos(parte)
         frase = _fix_sentence_case(frase)
         # Deixa o fluxo mais humano entre contexto -> fato -> impacto.
         if idx in conectores:
             if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso|adicionalmente|dessa forma|por conseguinte|outrossim|destarte|igualmente|simultaneamente|em contrapartida|posteriormente|ademais|consequentemente)\b", frase):
                 frase = f"{conectores[idx]} {frase}"
-        frase = _limitar_palavras(frase, max_palavras=45).strip()
+        # NÃO limita mais palavras por frase - deixa a IA escrever livremente
+        frase = frase.strip()
         if frase:
-            frase = frase[0].upper() + frase[1:]
-            frases.append(f"{frase}.")
+            if not frase[0].isupper():
+                frase = frase[0].upper() + frase[1:]
+            if not frase.endswith("."):
+                frase += "."
+            frases.append(frase)
+    
+    resultado = " ".join(frases)
+    # Usa TODO o limite do Discord (4096 caracteres), cortando graciosamente
+    if len(resultado) > 4000:
+        corte = resultado[:4000]
+        # Tenta cortar no final de uma frase
+        ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
+        if ultimo_ponto > 3000:
+            resultado = corte[:ultimo_ponto + 1]
+        else:
+            resultado = corte + "..."
+    return resultado
 
     return " ".join(frases)
 
@@ -860,22 +876,22 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 
 ═══ RESUMO (campo mais importante) ═══
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- EXATAMENTE 20 a 25 FRASES, cada uma terminando com ponto final.
+- NÃO HÁ LIMITE DE FRASES. Escreva o máximo de frases necessárias para cobrir TODO o conteúdo relevante da notícia.
 - Estrutura narrativa obrigatória:
-  Frase 1-5: CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes).
-  Frase 6-18: FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas).
-  Frase 19-25: IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações).
-- Cada frase deve ter entre 35 e 45 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
+  CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes).
+  FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas).
+  IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações).
+- Cada frase deve ter entre 40 e 50 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
 - Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES) detalhado em CADA frase.
 - Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O parágrafo final deve ter entre 700 e 1000 palavras no total, sendo massivamente denso e substancial.
+- O parágrafo final deve ter NO MÍNIMO 1000 palavras, podendo chegar a 1500 ou mais palavras, sendo massivamente denso e substancial.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
 - Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
 - NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
-- IMPORTANTE: NÃO CORTE INFORMAÇÕES. O resumo deve ser extremamente longo e detalhado, quase uma matéria completa em parágrafo único.
+- IMPORTANTE: NÃO CORTE INFORMAÇÕES. Seja exaustivo. O resumo deve ser uma matéria completa em parágrafo único.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
