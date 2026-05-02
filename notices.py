@@ -841,30 +841,30 @@ async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) 
     partes = []
     prompts = [
         (f"""Escreva APENAS o CONTEXTO da notícia abaixo. 
-        Regra: DEVE TER NO MÍNIMO 1200 CARACTERES. Seja exaustivo no contexto histórico, quem, quando, por que.
-        Texto: {texto_base[:7000]}
+        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 1500 CARACTERES. SEJA EXTREMAMENTE EXAUSTIVO no contexto histórico, quem, quando, por que, antecedentes.
+        Texto: {texto_base[:10000]}
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: NO MÍNIMO 1200 caracteres de contexto puro.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 1500 caracteres. Seja massivo e detalhado no contexto.""",
          "contexto"),
         
         (f"""Escreva APENAS os FATOS concretos da notícia abaixo.
-        Regra: DEVE TER NO MÍNIMO 2000 CARACTERES. Inclua TODOS os detalhes técnicos, números, versões, nomes.
-        Texto: {texto_base[:7000]}
+        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 2200 CARACTERES. Seja EXTREMAMENTE exaustivo nos detalhes técnicos, números, versões, nomes, especificações.
+        Texto: {texto_base[:10000]}
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: NO MÍNIMO 2000 caracteres de fatos densos.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 2200 caracteres. Seja massivo e denso.""",
          "fatos"),
         
         (f"""Escreva APENAS o IMPACTO da notícia abaixo.
-        Regra: DEVE TER NO MÍNIMO 800 CARACTERES. Explique repercussões, mudanças, reações.
-        Texto: {texto_base[:7000]}
+        ⚠️⚠️ REGRA ABSOLUTA: DEVE TER NO MÍNIMO 1000 CARACTERES. Analise repercussões imediatas e de longo prazo, mudanças para usuários/mercado, reações.
+        Texto: {texto_base[:10000]}
         Título: {titulo}
         Fonte: {nome_site}
         
-        Lembre-se: NO MÍNIMO 800 caracteres de impacto detalhado.""",
+        Lembre-se: O texto DEVE ter NO MÍNIMO 1000 caracteres. Seja exaustivo no impacto.""",
          "impacto"),
     ]
     
