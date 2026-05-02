@@ -816,12 +816,8 @@ def _normalizar_resumo_final(texto: str) -> str:
     
     resultado = " ".join(frases)
     
-    # NÃO corta mais - deixa a IA escrever o máximo possível
-    # O Discord vai truncar naturalmente se passar de 4096 chars
-    # Mas tentamos ser graciosos se estiver muito longo
+    # Tenta usar TODO o limite do Discord (4096 chars), cortando graciosamente
     if len(resultado) > 4096:
-        log.warning(f"Resumo muito longo: {len(resultado)} chars - será cortado pelo Discord")
-        # Tenta cortar no final de uma frase para não quebrar no meio
         corte = resultado[:4096]
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
         if ultimo_ponto > 3500:
@@ -831,33 +827,34 @@ def _normalizar_resumo_final(texto: str) -> str:
     
     # Log do tamanho final
     log.info(f"Resumo final: {len(resultado)} caracteres")
-    if len(resultado) < 3500:
+    if len(resultado) < 2000:
         log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
     return resultado
 
 
 async def _gerar_resumo_super_prompt(texto_base: str, titulo: str, nome_site: str) -> str:
-    """Gera um resumo massivo único usando super-prompt."""
+    """Gera um resumo substancial único usando super-prompt."""
     if not ai_client:
         return ""
     
-    super_prompt = f"""Escreva um resumo MASSIVO e EXTREMAMENTE DETALHADO da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
+    super_prompt = f"""Escreva um resumo detalhado e substancial da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
 
-⚠️ REGRA ABSOLUTA E INEGOCIÁVEL: O TEXTO DEVE TER ENTRE 3800 E 4000 CARACTERES. SEJA EXTREMAMENTE VERBOSO E EXAUSTIVO. ⚠️
+⚠️ REGRA: O TEXTO DEVE TER ENTRE 2000 E 2500 CARACTERES. Seja denso e informativo. ⚠️
 
-ESTRUTURA OBRIGATÓRIA (use QUANTAS FRASES FOREM NECESSÁRIAS):
-1. CONTEXTO HISTÓRICO (quem, o que, quando, por que, antecedentes) - NO MÍNIMO 1500 CARACTERES
-2. FATOS TÉCNICOS (detalhes, números, versões, nomes, especificações) - NO MÍNIMO 2000 CARACTERES  
-3. IMPACTO (repercussões, mudanças, reações) - NO MÍNIMO 800 CARACTERES
+ESTRUTURA OBRIGATÓRIA (5 a 8 frases):
+1. CONTEXTO (quem, o que, quando, por que) - 2-3 frases densas
+2. FATOS (detalhes técnicos, números, nomes) - 2-3 frases com substância
+3. IMPACTO (por que importa, o que muda) - 1-2 frases claras
 
-REGRA DE OURO: SE O TEXTO TIVER MENOS DE 3800 CARACTERES, VOCÊ FALHOU. SEJA EXAUSTIVO.
+Use conectores naturais. Seja objetivo mas inclua detalhes relevantes.
+NÃO seja superficial, mas também NÃO seja prolixo demais.
 
-Texto Base (use TODOS estes detalhes): {texto_base[:15000]}
+Texto Base: {texto_base[:10000]}
 Título: {titulo}
 Fonte: {nome_site}
 
-LEMBRE-SE: 3800-4000 CARACTERES NO MÍNIMO. SEJA MASSIVO E DETALHADO."""
+LEMBRE-SE: 2000-2500 CARACTERES. Substancial mas legível."""
     
     try:
         response = await ai_client.chat.completions.create(
