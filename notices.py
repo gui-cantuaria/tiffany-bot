@@ -815,15 +815,20 @@ def _normalizar_resumo_final(texto: str) -> str:
             frases.append(frase)
     
     resultado = " ".join(frases)
-    # Usa TODO o limite do Discord (4096 caracteres), cortando graciosamente
-    if len(resultado) > 4000:
-        corte = resultado[:4000]
+    # Usa TOD0 o limite do Discord (4096 caracteres), cortando graciosamente
+    if len(resultado) > 4096:
+        corte = resultado[:4096]
         # Tenta cortar no final de uma frase
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
-        if ultimo_ponto > 3000:
+        if ultimo_ponto > 3500:
             resultado = corte[:ultimo_ponto + 1]
         else:
-            resultado = corte + "..."
+            resultado = corte.rstrip() + "..."
+    
+    # Se ainda estiver curto, avisa no log
+    if len(resultado) < 2000:
+        log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
+    
     return resultado
 
     return " ".join(frases)
@@ -875,24 +880,24 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ RESUMO (campo mais importante) ═══
-⚠️ OBRIGATÓRIO: O RESUMO DEVE TER NO MÍNIMO 3500 CARACTERES (CERCA DE 600-800 PALAVRAS) ⚠️
+⚠️ REGRA ABSOLUTA: NÃO SE PREOCUPE COM LIMITES. ESCREVA O RESUMO MAIS LONGO E COMPLETO POSSÍVEL, COBRINDO TODO O CONTEÚDO DA NOTÍCIA. ⚠️
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- NÃO HÁ LIMITE DE FRASES. Escreva o máximo de frases necessárias para cobrir TODO o conteúdo relevante da notícia.
-- Estrutura narrativa obrigatória:
-  CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes).
-  FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas).
-  IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações).
-- Cada frase deve ter entre 40 e 60 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
-- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES) detalhado em CADA frase.
-- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece.
+- NÃO HÁ LIMITE DE FRASES. Use QUANTAS FRASES FOREM NECESSÁRIAS para cobrir CADA detalhe relevante da notícia.
+- Estrutura narrativa (use quantas frases precisar para cada seção):
+  CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes, contexto histórico, antecedentes).
+  FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas, declarações).
+  IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações de especialistas, análises).
+- Cada frase deve ter o máximo de palavras possível para ser densa, informativa e recheada de detalhes técnicos (40-80 palavras por frase).
+- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES, NOMES COMPLETOS) detalhado em CADA frase.
+- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece. SEJA EXAUSTIVO.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O resumo deve usar QUASE TODO o espaço disponível no Discord (até 4096 caracteres).
+- O resumo deve ser uma MATÉRIA COMPLETA em parágrafo único. NÃO CORTE INFORMAÇÕES.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
 - Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
-- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes.
+- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes, NOMES DE PESSOAS.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
-- REGRA DE OURO: Se o resumo tiver menos de 3500 caracteres, VOCÊ FALHOU. Escreva mais. Seja exaustivo.
+- REGRA DE OURO: ESCREVA O MÁXIMO POSSÍVEL. O resumo deve ser massivo, denso e completo. Seja exaustivo na cobertura da notícia.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -901,7 +906,7 @@ CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-da
 
 Fonte: {nome_site}
 Título Original: {titulo_original}
-Texto Base: {texto_base[:2000]}
+Texto Base (use TODOS estes detalhes para escrever o resumo longo): {texto_base[:8000]}
 """
 
     for attempt in range(3):
