@@ -1,7 +1,8 @@
 """
-Comandos de voz estilo assistente: $tiffany entra na call, ouve o audio e
-interpreta frases como «Tiffany, toca ...». Reproducao via yt-dlp (YouTube
-busca ou URL Spotify/YouTube). Requer FFmpeg no PATH e PyNaCl.
+Comandos de voz estilo assistente: $e entra na call, ouve o audio e
+interpreta frases como «Tiffany, ...». Reproducao via yt-dlp (YouTube
+busca ou URL Spotify/YouTube). Responde perguntas por voz (TTS) ou chat.
+Requer FFmpeg no PATH e PyNaCl.
 """
 
 from __future__ import annotations
@@ -25,6 +26,9 @@ from discord import FFmpegPCMAudio, PCMVolumeTransformer
 from discord.ext import commands, voice_recv
 
 log = logging.getLogger("tiffany-bot.voice")
+
+# TTS via OpenRouter ou gTTS
+_TTS_ENABLED = os.getenv("TTS_ENABLED", "1").strip() == "1"
 
 def _resolve_ffmpeg_executable() -> Optional[str]:
     env_path = (os.getenv("FFMPEG_PATH") or "").strip()
@@ -75,6 +79,9 @@ def _voice_connect_timeout_sec() -> float:
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.5)
 
+# Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
+MIN_QUESTION_WORDS = 3
+
 YDL_OPTS: dict[str, Any] = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -103,6 +110,9 @@ class _GuildVoiceSession:
     music_task: Optional[asyncio.Task] = None
     music_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     play_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    question_queue: asyncio.Queue[tuple[int, str]] = field(default_factory=asyncio.Queue)
+    question_task: Optional[asyncio.Task] = None
+    tts_enabled: bool = _TTS_ENABLED
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -118,6 +128,7 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     if "tiffany" not in t and "tifani" not in t:
         return "none", None
 
+    # Comandos de controle
     if re.search(
         r"tiffany\s*,\s*(para|parar|stop|pause|pausa)\b|"
         r"tifani\s*,\s*(para|parar|stop|pause|pausa)\b",
@@ -125,6 +136,26 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     ):
         return "stop", None
 
+    if re.search(r"tiffany\s*,\s*(sai|saia|leave|sair)\b", t, re.IGNORECASE):
+        return "leave", None
+
+    if re.search(r"tiffany\s*,\s*(pula|próxim[ao]|next|skip)\b", t, re.IGNORECASE):
+        return "skip", None
+
+    # Detectar pergunta após "tiffany"
+    if re.search(r"tiffany\s*,", t):
+        # Remove o "tiffany," e captura o resto como pergunta
+        m = re.search(r"tiffany\s*,\s*(.+)", t, re.IGNORECASE)
+        if m:
+            question = m.group(1).strip()
+            # Se tem palavras suficientes, é pergunta; senão é comando de música
+            words = question.split()
+            if len(words) >= MIN_QUESTION_WORDS:
+                # Verifica se NÃO é comando de música
+                if not re.match(r"^(toca|reproduz|play|coloca)\b", question, re.IGNORECASE):
+                    return "question", question[:300]
+
+    # Comando de música
     m = re.search(
         r"(?:tiffany|tifani)\s*,\s*(?:toca|reproduz|play|coloca)\s+(.+)",
         t,
@@ -148,6 +179,46 @@ def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
         wf.setframerate(48000)
         wf.writeframes(mono)
     return buf.getvalue()
+
+
+def _text_to_speech(text: str) -> Optional[bytes]:
+    """Gera audio a partir de texto usando gTTS ou fallback."""
+    if not _TTS_ENABLED:
+        return None
+    try:
+        gtts = importlib.import_module("gtts")
+        from gtts import gTTS
+        tts = gTTS(text=text[:200], lang="pt-br", slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        buf.seek(0)
+        return buf.read()
+    except ModuleNotFoundError:
+        log.warning("gTTS não instalado; TTS desativado.")
+        return None
+    except Exception as e:
+        log.warning("Erro no TTS: %s", e)
+        return None
+
+
+def _tts_bytes_to_pcm(tts_bytes: bytes) -> Optional[bytes]:
+    """Converte bytes de MP3 (gTTS) para PCM usando FFmpeg."""
+    if not tts_bytes:
+        return None
+    try:
+        import subprocess
+        exe = FFMPEG_EXECUTABLE or "ffmpeg"
+        proc = subprocess.Popen(
+            [exe, "-i", "pipe:0", "-f", "s16le", "-ac", "2", "-ar", "48000", "pipe:1"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        pcm, _ = proc.communicate(tts_bytes)
+        return pcm
+    except Exception as e:
+        log.warning("Erro convertendo TTS para PCM: %s", e)
+        return None
 
 
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
@@ -321,6 +392,7 @@ async def _voice_listen_loop(
     _last_heard_notify = 0.0
     _last_audio_time = asyncio.get_event_loop().time()
     _warned_no_audio = False
+    _empty_since = None  # Timestamp desde que o canal ficou vazio
     try:
         while vc.is_connected():
             await asyncio.sleep(5.0)
@@ -328,6 +400,35 @@ async def _voice_listen_loop(
                 break
             if vc.is_playing():
                 continue
+            
+            # Verificar se canal está vazio (exceto o bot)
+            members_in_vc = [m for m in vc.channel.members if not m.bot] if vc.channel else []
+            agora = asyncio.get_event_loop().time()
+            
+            if not members_in_vc:
+                # Canal vazio
+                if _empty_since is None:
+                    _empty_since = agora
+                    await _notify(bot, session.text_channel_id, "⚠️ Canal ficou vazio. Saindo em 5 minutos se ninguém voltar...")
+                elif (agora - _empty_since) > 300:  # 5 minutos
+                    await _notify(bot, session.text_channel_id, "👋 **Tiffany saindo** - canal vazio por 5 minutos.")
+                    # Executar saída
+                    sess = _sessions.pop(guild_id, None)
+                    if sess:
+                        if sess.listen_task:
+                            sess.listen_task.cancel()
+                        if sess.music_task:
+                            sess.music_task.cancel()
+                        if sess.question_task:
+                            sess.question_task.cancel()
+                    if vc and vc.is_connected():
+                        await vc.disconnect(force=True)
+                    return
+            else:
+                # Tem gente no canal, resetar timer
+                if _empty_since is not None:
+                    await _notify(bot, session.text_channel_id, "✅ Pessoas voltaram ao canal.")
+                _empty_since = None
 
             # Diagnóstico: se passou 60s sem receber nenhum audio, avisa
             if not _warned_no_audio and (asyncio.get_event_loop().time() - _last_audio_time) > 60:
@@ -353,28 +454,68 @@ async def _voice_listen_loop(
                 continue
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
+            
             if action == "none":
                 agora = asyncio.get_event_loop().time()
                 if agora - _last_heard_notify > 30:
-                    await _notify(bot, session.text_channel_id, f"🎙️ Entendi: «{text[:60]}», mas não é um comando. Diga: **«Tiffany, toca ...»**")
+                    await _notify(bot, session.text_channel_id, f"🎙️ Entendi: «{text[:60]}», mas não é um comando. Diga: **«Tiffany, toca ...»** ou **«Tiffany, <pergunta>»**")
                     _last_heard_notify = agora
                 continue
-            if action == "stop":
+            
+            if action == "stop" or action == "skip":
                 vc.stop_playing()
-                await _notify(bot, session.text_channel_id, "⏹️ Reprodução interrompida (comando de voz).")
+                await _notify(bot, session.text_channel_id, "⏭️ Faixa pulada (comando de voz).")
                 continue
+            
+            if action == "leave":
+                # Sair do canal
+                text_ch_id = session.text_channel_id if session else None
+                sess = _sessions.pop(guild_id, None)
+                if sess:
+                    if sess.listen_task:
+                        sess.listen_task.cancel()
+                    if sess.music_task:
+                        sess.music_task.cancel()
+                    if sess.question_task:
+                        sess.question_task.cancel()
+                if vc and vc.is_connected():
+                    await vc.disconnect(force=True)
+                await _notify(bot, text_ch_id, "👋 **Tiffany saiu** do canal de voz.")
+                return
+            
+            if action == "question" and arg:
+                # Adiciona pergunta na fila
+                await session.question_queue.put((0, arg))  # 0 = indica voz
+                await _notify(bot, session.text_channel_id, f"💬 Pergunta recebida: «{arg[:80]}» — processando...")
+                continue
+            
             if action == "play" and arg:
-                q = arg.strip()
-                if "open.spotify.com" in q or q.startswith("spotify:"):
-                    q = q
-                elif not re.match(r"^https?://", q):
-                    q = f"ytsearch1:{q}"
-                await session.music_queue.put(q)
-                await _notify(
-                    bot,
-                    session.text_channel_id,
-                    f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.",
-                )
+                # Suporta múltiplas músicas separadas por vírgula ou " e "
+                parts = re.split(r'\s*,\s*|\s+e\s+', arg)
+                added = 0
+                for part in parts:
+                    q = part.strip()
+                    if not q:
+                        continue
+                    if "open.spotify.com" in q or q.startswith("spotify:"):
+                        pass
+                    elif not re.match(r"^https?://", q):
+                        q = f"ytsearch1:{q}"
+                    await session.music_queue.put(q)
+                    added += 1
+                
+                if added > 1:
+                    await _notify(
+                        bot,
+                        session.text_channel_id,
+                        f"🎵 **{added} músicas** adicionadas à fila.",
+                    )
+                else:
+                    await _notify(
+                        bot,
+                        session.text_channel_id,
+                        f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.",
+                    )
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -416,6 +557,10 @@ async def _join_voice_recv_client(
 
 
 def register_voice(bot: commands.Bot) -> None:
+    # Skip all voice setup if disabled
+    if not _voice_enabled():
+        return
+
     _RANDOM_SONGS = [
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "https://www.youtube.com/watch?v=9bZkp7q19f0",
@@ -427,33 +572,106 @@ def register_voice(bot: commands.Bot) -> None:
         "https://www.youtube.com/watch?v=ru0K8uYEZWw",
     ]
 
-    async def _ensure_connected(ctx: commands.Context) -> tuple:
+    async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc) -> str:
+        """Responde pergunta usando IA e opcionalmente TTS."""
+        try:
+            import openai
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                return "Desculpe, chave da API não configurada."
+            
+            client = openai.OpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
+            
+            # Prompt direto e objetivo para economizar tokens
+            resp = client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": f"Responda de forma direta e objetiva em português (máximo 2 frases): {question}"}],
+                max_tokens=100,
+                temperature=0.3,
+            )
+            answer = resp.choices[0].message.content.strip()
+            
+            # TTS se habilitado
+            if session.tts_enabled and vc and vc.is_connected():
+                tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
+                if tts_bytes:
+                    pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
+                    if pcm:
+                        source = discord.PCMAudio(io.BytesIO(pcm))
+                        vc.play(source)
+            
+            return answer
+        except Exception as e:
+            log.exception("Erro ao responder pergunta: %s", e)
+            return "Erro ao processar pergunta."
+
+    async def _question_worker(guild_id: int, vc, bot: discord.Client) -> None:
+        """Worker que processa fila de perguntas."""
+        session = _sessions.get(guild_id)
+        if not session:
+            return
+        try:
+            while vc.is_connected():
+                try:
+                    user_id, question = await asyncio.wait_for(session.question_queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                
+                answer = await _answer_question(question, guild_id, session, vc)
+                # Envia resposta no chat
+                ch = bot.get_channel(session.text_channel_id)
+                if ch:
+                    try:
+                        await ch.send(f"💬 **Resposta:** {answer}")
+                    except Exception:
+                        pass
+                session.question_queue.task_done()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Question worker encerrou com erro")
+
+    async def _ensure_connected(ctx: commands.Context, specific_channel: Optional[discord.VoiceChannel] = None) -> tuple:
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
             await ctx.send("⚠️ Use este comando em um servidor.")
             return None, None
 
-        user_vc = ctx.author.voice
-        if not user_vc or not user_vc.channel:
-            await ctx.send("⚠️ Você precisa estar em um **canal de voz** primeiro.")
-            return None, None
-
         guild = ctx.guild
         gid = guild.id
-        channel = user_vc.channel
-
-        # Já está conectado?
+        
+        # Se já está conectado
         sess = _sessions.get(gid)
         vc = guild.voice_client
         if sess and vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
-            if vc.channel.id == channel.id:
-                return sess, vc
-            # Se está em outro canal, move
-            try:
-                await vc.move_to(channel)
-                return sess, vc
-            except Exception as e:
-                await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
+            if specific_channel and vc.channel.id != specific_channel.id:
+                try:
+                    await vc.move_to(specific_channel)
+                    return sess, vc
+                except Exception as e:
+                    await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
+                    return None, None
+            return sess, vc
+
+        # Determinar canal de voz
+        channel = specific_channel
+        if not channel:
+            user_vc = ctx.author.voice
+            if not user_vc or not user_vc.channel:
+                await ctx.send("⚠️ Você precisa estar em um **canal de voz** primeiro.")
                 return None, None
+            channel = user_vc.channel
+
+        # Verificar múltiplos canais
+        voice_channels = [ch for ch in guild.voice_channels if ch.members]
+        if len(voice_channels) > 1 and not specific_channel:
+            # Listar canais com pessoas
+            channels_list = "\n".join([f"• {ch.name} ({len(ch.members)} pessoas)" for ch in voice_channels])
+            await ctx.send(f"🎙️ **Múltiplos canais de voz detectados:**\n{channels_list}\n\nUse `$e #{channel.name}` para entrar em um específico.")
+            # Entra no canal do autor por padrão
+            channel = user_vc.channel
 
         # Verificar permissoes
         bot_member = guild.me
@@ -499,72 +717,31 @@ def register_voice(bot: commands.Bot) -> None:
             _play_worker(gid, vc, bot),
             name=f"tiffany-music-{gid}",
         )
+        
+        # Iniciar worker de perguntas
+        session.question_task = asyncio.create_task(
+            _question_worker(gid, vc, bot),
+            name=f"tiffany-question-{gid}",
+        )
+        
         _sessions[gid] = session
 
         log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
         await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
         return session, vc
 
-    @bot.command(name="tiffany", help="Adiciona a Tiffany ao seu canal de voz. Depois você pode pedir musica por voz.")
-    async def cmd_tiffany(ctx: commands.Context):
+    @bot.command(name="e", help="Entra (enter) no canal de voz: $e ou $e #canal")
+    async def cmd_entrar(ctx: commands.Context, channel: Optional[discord.VoiceChannel] = None):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
-        sess, vc = await _ensure_connected(ctx)
+        sess, vc = await _ensure_connected(ctx, specific_channel=channel)
         if not sess:
             return
-        await ctx.send("🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
+        await ctx.send("🎙️ **Tiffany está ouvindo...** Diga «Tiffany, ...» para comandos ou perguntas.")
 
-    @bot.command(name="play", help="Toca música: $play <url> ou $play <nome>")
-    async def cmd_play(ctx: commands.Context, *, query: str = ""):
-        if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
-            return
-        if not ctx.guild:
-            return
-        if not query:
-            await ctx.send("🎵 Use: `$play <link do YouTube/Spotify>` ou `$play <nome da música>`")
-            return
-        sess, vc = await _ensure_connected(ctx)
-        if not sess:
-            return
-        q = query.strip()
-        if "open.spotify.com" in q or q.startswith("spotify:"):
-            pass
-        elif not re.match(r"^https?://", q):
-            q = f"ytsearch1:{q}"
-        
-        # Debug: log queue state
-        log.info("Play cmd: putting query '%s' into queue (size before: %d)", q, sess.music_queue.qsize())
-        await sess.music_queue.put(q)
-        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}** (fila: {sess.music_queue.qsize()})")
-        
-        # Ensure worker is running
-        gid = ctx.guild.id
-        if sess.music_task is None or sess.music_task.done():
-            log.warning("Music worker not running, restarting...")
-            sess.music_task = asyncio.create_task(
-                _play_worker(gid, vc, bot),
-                name=f"tiffany-music-{gid}",
-            )
-
-    @bot.command(name="rm", help="Toca uma musica aleatoria: $rm")
-    async def cmd_rm(ctx: commands.Context):
-        if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
-            return
-        if not ctx.guild:
-            return
-        sess, vc = await _ensure_connected(ctx)
-        if not sess:
-            return
-        import random
-        url = random.choice(_RANDOM_SONGS)
-        await sess.music_queue.put(url)
-        await ctx.send("🎲 Musica aleatoria adicionada à fila!")
-
-    @bot.command(name="leave", help="Desconecta a Tiffany do canal de voz.")
-    async def cmd_leave(ctx: commands.Context):
+    @bot.command(name="l", help="Sai (leave) do canal de voz: $l")
+    async def cmd_sair(ctx: commands.Context):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
@@ -577,6 +754,8 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.listen_task.cancel()
             if sess.music_task:
                 sess.music_task.cancel()
+            if sess.question_task:
+                sess.question_task.cancel()
         vc = ctx.guild.voice_client
         if vc and vc.is_connected():
             await vc.disconnect(force=True)
@@ -584,8 +763,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send("⚠️ Não estou em nenhum canal de voz.")
 
-    @bot.command(name="next", help="Pula a faixa atual e toca a proxima da fila.")
-    async def cmd_next(ctx: commands.Context):
+    @bot.command(name="s", help="Pula (skip) a faixa atual: $s")
+    async def cmd_pular(ctx: commands.Context):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
@@ -606,8 +785,59 @@ def register_voice(bot: commands.Bot) -> None:
         prox_na_fila = session.music_queue.qsize()
         vc.stop_playing()
         if prox_na_fila > 0:
-            await ctx.send(f"⏭️ Faixa pulada. Tocando a proxima (restantes na fila: {prox_na_fila}).")
+            await ctx.send(f"⏭️ Pulado. Próxima da fila (restantes: {prox_na_fila}).")
         else:
-            await ctx.send("⏭️ Faixa pulada. Não há proximas musicas na fila.")
+            await ctx.send("⏭️ Pulado. Fila vazia.")
 
-    log.info("Comandos de voz registrados: $tiffany, $play/$p, $rm, $leave, $next")
+    @bot.command(name="r", help="Toca música aleatória (random): $r")
+    async def cmd_random(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
+        if not ctx.guild:
+            return
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        import random
+        url = random.choice(_RANDOM_SONGS)
+        await sess.music_queue.put(url)
+        await ctx.send("🎲 Música aleatória na fila!")
+
+    @bot.command(name="h", help="Lista comandos da Tiffany: $h (help)")
+    async def cmd_help(ctx: commands.Context):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
+        help_text = (
+            "**🎙️ Comandos da Tiffany:**\n"
+            "`$e` - Entra (enter) no seu canal de voz\n"
+            "`$l` - Sai (leave) do canal de voz\n"
+            "`$s` - Pula (skip) a faixa atual\n"
+            "`$r` - Música aleatória (random)\n"
+            "`$c <pergunta>` - Pergunta via chat\n"
+            "`$h` - Este help\n\n"
+            "**Por voz:** diga «Tiffany, toca <música>» ou «Tiffany, <pergunta>»"
+        )
+        await ctx.send(help_text)
+
+    @bot.command(name="c", help="Pergunta via chat: $c <pergunta>")
+    async def cmd_chat(ctx: commands.Context, *, question: str = ""):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
+        if not ctx.guild:
+            return
+        if not question:
+            await ctx.send("💬 Use: `$c <sua pergunta>`")
+            return
+        
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        
+        await ctx.send("💭 Processando pergunta...")
+        answer = await _answer_question(question, ctx.guild.id, sess, vc)
+        await ctx.send(f"💬 **Resposta:** {answer}")
+
+    log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
