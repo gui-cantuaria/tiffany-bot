@@ -811,69 +811,43 @@ def _limitar_palavras(frase: str, max_palavras: int = 35) -> str:
 
 def _normalizar_resumo_final(texto: str) -> str:
     """
-    Processa o resumo para garantir formato correto e usar TODO o limite do Discord (4096 chars).
-    Remove construções semânticas estranhas e garante fluxo contexto->fato->impacto.
+    Processa o resumo para garantir formato correto e limite de 1000 caracteres.
+    Remove construções semânticas estranhas e garante fluxo natural.
     """
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
     if not bruto:
         return ""
-
-    partes = [p.strip() for p in re.split(r"[.!?]+", bruto) if p.strip()]
-    if not partes:
-        return ""
-
-    conectores = {
-        1: "Nesse cenário,",
-        2: "Na prática,",
-        3: "Além disso,",
-        4: "Com isso,",
-        5: "Adicionalmente,",
-        6: "Dessa forma,",
-        7: "Por conseguinte,",
-        8: "Outrossim,",
-        9: "Destarte,",
-        10: "Igualmente,",
-        11: "Simultaneamente,",
-        12: "Em contrapartida,",
-        13: "Posteriormente,",
-        14: "Ademais,",
-        15: "Consequentemente,",
-    }
-
+    
+    # Garante que termina com pontuação
+    if not bruto[-1] in ".!?":
+        bruto += "."
+    
+    # Limita a 1000 caracteres, cortando graciosamente no último ponto
+    if len(bruto) > 1000:
+        corte = bruto[:1000]
+        ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
+        if ultimo_ponto > 500:
+            bruto = corte[:ultimo_ponto + 1]
+        else:
+            bruto = corte.rstrip() + "..."
+    
+    # Corrige formatação de sentence case
     frases = []
-    for idx, parte in enumerate(partes):  # Sem limite de frases
-        frase = _corrigir_prefixos_estranhos(parte)
-        frase = _fix_sentence_case(frase)
-        # Deixa o fluxo mais humano entre contexto -> fato -> impacto.
-        if idx in conectores:
-            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso|adicionalmente|dessa forma|por conseguinte|outrossim|destarte|igualmente|simultaneamente|em contrapartida|posteriormente|ademais|consequentemente)\b", frase):
-                frase = f"{conectores[idx]} {frase}"
-        # NÃO limita mais palavras por frase - deixa a IA escrever livremente
-        frase = frase.strip()
-        if frase:
-            if not frase[0].isupper():
-                frase = frase[0].upper() + frase[1:]
-            if not frase.endswith("."):
-                frase += "."
-            frases.append(frase)
+    for parte in re.split(r"[.!?]+", bruto):
+        parte = parte.strip()
+        if parte:
+            parte = _corrigir_prefixos_estranhos(parte)
+            parte = _fix_sentence_case(parte)
+            if not parte[0].isupper():
+                parte = parte[0].upper() + parte[1:]
+            if not parte.endswith("."):
+                parte += "."
+            frases.append(parte)
     
     resultado = " ".join(frases)
-    
-    # Tenta usar TODO o limite do Discord (4096 chars), cortando graciosamente
-    if len(resultado) > 4096:
-        corte = resultado[:4096]
-        ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
-        if ultimo_ponto > 3500:
-            resultado = corte[:ultimo_ponto + 1]
-        else:
-            resultado = corte.rstrip() + "..."
-    
-    # Log do tamanho final
     log.info(f"Resumo final: {len(resultado)} caracteres")
-    if len(resultado) < 2500:
-        log.warning(f"Resumo curto detectado: {len(resultado)} chars - {resultado[:100]}")
     
-    return resultado if len(resultado) >= 500 else ""
+    return resultado if len(resultado) >= 100 else ""
 
 
 async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
@@ -988,19 +962,19 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         await asyncio.sleep(wait)
     _last_ai_call = time.monotonic()
 
-    # Estratégia: APENAS super-prompt de 500-700 chars
+    # Estratégia: super-prompt direto para resumo de ate 1000 chars
     resumo = await _gerar_resumo_super_prompt(texto_base, titulo_original, nome_site)
-    if resumo and 500 <= len(resumo) <= 700:
+    if resumo and 100 <= len(resumo) <= 1000:
         log.info(f"Resumo gerado (super-prompt): {len(resumo)} chars")
         nota_estimada = 80
         categoria_estimada = "Big Techs"
         return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo}
     
-    # Se falhar, continua com prompt completo
-    log.warning(f"Falha ao gerar resumo super-prompt, tentando análise completa...")
+    # Se falhar, usa prompt completo
+    log.warning(f"Super-prompt falhou, usando prompt completo...")
 
     prompt = """
-⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. ⚠️
+⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER NO MÁXIMO 1000 CARACTERES. ⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
@@ -1032,24 +1006,14 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 
 ═══ RESUMO (campo mais importante) ═══
-⚠️ REGRA ABSOLUTA: NÃO SE PREOCUPE COM LIMITES. ESCREVA O RESUMO MAIS LONGO E COMPLETO POSSÍVEL, COBRINDO TODO O CONTEÚDO DA NOTÍCIA. ⚠️
+⚠️ REGRA ABSOLUTA: O RESUMO DEVE TER NO MÁXIMO 1000 CARACTERES. SEJA DENSO MAS CONCISO. ⚠️
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- NÃO HÁ LIMITE DE FRASES. Use QUANTAS FRASES FOREM NECESSÁRIAS para cobrir CADA detalhe relevante da notícia.
-- Estrutura narrativa (use quantas frases precisar para cada seção):
-  CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes, contexto histórico, antecedentes).
-  FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas, declarações).
-  IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações de especialistas, análises).
-- Cada frase deve ter o máximo de palavras possível para ser densa, informativa e recheada de detalhes técnicos (40-80 palavras por frase).
-- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES, NOMES COMPLETOS) detalhado em CADA frase.
-- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece. SEJA EXAUSTIVO.
-- Use conectores naturais para ligar contexto, fato e impacto.
-- O resumo deve ser uma MATÉRIA COMPLETA em parágrafo único. NÃO CORTE INFORMAÇÕES.
-- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
-- Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
-- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes, NOMES DE PESSOAS.
+- MÁXIMO de 4-6 frases densas (máximo 1000 caracteres no total).
+- Estrutura: CONTEXTO + FATO + IMPACTO (tudo no limite de 1000 caracteres).
+- Inclua detalhes importantes: quem, o que, quando, como, impacto principal.
+- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula.
+- Gramática impecável em PT-BR. Texto denso e substantivo, sem excesso de adjetivos.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
-- Não use construções semânticas inválidas como "a empresa governo federal".
-- REGRA DE OURO: ESCREVA O MÁXIMO POSSÍVEL. O resumo deve ser massivo, denso e completo. Seja exaustivo na cobertura da notícia.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -1066,7 +1030,7 @@ Texto Base COMPLETO (use CADA detalhe desta notícia para escrever o resumo MASS
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER O MÁXIMO DE CARACTERES POSSÍVEL, IDEALMENTE PRÓXIMO DE 4000 CARACTERES. Seja exaustivo e massivo na escrita."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRA CRÍTICA: O CAMPO 'resumo' DEVE TER NO MÁXIMO 1000 CARACTERES. Seja denso e direto."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.9,
