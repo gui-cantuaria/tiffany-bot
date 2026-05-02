@@ -768,7 +768,7 @@ def _limitar_palavras(frase: str, max_palavras: int = 35) -> str:
 
 def _normalizar_resumo_final(texto: str) -> str:
     """
-    Garante resumo em exatamente 10 a 12 frases, com 25-35 palavras por frase.
+    Garante resumo em exatamente 20 a 25 frases, com 30-40 palavras por frase.
     Remove construções semânticas estranhas e garante fluxo contexto->fato->impacto.
     """
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
@@ -789,17 +789,23 @@ def _normalizar_resumo_final(texto: str) -> str:
         7: "Por conseguinte,",
         8: "Outrossim,",
         9: "Destarte,",
+        10: "Igualmente,",
+        11: "Simultaneamente,",
+        12: "Em contrapartida,",
+        13: "Posteriormente,",
+        14: "Ademais,",
+        15: "Consequentemente,",
     }
 
     frases = []
-    for idx, parte in enumerate(partes[:12]):
+    for idx, parte in enumerate(partes[:25]):
         frase = _corrigir_prefixos_estranhos(parte)
         frase = _fix_sentence_case(frase)
         # Deixa o fluxo mais humano entre contexto -> fato -> impacto.
         if idx in conectores:
-            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso|adicionalmente|dessa forma|por conseguinte|outrossim|destarte)\b", frase):
+            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso|adicionalmente|dessa forma|por conseguinte|outrossim|destarte|igualmente|simultaneamente|em contrapartida|posteriormente|ademais|consequentemente)\b", frase):
                 frase = f"{conectores[idx]} {frase}"
-        frase = _limitar_palavras(frase, max_palavras=35).strip()
+        frase = _limitar_palavras(frase, max_palavras=45).strip()
         if frase:
             frase = frase[0].upper() + frase[1:]
             frases.append(f"{frase}.")
@@ -854,21 +860,22 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 
 ═══ RESUMO (campo mais importante) ═══
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- EXATAMENTE 10 a 12 FRASES, cada uma terminando com ponto final.
+- EXATAMENTE 20 a 25 FRASES, cada uma terminando com ponto final.
 - Estrutura narrativa obrigatória:
-  Frase 1-3: CONTEXTO (quem, o que, quando, POR QUE — situe o leitor com MUITOS detalhes).
-  Frase 4-9: FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações).
-  Frase 10-12: IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões de longo prazo).
-- Cada frase deve ter entre 25 e 35 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
-- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas) detalhado em CADA frase.
-- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante que a notícia oferece.
+  Frase 1-5: CONTEXTO (quem, o que, quando, POR QUE, HISTÓRICO — situe o leitor com TODOS os detalhes).
+  Frase 6-18: FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações, citações diretas).
+  Frase 19-25: IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões imediatas e de longo prazo, reações).
+- Cada frase deve ter entre 35 e 45 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
+- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas, CITAÇÕES) detalhado em CADA frase.
+- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante e útil que a notícia oferece.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O parágrafo final deve ter entre 300 e 400 palavras no total, sendo massivamente denso e substancial.
+- O parágrafo final deve ter entre 700 e 1000 palavras no total, sendo massivamente denso e substancial.
 - FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
 - Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
-- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos mencionados.
+- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos, CITAÇÕES de fontes.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
+- IMPORTANTE: NÃO CORTE INFORMAÇÕES. O resumo deve ser extremamente longo e detalhado, quase uma matéria completa em parágrafo único.
 
 ═══ FILTROS ESPECIAIS POR CATEGORIA ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real (tela dobrável, nova bateria, IA integrada). Rejeitar intermediários e "refresh" sem novidade.
@@ -888,9 +895,9 @@ Texto Base: {texto_base[:2000]}
                     {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.5,
-                max_tokens=1500,
-                timeout=90.0,
+                temperature=0.6,
+                max_tokens=3000,
+                timeout=120.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
