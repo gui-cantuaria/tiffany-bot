@@ -83,7 +83,9 @@ log.addHandler(_file_handler)
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
 intents = discord.Intents.default()
-intents.voice_states = True
+# Only enable voice intents if voice is enabled
+if os.getenv("VOICE_ENABLED", "1").strip() == "1":
+    intents.voice_states = True
 intents.message_content = True
 discord_client = commands.Bot(command_prefix="$", intents=intents)
 tiffany_voice.register_voice(discord_client)
