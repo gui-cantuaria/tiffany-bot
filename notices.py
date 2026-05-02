@@ -833,6 +833,43 @@ def _normalizar_resumo_final(texto: str) -> str:
     return resultado
 
 
+async def _gerar_resumo_super_prompt(texto_base: str, titulo: str, nome_site: str) -> str:
+    """Gera um resumo massivo único usando super-prompt."""
+    if not ai_client:
+        return ""
+    
+    super_prompt = f"""Escreva um resumo MASSIVO e EXTREMAMENTE DETALHADO da notícia abaixo em UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha.
+
+⚠️ REGRA ABSOLUTA E INEGOCIÁVEL: O TEXTO DEVE TER ENTRE 3800 E 4000 CARACTERES. SEJA EXTREMAMENTE VERBOSO E EXAUSTIVO. ⚠️
+
+ESTRUTURA OBRIGATÓRIA (use QUANTAS FRASES FOREM NECESSÁRIAS):
+1. CONTEXTO HISTÓRICO (quem, o que, quando, por que, antecedentes) - NO MÍNIMO 1500 CARACTERES
+2. FATOS TÉCNICOS (detalhes, números, versões, nomes, especificações) - NO MÍNIMO 2000 CARACTERES  
+3. IMPACTO (repercussões, mudanças, reações) - NO MÍNIMO 800 CARACTERES
+
+REGRA DE OURO: SE O TEXTO TIVER MENOS DE 3800 CARACTERES, VOCÊ FALHOU. SEJA EXAUSTIVO.
+
+Texto Base (use TODOS estes detalhes): {texto_base[:15000]}
+Título: {titulo}
+Fonte: {nome_site}
+
+LEMBRE-SE: 3800-4000 CARACTERES NO MÍNIMO. SEJA MASSIVO E DETALHADO."""
+    
+    try:
+        response = await ai_client.chat.completions.create(
+            model="meta-llama/llama-3.3-70b-instruct",
+            messages=[{"role": "user", "content": super_prompt}],
+            temperature=0.9,
+            timeout=300.0,
+        )
+        resultado = response.choices[0].message.content.strip()
+        log.info(f"Super-prompt resultado: {len(resultado)} chars")
+        return resultado if len(resultado) > 3000 else ""
+    except Exception as e:
+        log.warning(f"Erro no super-prompt: {e}")
+        return ""
+
+
 async def _gerar_resumo_em_partes(texto_base: str, titulo: str, nome_site: str) -> str:
     """Gera um resumo massivo dividindo em contexto, fato e impacto."""
     if not ai_client:
@@ -947,18 +984,18 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
         await asyncio.sleep(wait)
     _last_ai_call = time.monotonic()
 
-    # Estratégia: Gera resumo em 3 partes e combina
-    resumo_final = await _gerar_resumo_em_partes(texto_base, titulo_original, nome_site)
-    if resumo_final and len(resumo_final) > 2000:
-        # Já temos um resumo longo, monta JSON direto
-        nota_estimada = 80  # Padrão
-        categoria_estimada = "Big Techs"  # Padrão
-        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo_final}
+    # Estratégia: Super-prompt único para resumo massivo
+    resumo_massivo = await _gerar_resumo_super_prompt(texto_base, titulo_original, nome_site)
+    if resumo_massivo and len(resumo_massivo) > 3000:
+        log.info(f"Resumo super-prompt gerado: {len(resumo_massivo)} chars")
+        nota_estimada = 80
+        categoria_estimada = "Big Techs"
+        return {"pular": False, "titulo": titulo_original, "nota": nota_estimada, "categoria": categoria_estimada, "resumo": resumo_massivo}
     
-    # Fallback para o método antigo se a divisão falhar
+    # Fallback
     prompt = f"""Você é um editor-chefe de tecnologia de um portal premium. Analise a notícia abaixo e retorne APENAS um JSON válido, sem texto fora do JSON.
 
-⚠️ REGRA: O CAMPO "resumo" DEVE TER NO MÍNIMO 3000 CARACTERES. Seja exaustivo. ⚠️
+⚠️ REGRA ABSOLUTA: O CAMPO "resumo" DEVE TER ENTRE 3800 E 4000 CARACTERES. ⚠️
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto da rejeição"}}
