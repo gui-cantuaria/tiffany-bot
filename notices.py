@@ -759,7 +759,7 @@ def _corrigir_prefixos_estranhos(frase: str) -> str:
     return s
 
 
-def _limitar_palavras(frase: str, max_palavras: int = 25) -> str:
+def _limitar_palavras(frase: str, max_palavras: int = 35) -> str:
     tokens = [t for t in (frase or "").split() if t]
     if len(tokens) <= max_palavras:
         return frase.strip()
@@ -768,7 +768,7 @@ def _limitar_palavras(frase: str, max_palavras: int = 25) -> str:
 
 def _normalizar_resumo_final(texto: str) -> str:
     """
-    Garante resumo em exatamente 5 frases, com 15-25 palavras por frase.
+    Garante resumo em exatamente 10 a 12 frases, com 25-35 palavras por frase.
     Remove construções semânticas estranhas e garante fluxo contexto->fato->impacto.
     """
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
@@ -784,17 +784,22 @@ def _normalizar_resumo_final(texto: str) -> str:
         2: "Na prática,",
         3: "Além disso,",
         4: "Com isso,",
+        5: "Adicionalmente,",
+        6: "Dessa forma,",
+        7: "Por conseguinte,",
+        8: "Outrossim,",
+        9: "Destarte,",
     }
 
     frases = []
-    for idx, parte in enumerate(partes[:5]):
+    for idx, parte in enumerate(partes[:12]):
         frase = _corrigir_prefixos_estranhos(parte)
         frase = _fix_sentence_case(frase)
         # Deixa o fluxo mais humano entre contexto -> fato -> impacto.
         if idx in conectores:
-            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso)\b", frase):
+            if not re.match(r"(?i)^(nesse cenário|na prática|além disso|com isso|adicionalmente|dessa forma|por conseguinte|outrossim|destarte)\b", frase):
                 frase = f"{conectores[idx]} {frase}"
-        frase = _limitar_palavras(frase, max_palavras=25).strip()
+        frase = _limitar_palavras(frase, max_palavras=35).strip()
         if frase:
             frase = frase[0].upper() + frase[1:]
             frases.append(f"{frase}.")
@@ -849,19 +854,19 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 
 ═══ RESUMO (campo mais importante) ═══
 - UM ÚNICO PARÁGRAFO contínuo, sem quebras de linha, sem bullet points, sem listas.
-- EXATAMENTE 5 FRASES, cada uma terminando com ponto final.
+- EXATAMENTE 10 a 12 FRASES, cada uma terminando com ponto final.
 - Estrutura narrativa obrigatória:
-  Frase 1-2: CONTEXTO (quem, o que, quando — situe o leitor).
-  Frase 3-4: FATO (o que aconteceu de concreto, com detalhes técnicos relevantes).
-  Frase 5: IMPACTO (por que isso importa, o que muda para o usuário/mercado).
-- Cada frase deve ter entre 20 e 25 palavras, sendo densa, informativa e com detalhes técnicos.
-- Inclua contexto concreto (ator, ação, tempo e consequência) detalhado em cada frase.
-- Escreva de forma objetiva e direta, sem enrolação, mas com detalhes técnicos essenciais.
+  Frase 1-3: CONTEXTO (quem, o que, quando, POR QUE — situe o leitor com MUITOS detalhes).
+  Frase 4-9: FATO (o que aconteceu de concreto, com TODOS os detalhes técnicos, nomes, versões, números, especificações).
+  Frase 10-12: IMPACTO (por que isso importa, o que muda para o usuário/mercado, repercussões de longo prazo).
+- Cada frase deve ter entre 25 e 35 palavras, sendo EXTREMAMENTE densa, informativa e recheada de detalhes técnicos.
+- Inclua contexto concreto (ator, ação, tempo, versões, números, especificações, porcentagens, datas) detalhado em CADA frase.
+- Escreva de forma objetiva e direta, mas com ABSOLUTAMENTE TODO o conteúdo relevante que a notícia oferece.
 - Use conectores naturais para ligar contexto, fato e impacto.
-- O parágrafo final deve ter entre 110 e 125 palavras no total, denso e substancial.
-- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case (ex: ERRADO: "A Empresa Divulgou Um Incidente"; CORRETO: "A empresa divulgou um incidente").
-- Gramática impecável em PT-BR. O texto deve ser denso e substancial — nunca genérico ou superficial.
-- NÃO USE frases curtas ou vagas. Seja específico com nomes, números, tecnologias e impactos reais.
+- O parágrafo final deve ter entre 300 e 400 palavras no total, sendo massivamente denso e substancial.
+- FORMATAÇÃO OBRIGATÓRIA: use português padrão — APENAS a primeira palavra de cada frase começa com maiúscula. NUNCA use Title Case.
+- Gramática impecável em PT-BR. O texto deve ser EXTREMAMENTE denso e substancial — nunca genérico ou superficial.
+- NÃO POUPE DETALHES: inclua TODOS os nomes de tecnologias, versões, números, porcentagens, datas, nomes de empresas/produtos mencionados.
 - Mantenha nomes próprios corretos: Xbox, Windows, PlayStation, iPhone, etc.
 - Não use construções semânticas inválidas como "a empresa governo federal".
 
@@ -883,9 +888,9 @@ Texto Base: {texto_base[:2000]}
                     {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.4,
-                max_tokens=800,
-                timeout=60.0,
+                temperature=0.5,
+                max_tokens=1500,
+                timeout=90.0,
             )
             resp = response.choices[0].message.content.strip()
             match = re.search(r"\{.*\}", resp, re.DOTALL)
