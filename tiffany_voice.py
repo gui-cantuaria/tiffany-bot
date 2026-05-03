@@ -852,13 +852,13 @@ def register_voice(bot: commands.Bot) -> None:
         voz = "✅ ativa" if _voice_enabled() else "❌ desativada (VOICE_ENABLED=0)"
         help_text = (
             "**Comandos da Tiffany:**\n"
-            "`$c` — Faz uma pergunta para a IA responder no chat *(chat)*\n"
-            "`$e` — Entra no seu canal de voz *(enter)*\n"
-            "`$l` — Sai do canal de voz *(leave)*\n"
-            "`$p` — Toca uma música por nome ou URL *(play)*\n"
-            "`$s` — Pula a faixa que está tocando *(skip)*\n"
-            "`$r` — Toca uma música aleatória *(random)*\n"
-            "`$h` — Mostra esta lista de comandos *(help)*"
+            "`t$c` — Faz uma pergunta para a IA responder no chat *(chat)*\n"
+            "`t$e` — Entra no seu canal de voz *(enter)*\n"
+            "`t$l` — Sai do canal de voz *(leave)*\n"
+            "`t$p` — Toca uma música por nome ou URL *(play)*\n"
+            "`t$s` — Pula a faixa que está tocando *(skip)*\n"
+            "`t$r` — Toca uma música aleatória *(random)*\n"
+            "`t$h` — Mostra esta lista de comandos *(help)*"
         )
         await ctx.send(help_text)
 
@@ -867,11 +867,10 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         if not question:
-            await ctx.send("💬 Use: `$c <sua pergunta>`")
-            return
+        await ctx.send("💬 Use: `t$c <sua pergunta>`")
+        return
 
-        await ctx.send("💭 Processando pergunta...")
-        answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
-        await ctx.send(f"💬 **Resposta:** {answer}")
+    answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
+    await ctx.send(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
