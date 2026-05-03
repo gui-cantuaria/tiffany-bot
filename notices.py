@@ -95,7 +95,7 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
-discord_client = commands.Bot(command_prefix="$", intents=intents)
+discord_client = commands.Bot(command_prefix="!", intents=intents)
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)
 ai_client = (
