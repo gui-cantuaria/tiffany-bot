@@ -609,7 +609,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             resp = await client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
-                messages=[{"role": "user", "content": f"Responda de forma direta e objetiva em português (máximo 2 frases): {question}"}],
+                messages=[{"role": "system", "content": "Responda em português do Brasil com formatação correta: capitalize nomes próprios, siglas (ChatGPT, OpenAI, API, GPU), marcas e início de frases. Use tom conversacional e direto. Máximo 2 frases."}, {"role": "user", "content": question}],
                 max_tokens=150,
                 temperature=0.3,
                 timeout=30.0,
