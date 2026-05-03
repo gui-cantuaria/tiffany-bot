@@ -907,7 +907,7 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 
 ═══ FILTROS ESPECIAIS ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real.
-GAMES: Aceitar APENAS grandes lançamentos AAA, grandes eventos (TGA, E3, Direct), aquisições ou demissões em massa.
+GAMES: Aceitar APENAS grandes lançamentos AAA confirmados, grandes eventos (TGA, E3, Nintendo Direct), aquisições ou demissões em massa. Rejeitar: vazamentos de código-fonte de jogos antigos, mods, hacks de console, cheats, patches de balanceamento, temporadas de battle pass.
 CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-day. Nota ≥85.
 
 Fonte: {nome_site}
@@ -1083,12 +1083,24 @@ async def verificar_feeds():
             if not img:
                 log.warning(f"  ✗ Item da fila sem imagem, descartando: {item.get('titulo', '?')[:60]}")
                 continue
+            # Dedup: verificar se título já foi postado
+            titulo_item = item.get("titulo", "")
+            if titulo_item and title_is_dup(history, titulo_item):
+                log.info(f"  ✗ Fila: título duplicado, descartando: {titulo_item[:60]}")
+                continue
+            # Dedup: verificar simhash do conteúdo
+            sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
+            if simhash_is_dup(history, sh_item):
+                log.info(f"  ✗ Fila: simhash duplicado, descartando: {titulo_item[:60]}")
+                continue
             # Revalidar imagem da fila (URLs podem ter morrido)
             if not await validar_imagem(img):
                 log.warning(f"  ✗ Imagem inválida na fila, descartando: {item.get('titulo', '?')[:60]}")
                 continue
             if await _postar_noticia(channel, item, history, metrics):
                 posts_feitos += 1
+                title_add(history, titulo_item)
+                simhash_add(history, sh_item)
                 if posts_feitos < MAX_POSTS_POR_CICLO:
                     await asyncio.sleep(POST_SPACING_SEC)
             else:
