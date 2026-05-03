@@ -819,16 +819,16 @@ def _normalizar_resumo_final(texto: str) -> str:
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
     if not bruto:
         return ""
-    
+
     # Garante que termina com pontuação
     if not bruto[-1] in ".!?":
         bruto += "."
-    
-    # Limita a 500 caracteres, cortando graciosamente no último ponto
-    if len(bruto) > 500:
-        corte = bruto[:500]
+
+    # Limita a 1000 caracteres, cortando graciosamente no último ponto
+    if len(bruto) > 1000:
+        corte = bruto[:1000]
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
-        if ultimo_ponto > 200:
+        if ultimo_ponto > 400:
             bruto = corte[:ultimo_ponto + 1]
         else:
             bruto = corte.rstrip() + "..."
@@ -898,11 +898,12 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Máximo 90 caracteres.
 
 ═══ RESUMO ═══
-⚠️ LIMITE ABSOLUTO: MÁXIMO 500 CARACTERES. NÃO ULTRAPASSE. ⚠️
-- Um único parágrafo, 2-3 frases densas e diretas.
-- Estrutura: FATO PRINCIPAL + IMPACTO.
-- Sem bullet points, sem quebras de linha.
-- Em PT-BR com gramática impecável.
+- Um único parágrafo contínuo, 4 a 6 frases. Sem bullet points, sem quebras de linha.
+- Estilo Filipe Deschamps: engajante, contextualizado, explica o fato, o porquê e o impacto real.
+- Estrutura: CONTEXTO/GANCHO → FATO PRINCIPAL → DETALHE RELEVANTE → IMPACTO ou REAÇÃO.
+- Linguagem jornalística mas acessível: não seco, não acadêmico. Faz o leitor entender por que isso importa.
+- Traduza termos técnicos quando necessário. Em PT-BR com gramática impecável.
+- LIMITE: entre 600 e 1000 caracteres. Não ultrapasse 1000.
 
 ═══ FILTROS ESPECIAIS ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real.
@@ -919,7 +920,7 @@ Texto da Notícia: {texto_base[:8000]}
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O campo 'resumo' deve ter NO MÁXIMO 500 caracteres."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O campo 'resumo' deve ter entre 600 e 1000 caracteres: parágrafo único, 4-6 frases, estilo jornalístico engajante."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
