@@ -1391,6 +1391,14 @@ async def on_close():
     log.info("🔌 Sessão HTTP fechada. Bot desligando.")
 
 # =========================
+# DIAGNÓSTICO: !ping
+# =========================
+@discord_client.command(name="ping")
+async def cmd_ping(ctx):
+    voz = "✅ carregado" if _voice_available else "❌ falhou ao carregar"
+    await ctx.send(f"🏓 pong! | módulo de voz: {voz}")
+
+# =========================
 # SLASH COMMAND: /status
 # =========================
 @discord_client.tree.command(name="status", description="Exibe o status atual do bot Tiffany")
