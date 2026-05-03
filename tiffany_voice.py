@@ -870,7 +870,8 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("💬 Use: `t$c <sua pergunta>`")
             return
 
-        answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
+        async with ctx.typing():
+            answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
         await ctx.send(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
