@@ -862,15 +862,15 @@ def register_voice(bot: commands.Bot) -> None:
         )
         await ctx.send(help_text)
 
-    @bot.command(name="c", help="Pergunta via chat: $c <pergunta>")
+    @bot.command(name="c", help="Pergunta via chat: t$c <pergunta>")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
             return
         if not question:
-        await ctx.send("💬 Use: `t$c <sua pergunta>`")
-        return
+            await ctx.send("💬 Use: `t$c <sua pergunta>`")
+            return
 
-    answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
-    await ctx.send(f"💬 **Resposta:** {answer}")
+        answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
+        await ctx.send(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
