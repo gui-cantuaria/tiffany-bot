@@ -847,6 +847,22 @@ def register_voice(bot: commands.Bot) -> None:
         await sess.music_queue.put(url)
         await ctx.send("🎲 Música aleatória na fila!")
 
+    @bot.command(name="p", help="Toca uma música: !p <nome ou URL>")
+    async def cmd_play(ctx: commands.Context, *, query: str = ""):
+        if not _voice_enabled():
+            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            return
+        if not query:
+            await ctx.send("🎵 Use: `!p <nome da música ou URL>`")
+            return
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        if not re.match(r"^https?://", query):
+            query = f"ytsearch1:{query}"
+        await sess.music_queue.put(query)
+        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
+
     @bot.command(name="h", help="Lista comandos da Tiffany: !h (help)")
     async def cmd_help(ctx: commands.Context):
         voz = "✅ ativa" if _voice_enabled() else "❌ desativada (VOICE_ENABLED=0)"
@@ -854,6 +870,7 @@ def register_voice(bot: commands.Bot) -> None:
             "**🎙️ Comandos da Tiffany:**\n"
             "`!e` - Entra (enter) no seu canal de voz\n"
             "`!l` - Sai (leave) do canal de voz\n"
+            "`!p <música>` - Toca uma música (nome ou URL)\n"
             "`!s` - Pula (skip) a faixa atual\n"
             "`!r` - Música aleatória (random)\n"
             "`!c <pergunta>` - Pergunta via chat (IA)\n"
