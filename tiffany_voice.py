@@ -849,38 +849,30 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="h", help="Lista comandos da Tiffany: !h (help)")
     async def cmd_help(ctx: commands.Context):
-        if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
-            return
+        voz = "✅ ativa" if _voice_enabled() else "❌ desativada (VOICE_ENABLED=0)"
         help_text = (
             "**🎙️ Comandos da Tiffany:**\n"
             "`!e` - Entra (enter) no seu canal de voz\n"
             "`!l` - Sai (leave) do canal de voz\n"
             "`!s` - Pula (skip) a faixa atual\n"
             "`!r` - Música aleatória (random)\n"
-            "`!c <pergunta>` - Pergunta via chat\n"
+            "`!c <pergunta>` - Pergunta via chat (IA)\n"
             "`!h` - Este help\n\n"
-            "**Por voz:** diga «Tiffany, toca <música>» ou «Tiffany, <pergunta>»"
+            "**Por voz:** diga «Tiffany, toca <música>» ou «Tiffany, <pergunta>»\n"
+            f"**Voz:** {voz}"
         )
         await ctx.send(help_text)
 
     @bot.command(name="c", help="Pergunta via chat: !c <pergunta>")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
-        if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
-            return
         if not ctx.guild:
             return
         if not question:
             await ctx.send("💬 Use: `!c <sua pergunta>`")
             return
-        
-        sess, vc = await _ensure_connected(ctx)
-        if not sess:
-            return
-        
+
         await ctx.send("💭 Processando pergunta...")
-        answer = await _answer_question(question, ctx.guild.id, sess, vc)
+        answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
         await ctx.send(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: !e, !l, !s, !r, !c, !h")
