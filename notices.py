@@ -22,7 +22,9 @@ from openai import AsyncOpenAI
 try:
     import tiffany_voice
     _voice_available = True
-except Exception:
+except Exception as _ve:
+    import logging as _log_tmp
+    _log_tmp.getLogger("tiffany-bot").warning("tiffany_voice não carregou (%s) — comandos de voz desativados.", _ve)
     tiffany_voice = None
     _voice_available = False
 

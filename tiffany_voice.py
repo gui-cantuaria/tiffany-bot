@@ -20,9 +20,26 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import discord
-import yt_dlp
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
-from discord.ext import commands, voice_recv
+from discord.ext import commands
+
+try:
+    from discord.ext import voice_recv as voice_recv
+    _VOICE_RECV_AVAILABLE = True
+except Exception as _e:
+    voice_recv = None  # type: ignore
+    _VOICE_RECV_AVAILABLE = False
+    import logging as _log_tmp
+    _log_tmp.getLogger("tiffany-bot.voice").warning(
+        "discord-ext-voice-recv não disponível (%s) — escuta de voz desativada, demais comandos funcionam normalmente.", _e
+    )
+
+try:
+    import yt_dlp as yt_dlp
+    _YTDLP_AVAILABLE = True
+except Exception:
+    yt_dlp = None  # type: ignore
+    _YTDLP_AVAILABLE = False
 
 log = logging.getLogger("tiffany-bot.voice")
 
@@ -131,7 +148,7 @@ class _GuildVoiceSession:
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
-_ytdl = yt_dlp.YoutubeDL(YDL_OPTS)
+_ytdl = yt_dlp.YoutubeDL(YDL_OPTS) if _YTDLP_AVAILABLE else None
 
 
 def _normalize_transcript(t: str) -> str:
@@ -272,6 +289,8 @@ def _extract_audio(info: dict[str, Any]) -> tuple[Optional[str], str]:
 
 
 def _blocking_ytdl_extract(query: str) -> tuple[Optional[str], str]:
+    if not _ytdl:
+        return None, "yt-dlp não disponível"
     try:
         info = _ytdl.extract_info(query, download=False)
     except Exception as e:
@@ -280,7 +299,9 @@ def _blocking_ytdl_extract(query: str) -> tuple[Optional[str], str]:
     return _extract_audio(info)
 
 
-class _PCMBufferSink(voice_recv.AudioSink):
+_AudioSinkBase = voice_recv.AudioSink if _VOICE_RECV_AVAILABLE else object
+
+class _PCMBufferSink(_AudioSinkBase):
     def __init__(self, session: _GuildVoiceSession):
         super().__init__()
         self._session = session
@@ -550,25 +571,30 @@ async def _voice_listen_loop(
 async def _join_voice_recv_client(
     guild: discord.Guild,
     channel: discord.VoiceChannel,
-) -> voice_recv.VoiceRecvClient:
+):
     vc_existing = guild.voice_client
-    if (
-        vc_existing
-        and vc_existing.is_connected()
-        and isinstance(vc_existing, voice_recv.VoiceRecvClient)
-    ):
-        try:
-            vc_existing.stop_listening()
-        except Exception:
-            pass
-        await vc_existing.move_to(channel)
-        return vc_existing
-    if vc_existing and vc_existing.is_connected():
-        await vc_existing.disconnect(force=True)
-    return await channel.connect(
-        cls=voice_recv.VoiceRecvClient,
-        self_deaf=False,
-    )
+    if _VOICE_RECV_AVAILABLE:
+        if (
+            vc_existing
+            and vc_existing.is_connected()
+            and isinstance(vc_existing, voice_recv.VoiceRecvClient)
+        ):
+            try:
+                vc_existing.stop_listening()
+            except Exception:
+                pass
+            await vc_existing.move_to(channel)
+            return vc_existing
+        if vc_existing and vc_existing.is_connected():
+            await vc_existing.disconnect(force=True)
+        return await channel.connect(cls=voice_recv.VoiceRecvClient, self_deaf=False)
+    else:
+        if vc_existing and vc_existing.is_connected():
+            await vc_existing.move_to(channel)
+            return vc_existing
+        if vc_existing and vc_existing.is_connected():
+            await vc_existing.disconnect(force=True)
+        return await channel.connect(self_deaf=False)
 
 
 def register_voice(bot: commands.Bot) -> None:
@@ -660,7 +686,8 @@ def register_voice(bot: commands.Bot) -> None:
         # Se já está conectado
         sess = _sessions.get(gid)
         vc = guild.voice_client
-        if sess and vc and vc.is_connected() and isinstance(vc, voice_recv.VoiceRecvClient):
+        _VRC = voice_recv.VoiceRecvClient if _VOICE_RECV_AVAILABLE else discord.VoiceClient
+        if sess and vc and vc.is_connected() and isinstance(vc, _VRC):
             if specific_channel and vc.channel.id != specific_channel.id:
                 try:
                     await vc.move_to(specific_channel)
@@ -717,15 +744,19 @@ def register_voice(bot: commands.Bot) -> None:
 
         # Criar sessão
         session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
-        sink = _PCMBufferSink(session)
-        try:
-            vc.listen(sink)
-            session.listen_task = asyncio.create_task(
-                _voice_listen_loop(gid, vc, bot),
-                name=f"tiffany-voice-{gid}",
-            )
-        except Exception as e:
-            log.warning("Falha ao iniciar escuta: %s", e)
+        if _VOICE_RECV_AVAILABLE:
+            sink = _PCMBufferSink(session)
+            try:
+                vc.listen(sink)
+                session.listen_task = asyncio.create_task(
+                    _voice_listen_loop(gid, vc, bot),
+                    name=f"tiffany-voice-{gid}",
+                )
+            except Exception as e:
+                log.warning("Falha ao iniciar escuta: %s", e)
+                session.listen_task = None
+        else:
+            log.warning("voice_recv não disponível — escuta de voz desativada.")
             session.listen_task = None
 
         session.music_task = asyncio.create_task(
