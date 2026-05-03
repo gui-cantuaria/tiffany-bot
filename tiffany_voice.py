@@ -598,9 +598,6 @@ async def _join_voice_recv_client(
 
 
 def register_voice(bot: commands.Bot) -> None:
-    # Skip all voice setup if disabled
-    if not _voice_enabled():
-        return
 
     _RANDOM_SONGS = [
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
