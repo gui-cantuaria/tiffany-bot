@@ -424,7 +424,7 @@ async def _voice_listen_loop(
     session = _sessions.get(guild_id)
     if not session:
         return
-    await _notify(bot, session.text_channel_id, "🎙️ **Tiffany está ouvindo o canal de voz...** (diga «Tiffany, toca ...»)")
+    await _notify(bot, session.text_channel_id, "🎙️ Tiffany entrou na call.")
     _last_heard_notify = 0.0
     _last_audio_time = asyncio.get_event_loop().time()
     _warned_no_audio = False
@@ -462,18 +462,10 @@ async def _voice_listen_loop(
                     return
             else:
                 # Tem gente no canal, resetar timer
-                if _empty_since is not None:
-                    await _notify(bot, session.text_channel_id, "✅ Pessoas voltaram ao canal.")
                 _empty_since = None
 
             # Diagnóstico: se passou 60s sem receber nenhum audio, avisa
             if not _warned_no_audio and (asyncio.get_event_loop().time() - _last_audio_time) > 60:
-                await _notify(
-                    bot,
-                    session.text_channel_id,
-                    "⚠️ Não recebi nenhum audio após 60s. Seu host pode estar bloqueando UDP (comum na Discloud). "
-                    "Comandos por fala podem não funcionar — use comandos de texto ou um VPS.",
-                )
                 _warned_no_audio = True
 
             pcm = _drain_loudest_user_pcm(session)
@@ -483,19 +475,11 @@ async def _voice_listen_loop(
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
-                agora = asyncio.get_event_loop().time()
-                if agora - _last_heard_notify > 60:
-                    await _notify(bot, session.text_channel_id, "🎙️ Ouvido, mas não entendi. Tente: **«Tiffany, toca <musica>»**")
-                    _last_heard_notify = agora
                 continue
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
-            
+
             if action == "none":
-                agora = asyncio.get_event_loop().time()
-                if agora - _last_heard_notify > 30:
-                    await _notify(bot, session.text_channel_id, f"🎙️ Entendi: «{text[:60]}», mas não é um comando. Diga: **«Tiffany, toca ...»** ou **«Tiffany, <pergunta>»**")
-                    _last_heard_notify = agora
                 continue
             
             if action == "stop" or action == "skip":
@@ -867,16 +851,14 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_help(ctx: commands.Context):
         voz = "✅ ativa" if _voice_enabled() else "❌ desativada (VOICE_ENABLED=0)"
         help_text = (
-            "**🎙️ Comandos da Tiffany:**\n"
-            "`!e` - Entra (enter) no seu canal de voz\n"
-            "`!l` - Sai (leave) do canal de voz\n"
-            "`!p <música>` - Toca uma música (nome ou URL)\n"
-            "`!s` - Pula (skip) a faixa atual\n"
-            "`!r` - Música aleatória (random)\n"
-            "`!c <pergunta>` - Pergunta via chat (IA)\n"
-            "`!h` - Este help\n\n"
-            "**Por voz:** diga «Tiffany, toca <música>» ou «Tiffany, <pergunta>»\n"
-            f"**Voz:** {voz}"
+            "**Comandos da Tiffany:**\n"
+            "`!e` — Entra no seu canal de voz *(enter)*\n"
+            "`!l` — Sai do canal de voz *(leave)*\n"
+            "`!p <música>` — Toca uma música por nome ou URL *(play)*\n"
+            "`!s` — Pula a faixa que está tocando *(skip)*\n"
+            "`!r` — Toca uma música aleatória *(random)*\n"
+            "`!c <pergunta>` — Faz uma pergunta para a IA responder no chat *(chat)*\n"
+            "`!h` — Mostra esta lista de comandos *(help)*"
         )
         await ctx.send(help_text)
 
