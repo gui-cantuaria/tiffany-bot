@@ -837,7 +837,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
         if not query:
-            await ctx.send("🎵 Use: `!p <nome da música ou URL>`")
+            await ctx.send("🎵 Use: `$p <nome da música ou URL>`")
             return
         sess, vc = await _ensure_connected(ctx)
         if not sess:
