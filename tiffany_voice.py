@@ -633,7 +633,7 @@ def register_voice(bot: commands.Bot) -> None:
             answer = resp.choices[0].message.content.strip()
             
             # TTS se habilitado
-            if session.tts_enabled and vc and vc.is_connected():
+            if session and session.tts_enabled and vc and vc.is_connected():
                 tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
                 if tts_bytes:
                     pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
