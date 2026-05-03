@@ -617,18 +617,18 @@ def register_voice(bot: commands.Bot) -> None:
             api_key = os.getenv("OPENROUTER_API_KEY")
             if not api_key:
                 return "Desculpe, chave da API não configurada."
-            
-            client = openai.OpenAI(
+
+            client = openai.AsyncOpenAI(
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
             )
-            
-            # Prompt direto e objetivo para economizar tokens
-            resp = client.chat.completions.create(
+
+            resp = await client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": f"Responda de forma direta e objetiva em português (máximo 2 frases): {question}"}],
-                max_tokens=100,
+                max_tokens=150,
                 temperature=0.3,
+                timeout=30.0,
             )
             answer = resp.choices[0].message.content.strip()
             
