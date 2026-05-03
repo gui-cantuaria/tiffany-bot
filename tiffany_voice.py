@@ -312,12 +312,21 @@ class _PCMBufferSink(_AudioSinkBase):
     def write(self, user: discord.Member | discord.User | None, data: Any) -> None:
         if user is None or getattr(user, "bot", False):
             return
-        pcm = data.pcm
-        if not pcm:
-            return
-        uid = user.id
-        with self._session.buf_lock:
-            self._session.pcm_buffers.setdefault(uid, bytearray()).extend(pcm)
+        try:
+            log.info("🎤 Sink.write chamado por %s", user.name)
+            pcm = data.pcm
+            if not pcm:
+                return
+            
+            # Nova biblioteca pode enviar lista de bytes; converte para bytes único
+            if isinstance(pcm, list):
+                pcm = b"".join(pcm)
+            
+            uid = user.id
+            with self._session.buf_lock:
+                self._session.pcm_buffers.setdefault(uid, bytearray()).extend(pcm)
+        except Exception as e:
+            log.error("Erro ao processar áudio do usuário %s: %s", user.name if user else "?", e)
 
     def cleanup(self) -> None:
         pass
@@ -473,8 +482,10 @@ async def _voice_listen_loop(
                 continue
             _last_audio_time = asyncio.get_event_loop().time()
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
+            log.info("Enviando %d bytes de áudio para STT...", len(wav))
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
+                log.warning("STT não reconheceu áudio (pode ser ruído ou sotaque)")
                 continue
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
