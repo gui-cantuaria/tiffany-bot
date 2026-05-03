@@ -8,7 +8,6 @@ Requer FFmpeg no PATH e PyNaCl.
 from __future__ import annotations
 
 import asyncio
-import audioop
 import importlib
 import io
 import logging
@@ -26,6 +25,22 @@ from discord import FFmpegPCMAudio, PCMVolumeTransformer
 from discord.ext import commands, voice_recv
 
 log = logging.getLogger("tiffany-bot.voice")
+
+# audioop foi removido no Python 3.13 — usa fallback puro se necessário
+try:
+    import audioop as _audioop
+    def _tomono(data: bytes) -> bytes:
+        return _audioop.tomono(data, 2, 0.5, 0.5)
+except ImportError:
+    import struct as _struct
+    def _tomono(data: bytes) -> bytes:
+        count = len(data) // 4  # 2 bytes * 2 canais
+        out = bytearray(count * 2)
+        for i in range(count):
+            l, r = _struct.unpack_from("<hh", data, i * 4)
+            mono = max(-32768, min(32767, int(l * 0.5 + r * 0.5)))
+            _struct.pack_into("<h", out, i * 2, mono)
+        return bytes(out)
 
 # TTS via OpenRouter ou gTTS
 _TTS_ENABLED = os.getenv("TTS_ENABLED", "1").strip() == "1"
@@ -171,7 +186,7 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
 
 
 def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
-    mono = audioop.tomono(pcm_stereo, 2, 0.5, 0.5)
+    mono = _tomono(pcm_stereo)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)

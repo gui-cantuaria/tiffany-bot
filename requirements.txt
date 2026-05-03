@@ -7,3 +7,4 @@ openai
 yt-dlp
 imageio-ffmpeg
 SpeechRecognition
+gTTS
