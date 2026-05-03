@@ -687,15 +687,6 @@ def register_voice(bot: commands.Bot) -> None:
                 return None, None
             channel = user_vc.channel
 
-        # Verificar múltiplos canais
-        voice_channels = [ch for ch in guild.voice_channels if ch.members]
-        if len(voice_channels) > 1 and not specific_channel:
-            # Listar canais com pessoas
-            channels_list = "\n".join([f"• {ch.name} ({len(ch.members)} pessoas)" for ch in voice_channels])
-            await ctx.send(f"🎙️ **Múltiplos canais de voz detectados:**\n{channels_list}\n\nUse `t$e #canal` para entrar em um específico.")
-            # Entra no canal do autor por padrão
-            channel = user_vc.channel
-
         # Verificar permissoes
         bot_member = guild.me
         if bot_member:
