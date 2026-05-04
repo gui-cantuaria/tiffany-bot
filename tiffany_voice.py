@@ -119,13 +119,16 @@ YDL_OPTS: dict[str, Any] = {
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "auto",
+    "default_search": "ytsearch1",
     "ignoreerrors": False,
     "extractor_args": {
         "youtube": {
-            "player_client": ["tv", "web", "android"],
-            "player_skip": ["webpage"],
+            "player_client": ["web_embed", "web"],
         },
+    },
+    "geo_bypass": True,
+    "http_headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     },
 }
 
