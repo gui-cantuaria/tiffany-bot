@@ -123,12 +123,14 @@ YDL_OPTS: dict[str, Any] = {
     "ignoreerrors": False,
     "extractor_args": {
         "youtube": {
-            "player_client": ["web_embed", "web"],
+            "player_client": ["tv_embedded", "web_embed", "tv", "web"],
+            "player_skip": ["webpage"],
         },
     },
     "geo_bypass": True,
     "http_headers": {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
     },
 }
 
