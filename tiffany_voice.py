@@ -479,6 +479,8 @@ async def _voice_listen_loop(
 
             pcm = _drain_loudest_user_pcm(session)
             if len(pcm) < MIN_PCM_BYTES:
+                if len(pcm) > 0:
+                    log.info("🎤 Áudio recebido (%d bytes), mas abaixo do mínimo (%d bytes) para STT. Fale por mais tempo.", len(pcm), MIN_PCM_BYTES)
                 continue
             _last_audio_time = asyncio.get_event_loop().time()
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
