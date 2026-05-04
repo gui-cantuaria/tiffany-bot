@@ -123,7 +123,7 @@ YDL_OPTS: dict[str, Any] = {
     "ignoreerrors": False,
     "extractor_args": {
         "youtube": {
-            "player_client": ["android_vr", "android", "tv_embedded", "web"],
+            "player_client": ["ios", "android_vr", "android", "tv_embedded", "web"],
             "player_skip": ["webpage"],
         },
     },
