@@ -134,6 +134,12 @@ YDL_OPTS: dict[str, Any] = {
     },
 }
 
+# Suporte a cookies do YouTube (para contornar bloqueio de IP em VPS)
+_cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+if os.path.isfile(_cookies_path):
+    YDL_OPTS["cookiefile"] = _cookies_path
+    log.info("yt-dlp usando cookies de: %s", _cookies_path)
+
 FFMPEG_OPTS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-vn",
@@ -303,9 +309,11 @@ def _blocking_ytdl_extract(query: str) -> tuple[Optional[str], str]:
     if not _ytdl:
         return None, "yt-dlp não disponível"
     try:
+        log.info("yt-dlp tentando extrair: %s", query)
         info = _ytdl.extract_info(query, download=False)
+        log.info("yt-dlp extraiu com sucesso: %s", info.get("title", "?"))
     except Exception as e:
-        log.exception("yt-dlp falhou: %s", e)
+        log.error("yt-dlp falhou em %s: %s", query, e)
         return None, str(e)
     return _extract_audio(info)
 
