@@ -121,6 +121,12 @@ YDL_OPTS: dict[str, Any] = {
     "no_warnings": True,
     "default_search": "auto",
     "ignoreerrors": False,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv", "web", "android"],
+            "player_skip": ["webpage"],
+        },
+    },
 }
 
 FFMPEG_OPTS = {
