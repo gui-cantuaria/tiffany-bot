@@ -1241,8 +1241,30 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.question_task.cancel()
         _clear_voice_state(gid)  # saida limpa — nao reconectar no proximo restart
         vc = ctx.guild.voice_client
+        saiu = False
+
         if vc and vc.is_connected():
             await vc.disconnect(force=True)
+            saiu = True
+        elif vc:
+            # Voice client existe mas is_connected() = False (estado zumbi)
+            try:
+                await vc.disconnect(force=True)
+            except Exception:
+                pass
+            saiu = True
+
+        # Fallback: verifica pelo estado real do membro no Discord
+        if not saiu:
+            me = ctx.guild.me
+            if me and me.voice and me.voice.channel:
+                try:
+                    await me.move_to(None)
+                except Exception:
+                    pass
+                saiu = True
+
+        if saiu or sess:
             await ctx.send("👋 **Tiffany saiu** do canal de voz.")
         else:
             await ctx.send("⚠️ Não estou em nenhum canal de voz.")
