@@ -775,8 +775,8 @@ def register_voice(bot: commands.Bot) -> None:
         "scsearch1:Queen Bohemian Rhapsody",
     ]
 
-    async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc) -> str:
-        """Responde pergunta usando IA e opcionalmente TTS."""
+    async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None) -> str:
+        """Responde pergunta usando IA. Se image_urls fornecido, usa modelo com visão."""
         try:
             import openai
             api_key = os.getenv("OPENROUTER_API_KEY")
@@ -801,9 +801,20 @@ def register_voice(bot: commands.Bot) -> None:
                 ),
             }
             history_msgs = _get_context_messages(guild_id) if guild_id else []
+
+            # Monta o conteúdo da mensagem do usuário (texto + imagens opcionais)
+            if image_urls:
+                user_content: list = [{"type": "text", "text": question or "O que está nessa imagem?"}]
+                for url in image_urls[:4]:  # máximo 4 imagens por mensagem
+                    user_content.append({"type": "image_url", "image_url": {"url": url}})
+                model = "meta-llama/llama-4-maverick"
+            else:
+                user_content = question
+                model = "meta-llama/llama-3.3-70b-instruct"
+
             resp = await client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct",
-                messages=[system_msg, *history_msgs, {"role": "user", "content": question}],
+                model=model,
+                messages=[system_msg, *history_msgs, {"role": "user", "content": user_content}],
                 max_tokens=600,
                 temperature=0.3,
                 timeout=30.0,
@@ -1126,16 +1137,26 @@ def register_voice(bot: commands.Bot) -> None:
         )
         await ctx.send(help_text)
 
-    @bot.command(name="c", help="Pergunta via chat: t$c <pergunta>")
+    @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
             return
-        if not question:
-            await ctx.send("💬 Use: `t$c <sua pergunta>`")
+
+        # Coleta URLs de imagens anexadas à mensagem
+        image_urls = [
+            a.url for a in ctx.message.attachments
+            if a.content_type and a.content_type.startswith("image/")
+        ]
+
+        if not question and not image_urls:
+            await ctx.send("💬 Use: `t$c <sua pergunta>` ou anexe uma imagem com uma pergunta.")
             return
 
         async with ctx.typing():
-            answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
+            answer = await _answer_question(
+                question, ctx.guild.id, None, None,
+                image_urls=image_urls if image_urls else None,
+            )
         await ctx.reply(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
