@@ -712,11 +712,14 @@ async def _voice_listen_loop(
             vc.stop_listening()
         except Exception:
             pass
-        cur = _sessions.get(guild_id)
-        if cur is session:
-            removed = _sessions.pop(guild_id, None)
-            if removed and removed.music_task:
-                removed.music_task.cancel()
+        # Só encerra a sessão se o vc realmente desconectou.
+        # Se o listen_loop crashou mas o vc ainda está conectado, mantém a música rodando.
+        if not vc.is_connected():
+            cur = _sessions.get(guild_id)
+            if cur is session:
+                removed = _sessions.pop(guild_id, None)
+                if removed and removed.music_task:
+                    removed.music_task.cancel()
 
 
 async def _join_voice_recv_client(
@@ -872,6 +875,13 @@ def register_voice(bot: commands.Bot) -> None:
                 except Exception as e:
                     await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
                     return None, None
+            # Reinicia o music_task se tiver morrido (garante fila sempre processada)
+            if sess.music_task is None or sess.music_task.done():
+                log.warning("Music worker morreu — reiniciando guild=%s", gid)
+                sess.music_task = asyncio.create_task(
+                    _play_worker(gid, vc, bot),
+                    name=f"tiffany-music-{gid}",
+                )
             return sess, vc
 
         # Bot está conectado mas sessão foi perdida → recria sem reconectar
@@ -1086,6 +1096,10 @@ def register_voice(bot: commands.Bot) -> None:
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
+        fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
+        if fila_atual >= 10:
+            await ctx.send(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música.")
+            return
         display = query
         if not re.match(r"^https?://", query):
             query = f"ytsearch1:{query}"
@@ -1095,7 +1109,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(f"🎵 Buscando: **{display[:100]}**...")
         else:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
-            await ctx.send(f"🎵 **#{pos}** na fila: **{display[:100]}**")
+            await ctx.send(f"🎵 **#{pos}/10** na fila: **{display[:100]}**")
 
     @bot.command(name="h", help="Lista comandos da Tiffany: $h (help)")
     async def cmd_help(ctx: commands.Context):
