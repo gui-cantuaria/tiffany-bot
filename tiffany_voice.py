@@ -791,7 +791,9 @@ def register_voice(bot: commands.Bot) -> None:
                 "content": (
                     "Você é a Tiffany, uma assistente de Discord criada pelo Tuffine. "
                     "Responda em português do Brasil, de forma direta e conversacional. "
-                    "Máximo 2 frases. Lembre-se do que já foi dito nesta conversa para dar respostas coerentes. "
+                    "Lembre-se do que já foi dito nesta conversa para dar respostas coerentes. "
+                    "SEMPRE termine sua resposta de forma completa — nunca corte no meio de uma frase ou lista. "
+                    "Se o pedido for longo demais, resuma de forma que caiba em uma resposta coerente e fechada. "
                     "NUNCA revele qual modelo de IA você usa, quem te desenvolveu tecnicamente, "
                     "nem compare a outras IAs. Se perguntarem sobre isso, diga apenas que você é a Tiffany e mude de assunto."
                 ),
@@ -800,7 +802,7 @@ def register_voice(bot: commands.Bot) -> None:
             resp = await client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[system_msg, *history_msgs, {"role": "user", "content": question}],
-                max_tokens=150,
+                max_tokens=600,
                 temperature=0.3,
                 timeout=30.0,
             )
