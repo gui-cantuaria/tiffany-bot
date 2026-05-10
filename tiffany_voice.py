@@ -566,6 +566,9 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
     if query.startswith("ytsearch"):
         term = re.sub(r"^ytsearch\d*:", "", query).strip()
         queries.append(f"scsearch1:{term}")
+    elif query.startswith("scsearch"):
+        term = re.sub(r"^scsearch\d*:", "", query).strip()
+        queries.append(f"ytsearch1:{term}")
 
     for q in queries:
         try:
@@ -959,14 +962,14 @@ def register_voice(bot: commands.Bot) -> None:
     _ai_semaphore = asyncio.Semaphore(1)
 
     _RANDOM_SONGS = [
-        "scsearch1:Rick Astley Never Gonna Give You Up",
-        "scsearch1:PSY Gangnam Style",
-        "scsearch1:Luis Fonsi Despacito",
-        "scsearch1:Mark Ronson Uptown Funk Bruno Mars",
-        "scsearch1:The Weeknd Blinding Lights",
-        "scsearch1:Dua Lipa Levitating",
-        "scsearch1:Imagine Dragons Believer",
-        "scsearch1:Queen Bohemian Rhapsody",
+        "ytsearch1:Rick Astley Never Gonna Give You Up",
+        "ytsearch1:PSY Gangnam Style",
+        "ytsearch1:Luis Fonsi Despacito",
+        "ytsearch1:Mark Ronson Uptown Funk Bruno Mars",
+        "ytsearch1:The Weeknd Blinding Lights",
+        "ytsearch1:Dua Lipa Levitating",
+        "ytsearch1:Imagine Dragons Believer",
+        "ytsearch1:Queen Bohemian Rhapsody",
     ]
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
