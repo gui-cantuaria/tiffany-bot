@@ -572,6 +572,9 @@ def _norm_img_url(img: str, base: Optional[str] = None) -> Optional[str]:
     u = img.strip()
     if u.startswith("//"):
         u = "https:" + u
+    # Converte HTTP para HTTPS (muitos sites bloqueiam HTTP ou redirecionam)
+    if u.startswith("http://"):
+        u = "https://" + u[7:]
     if base and u.startswith("/"):
         try:
             u = urljoin(base, u)
@@ -646,8 +649,8 @@ async def validar_imagem(url: str) -> bool:
                 return False
             ct = r.headers.get("Content-Type", "").lower()
             cl = r.headers.get("Content-Length")
-            # Rejeitar imagens < 3KB (ícones/placeholders)
-            if cl and int(cl) < 3000:
+            # Rejeitar imagens < 5KB (ícones/placeholders pequenos)
+            if cl and int(cl) < 5000:
                 return False
             return "image/" in ct
     except Exception as e:
@@ -655,16 +658,46 @@ async def validar_imagem(url: str) -> bool:
     return False
 
 async def extrair_imagem_completa(entry, feed_url: str) -> Optional[str]:
-    """Pipeline completo: RSS → validação HTTP → fallback og:image."""
+    """Pipeline completo: RSS → validação HTTP → fallback og:image obrigatório."""
     img = extrair_imagem_rss(entry, feed_url)
+    # Se imagem RSS válida, retorna
     if img and await validar_imagem(img):
+        log.debug(f"Imagem extraída via RSS: {img[:80]}")
         return img
-    # Fallback: og:image da página
+    
+    # Fallback OBRIGATÓRIO: og:image da página (mesmo se RSS retornou algo inválido)
     link = entry.get("link")
     if link:
+        log.debug(f"RSS falhou, buscando og:image para: {link[:80]}")
         og = await fetch_og_image(link)
         if og and await validar_imagem(og):
+            log.info(f"Imagem recuperada via og:image: {og[:80]}")
             return og
+        elif og:
+            log.warning(f"og:image encontrado mas inválido: {og[:80]}")
+    
+    # Última tentativa: extrair qualquer imagem do HTML da página
+    if link:
+        try:
+            if http_session:
+                async with http_session.get(
+                    link,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r:
+                    if r.status == 200:
+                        html = await r.text()
+                        # Busca imagens no HTML (tags img, figure, etc)
+                        imgs = IMG_SRC_RE.findall(html)
+                        for img_url in imgs[:5]:  # Testa até 5 imagens
+                            norm = _norm_img_url(img_url, link)
+                            if norm and await validar_imagem(norm):
+                                log.info(f"Imagem recuperada via HTML scraping: {norm[:80]}")
+                                return norm
+        except Exception as e:
+            log.debug(f"Erro no scraping final: {e}")
+    
+    log.warning(f"Nenhuma imagem válida encontrada para: {entry.get('title', '?')[:60]}")
     return None
 
 # =========================
@@ -755,16 +788,63 @@ def _normalize_news_title(title: str) -> str:
         "phantom blade zero": "Phantom Blade Zero",
         "gamescom": "Gamescom",
     }
+    # Nomes próprios compostos (multi-palavra) — aplicar primeiro
+    multi_proper = {
+        "estados unidos": "Estados Unidos",
+        "reino unido": "Reino Unido",
+        "coreia do sul": "Coreia do Sul",
+        "coreia do norte": "Coreia do Norte",
+        "nova york": "Nova York",
+        "são francisco": "São Francisco",
+        "silicon valley": "Silicon Valley",
+        "double fine": "Double Fine",
+        "call of duty": "Call of Duty",
+        "world of warcraft": "World of Warcraft",
+        "league of legends": "League of Legends",
+        "grand theft auto": "Grand Theft Auto",
+        "communications workers of america": "Communications Workers of America",
+        "open ai": "OpenAI",
+        "deep seek": "DeepSeek",
+        "black myth": "Black Myth",
+        "star wars": "Star Wars",
+    }
+    for lower_name, correct_name in multi_proper.items():
+        t = re.sub(re.escape(lower_name), correct_name, t, flags=re.IGNORECASE)
+
     for lower_name, correct_name in proper_names.items():
-        t = re.sub(rf"\b{lower_name}\b", correct_name, t, flags=re.IGNORECASE)
+        t = re.sub(rf"\b{re.escape(lower_name)}\b", correct_name, t, flags=re.IGNORECASE)
     
-    # Limita tamanho para ~1,5 linhas (90 caracteres)
-    if len(t) > 90:
-        cut = t[:90]
-        last_space = cut.rfind(" ")
-        if last_space >= 50:
-            cut = cut[:last_space]
-        t = cut.rstrip(" ,;:-") + "..."
+    # Garante pelo menos 8 palavras (se o original tiver)
+    words = t.split()
+    min_words = 8
+    if len(words) < min_words and len(t) <= 150:
+        # Título curto, manter original se não for muito longo
+        pass
+    else:
+        # Limita tamanho para ~2 linhas (150 caracteres) preservando palavras
+        max_len = 150
+        if len(t) > max_len:
+            cut = t[:max_len]
+            # Corta no último espaço para não quebrar palavra
+            last_space = cut.rfind(" ")
+            if last_space >= 80:  # pelo menos 80 chars para caber 8 palavras
+                cut = cut[:last_space]
+            # Se após corte ficou com menos de 8 palavras, tenta recuperar
+            if len(words) >= min_words and len(cut.split()) < min_words:
+                # Recua até o 8º espaço
+                space_count = 0
+                pos = 0
+                for i, ch in enumerate(t):
+                    if ch == ' ':
+                        space_count += 1
+                        if space_count == min_words:
+                            pos = i
+                            break
+                if pos > 0:
+                    cut = t[:pos].rstrip(" ,;:-")
+            t = cut.rstrip(" ,;:-") + ("" if len(t) <= max_len else "...")
+        else:
+            t = t  # mantém original se <= max_len
     if t:
         t = t[0].upper() + t[1:]
     return t
@@ -870,6 +950,16 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
 
     prompt = f"""Analise a notícia abaixo e responda APENAS com JSON válido, sem markdown.
 
+REGRAS RÍGIDAS PARA O TÍTULO (NÃO NEGOCIÁVEL):
+- O CAMPO "titulo" DEVE TER ENTRE 8 E 15 PALAVRAS OBRIGATORIAMENTE.
+- TÍTULO CURTO = REJEIÇÃO AUTOMÁTICA. Mínimo: 8 palavras. Máximo: 15.
+- Se o título original tiver menos de 8 palavras, EXPENDA-O adicionando contexto jornalístico.
+- Exemplos:
+  ✗ "Meta processada" (2 palavras - REJETADO)
+  ✗ "OpenAI lança GPT-5" (4 palavras - REJETADO)
+  ✓ "Meta enfrenta processo milionário por uso indevido de livros no treinamento de IA" (11 palavras - ACEITO)
+  ✓ "Nova versão do ChatGPT reduz alucinações em aplicações médicas e jurídicas" (10 palavras - ACEITO)
+
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto"}}
 2. SE APROVAR: {{"pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..."}}
@@ -893,9 +983,15 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - <75: IRRELEVANTE — marque pular=true.
 
 ═══ TÍTULO ═══
+- OBRIGATÓRIO: EXATAMENTE ENTRE 8 E 15 PALAVRAS. NUNCA MENOS QUE 8.
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
 - Traduza para PT-BR. Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
-- Máximo 90 caracteres.
+- Entre 80 e 150 caracteres. Conta as palavras ANTES de enviar.
+- EXEMPLOS DE TÍTULOS BONS:
+  ✓ "Meta enfrenta processo milionário por uso indevido de livros no treinamento de IA"
+  ✓ "Nova versão do ChatGPT reduz alucinações em aplicações médicas e jurídicas"
+  ✗ "Meta processada" (RUIM: apenas 2 palavras)
+  ✗ "OpenAI lança GPT-5" (RUIM: apenas 4 palavras)
 
 ═══ RESUMO ═══
 - Um único parágrafo contínuo, 4 a 6 frases. Sem bullet points, sem quebras de linha.
@@ -907,7 +1003,7 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 
 ═══ FILTROS ESPECIAIS ═══
 SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real.
-GAMES: Aceitar APENAS grandes lançamentos AAA confirmados, grandes eventos (TGA, E3, Nintendo Direct), aquisições ou demissões em massa. Rejeitar: vazamentos de código-fonte de jogos antigos, mods, hacks de console, cheats, patches de balanceamento, temporadas de battle pass.
+GAMES: Aceitar APENAS grandes lançamentos AAA confirmados, grandes eventos (TGA, E3, Nintendo Direct), aquisições de estúdios ou demissões em massa (100+ funcionários). Rejeitar: sindicatos, direitos trabalhistas, greves, negociações coletivas, vazamentos de código-fonte de jogos antigos, mods, hacks de console, cheats, patches de balanceamento, temporadas de battle pass, polêmicas internas de estúdio.
 CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-day. Nota ≥85.
 
 Fonte: {nome_site}
@@ -1200,6 +1296,23 @@ async def verificar_feeds():
                 total_prefiltrados += 1
                 log.info(f"  ✗ Prefiltro rejeitou: [{nome_site}] {title[:60]}")
                 continue
+            
+            # PRÉ-FILTRO: Título muito curto/vago (antes da IA para economizar calls)
+            palavras_titulo = [p for p in title.split() if p]
+            if len(palavras_titulo) < 8:
+                historico_set(history, link_norm, dedupe, "skipped", {"reason": "titulo_curto_prefiltro"})
+                total_prefiltrados += 1
+                log.info(f"  ✗ Título curto pré-filtro ({len(palavras_titulo)} palavras): [{nome_site}] {title[:60]}")
+                continue
+            
+            # PRÉ-FILTRO: Título muito vago (genérico demais)
+            titulo_lower = title.lower()
+            titulos_vagos = ["meta processada", "meta processa", "openai lança", "google lança"]
+            if any(vago in titulo_lower for vago in titulos_vagos):
+                historico_set(history, link_norm, dedupe, "skipped", {"reason": "titulo_vago"})
+                total_prefiltrados += 1
+                log.info(f"  ✗ Título vago: [{nome_site}] {title[:60]}")
+                continue
 
             # Limite de candidatos por fonte (diversidade)
             if contagem_por_fonte.get(nome_site, 0) >= MAX_CANDIDATOS_POR_FONTE:
@@ -1263,6 +1376,28 @@ async def verificar_feeds():
             log.info(f"Budget de IA esgotado ({MAX_IA_CALLS_POR_CICLO} chamadas).")
             break
 
+        # Dedup extra: verificar se assunto já foi aprovado neste ciclo
+        titulo_lower = cand["title"].lower()
+        assunto_keywords = set()
+        for palavra in ["meta", "openai", "google", "microsoft", "apple", "amazon", "facebook", "jwst", "james webb", "call of duty", "activision"]:
+            if palavra in titulo_lower:
+                assunto_keywords.add(palavra)
+        
+        if assunto_keywords:
+            ja_tem_assunto = False
+            for aprov in aprovados:
+                aprov_titulo = aprov["titulo"].lower()
+                for kw in assunto_keywords:
+                    if kw in aprov_titulo:
+                        ja_tem_assunto = True
+                        break
+                if ja_tem_assunto:
+                    break
+            if ja_tem_assunto:
+                historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"assunto_repetido_{list(assunto_keywords)[0]}"})
+                log.info(f"  ✗ Assunto repetido ({list(assunto_keywords)[0]}): [{cand['nome_site']}] {cand['title'][:60]}")
+                continue
+
         _ai_calls_this_cycle += 1
         metric_inc(metrics, "ia_calls_hoje")
         res = await gerar_analise_ia(cand["texto_raw"], cand["title"], cand["nome_site"])
@@ -1300,6 +1435,28 @@ async def verificar_feeds():
         if not cand.get("img"):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem_fase2"})
             log.info(f"  ✗ Sem imagem (Fase 2): [{cand['nome_site']}] {cand['title'][:60]}")
+            continue
+        
+        # TRAVA: título deve ter pelo menos 8 palavras (contagem real)
+        titulo_final = res.get("titulo", "").strip()
+        # Remove emojis e pontuação para contar palavras reais
+        titulo_limpo = re.sub(r'[^\w\s]', ' ', titulo_final)
+        palavras_titulo = [p for p in titulo_limpo.split() if len(p) > 2]  # palavras com mais de 2 letras
+        if len(palavras_titulo) < 8:
+            historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_curto_{len(palavras_titulo)}palavras"})
+            log.info(f"  ✗ Título muito curto ({len(palavras_titulo)} palavras): {titulo_final[:60]}")
+            continue
+        
+        # TRAVA: título muito vago (menos de 60 caracteres após normalização)
+        if len(titulo_final) < 60:
+            historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "titulo_vago_curto"})
+            log.info(f"  ✗ Título muito vago/curto: {titulo_final[:60]}")
+            continue
+        
+        # TRAVA EXTRA: Rejeitar títulos que são apenas 2-3 palavras mesmo após processamento
+        if len(titulo_final.split()) < 8:
+            historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_palavras_insuf_{len(titulo_final.split())}"})
+            log.info(f"  ✗ Título com poucas palavras: {titulo_final[:60]}")
             continue
 
         metric_inc(metrics, "ia_aprovadas_hoje")
@@ -1415,6 +1572,7 @@ async def cmd_ping(ctx):
 # SLASH COMMAND: /status
 # =========================
 @discord_client.tree.command(name="status", description="Exibe o status atual do bot Tiffany")
+@discord.app_commands.default_permissions(administrator=True)
 async def cmd_status(interaction: discord.Interaction):
     agora = datetime.now(FUSO_HORARIO_BR)
     metrics = load_metrics()
