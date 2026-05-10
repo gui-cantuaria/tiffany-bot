@@ -369,7 +369,8 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
     tmp_dir = tempfile.mkdtemp(prefix="tiffany_")
     ydl_opts = {
         **YDL_OPTS,
-        "format": "bestaudio/best",
+        # m4a/mp3 são mais estáveis para o FFmpeg ler de arquivo local
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best",
         "outtmpl": os.path.join(tmp_dir, "audio.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
@@ -540,10 +541,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
 
                     loop = asyncio.get_running_loop()
                     fut: asyncio.Future = loop.create_future()
+                    playback_error: list = []
 
                     def _after(err: Optional[Exception]) -> None:
                         if err:
                             log.error("Erro no player: %s", err)
+                            playback_error.append(err)
                         if not fut.done():
                             loop.call_soon_threadsafe(fut.set_result, None)
 
@@ -556,6 +559,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         vc.stop()
                         await fut
                     session.current_song = ""
+                    if playback_error:
+                        await _notify(
+                            bot,
+                            session.text_channel_id,
+                            f"⚠️ Áudio interrompido: `{str(playback_error[0])[:120]}`",
+                        )
             except Exception:
                 log.exception("Erro no worker de música")
                 session.current_song = ""
