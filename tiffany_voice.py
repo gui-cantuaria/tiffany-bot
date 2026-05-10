@@ -1434,7 +1434,7 @@ def register_voice(bot: commands.Bot) -> None:
             "**Comandos da Tiffany:**\n\n"
             "**Chat & IA**\n"
             "`t$c <pergunta>` — Pergunta para a IA (aceita imagens)\n"
-            "`t$rs <URL>` — Resume o conteudo de um link\n\n"
+            "`t$su <URL>` — Resume o conteudo de um link\n\n"
             "**Musica**\n"
             "`t$e` — Entra no seu canal de voz\n"
             "`t$l` — Sai do canal de voz\n"
@@ -1535,12 +1535,12 @@ def register_voice(bot: commands.Bot) -> None:
         session.current_song = ""
         await ctx.send("🗑️ Fila limpa e reproducao parada.")
 
-    @bot.command(name="rs", help="Resume o conteudo de um link: $rs <URL>")
+    @bot.command(name="su", help="Resume o conteudo de um link: $su <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
         if not ctx.guild:
             return
         if not url or not re.match(r"^https?://", url):
-            await ctx.send("⚠️ Uso: `t$rs <URL>` — precisa ser um link completo (https://...)")
+            await ctx.send("⚠️ Uso: `t$su <URL>` — precisa ser um link completo (https://...)")
             return
         if not _check_cooldown(ctx.author.id):
             await ctx.send("⏳ Aguarde alguns segundos antes de usar novamente.", delete_after=5)
