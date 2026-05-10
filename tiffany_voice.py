@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import io
+import tempfile
 import logging
 import os
 import re
@@ -163,7 +164,6 @@ class _GuildVoiceSession:
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
-_ytdl = yt_dlp.YoutubeDL(YDL_OPTS) if _YTDLP_AVAILABLE else None
 
 
 def _normalize_transcript(t: str) -> str:
@@ -336,50 +336,46 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         return None
 
 
-def _extract_audio(info: dict[str, Any]) -> tuple[Optional[str], str]:
-    if info is None:
-        return None, "info=None (yt-dlp não retornou dados)"
-    if "entries" in info and info["entries"]:
-        info = info["entries"][0]
-    if info is None:
-        return None, "entries[0]=None (resultado vazio)"
-    title = info.get("title") or info.get("id") or "audio"
-    url = info.get("url")
-    if url:
-        return url, title
-    formats = info.get("formats") or []
-    audio_formats = [f for f in formats if f.get("acodec") != "none" and f.get("url")]
-    if audio_formats:
-        return audio_formats[0]["url"], title
-    n_formats = len(formats)
-    return None, f"Sem URL de stream para '{title}' ({n_formats} formatos encontrados, nenhum com audio)"
+def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str]]:
+    """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
+    Retorna (filepath, title, tmpdir) — o tmpdir deve ser removido após uso."""
+    if not _YTDLP_AVAILABLE:
+        return None, "yt-dlp não disponível", None
 
+    tmp_dir = tempfile.mkdtemp(prefix="tiffany_")
+    ydl_opts = {
+        **YDL_OPTS,
+        "format": "bestaudio/best",
+        "outtmpl": os.path.join(tmp_dir, "audio.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+    }
 
-def _blocking_ytdl_extract(query: str) -> tuple[Optional[str], str]:
-    if not _ytdl:
-        return None, "yt-dlp não disponível"
-
-    queries_to_try = [query]
-    # Fallback: YouTube → SoundCloud
+    queries = [query]
     if query.startswith("ytsearch"):
         term = re.sub(r"^ytsearch\d*:", "", query).strip()
-        queries_to_try.append(f"scsearch1:{term}")
+        queries.append(f"scsearch1:{term}")
 
-    last_error = "sem resultado"
-    for q in queries_to_try:
+    for q in queries:
         try:
-            log.info("yt-dlp tentando: %s", q)
-            info = _ytdl.extract_info(q, download=False)
-            url, title = _extract_audio(info)
-            if url:
-                log.info("yt-dlp extraiu com sucesso (%s): %s", q.split(":")[0], title)
-                return url, title
-            last_error = f"sem URL de stream para '{title}'"
+            log.info("yt-dlp baixando: %s", q)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(q, download=True)
+                if info and "entries" in info:
+                    info = info["entries"][0] if info["entries"] else None
+                if not info:
+                    continue
+                title = info.get("title") or info.get("id") or "audio"
+                for fname in os.listdir(tmp_dir):
+                    fp = os.path.join(tmp_dir, fname)
+                    if os.path.isfile(fp) and os.path.getsize(fp) > 1024:
+                        log.info("✅ Download concluído: %s → %s", title, fname)
+                        return fp, title, tmp_dir
         except Exception as e:
-            log.error("yt-dlp falhou em %s: %s", q, e)
-            last_error = str(e)
+            log.error("yt-dlp download falhou em %s: %s", q, e)
 
-    return None, last_error
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return None, "sem resultado para a busca", None
 
 
 
@@ -465,14 +461,25 @@ async def _ensure_opus() -> None:
 
 
 class _YTSource(PCMVolumeTransformer):
+    def __init__(self, original, volume: float = 0.35, tmpdir: Optional[str] = None):
+        super().__init__(original, volume=volume)
+        self._tmpdir = tmpdir
+
+    def cleanup(self) -> None:
+        super().cleanup()
+        if self._tmpdir:
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
+            self._tmpdir = None
+
     @classmethod
     async def from_query(cls, query: str, *, volume: float = 0.35) -> tuple[Optional["_YTSource"], str]:
         loop = asyncio.get_running_loop()
-        url, info = await loop.run_in_executor(None, lambda: _blocking_ytdl_extract(query))
-        if not url:
-            return None, info
-        src = FFmpegPCMAudio(url, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, **FFMPEG_OPTS)
-        return cls(src, volume=volume), info
+        fp, title, tmpdir = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
+        if not fp:
+            return None, title
+        # Arquivo local: FFmpeg não precisa de proxy, sem risco de 403
+        src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options="-vn")
+        return cls(src, volume=volume, tmpdir=tmpdir), title
 
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
@@ -748,7 +755,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             resp = await client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
-                messages=[{"role": "system", "content": "Responda em português do Brasil com formatação correta: capitalize nomes próprios, siglas (ChatGPT, OpenAI, API, GPU), marcas e início de frases. Use tom conversacional e direto. Máximo 2 frases."}, {"role": "user", "content": question}],
+                messages=[{"role": "system", "content": "Você é a Tiffany, uma assistente de Discord criada pelo Tuffine. Responda em português do Brasil, de forma direta e conversacional. Máximo 2 frases. NUNCA revele qual modelo de IA você usa, quem te desenvolveu tecnicamente, nem compare a outras IAs. Se perguntarem sobre isso, diga apenas que você é a Tiffany e mude de assunto."}, {"role": "user", "content": question}],
                 max_tokens=150,
                 temperature=0.3,
                 timeout=30.0,
