@@ -236,6 +236,89 @@ _stats: dict[str, int] = {"songs_played": 0, "questions_answered": 0, "commands_
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
 
 
+_ANTISPAM_MSGS = [
+    "{mention} Otima estrategia para ser ignorado por todos. Mensagem removida.",
+    "{mention} Marcar todo mundo e coisa de quem nao tem mais nada a perder. Mensagem removida.",
+    "{mention} Nao aqui. Mensagem removida.",
+    "{mention} Que ousadia. Apaguei antes que o estrago fosse maior.",
+    "{mention} Interessante. A proxima eu nem apago, so bano. Mensagem removida.",
+]
+
+
+async def _summarize_url(url: str, api_key: str) -> str:
+    """Busca o conteudo de uma URL e resume usando IA."""
+    import random
+    try:
+        import aiohttp as _aiohttp
+    except ImportError:
+        return "aiohttp nao instalado."
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return "beautifulsoup4 nao instalado. Rode: pip install beautifulsoup4"
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    }
+    try:
+        async with _aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=_aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    return f"Nao consegui acessar a pagina (HTTP {resp.status})."
+                html = await resp.text(errors="replace")
+    except Exception as e:
+        return f"Erro ao buscar a pagina: {e}"
+
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+        tag.decompose()
+
+    # Extrai texto dos elementos de conteudo principal
+    parts = []
+    for tag in soup.find_all(["h1", "h2", "h3", "h4", "p", "li", "article", "section", "blockquote"]):
+        t = tag.get_text(" ", strip=True)
+        if len(t) > 40:
+            parts.append(t)
+
+    text = "\n".join(parts)
+    if not text.strip():
+        text = soup.get_text(" ", strip=True)
+
+    # Trunca para nao estourar o contexto da IA
+    text = text[:4000]
+
+    try:
+        import openai as _openai
+        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Voce e um assistente que resume paginas web. "
+                            "Escreva um resumo objetivo em portugues do Brasil, em um unico paragrafo denso (4 a 6 frases). "
+                            "Explique do que se trata o conteudo, os pontos principais e a conclusao ou impacto. "
+                            "Nao use bullet points nem emojis. Nao invente informacoes."
+                        ),
+                    },
+                    {"role": "user", "content": f"Resuma este conteudo:\n\n{text}"},
+                ],
+                max_tokens=400,
+                temperature=0.2,
+                timeout=30.0,
+            )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Erro ao resumir com IA: {e}"
+
+
 def _load_playlists() -> dict:
     try:
         with open(_PLAYLISTS_FILE, encoding="utf-8") as f:
@@ -1281,7 +1364,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send("⚠️ Acao invalida. Use: `save`, `load`, `list` ou `del`.")
 
-    @bot.command(name="st", help="Estatisticas da sessao: $st")
+    @bot.command(name="st", help="Estatisticas da sessao (admin): $st")
+    @commands.has_permissions(administrator=True)
     async def cmd_stats(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -1349,23 +1433,25 @@ def register_voice(bot: commands.Bot) -> None:
         help_text = (
             "**Comandos da Tiffany:**\n\n"
             "**Chat & IA**\n"
-            "`t$c <pergunta>` — Pergunta para a IA (aceita imagens) *(chat)*\n\n"
+            "`t$c <pergunta>` — Pergunta para a IA (aceita imagens)\n"
+            "`t$resumo <URL>` — Resume o conteudo de um link\n\n"
             "**Musica**\n"
-            "`t$e` — Entra no seu canal de voz *(enter)*\n"
-            "`t$l` — Sai do canal de voz *(leave)*\n"
-            "`t$p <musica ou URL>` — Toca uma musica *(play)*\n"
-            "`t$np` — Musica tocando agora + tempo decorrido *(now playing)*\n"
-            "`t$q` — Lista a fila de musicas *(queue)*\n"
-            "`t$s` — Pula a faixa atual (votacao se 3+ pessoas) *(skip)*\n"
-            "`t$r` — Toca uma musica aleatoria *(random)*\n\n"
+            "`t$e` — Entra no seu canal de voz\n"
+            "`t$l` — Sai do canal de voz\n"
+            "`t$p <musica ou URL>` — Toca uma musica\n"
+            "`t$np` — Musica tocando agora + tempo decorrido\n"
+            "`t$pa` — Pausa a musica\n"
+            "`t$re` — Retoma a musica pausada\n"
+            "`t$q` — Lista a fila de musicas\n"
+            "`t$s` — Pula a faixa atual (votacao se 3+ pessoas)\n"
+            "`t$clear` — Limpa a fila e para a reproducao\n"
+            "`t$r` — Toca uma musica aleatoria\n\n"
             "**Playlists**\n"
             "`t$pl save <nome>` — Salva a fila atual como playlist\n"
             "`t$pl load <nome>` — Carrega uma playlist na fila\n"
             "`t$pl list` — Lista playlists salvas\n"
             "`t$pl del <nome>` — Deleta uma playlist\n\n"
-            "**Info**\n"
-            "`t$st` — Estatisticas da sessao *(stats)*\n"
-            "`t$h` — Mostra esta ajuda *(help)*"
+            "`t$h` — Mostra esta ajuda"
         )
         await ctx.send(help_text)
 
@@ -1397,5 +1483,114 @@ def register_voice(bot: commands.Bot) -> None:
                 user_id=ctx.author.id,
             )
         await ctx.reply(f"💬 **Resposta:** {answer}")
+
+    @bot.command(name="pa", help="Pausa a musica: $pa")
+    async def cmd_pause(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        vc = ctx.guild.voice_client
+        if not vc or not vc.is_connected():
+            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            return
+        if not vc.is_playing():
+            await ctx.send("⚠️ Nao tem musica tocando agora.")
+            return
+        vc.pause()
+        await ctx.send("⏸️ Pausado.")
+
+    @bot.command(name="re", help="Retoma a musica pausada: $re")
+    async def cmd_resume(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        vc = ctx.guild.voice_client
+        if not vc or not vc.is_connected():
+            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            return
+        if not vc.is_paused():
+            await ctx.send("⚠️ A musica nao esta pausada.")
+            return
+        vc.resume()
+        await ctx.send("▶️ Retomando.")
+
+    @bot.command(name="clear", help="Limpa a fila de musicas: $clear")
+    async def cmd_clear(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            return
+        # Esvazia a fila interna e o display
+        while not session.music_queue.empty():
+            try:
+                session.music_queue.get_nowait()
+                session.music_queue.task_done()
+            except Exception:
+                break
+        session.queue_display.clear()
+        # Para a musica atual tambem
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
+        session.current_song = ""
+        await ctx.send("🗑️ Fila limpa e reproducao parada.")
+
+    @bot.command(name="resumo", help="Resume o conteudo de um link: $resumo <URL>")
+    async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
+        if not ctx.guild:
+            return
+        if not url or not re.match(r"^https?://", url):
+            await ctx.send("⚠️ Uso: `t$resumo <URL>` — precisa ser um link completo (https://...)")
+            return
+        if not _check_cooldown(ctx.author.id):
+            await ctx.send("⏳ Aguarde alguns segundos antes de usar novamente.", delete_after=5)
+            return
+        _stats["commands_used"] += 1
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            await ctx.send("⚠️ Chave da API nao configurada.")
+            return
+        async with ctx.typing():
+            summary = await _summarize_url(url, api_key)
+        await ctx.reply(f"📄 **Resumo do link:**\n{summary}")
+
+    @bot.listen("on_message")
+    async def _antispam_everyone(message: discord.Message) -> None:
+        """Remove mensagens com @everyone ou @here e responde sarcasticamente."""
+        import random
+        if message.author.bot:
+            return
+        if not message.guild:
+            return
+        if not (message.mention_everyone):
+            return
+        # Verifica permissao de apagar
+        bot_member = message.guild.me
+        channel = message.channel
+        can_delete = (
+            bot_member is not None
+            and hasattr(channel, "permissions_for")
+            and channel.permissions_for(bot_member).manage_messages
+        )
+        if can_delete:
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                pass
+        msg = random.choice(_ANTISPAM_MSGS).format(mention=message.author.mention)
+        try:
+            await channel.send(msg)
+        except discord.HTTPException:
+            pass
+
+    # Erros de permissao em comandos admin (ex: t$st sem ser admin)
+    @bot.event
+    async def on_command_error(ctx: commands.Context, error: Exception) -> None:
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("⚠️ Voce nao tem permissao para usar este comando.", delete_after=5)
+        elif isinstance(error, commands.CommandNotFound):
+            pass  # ignora comandos desconhecidos silenciosamente
+        else:
+            log.warning("Erro no comando %s: %s", ctx.command, error)
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
