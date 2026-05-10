@@ -442,9 +442,9 @@ class _PCMBufferSink(_AudioSinkBase):
 _SILENCE_SEC = 0.8  # espera este silêncio após última fala antes de transcrever
 
 
-def _drain_ready_user_pcm(session: _GuildVoiceSession) -> bytes:
-    """Retorna o PCM do usuário que parou de falar há pelo menos _SILENCE_SEC segundos.
-    Só drena se o buffer for grande o suficiente para transcrição."""
+def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
+    """Retorna (PCM, uid) do usuário que parou de falar há pelo menos _SILENCE_SEC segundos.
+    Retorna (b"", 0) se não há áudio pronto."""
     import time
     now = time.monotonic()
     with session.buf_lock:
@@ -455,12 +455,12 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> bytes:
             and (now - session.last_audio_ts.get(uid, 0)) >= _SILENCE_SEC
         ]
         if not ready:
-            return b""
+            return b"", 0
         uid, buf = max(ready, key=lambda kv: len(kv[1]))
         raw = bytes(buf)
         del session.pcm_buffers[uid]
         session.last_audio_ts.pop(uid, None)
-    return raw
+    return raw, uid
 
 
 async def _notify(bot: discord.Client, channel_id: int, content: str) -> None:
@@ -632,7 +632,7 @@ async def _voice_listen_loop(
                     _empty_since = None
 
             # Processa áudio assim que o usuário faz pausa de ≥0.8s
-            pcm = _drain_ready_user_pcm(session)
+            pcm, speaker_uid = _drain_ready_user_pcm(session)
             if not pcm:
                 continue
             log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
@@ -671,8 +671,7 @@ async def _voice_listen_loop(
                 return
             
             if action == "question" and arg:
-                # Adiciona pergunta na fila
-                await session.question_queue.put((0, arg))  # 0 = indica voz
+                await session.question_queue.put((speaker_uid, arg))
                 await _notify(bot, session.text_channel_id, f"💬 Pergunta recebida: «{arg[:80]}» — processando...")
                 continue
             
@@ -842,11 +841,11 @@ def register_voice(bot: commands.Bot) -> None:
                     continue
                 
                 answer = await _answer_question(question, guild_id, session, vc)
-                # Envia resposta no chat
                 ch = bot.get_channel(session.text_channel_id)
                 if ch:
                     try:
-                        await ch.send(f"💬 **Resposta:** {answer}")
+                        mention = f"<@{user_id}> " if user_id else ""
+                        await ch.send(f"{mention}💬 **Resposta:** {answer}")
                     except Exception:
                         pass
                 session.question_queue.task_done()
@@ -1137,6 +1136,6 @@ def register_voice(bot: commands.Bot) -> None:
 
         async with ctx.typing():
             answer = await _answer_question(question, ctx.guild.id if ctx.guild else 0, None, None)
-        await ctx.send(f"💬 **Resposta:** {answer}")
+        await ctx.reply(f"💬 **Resposta:** {answer}")
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
