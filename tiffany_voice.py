@@ -1434,7 +1434,7 @@ def register_voice(bot: commands.Bot) -> None:
             "**Comandos da Tiffany:**\n\n"
             "**Chat & IA**\n"
             "`t$c <pergunta>` — Pergunta para a IA (aceita imagens)\n"
-            "`t$resumo <URL>` — Resume o conteudo de um link\n\n"
+            "`t$rs <URL>` — Resume o conteudo de um link\n\n"
             "**Musica**\n"
             "`t$e` — Entra no seu canal de voz\n"
             "`t$l` — Sai do canal de voz\n"
@@ -1444,7 +1444,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$re` — Retoma a musica pausada\n"
             "`t$q` — Lista a fila de musicas\n"
             "`t$s` — Pula a faixa atual (votacao se 3+ pessoas)\n"
-            "`t$clear` — Limpa a fila e para a reproducao\n"
+            "`t$cl` — Limpa a fila e para a reproducao\n"
             "`t$r` — Toca uma musica aleatoria\n\n"
             "**Playlists**\n"
             "`t$pl save <nome>` — Salva a fila atual como playlist\n"
@@ -1512,7 +1512,7 @@ def register_voice(bot: commands.Bot) -> None:
         vc.resume()
         await ctx.send("▶️ Retomando.")
 
-    @bot.command(name="clear", help="Limpa a fila de musicas: $clear")
+    @bot.command(name="cl", help="Limpa a fila de musicas: $cl")
     async def cmd_clear(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -1535,12 +1535,12 @@ def register_voice(bot: commands.Bot) -> None:
         session.current_song = ""
         await ctx.send("🗑️ Fila limpa e reproducao parada.")
 
-    @bot.command(name="resumo", help="Resume o conteudo de um link: $resumo <URL>")
+    @bot.command(name="rs", help="Resume o conteudo de um link: $rs <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
         if not ctx.guild:
             return
         if not url or not re.match(r"^https?://", url):
-            await ctx.send("⚠️ Uso: `t$resumo <URL>` — precisa ser um link completo (https://...)")
+            await ctx.send("⚠️ Uso: `t$rs <URL>` — precisa ser um link completo (https://...)")
             return
         if not _check_cooldown(ctx.author.id):
             await ctx.send("⏳ Aguarde alguns segundos antes de usar novamente.", delete_after=5)
