@@ -109,7 +109,7 @@ def _voice_connect_timeout_sec() -> float:
         return 25.0
 
 
-MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.5)
+MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.4)  # ~75kb — voz real (sem silêncios)
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 3
@@ -117,28 +117,23 @@ MIN_QUESTION_WORDS = 3
 YDL_OPTS: dict[str, Any] = {
     "format": "bestaudio/best",
     "noplaylist": True,
-    "quiet": True,
-    "no_warnings": True,
+    "quiet": False,
+    "no_warnings": False,
     "default_search": "ytsearch1",
     "ignoreerrors": False,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["ios", "android_vr", "android", "tv_embedded", "web"],
-            "player_skip": ["webpage"],
-        },
-    },
     "geo_bypass": True,
-    "http_headers": {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-    },
+    "source_address": "0.0.0.0",
+    # Cloudflare WARP proxy — contorna bloqueio de IP do YouTube em VPS
+    "proxy": "socks5://127.0.0.1:40000",
 }
 
 # Suporte a cookies do YouTube (para contornar bloqueio de IP em VPS)
-_cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+_cookies_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
 if os.path.isfile(_cookies_path):
     YDL_OPTS["cookiefile"] = _cookies_path
-    log.info("yt-dlp usando cookies de: %s", _cookies_path)
+    log.info("✅ yt-dlp usando cookies de: %s", _cookies_path)
+else:
+    log.warning("⚠️ Arquivo cookies.txt não encontrado em %s. O YouTube pode bloquear a reprodução.", os.path.dirname(os.path.abspath(__file__)))
 
 FFMPEG_OPTS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -155,9 +150,12 @@ class _GuildVoiceSession:
     text_channel_id: int
     pcm_buffers: dict[int, bytearray] = field(default_factory=dict)
     buf_lock: threading.Lock = field(default_factory=threading.Lock)
+    last_audio_ts: dict[int, float] = field(default_factory=dict)  # uid -> monotonic timestamp
     listen_task: Optional[asyncio.Task] = None
     music_task: Optional[asyncio.Task] = None
     music_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
+    queue_display: list[str] = field(default_factory=list)
+    current_song: str = ""
     play_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     question_queue: asyncio.Queue[tuple[int, str]] = field(default_factory=asyncio.Queue)
     question_task: Optional[asyncio.Task] = None
@@ -270,52 +268,120 @@ def _tts_bytes_to_pcm(tts_bytes: bytes) -> Optional[bytes]:
         return None
 
 
+_vosk_model_cache: dict = {}
+
+
+def _get_vosk_model(model_path: str):
+    if model_path not in _vosk_model_cache:
+        from vosk import Model
+        import logging as _vlog
+        _vlog.getLogger("vosk").setLevel(logging.WARNING)
+        _vosk_model_cache[model_path] = Model(model_path)
+        log.info("✅ Vosk model carregado: %s", model_path)
+    return _vosk_model_cache[model_path]
+
+
+def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
+    """STT offline usando Vosk + modelo português."""
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vosk-model-small-pt-0.3")
+    if not os.path.isdir(model_path):
+        return None
+    try:
+        from vosk import KaldiRecognizer
+        import json, subprocess
+        model = _get_vosk_model(model_path)
+        exe = FFMPEG_EXECUTABLE or "ffmpeg"
+        # Converte WAV 48kHz → PCM raw 16kHz mono (formato que o Vosk espera)
+        proc = subprocess.Popen(
+            [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "s16le", "pipe:1"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        pcm_16k, _ = proc.communicate(wav_48k)
+        if not pcm_16k:
+            return None
+        rec = KaldiRecognizer(model, 16000)
+        rec.AcceptWaveform(pcm_16k)
+        result = json.loads(rec.FinalResult())
+        text = result.get("text", "").strip()
+        log.info("Vosk STT: %r", text)
+        return text if text else None
+    except Exception as e:
+        log.warning("Vosk error: %s", e)
+        return None
+
+
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
+    # Tenta Vosk (offline, confiável em VPS) primeiro
+    result = _transcribe_with_vosk(wav)
+    if result is not None:
+        return result
+    # Fallback: Google STT
     try:
         sr = importlib.import_module("speech_recognition")
     except ModuleNotFoundError:
         log.warning("Pacote SpeechRecognition não instalado; STT desativado.")
         return None
-
     r = sr.Recognizer()
     r.dynamic_energy_threshold = True
     with sr.AudioFile(io.BytesIO(wav)) as source:
         audio = r.record(source)
     try:
-        return r.recognize_google(audio, language="pt-BR")
+        text = r.recognize_google(audio, language="pt-BR")
+        log.info("Google STT: %r", text)
+        return text
     except sr.UnknownValueError:
         return None
     except sr.RequestError as e:
-        log.warning("SpeechRecognition indisponível: %s", e)
+        log.warning("Google STT indisponível: %s", e)
         return None
 
 
 def _extract_audio(info: dict[str, Any]) -> tuple[Optional[str], str]:
     if info is None:
-        return None, "?"
+        return None, "info=None (yt-dlp não retornou dados)"
     if "entries" in info and info["entries"]:
         info = info["entries"][0]
+    if info is None:
+        return None, "entries[0]=None (resultado vazio)"
     title = info.get("title") or info.get("id") or "audio"
     url = info.get("url")
     if url:
         return url, title
-    for f in info.get("formats") or ():
-        if f.get("acodec") != "none" and f.get("url"):
-            return f["url"], title
-    return None, title
+    formats = info.get("formats") or []
+    audio_formats = [f for f in formats if f.get("acodec") != "none" and f.get("url")]
+    if audio_formats:
+        return audio_formats[0]["url"], title
+    n_formats = len(formats)
+    return None, f"Sem URL de stream para '{title}' ({n_formats} formatos encontrados, nenhum com audio)"
 
 
 def _blocking_ytdl_extract(query: str) -> tuple[Optional[str], str]:
     if not _ytdl:
         return None, "yt-dlp não disponível"
-    try:
-        log.info("yt-dlp tentando extrair: %s", query)
-        info = _ytdl.extract_info(query, download=False)
-        log.info("yt-dlp extraiu com sucesso: %s", info.get("title", "?"))
-    except Exception as e:
-        log.error("yt-dlp falhou em %s: %s", query, e)
-        return None, str(e)
-    return _extract_audio(info)
+
+    queries_to_try = [query]
+    # Fallback: YouTube → SoundCloud
+    if query.startswith("ytsearch"):
+        term = re.sub(r"^ytsearch\d*:", "", query).strip()
+        queries_to_try.append(f"scsearch1:{term}")
+
+    last_error = "sem resultado"
+    for q in queries_to_try:
+        try:
+            log.info("yt-dlp tentando: %s", q)
+            info = _ytdl.extract_info(q, download=False)
+            url, title = _extract_audio(info)
+            if url:
+                log.info("yt-dlp extraiu com sucesso (%s): %s", q.split(":")[0], title)
+                return url, title
+            last_error = f"sem URL de stream para '{title}'"
+        except Exception as e:
+            log.error("yt-dlp falhou em %s: %s", q, e)
+            last_error = str(e)
+
+    return None, last_error
+
+
 
 
 _AudioSinkBase = voice_recv.AudioSink if _VOICE_RECV_AVAILABLE else object
@@ -332,18 +398,19 @@ class _PCMBufferSink(_AudioSinkBase):
         if user is None or getattr(user, "bot", False):
             return
         try:
-            log.info("🎤 Sink.write chamado por %s", user.name)
             pcm = data.pcm
             if not pcm:
                 return
-            
+
             # Nova biblioteca pode enviar lista de bytes; converte para bytes único
             if isinstance(pcm, list):
                 pcm = b"".join(pcm)
-            
+
+            import time
             uid = user.id
             with self._session.buf_lock:
                 self._session.pcm_buffers.setdefault(uid, bytearray()).extend(pcm)
+                self._session.last_audio_ts[uid] = time.monotonic()
         except Exception as e:
             log.error("Erro ao processar áudio do usuário %s: %s", user.name if user else "?", e)
 
@@ -351,13 +418,27 @@ class _PCMBufferSink(_AudioSinkBase):
         pass
 
 
-def _drain_loudest_user_pcm(session: _GuildVoiceSession) -> bytes:
+_SILENCE_SEC = 0.8  # espera este silêncio após última fala antes de transcrever
+
+
+def _drain_ready_user_pcm(session: _GuildVoiceSession) -> bytes:
+    """Retorna o PCM do usuário que parou de falar há pelo menos _SILENCE_SEC segundos.
+    Só drena se o buffer for grande o suficiente para transcrição."""
+    import time
+    now = time.monotonic()
     with session.buf_lock:
-        if not session.pcm_buffers:
+        ready = [
+            (uid, buf)
+            for uid, buf in session.pcm_buffers.items()
+            if len(buf) >= MIN_PCM_BYTES
+            and (now - session.last_audio_ts.get(uid, 0)) >= _SILENCE_SEC
+        ]
+        if not ready:
             return b""
-        uid, buf = max(session.pcm_buffers.items(), key=lambda kv: len(kv[1]))
+        uid, buf = max(ready, key=lambda kv: len(kv[1]))
         raw = bytes(buf)
-        session.pcm_buffers.clear()
+        del session.pcm_buffers[uid]
+        session.last_audio_ts.pop(uid, None)
     return raw
 
 
@@ -385,13 +466,13 @@ async def _ensure_opus() -> None:
 
 class _YTSource(PCMVolumeTransformer):
     @classmethod
-    async def from_query(cls, query: str, *, volume: float = 0.35) -> Optional[_YTSource]:
+    async def from_query(cls, query: str, *, volume: float = 0.35) -> tuple[Optional["_YTSource"], str]:
         loop = asyncio.get_running_loop()
-        url, _title = await loop.run_in_executor(None, lambda: _blocking_ytdl_extract(query))
+        url, info = await loop.run_in_executor(None, lambda: _blocking_ytdl_extract(query))
         if not url:
-            return None
+            return None, info
         src = FFmpegPCMAudio(url, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, **FFMPEG_OPTS)
-        return cls(src, volume=volume)
+        return cls(src, volume=volume), info
 
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
@@ -406,16 +487,22 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
                 continue
+            # Pegar nome de display da fila (primeiro item)
+            display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
+            if session.queue_display:
+                display_name = session.queue_display.pop(0)
             try:
                 async with session.play_lock:
                     if not vc.is_connected():
                         break
-                    source = await _YTSource.from_query(query)
+                    session.current_song = display_name
+                    source, info = await _YTSource.from_query(query)
                     if source is None:
+                        session.current_song = ""
                         await _notify(
                             bot,
                             session.text_channel_id,
-                            f"❌ Não consegui achar audio para: `{query[:80]}`",
+                            f"❌ Não consegui achar audio para: `{display_name[:80]}`\n> `{info[:200]}`",
                         )
                         session.music_queue.task_done()
                         continue
@@ -430,9 +517,17 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             loop.call_soon_threadsafe(fut.set_result, None)
 
                     vc.play(source, after=_after)
-                    await fut
+                    # Watchdog: se travar por mais de 8 min sem terminar, força skip
+                    try:
+                        await asyncio.wait_for(asyncio.shield(fut), timeout=480.0)
+                    except asyncio.TimeoutError:
+                        log.warning("Watchdog: playback travado por 8 min, forçando skip.")
+                        vc.stop()
+                        await fut
+                    session.current_song = ""
             except Exception:
                 log.exception("Erro no worker de música")
+                session.current_song = ""
             finally:
                 try:
                     session.music_queue.task_done()
@@ -453,55 +548,54 @@ async def _voice_listen_loop(
     if not session:
         return
     await _notify(bot, session.text_channel_id, "🎙️ Tiffany entrou na call.")
-    _last_heard_notify = 0.0
-    _last_audio_time = asyncio.get_event_loop().time()
-    _warned_no_audio = False
-    _empty_since = None  # Timestamp desde que o canal ficou vazio
+    _empty_since = None
+    _empty_check_counter = 0
     try:
         while vc.is_connected():
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(0.5)
             if not vc.is_connected():
                 break
-            if vc.is_playing():
-                continue
-            
-            # Verificar se canal está vazio (exceto o bot)
-            members_in_vc = [m for m in vc.channel.members if not m.bot] if vc.channel else []
-            agora = asyncio.get_event_loop().time()
-            
-            if not members_in_vc:
-                # Canal vazio
-                if _empty_since is None:
-                    _empty_since = agora
-                    await _notify(bot, session.text_channel_id, "⚠️ Canal ficou vazio. Saindo em 5 minutos se ninguém voltar...")
-                elif (agora - _empty_since) > 300:  # 5 minutos
-                    await _notify(bot, session.text_channel_id, "👋 **Tiffany saindo** - canal vazio por 5 minutos.")
-                    # Executar saída
-                    sess = _sessions.pop(guild_id, None)
-                    if sess:
-                        if sess.listen_task:
-                            sess.listen_task.cancel()
-                        if sess.music_task:
-                            sess.music_task.cancel()
-                        if sess.question_task:
-                            sess.question_task.cancel()
-                    if vc and vc.is_connected():
-                        await vc.disconnect(force=True)
-                    return
-            else:
-                # Tem gente no canal, resetar timer
-                _empty_since = None
 
-            # Diagnóstico: se passou 60s sem receber nenhum audio, avisa
-            if not _warned_no_audio and (asyncio.get_event_loop().time() - _last_audio_time) > 60:
-                _warned_no_audio = True
+            # Verificar canal vazio a cada ~10s (20 iterações de 0.5s)
+            _empty_check_counter += 1
+            if _empty_check_counter >= 20:
+                _empty_check_counter = 0
+                agora = asyncio.get_event_loop().time()
+                if vc.channel:
+                    ch_id = vc.channel.id
+                    members_in_vc = [
+                        m for m in vc.channel.members
+                        if not m.bot
+                        and m.voice is not None
+                        and m.voice.channel is not None
+                        and m.voice.channel.id == ch_id
+                    ]
+                else:
+                    members_in_vc = []
 
-            pcm = _drain_loudest_user_pcm(session)
-            if len(pcm) < MIN_PCM_BYTES:
-                if len(pcm) > 0:
-                    log.info("🎤 Áudio recebido (%d bytes), mas abaixo do mínimo (%d bytes) para STT. Fale por mais tempo.", len(pcm), MIN_PCM_BYTES)
+                if not members_in_vc:
+                    if _empty_since is None:
+                        _empty_since = agora
+                    elif (agora - _empty_since) > 600:
+                        sess = _sessions.pop(guild_id, None)
+                        if sess:
+                            if sess.listen_task:
+                                sess.listen_task.cancel()
+                            if sess.music_task:
+                                sess.music_task.cancel()
+                            if sess.question_task:
+                                sess.question_task.cancel()
+                        if vc and vc.is_connected():
+                            await vc.disconnect(force=True)
+                        return
+                else:
+                    _empty_since = None
+
+            # Processa áudio assim que o usuário faz pausa de ≥0.8s
+            pcm = _drain_ready_user_pcm(session)
+            if not pcm:
                 continue
-            _last_audio_time = asyncio.get_event_loop().time()
+            log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             log.info("Enviando %d bytes de áudio para STT...", len(wav))
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
@@ -510,8 +604,9 @@ async def _voice_listen_loop(
                 continue
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
-
             if action == "none":
+                # Mostra o que foi ouvido para ajudar a calibrar
+                await _notify(bot, session.text_channel_id, f"🗣️ Ouvi: «{text[:80]}» *(diga «Tiffany, ...» para comandos)*")
                 continue
             
             if action == "stop" or action == "skip":
@@ -594,36 +689,48 @@ async def _join_voice_recv_client(
             vc_existing
             and vc_existing.is_connected()
             and isinstance(vc_existing, voice_recv.VoiceRecvClient)
+            and vc_existing.channel
+            and vc_existing.channel.id == channel.id
         ):
             try:
                 vc_existing.stop_listening()
             except Exception:
                 pass
-            await vc_existing.move_to(channel)
             return vc_existing
-        if vc_existing and vc_existing.is_connected():
-            await vc_existing.disconnect(force=True)
+        # Limpa qualquer conexão existente (conectada ou zumbi)
+        if vc_existing:
+            try:
+                await vc_existing.disconnect(force=True)
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
         return await channel.connect(cls=voice_recv.VoiceRecvClient, self_deaf=False)
     else:
         if vc_existing and vc_existing.is_connected():
+            if vc_existing.channel and vc_existing.channel.id == channel.id:
+                return vc_existing
             await vc_existing.move_to(channel)
             return vc_existing
-        if vc_existing and vc_existing.is_connected():
-            await vc_existing.disconnect(force=True)
+        if vc_existing:
+            try:
+                await vc_existing.disconnect(force=True)
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
         return await channel.connect(self_deaf=False)
 
 
 def register_voice(bot: commands.Bot) -> None:
 
     _RANDOM_SONGS = [
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "https://www.youtube.com/watch?v=9bZkp7q19f0",
-        "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
-        "https://www.youtube.com/watch?v=RgKAFK5djSk",
-        "https://www.youtube.com/watch?v=JGwWNGJdvx8",
-        "https://www.youtube.com/watch?v=YR3nmjxJY74",
-        "https://www.youtube.com/watch?v=YQHsXMglC9A",
-        "https://www.youtube.com/watch?v=ru0K8uYEZWw",
+        "scsearch1:Rick Astley Never Gonna Give You Up",
+        "scsearch1:PSY Gangnam Style",
+        "scsearch1:Luis Fonsi Despacito",
+        "scsearch1:Mark Ronson Uptown Funk Bruno Mars",
+        "scsearch1:The Weeknd Blinding Lights",
+        "scsearch1:Dua Lipa Levitating",
+        "scsearch1:Imagine Dragons Believer",
+        "scsearch1:Queen Bohemian Rhapsody",
     ]
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc) -> str:
@@ -699,8 +806,8 @@ def register_voice(bot: commands.Bot) -> None:
         # Se já está conectado
         sess = _sessions.get(gid)
         vc = guild.voice_client
-        _VRC = voice_recv.VoiceRecvClient if _VOICE_RECV_AVAILABLE else discord.VoiceClient
-        if sess and vc and vc.is_connected() and isinstance(vc, _VRC):
+
+        if sess and vc and vc.is_connected():
             if specific_channel and vc.channel.id != specific_channel.id:
                 try:
                     await vc.move_to(specific_channel)
@@ -709,6 +816,20 @@ def register_voice(bot: commands.Bot) -> None:
                     await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
                     return None, None
             return sess, vc
+
+        # Bot está conectado mas sessão foi perdida → recria sem reconectar
+        if vc and vc.is_connected() and not sess:
+            session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
+            session.music_task = asyncio.create_task(
+                _play_worker(gid, vc, bot),
+                name=f"tiffany-music-{gid}",
+            )
+            session.question_task = asyncio.create_task(
+                _question_worker(gid, vc, bot),
+                name=f"tiffany-question-{gid}",
+            )
+            _sessions[gid] = session
+            return session, vc
 
         # Determinar canal de voz
         channel = specific_channel
@@ -733,22 +854,40 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             pass
 
+        timeout = _voice_connect_timeout_sec()
+        voice_recv_ok = False
         try:
-            timeout = _voice_connect_timeout_sec()
             vc = await asyncio.wait_for(
                 _join_voice_recv_client(guild, channel),
                 timeout=timeout,
             )
+            voice_recv_ok = _VOICE_RECV_AVAILABLE
         except asyncio.TimeoutError:
-            await ctx.send("⏱️ Tempo esgotado ao conectar no canal de voz. Verifique se o host permite UDP (bloqueio comum na Discloud).")
-            return None, None
+            # Fallback silencioso para VoiceClient normal (sem escuta, mas música funciona)
+            log.warning("VoiceRecvClient timeout — usando VoiceClient padrão (música apenas).")
+            try:
+                # Limpa qualquer estado parcial de conexão (conectado ou não)
+                existing = guild.voice_client
+                if existing:
+                    try:
+                        await existing.disconnect(force=True)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.5)
+                vc = await asyncio.wait_for(
+                    channel.connect(self_deaf=False),
+                    timeout=timeout,
+                )
+            except Exception as e:
+                await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
+                return None, None
         except Exception as e:
             await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
             return None, None
 
         # Criar sessão
         session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
-        if _VOICE_RECV_AVAILABLE:
+        if voice_recv_ok:
             sink = _PCMBufferSink(session)
             try:
                 vc.listen(sink)
@@ -760,7 +899,7 @@ def register_voice(bot: commands.Bot) -> None:
                 log.warning("Falha ao iniciar escuta: %s", e)
                 session.listen_task = None
         else:
-            log.warning("voice_recv não disponível — escuta de voz desativada.")
+            log.warning("voice_recv não disponível — escuta de voz desativada, música ativa.")
             session.listen_task = None
 
         session.music_task = asyncio.create_task(
@@ -832,12 +971,35 @@ def register_voice(bot: commands.Bot) -> None:
         if not vc.is_playing():
             await ctx.send("⚠️ Não tem faixa tocando agora.")
             return
-        prox_na_fila = session.music_queue.qsize()
-        vc.stop_playing()
-        if prox_na_fila > 0:
-            await ctx.send(f"⏭️ Pulado. Próxima da fila (restantes: {prox_na_fila}).")
+        prox = session.queue_display[0] if session.queue_display else None
+        vc.stop()
+        if prox:
+            await ctx.send(f"⏭️ Pulado. Próxima: **{prox[:80]}**")
         else:
             await ctx.send("⏭️ Pulado. Fila vazia.")
+
+    @bot.command(name="q", help="Lista a fila de músicas: $q")
+    async def cmd_queue(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            return
+        lines = []
+        if session.current_song:
+            lines.append(f"▶️ **Tocando agora:** {session.current_song[:80]}")
+        if session.queue_display:
+            lines.append("")
+            for i, name in enumerate(session.queue_display[:10], start=1):
+                lines.append(f"`{i}.` {name[:80]}")
+            if len(session.queue_display) > 10:
+                lines.append(f"*... e mais {len(session.queue_display) - 10} músicas*")
+        if not lines:
+            await ctx.send("📭 Fila vazia.")
+            return
+        await ctx.send("\n".join(lines))
 
     @bot.command(name="r", help="Toca música aleatória (random): $r")
     async def cmd_random(ctx: commands.Context):
@@ -850,9 +1012,11 @@ def register_voice(bot: commands.Bot) -> None:
         if not sess:
             return
         import random
-        url = random.choice(_RANDOM_SONGS)
-        await sess.music_queue.put(url)
-        await ctx.send("🎲 Música aleatória na fila!")
+        query = random.choice(_RANDOM_SONGS)
+        display = re.sub(r"^scsearch\d*:", "", query).strip()
+        sess.queue_display.append(display)
+        await sess.music_queue.put(query)
+        await ctx.send(f"🎲 Música aleatória na fila: **{display}**")
 
     @bot.command(name="p", help="Toca uma música: !p <nome ou URL>")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
@@ -865,10 +1029,16 @@ def register_voice(bot: commands.Bot) -> None:
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
+        display = query
         if not re.match(r"^https?://", query):
             query = f"ytsearch1:{query}"
+        sess.queue_display.append(display)
         await sess.music_queue.put(query)
-        await ctx.send(f"🎵 Adicionado à fila: **{query[:100]}**")
+        if not sess.current_song and len(sess.queue_display) == 1:
+            await ctx.send(f"🎵 Buscando: **{display[:100]}**...")
+        else:
+            pos = len(sess.queue_display) + (1 if sess.current_song else 0)
+            await ctx.send(f"🎵 **#{pos}** na fila: **{display[:100]}**")
 
     @bot.command(name="h", help="Lista comandos da Tiffany: $h (help)")
     async def cmd_help(ctx: commands.Context):
@@ -879,6 +1049,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$e` — Entra no seu canal de voz *(enter)*\n"
             "`t$l` — Sai do canal de voz *(leave)*\n"
             "`t$p` — Toca uma música por nome ou URL *(play)*\n"
+            "`t$q` — Lista as músicas na fila *(queue)*\n"
             "`t$s` — Pula a faixa que está tocando *(skip)*\n"
             "`t$r` — Toca uma música aleatória *(random)*\n"
             "`t$h` — Mostra esta lista de comandos *(help)*"
