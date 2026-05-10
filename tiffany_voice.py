@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import threading
 import wave
 from dataclasses import dataclass, field
@@ -111,6 +112,7 @@ def _voice_connect_timeout_sec() -> float:
 
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.4)  # ~75kb — voz real (sem silêncios)
+MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 3
@@ -179,6 +181,20 @@ def _get_context_messages(guild_id: int) -> list[dict]:
         messages.append({"role": "user", "content": turn["q"]})
         messages.append({"role": "assistant", "content": turn["a"]})
     return messages
+
+
+_CMD_COOLDOWN_SEC = 5.0
+_user_last_cmd: dict[int, float] = {}  # user_id -> monotonic timestamp
+
+
+def _check_cooldown(user_id: int) -> bool:
+    """Retorna True se o usuário pode usar o comando. False se está em cooldown."""
+    now = time.monotonic()
+    last = _user_last_cmd.get(user_id, 0)
+    if (now - last) < _CMD_COOLDOWN_SEC:
+        return False
+    _user_last_cmd[user_id] = now
+    return True
 
 
 def _add_to_context(guild_id: int, question: str, answer: str) -> None:
@@ -427,10 +443,13 @@ class _PCMBufferSink(_AudioSinkBase):
             if isinstance(pcm, list):
                 pcm = b"".join(pcm)
 
-            import time
             uid = user.id
             with self._session.buf_lock:
-                self._session.pcm_buffers.setdefault(uid, bytearray()).extend(pcm)
+                buf = self._session.pcm_buffers.setdefault(uid, bytearray())
+                buf.extend(pcm)
+                # Cap: descarta início se ultrapassar MAX_PCM_BYTES (evita memory leak)
+                if len(buf) > MAX_PCM_BYTES:
+                    del buf[: len(buf) - MAX_PCM_BYTES]
                 self._session.last_audio_ts[uid] = time.monotonic()
         except Exception as e:
             log.error("Erro ao processar áudio do usuário %s: %s", user.name if user else "?", e)
@@ -445,7 +464,6 @@ _SILENCE_SEC = 0.8  # espera este silêncio após última fala antes de transcre
 def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
     """Retorna (PCM, uid) do usuário que parou de falar há pelo menos _SILENCE_SEC segundos.
     Retorna (b"", 0) se não há áudio pronto."""
-    import time
     now = time.monotonic()
     with session.buf_lock:
         ready = [
@@ -650,7 +668,7 @@ async def _voice_listen_loop(
                 continue
             
             if action == "stop" or action == "skip":
-                vc.stop_playing()
+                vc.stop()
                 await _notify(bot, session.text_channel_id, "⏭️ Faixa pulada (comando de voz).")
                 continue
             
@@ -676,6 +694,11 @@ async def _voice_listen_loop(
                 continue
             
             if action == "play" and arg:
+                # Verifica limite de fila
+                fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
+                if fila_atual >= 10:
+                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/10).")
+                    continue
                 # Suporta múltiplas músicas separadas por vírgula ou " e "
                 parts = re.split(r'\s*,\s*|\s+e\s+', arg)
                 added = 0
@@ -683,25 +706,21 @@ async def _voice_listen_loop(
                     q = part.strip()
                     if not q:
                         continue
+                    display = q
                     if "open.spotify.com" in q or q.startswith("spotify:"):
                         pass
                     elif not re.match(r"^https?://", q):
                         q = f"ytsearch1:{q}"
+                    session.queue_display.append(display)
                     await session.music_queue.put(q)
                     added += 1
-                
+                    if len(session.queue_display) + (1 if session.current_song else 0) >= 10:
+                        break
+
                 if added > 1:
-                    await _notify(
-                        bot,
-                        session.text_channel_id,
-                        f"🎵 **{added} músicas** adicionadas à fila.",
-                    )
-                else:
-                    await _notify(
-                        bot,
-                        session.text_channel_id,
-                        f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.",
-                    )
+                    await _notify(bot, session.text_channel_id, f"🎵 **{added} músicas** adicionadas à fila.")
+                elif added == 1:
+                    await _notify(bot, session.text_channel_id, f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.")
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -885,12 +904,18 @@ def register_voice(bot: commands.Bot) -> None:
                 except Exception as e:
                     await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
                     return None, None
-            # Reinicia o music_task se tiver morrido (garante fila sempre processada)
+            # Reinicia workers mortos (garante fila sempre processada)
             if sess.music_task is None or sess.music_task.done():
                 log.warning("Music worker morreu — reiniciando guild=%s", gid)
                 sess.music_task = asyncio.create_task(
                     _play_worker(gid, vc, bot),
                     name=f"tiffany-music-{gid}",
+                )
+            if sess.question_task is None or sess.question_task.done():
+                log.warning("Question worker morreu — reiniciando guild=%s", gid)
+                sess.question_task = asyncio.create_task(
+                    _question_worker(gid, vc, bot),
+                    name=f"tiffany-question-{gid}",
                 )
             return sess, vc
 
@@ -1140,6 +1165,11 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
+            return
+
+        # Cooldown: 5s por usuário
+        if not _check_cooldown(ctx.author.id):
+            await ctx.send("⏳ Aguarde alguns segundos antes de perguntar novamente.", delete_after=5)
             return
 
         # Coleta URLs de imagens anexadas à mensagem
