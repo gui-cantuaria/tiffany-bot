@@ -319,6 +319,47 @@ async def _summarize_url(url: str, api_key: str) -> str:
         return f"Erro ao resumir com IA: {e}"
 
 
+_VOICE_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_state.json")
+
+
+def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int) -> None:
+    """Persiste o canal de voz atual para reconexao automatica apos restart."""
+    try:
+        try:
+            with open(_VOICE_STATE_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+        data[str(guild_id)] = {"channel_id": channel_id, "text_channel_id": text_channel_id}
+        with open(_VOICE_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        log.warning("Erro ao salvar voice state: %s", e)
+
+
+def _clear_voice_state(guild_id: int) -> None:
+    """Remove o estado de voz de um servidor (saida limpa)."""
+    try:
+        try:
+            with open(_VOICE_STATE_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+        data.pop(str(guild_id), None)
+        with open(_VOICE_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        log.warning("Erro ao limpar voice state: %s", e)
+
+
+def _load_voice_state() -> dict:
+    try:
+        with open(_VOICE_STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def _load_playlists() -> dict:
     try:
         with open(_PLAYLISTS_FILE, encoding="utf-8") as f:
@@ -1165,6 +1206,7 @@ def register_voice(bot: commands.Bot) -> None:
         _sessions[gid] = session
 
         log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
+        _save_voice_state(gid, channel.id, ctx.channel.id)
         await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
         return session, vc
 
@@ -1194,6 +1236,7 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.music_task.cancel()
             if sess.question_task:
                 sess.question_task.cancel()
+        _clear_voice_state(gid)  # saida limpa — nao reconectar no proximo restart
         vc = ctx.guild.voice_client
         if vc and vc.is_connected():
             await vc.disconnect(force=True)
@@ -1592,5 +1635,64 @@ def register_voice(bot: commands.Bot) -> None:
             pass  # ignora comandos desconhecidos silenciosamente
         else:
             log.warning("Erro no comando %s: %s", ctx.command, error)
+
+    @bot.listen("on_ready")
+    async def _rejoin_on_ready() -> None:
+        """Reconecta automaticamente aos canais de voz apos restart."""
+        await asyncio.sleep(4)  # aguarda guilds carregarem completamente
+        state = _load_voice_state()
+        if not state:
+            return
+        for gid_str, info in state.items():
+            try:
+                gid = int(gid_str)
+                if gid in _sessions:
+                    continue  # ja conectado
+                guild = bot.get_guild(gid)
+                if not guild:
+                    continue
+                channel = guild.get_channel(info["channel_id"])
+                if not channel or not isinstance(channel, discord.VoiceChannel):
+                    continue
+                # So reconecta se ainda ha humanos no canal
+                humans = [m for m in channel.members if not m.bot]
+                if not humans:
+                    continue
+                text_channel_id = info.get("text_channel_id", 0)
+                await _ensure_opus()
+                vc = await asyncio.wait_for(
+                    _join_voice_recv_client(guild, channel),
+                    timeout=25.0,
+                )
+                voice_recv_ok = _VOICE_RECV_AVAILABLE
+                session = _GuildVoiceSession(text_channel_id=text_channel_id)
+                if voice_recv_ok:
+                    sink = _PCMBufferSink(session)
+                    try:
+                        vc.listen(sink)
+                        session.listen_task = asyncio.create_task(
+                            _voice_listen_loop(gid, vc, bot),
+                            name=f"tiffany-voice-{gid}",
+                        )
+                    except Exception as e:
+                        log.warning("Falha ao iniciar escuta no rejoin: %s", e)
+                session.music_task = asyncio.create_task(
+                    _play_worker(gid, vc, bot),
+                    name=f"tiffany-music-{gid}",
+                )
+                session.question_task = asyncio.create_task(
+                    _question_worker(gid, vc, bot),
+                    name=f"tiffany-question-{gid}",
+                )
+                _sessions[gid] = session
+                log.info("Reconectado automaticamente guild=%s canal=%s", gid, channel.name)
+                text_ch = bot.get_channel(text_channel_id)
+                if text_ch and hasattr(text_ch, "send"):
+                    try:
+                        await text_ch.send("🔄 Voltei! A fila foi resetada mas estou pronta.")
+                    except discord.HTTPException:
+                        pass
+            except Exception as e:
+                log.warning("Erro ao reconectar guild %s no on_ready: %s", gid_str, e)
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
