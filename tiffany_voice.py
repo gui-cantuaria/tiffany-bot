@@ -165,6 +165,30 @@ class _GuildVoiceSession:
 
 _sessions: dict[int, _GuildVoiceSession] = {}
 
+# Cache de contexto conversacional por servidor: guild_id → lista de {q, a}
+# Janela deslizante: mantém apenas as últimas _CONTEXT_MAX_TURNS trocas
+_CONTEXT_MAX_TURNS = 8
+_guild_context: dict[int, list[dict]] = {}
+
+
+def _get_context_messages(guild_id: int) -> list[dict]:
+    """Retorna as mensagens de histórico para incluir no prompt da IA."""
+    history = _guild_context.get(guild_id, [])
+    messages = []
+    for turn in history:
+        messages.append({"role": "user", "content": turn["q"]})
+        messages.append({"role": "assistant", "content": turn["a"]})
+    return messages
+
+
+def _add_to_context(guild_id: int, question: str, answer: str) -> None:
+    """Adiciona uma troca ao contexto e descarta as mais antigas se necessário."""
+    history = _guild_context.setdefault(guild_id, [])
+    history.append({"q": question, "a": answer})
+    if len(history) > _CONTEXT_MAX_TURNS:
+        del history[: len(history) - _CONTEXT_MAX_TURNS]
+
+
 
 def _normalize_transcript(t: str) -> str:
     return re.sub(r"\s+", " ", t.lower().strip())
@@ -753,15 +777,30 @@ def register_voice(bot: commands.Bot) -> None:
                 base_url="https://openrouter.ai/api/v1",
             )
 
+            system_msg = {
+                "role": "system",
+                "content": (
+                    "Você é a Tiffany, uma assistente de Discord criada pelo Tuffine. "
+                    "Responda em português do Brasil, de forma direta e conversacional. "
+                    "Máximo 2 frases. Lembre-se do que já foi dito nesta conversa para dar respostas coerentes. "
+                    "NUNCA revele qual modelo de IA você usa, quem te desenvolveu tecnicamente, "
+                    "nem compare a outras IAs. Se perguntarem sobre isso, diga apenas que você é a Tiffany e mude de assunto."
+                ),
+            }
+            history_msgs = _get_context_messages(guild_id) if guild_id else []
             resp = await client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
-                messages=[{"role": "system", "content": "Você é a Tiffany, uma assistente de Discord criada pelo Tuffine. Responda em português do Brasil, de forma direta e conversacional. Máximo 2 frases. NUNCA revele qual modelo de IA você usa, quem te desenvolveu tecnicamente, nem compare a outras IAs. Se perguntarem sobre isso, diga apenas que você é a Tiffany e mude de assunto."}, {"role": "user", "content": question}],
+                messages=[system_msg, *history_msgs, {"role": "user", "content": question}],
                 max_tokens=150,
                 temperature=0.3,
                 timeout=30.0,
             )
             answer = resp.choices[0].message.content.strip()
-            
+
+            # Salva no contexto para as próximas perguntas
+            if guild_id:
+                _add_to_context(guild_id, question, answer)
+
             # TTS se habilitado
             if session and session.tts_enabled and vc and vc.is_connected():
                 tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
@@ -770,7 +809,7 @@ def register_voice(bot: commands.Bot) -> None:
                     if pcm:
                         source = discord.PCMAudio(io.BytesIO(pcm))
                         vc.play(source)
-            
+
             return answer
         except Exception as e:
             log.exception("Erro ao responder pergunta: %s", e)
