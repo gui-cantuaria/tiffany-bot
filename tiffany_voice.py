@@ -1464,7 +1464,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         import random
         query = random.choice(_RANDOM_SONGS)
-        display = re.sub(r"^scsearch\d*:", "", query).strip()
+        display = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
         await ctx.send(f"🎲 Música aleatória na fila: **{display}**")
@@ -1652,14 +1652,18 @@ def register_voice(bot: commands.Bot) -> None:
             pass
 
     # Erros de permissao em comandos admin (ex: t$st sem ser admin)
-    @bot.event
-    async def on_command_error(ctx: commands.Context, error: Exception) -> None:
+    @bot.listen("on_command_error")
+    async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send("⚠️ Voce nao tem permissao para usar este comando.", delete_after=5)
+            await ctx.send("⚠️ Você não tem permissão para usar este comando.", delete_after=5)
         elif isinstance(error, commands.CommandNotFound):
             pass  # ignora comandos desconhecidos silenciosamente
-        else:
-            log.warning("Erro no comando %s: %s", ctx.command, error)
+        elif isinstance(error, commands.CommandInvokeError):
+            log.exception("Erro ao executar comando %s: %s", ctx.command, error.original)
+            try:
+                await ctx.send(f"❌ Erro interno ao executar `t${ctx.command}`. Tente novamente.", delete_after=10)
+            except Exception:
+                pass
 
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
