@@ -645,7 +645,7 @@ async def validar_imagem(url: str) -> bool:
             timeout=aiohttp.ClientTimeout(total=5),
             allow_redirects=True,
         ) as r:
-            if r.status >= 400 and r.status not in (401, 403, 429):
+            if r.status >= 400 and r.status not in (401, 429):
                 return False
             ct = r.headers.get("Content-Type", "").lower()
             cl = r.headers.get("Content-Length")
