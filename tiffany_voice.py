@@ -821,6 +821,7 @@ async def _voice_listen_loop(
                                 sess.question_task.cancel()
                         if vc and vc.is_connected():
                             await vc.disconnect(force=True)
+                        _clear_voice_state(guild_id)
                         return
                 else:
                     _empty_since = None
@@ -1664,6 +1665,55 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(f"❌ Erro interno ao executar `t${ctx.command}`. Tente novamente.", delete_after=10)
             except Exception:
                 pass
+
+    @bot.listen("on_voice_state_update")
+    async def _on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        """Desconecta automaticamente quando todos saem do canal (safety net)."""
+        if member.bot:
+            return
+        guild = member.guild
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
+            return
+        bot_channel = vc.channel
+        if not bot_channel:
+            return
+        # Só age quando um humano SAIU do canal onde o bot está
+        if before.channel is None or before.channel.id != bot_channel.id:
+            return
+        humans = [m for m in bot_channel.members if not m.bot]
+        if humans:
+            return
+        # Canal ficou vazio — espera 60s e desconecta
+        await asyncio.sleep(60)
+        if not vc.is_connected():
+            return
+        bot_channel = vc.channel
+        if bot_channel:
+            humans = [m for m in bot_channel.members if not m.bot]
+            if humans:
+                return
+        gid = guild.id
+        log.info("Canal vazio por 60s (on_voice_state_update), desconectando guild=%s", gid)
+        sess = _sessions.pop(gid, None)
+        if sess:
+            if sess.listen_task:
+                sess.listen_task.cancel()
+            if sess.music_task:
+                sess.music_task.cancel()
+            if sess.question_task:
+                sess.question_task.cancel()
+            text_ch = bot.get_channel(sess.text_channel_id)
+            if text_ch and hasattr(text_ch, "send"):
+                try:
+                    await text_ch.send("👋 **Tiffany saiu** — canal ficou vazio.")
+                except Exception:
+                    pass
+        _clear_voice_state(gid)
+        try:
+            await vc.disconnect(force=True)
+        except Exception:
+            pass
 
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:

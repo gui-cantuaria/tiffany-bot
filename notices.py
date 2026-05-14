@@ -632,27 +632,36 @@ async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
     return None
 
 async def validar_imagem(url: str) -> bool:
-    """HEAD request para verificar se URL é imagem válida (>5KB)."""
+    """GET request para verificar se URL é imagem válida (>5KB, status 200/206)."""
     if not url:
         return False
     if not http_session:
         # Sem sessão HTTP: aceita apenas por extensão (menos seguro)
         return bool(IMG_EXT_RE.search(url))
     try:
-        async with http_session.head(
+        async with http_session.get(
             url,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=aiohttp.ClientTimeout(total=5),
+            headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-8191"},
+            timeout=aiohttp.ClientTimeout(total=8),
             allow_redirects=True,
         ) as r:
-            if r.status >= 400 and r.status not in (401, 429):
+            # Aceitar somente 200 (OK) ou 206 (Partial Content - Range honrado)
+            if r.status not in (200, 206):
                 return False
             ct = r.headers.get("Content-Type", "").lower()
-            cl = r.headers.get("Content-Length")
-            # Rejeitar imagens < 5KB (ícones/placeholders pequenos)
-            if cl and int(cl) < 5000:
+            if "image/" not in ct:
                 return False
-            return "image/" in ct
+            # Verificar tamanho: preferir Content-Range quando Range foi honrado
+            cr = r.headers.get("Content-Range", "")
+            if cr and "/" in cr:
+                total = cr.rsplit("/", 1)[-1]
+                if total.isdigit() and int(total) < 5000:
+                    return False
+            else:
+                cl = r.headers.get("Content-Length", "")
+                if cl.isdigit() and int(cl) < 5000:
+                    return False
+            return True
     except Exception as e:
         log.debug(f"Erro validando imagem {url}: {e}")
     return False
