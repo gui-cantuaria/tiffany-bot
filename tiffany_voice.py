@@ -1715,10 +1715,51 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             pass
 
+    async def _empty_channel_watchdog() -> None:
+        """Safety net: desconecta de canais vazios a cada 5 minutos, independente de eventos."""
+        await asyncio.sleep(90)  # aguarda startup completo
+        while True:
+            await asyncio.sleep(300)  # verifica a cada 5 minutos
+            try:
+                for guild in bot.guilds:
+                    vc = guild.voice_client
+                    if not vc or not vc.is_connected():
+                        continue
+                    bot_channel = vc.channel
+                    if not bot_channel:
+                        continue
+                    humans = [m for m in bot_channel.members if not m.bot]
+                    if humans:
+                        continue
+                    gid = guild.id
+                    log.info("Watchdog: canal vazio detectado guild=%s, desconectando.", gid)
+                    sess = _sessions.pop(gid, None)
+                    if sess:
+                        if sess.listen_task:
+                            sess.listen_task.cancel()
+                        if sess.music_task:
+                            sess.music_task.cancel()
+                        if sess.question_task:
+                            sess.question_task.cancel()
+                        text_ch = bot.get_channel(sess.text_channel_id)
+                        if text_ch and hasattr(text_ch, "send"):
+                            try:
+                                await text_ch.send("👋 **Tiffany saiu** — canal ficou vazio.")
+                            except Exception:
+                                pass
+                    _clear_voice_state(gid)
+                    try:
+                        await vc.disconnect(force=True)
+                    except Exception:
+                        pass
+            except Exception:
+                log.exception("Erro no watchdog de canal vazio")
+
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
         """Reconecta automaticamente aos canais de voz apos restart."""
         await asyncio.sleep(4)  # aguarda guilds carregarem completamente
+        asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
         state = _load_voice_state()
         if not state:
             return

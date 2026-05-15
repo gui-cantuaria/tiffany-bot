@@ -2,12 +2,22 @@ import subprocess
 import time
 import sys
 import os
+import fcntl
 from datetime import datetime
+
+# --- LOCKFILE: garante que só uma instância roda ---
+_LOCKFILE = "/tmp/tuffine_launcher.lock"
+_lock_fd = open(_LOCKFILE, "w")
+try:
+    fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except IOError:
+    print(f"[LOCK] Outra instância do launcher já está rodando. Encerrando duplicata.")
+    sys.exit(0)
 
 # --- LISTA DE BOTS ---
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
-    # {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas Discord"}, # <--- COMENTADO (Desligado)
+    {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},
 ]
 
 LOG_DIR = "logs"
