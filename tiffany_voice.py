@@ -29,6 +29,19 @@ from discord.ext import commands
 try:
     from discord.ext import voice_recv as voice_recv
     _VOICE_RECV_AVAILABLE = True
+    # Monkey-patch: ignorar OpusError em pacotes corrompidos (retorna silêncio)
+    try:
+        import discord.opus as _dopus
+        _original_decode = _dopus.Decoder.decode
+        def _safe_decode(self, data, *, fec=False):
+            try:
+                return _original_decode(self, data, fec=fec)
+            except _dopus.OpusError:
+                # Retorna frame de silêncio (960 samples * 2 canais * 2 bytes = 3840)
+                return b"\x00" * 3840
+        _dopus.Decoder.decode = _safe_decode
+    except Exception:
+        pass
 except Exception as _e:
     voice_recv = None  # type: ignore
     _VOICE_RECV_AVAILABLE = False
@@ -112,7 +125,7 @@ def _voice_connect_timeout_sec() -> float:
         return 25.0
 
 
-MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.4)  # ~75kb — voz real (sem silêncios)
+MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.15)  # ~28kb — aceitar frases curtas como "Tiffany, para"
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
