@@ -5,6 +5,7 @@ import os
 import re
 import json
 import time
+import io
 import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
@@ -54,8 +55,8 @@ POST_SPACING_SEC = 120
 MAX_POSTS_POR_CICLO = 1
 
 # --- Notas de corte ---
-NOTA_MIN_APROVACAO = 75
-NOTA_MIN_GAMES = 82
+NOTA_MIN_APROVACAO = 80
+NOTA_MIN_GAMES = 85
 NOTA_URGENTE = 90
 
 # --- Anti-dup ---
@@ -96,7 +97,7 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
-discord_client = commands.Bot(command_prefix="t$", intents=intents)
+discord_client = commands.Bot(command_prefix=commands.when_mentioned_or("t$", "T$"), case_insensitive=True, intents=intents)
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)
 ai_client = (
@@ -736,29 +737,50 @@ async def extrair_imagem_completa(entry, feed_url: str) -> Optional[str]:
         elif og:
             log.warning(f"og:image encontrado mas inválido: {og[:80]}")
     
-    # Última tentativa: extrair qualquer imagem do HTML da página
-    if link:
-        try:
-            if http_session:
-                async with http_session.get(
-                    link,
-                    headers={"User-Agent": "Mozilla/5.0"},
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as r:
-                    if r.status == 200:
-                        html = await r.text()
-                        # Busca imagens no HTML (tags img, figure, etc)
-                        imgs = IMG_SRC_RE.findall(html)
-                        for img_url in imgs[:5]:  # Testa até 5 imagens
-                            norm = _norm_img_url(img_url, link)
-                            if norm and await validar_imagem(norm):
-                                log.info(f"Imagem recuperada via HTML scraping: {norm[:80]}")
-                                return norm
-        except Exception as e:
-            log.debug(f"Erro no scraping final: {e}")
-    
     log.warning(f"Nenhuma imagem válida encontrada para: {entry.get('title', '?')[:60]}")
     return None
+
+
+async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
+    """Usa IA de visão (llama-4-maverick) para verificar se a imagem combina com o título."""
+    if not ai_client or not img_url or not titulo:
+        return True  # Se não tem IA, assume válida (não bloqueia)
+    try:
+        resp = await ai_client.chat.completions.create(
+            model="meta-llama/llama-4-maverick",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Você é um validador de imagens para um bot de notícias de tecnologia. "
+                        "Analise se a imagem tem relação com o título da notícia. "
+                        "Responda APENAS 'SIM' se a imagem é relevante ao tema da notícia, "
+                        "ou 'NAO' se a imagem é completamente irrelevante (ex: anúncio, produto aleatório, "
+                        "logo genérico, cortador de grama em notícia de cibersegurança, etc). "
+                        "Imagens genéricas de tecnologia (teclados, telas, servidores) são aceitáveis "
+                        "para notícias de tech. Responda apenas SIM ou NAO, nada mais."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Título da notícia: {titulo}"},
+                        {"type": "image_url", "image_url": {"url": img_url}},
+                    ],
+                },
+            ],
+            max_tokens=5,
+            temperature=0.0,
+            timeout=15.0,
+        )
+        answer = resp.choices[0].message.content.strip().upper()
+        relevante = "SIM" in answer
+        if not relevante:
+            log.info(f"IA rejeitou imagem por irrelevância: {img_url[:80]} | título: {titulo[:60]}")
+        return relevante
+    except Exception as e:
+        log.debug(f"Erro na validação IA de imagem: {e}")
+        return True  # Em caso de erro, não bloqueia
 
 # =========================
 # ANÁLISE IA (OpenRouter)
@@ -1117,13 +1139,55 @@ def noticia_eh_recente(entry_dt: Optional[datetime]) -> bool:
 # =========================
 # POSTAR NOTÍCIA (extraído para reuso)
 # =========================
+async def _baixar_imagem(url: str) -> Optional[tuple[bytes, str]]:
+    """Baixa a imagem e retorna (bytes, extensão). Garante que Discord exiba."""
+    if not http_session or not url:
+        return None
+    try:
+        async with http_session.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=aiohttp.ClientTimeout(total=12),
+            allow_redirects=True,
+        ) as r:
+            if r.status not in (200, 206):
+                return None
+            ct = r.headers.get("Content-Type", "").lower()
+            if "image/" not in ct:
+                return None
+            data = await r.read()
+            if len(data) < 5000:
+                return None
+            # Determinar extensão pelo content-type
+            ext = "jpg"
+            if "png" in ct:
+                ext = "png"
+            elif "webp" in ct:
+                ext = "webp"
+            elif "gif" in ct:
+                ext = "gif"
+            return data, ext
+    except Exception as e:
+        log.debug(f"Erro ao baixar imagem {url[:80]}: {e}")
+        return None
+
+
 async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
     """Posta uma notícia no canal. Retorna True se postou com sucesso."""
     # Trava de segurança: nunca postar sem imagem
-    img = noticia.get("imagem")
-    if not img:
+    img_url = noticia.get("imagem")
+    if not img_url:
         log.error(f"Tentativa de postar sem imagem, abortando: {noticia.get('titulo', '')[:60]}")
         return False
+
+    # Baixar imagem para anexar (evita hotlink protection / URLs que Discord não carrega)
+    img_data = await _baixar_imagem(img_url)
+    if not img_data:
+        log.warning(f"Falha ao baixar imagem, abortando post: {noticia.get('titulo', '')[:60]}")
+        return False
+
+    img_bytes, img_ext = img_data
+    attachment = discord.File(io.BytesIO(img_bytes), filename=f"noticia.{img_ext}")
 
     emoji = EMOJIS_CATEGORIA.get(noticia["categoria"], "🔌")
 
@@ -1137,7 +1201,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         name=f"Via {noticia['site']} • {noticia['categoria']} {emoji}",
         icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png",
     )
-    embed.set_image(url=noticia["imagem"])
+    embed.set_image(url=f"attachment://noticia.{img_ext}")
     embed.add_field(
         name="",
         value=f"👉 **[Clique aqui para ler a matéria completa]({noticia['link']})**",
@@ -1150,7 +1214,13 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
     embed.set_footer(text=texto_rodape)
 
     try:
-        msg = await channel.send(content=f"<@&{ID_CARGO_PARA_MARCAR}>", embed=embed)
+        # Só menciona o cargo para notícias de extrema relevância (nota >= 90)
+        mention = f"<@&{ID_CARGO_PARA_MARCAR}>" if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR else None
+        msg = await channel.send(
+            content=mention,
+            embed=embed,
+            file=attachment,
+        )
         try:
             await msg.create_thread(
                 name=f"💬 {noticia['categoria']}: {noticia['titulo'][:80]}",
@@ -1183,9 +1253,9 @@ def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
 
 
 def _deve_rodar_slot(agora: datetime) -> bool:
-    """Roda somente em slots fixos (xx:00 e xx:30) e apenas uma vez por slot."""
+    """Roda somente em slots fixos (xx:00 e xx:45) e apenas uma vez por slot."""
     global _last_run_slot
-    if agora.minute not in (0, 30):
+    if agora.minute not in (0, 45):
         return False
     slot = (agora.year * 10000 + agora.month * 100 + agora.day, agora.hour, agora.minute)
     if _last_run_slot == slot:
@@ -1395,6 +1465,7 @@ async def verificar_feeds():
 
     # ===== Validação de imagem em batch (paralelo com semáforo) =====
     total_sem_imagem = 0
+    total_img_ia_rejeitada = 0
     candidatos = []
 
     if pre_candidatos:
@@ -1408,10 +1479,17 @@ async def verificar_feeds():
         resultados_img = await asyncio.gather(
             *[_validar_img(c) for c in pre_candidatos]
         )
-
         for cand, img in resultados_img:
             if not img:
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem"})
+                total_sem_imagem += 1
+                continue
+            # Validação IA: verificar se imagem combina com o título
+            titulo_cand = cand.get("title", "")
+            if not await validar_imagem_ia(img, titulo_cand):
+                log.info(f"  ✗ Imagem irrelevante (IA): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
+                historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "imagem_irrelevante_ia"})
+                total_img_ia_rejeitada += 1
                 total_sem_imagem += 1
                 continue
             cand["img"] = img
@@ -1420,7 +1498,8 @@ async def verificar_feeds():
     log.info(
         f"Fase 1 concluída: {total_examinados} examinados, "
         f"{total_antigas} antigas, {total_dedup} dedup, {total_prefiltrados} prefiltrados, "
-        f"{total_sem_imagem} sem imagem → {len(candidatos)} candidatos para IA"
+        f"{total_sem_imagem} sem imagem ({total_img_ia_rejeitada} rejeitadas por IA) "
+        f"→ {len(candidatos)} candidatos para IA"
     )
 
     if not candidatos:
@@ -1595,6 +1674,33 @@ async def verificar_feeds():
     log.info("Ciclo concluído.")
 
 
+_CMD_NAMES = ("p", "r", "e", "l", "s", "q", "c", "h", "np", "pa", "re", "cl", "pl", "st", "su", "ff")
+
+@discord_client.event
+async def on_message(message: discord.Message):
+    """Normaliza comandos sem espaço (ex: t$phttps://... → t$p https://...)."""
+    if message.author.bot:
+        return
+    content = message.content
+    lower = content.lower()
+    if lower.startswith("t$"):
+        after_prefix = content[2:]
+        matched = False
+        # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/st/su)
+        for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
+            if after_prefix.lower().startswith(cmd) and len(after_prefix) > len(cmd):
+                char_after = after_prefix[len(cmd)]
+                if char_after != " ":
+                    # Insere espaço entre comando e argumento
+                    message.content = f"t${cmd} {after_prefix[len(cmd):]}"
+                    matched = True
+                    break
+        # Normaliza prefixo para minúsculo (T$ → t$)
+        if not matched and content[:2] != "t$":
+            message.content = f"t${content[2:]}"
+    await discord_client.process_commands(message)
+
+
 @discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
@@ -1620,13 +1726,6 @@ async def on_close():
         http_session = None
     log.info("🔌 Sessão HTTP fechada. Bot desligando.")
 
-# =========================
-# DIAGNÓSTICO: !ping
-# =========================
-@discord_client.command(name="ping")
-async def cmd_ping(ctx):
-    voz = "✅ carregado" if _voice_available else "❌ falhou ao carregar"
-    await ctx.send(f"🏓 pong! | módulo de voz: {voz}")
 
 # =========================
 # SLASH COMMAND: /status

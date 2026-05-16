@@ -160,6 +160,11 @@ class _GuildVoiceSession:
     music_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     queue_display: list[str] = field(default_factory=list)
     current_song: str = ""
+    current_query: str = ""
+    current_file: str = ""
+    current_tmpdir: Optional[str] = None
+    current_duration: float = 0
+    seeking: bool = False
     play_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     question_queue: asyncio.Queue[tuple[int, str]] = field(default_factory=asyncio.Queue)
     question_task: Optional[asyncio.Task] = None
@@ -322,7 +327,7 @@ async def _summarize_url(url: str, api_key: str) -> str:
 _VOICE_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_state.json")
 
 
-def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int) -> None:
+def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, session: Optional["_GuildVoiceSession"] = None) -> None:
     """Persiste o canal de voz atual para reconexao automatica apos restart."""
     try:
         try:
@@ -330,7 +335,28 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int) -> N
                 data = json.load(f)
         except Exception:
             data = {}
-        data[str(guild_id)] = {"channel_id": channel_id, "text_channel_id": text_channel_id}
+        entry: dict = {"channel_id": channel_id, "text_channel_id": text_channel_id}
+        # Salvar estado musical para restaurar fila após restart
+        if session:
+            queue_queries = []
+            queue_displays = list(session.queue_display)
+            # Extrair queries da fila (asyncio.Queue não é iterável, fazer cópia)
+            temp_items = []
+            while not session.music_queue.empty():
+                try:
+                    item = session.music_queue.get_nowait()
+                    temp_items.append(item)
+                    queue_queries.append(item)
+                except Exception:
+                    break
+            # Recolocar na fila
+            for item in temp_items:
+                session.music_queue.put_nowait(item)
+            entry["current_query"] = session.current_query
+            entry["current_display"] = session.current_song
+            entry["queue_queries"] = queue_queries
+            entry["queue_displays"] = queue_displays
+        data[str(guild_id)] = entry
         with open(_VOICE_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as e:
@@ -546,11 +572,79 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         return None
 
 
-def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str]]:
+_MUSIC_PLATFORM_OEMBED = {
+    "open.spotify.com": "https://open.spotify.com/oembed?url={url}",
+    "spotify:": "https://open.spotify.com/oembed?url={url}",
+    "deezer.com": "https://api.deezer.com/oembed?url={url}",
+    "music.apple.com": "https://music.apple.com/services/oembed?url={url}",
+}
+
+
+def _detect_music_platform(url: str) -> Optional[str]:
+    """Detecta se a URL é de uma plataforma de streaming suportada."""
+    for pattern in _MUSIC_PLATFORM_OEMBED:
+        if pattern in url:
+            return pattern
+    return None
+
+
+async def _music_platform_to_search(url: str) -> Optional[str]:
+    """Converte URL de Spotify/Deezer/Apple Music em query de busca YouTube via oEmbed."""
+    platform = _detect_music_platform(url)
+    if not platform:
+        return None
+    try:
+        import aiohttp as _aiohttp
+        oembed_url = _MUSIC_PLATFORM_OEMBED[platform].format(url=url)
+        async with _aiohttp.ClientSession() as sess:
+            async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    title = data.get("title", "")
+                    artist = data.get("author_name", "")
+                    if title:
+                        # Limpa sufixos comuns tipo " - Single", " - EP"
+                        title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
+                        query = f"{artist} {title}".strip() if artist else title
+                        log.info("Plataforma resolvida: %s → %s", url[:60], query)
+                        return f"ytsearch1:{query}"
+    except Exception as e:
+        log.debug("Erro ao resolver plataforma musical (%s): %s", platform, e)
+    # Fallback: tentar extrair nome da URL para Apple Music / Deezer
+    try:
+        if "music.apple.com" in url:
+            # Ex: music.apple.com/us/album/song-name/12345?i=67890
+            parts = url.split("/")
+            for p in reversed(parts):
+                clean = p.split("?")[0].replace("-", " ").strip()
+                if clean and not clean.isdigit() and len(clean) > 3:
+                    log.info("Apple Music fallback URL: %s", clean)
+                    return f"ytsearch1:{clean}"
+        elif "deezer.com" in url and "/track/" in url:
+            # Ex: deezer.com/track/12345 — tenta via API pública
+            track_id = url.rsplit("/", 1)[-1].split("?")[0]
+            if track_id.isdigit():
+                import aiohttp as _aiohttp
+                async with _aiohttp.ClientSession() as sess:
+                    async with sess.get(f"https://api.deezer.com/track/{track_id}", timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                        if r.status == 200:
+                            data = await r.json()
+                            artist = data.get("artist", {}).get("name", "")
+                            title = data.get("title", "")
+                            if title:
+                                query = f"{artist} {title}".strip()
+                                log.info("Deezer API resolvido: %s → %s", url[:60], query)
+                                return f"ytsearch1:{query}"
+    except Exception as e:
+        log.debug("Fallback de plataforma falhou: %s", e)
+    return None
+
+
+def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str], float]:
     """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
-    Retorna (filepath, title, tmpdir) — o tmpdir deve ser removido após uso."""
+    Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso."""
     if not _YTDLP_AVAILABLE:
-        return None, "yt-dlp não disponível", None
+        return None, "yt-dlp não disponível", None, 0
 
     tmp_dir = tempfile.mkdtemp(prefix="tiffany_")
     ydl_opts = {
@@ -580,16 +674,17 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
                 if not info:
                     continue
                 title = info.get("title") or info.get("id") or "audio"
+                duration = float(info.get("duration") or 0)
                 for fname in os.listdir(tmp_dir):
                     fp = os.path.join(tmp_dir, fname)
                     if os.path.isfile(fp) and os.path.getsize(fp) > 1024:
-                        log.info("✅ Download concluído: %s → %s", title, fname)
-                        return fp, title, tmp_dir
+                        log.info("✅ Download concluído: %s → %s (%.0fs)", title, fname, duration)
+                        return fp, title, tmp_dir, duration
         except Exception as e:
             log.error("yt-dlp download falhou em %s: %s", q, e)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
-    return None, "sem resultado para a busca", None
+    return None, "sem resultado para a busca", None, 0
 
 
 
@@ -688,14 +783,28 @@ class _YTSource(PCMVolumeTransformer):
             self._tmpdir = None
 
     @classmethod
-    async def from_query(cls, query: str, *, volume: float = 0.35) -> tuple[Optional["_YTSource"], str]:
+    async def from_query(cls, query: str, *, volume: float = 0.35, seek_sec: float = 0) -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
+        """Retorna (source, title, filepath, tmpdir, duration). Se seek_sec > 0, pula para essa posição."""
         loop = asyncio.get_running_loop()
-        fp, title, tmpdir = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
+        fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
         if not fp:
-            return None, title
-        # Arquivo local: FFmpeg não precisa de proxy, sem risco de 403
-        src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options="-vn")
-        return cls(src, volume=volume, tmpdir=tmpdir), title
+            return None, title, None, None, 0
+        options = "-vn"
+        before = ""
+        if seek_sec > 0:
+            before = f"-ss {seek_sec:.1f}"
+        src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None)
+        return cls(src, volume=volume, tmpdir=tmpdir), title, fp, tmpdir, duration
+
+    @classmethod
+    def from_file(cls, filepath: str, *, volume: float = 0.35, seek_sec: float = 0) -> Optional["_YTSource"]:
+        """Cria source a partir de arquivo já baixado com seek opcional."""
+        if not os.path.isfile(filepath):
+            return None
+        options = "-vn"
+        before = f"-ss {seek_sec:.1f}" if seek_sec > 0 else None
+        src = FFmpegPCMAudio(filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before)
+        return cls(src, volume=volume, tmpdir=None)
 
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
@@ -714,13 +823,17 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
             display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
             if session.queue_display:
                 display_name = session.queue_display.pop(0)
+            # Nunca mostrar URLs como display — usar placeholder até yt-dlp resolver o título
+            if re.match(r"^https?://", display_name):
+                display_name = "link recebido"
             try:
                 async with session.play_lock:
                     if not vc.is_connected():
                         break
                     session.current_song = display_name
+                    session.current_query = query
                     session.skip_votes.clear()
-                    source, info = await _YTSource.from_query(query)
+                    source, info, dl_fp, dl_tmpdir, dl_duration = await _YTSource.from_query(query)
                     if source is None:
                         session.current_song = ""
                         await _notify(
@@ -730,6 +843,14 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         )
                         session.music_queue.task_done()
                         continue
+                    # Salvar referência ao arquivo para seek
+                    session.current_file = dl_fp or ""
+                    session.current_tmpdir = dl_tmpdir
+                    session.current_duration = dl_duration
+                    # Atualizar display com título real do yt-dlp (evita mostrar URLs)
+                    if info and info != "sem resultado para a busca":
+                        display_name = info
+                        session.current_song = display_name
 
                     loop = asyncio.get_running_loop()
                     fut: asyncio.Future = loop.create_future()
@@ -744,6 +865,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
 
                     session.song_start_time = time.monotonic()
                     _stats["songs_played"] += 1
+                    # Salvar estado para restaurar após restart
+                    if vc.channel:
+                        _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
+                    await _notify(bot, session.text_channel_id, f"▶️ **Tocando agora:** {display_name[:100]}")
                     vc.play(source, after=_after)
                     # Watchdog: se travar por mais de 8 min sem terminar, força skip
                     try:
@@ -752,8 +877,21 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         log.warning("Watchdog: playback travado por 8 min, forçando skip.")
                         vc.stop()
                         await fut
+                    # Se foi um seek, não avançar para próxima música
+                    if session.seeking:
+                        session.seeking = False
+                        # Esperar o seek cmd iniciar o novo player
+                        await asyncio.sleep(1)
+                        # Aguardar o novo playback terminar
+                        while vc.is_playing() or vc.is_paused():
+                            await asyncio.sleep(0.5)
                     session.current_song = ""
-                    if playback_error:
+                    session.current_query = ""
+                    session.current_file = ""
+                    if session.current_tmpdir:
+                        shutil.rmtree(session.current_tmpdir, ignore_errors=True)
+                        session.current_tmpdir = None
+                    if playback_error and not session.seeking:
                         await _notify(
                             bot,
                             session.text_channel_id,
@@ -884,8 +1022,13 @@ async def _voice_listen_loop(
                     if not q:
                         continue
                     display = q
-                    if "open.spotify.com" in q or q.startswith("spotify:"):
-                        pass
+                    if _detect_music_platform(q):
+                        resolved = await _music_platform_to_search(q)
+                        if resolved:
+                            display = re.sub(r"^ytsearch\d*:", "", resolved).strip()
+                            q = resolved
+                        else:
+                            continue
                     elif not re.match(r"^https?://", q):
                         q = f"ytsearch1:{q}"
                     session.queue_display.append(display)
@@ -963,15 +1106,262 @@ def register_voice(bot: commands.Bot) -> None:
     _ai_semaphore = asyncio.Semaphore(1)
 
     _RANDOM_SONGS = [
-        "ytsearch1:Rick Astley Never Gonna Give You Up",
-        "ytsearch1:PSY Gangnam Style",
-        "ytsearch1:Luis Fonsi Despacito",
-        "ytsearch1:Mark Ronson Uptown Funk Bruno Mars",
+        # === Most Streamed / Viral ===
         "ytsearch1:The Weeknd Blinding Lights",
+        "ytsearch1:The Weeknd Starboy",
+        "ytsearch1:The Weeknd Save Your Tears",
+        "ytsearch1:The Weeknd Die For You",
+        "ytsearch1:Ed Sheeran Shape Of You",
+        "ytsearch1:Ed Sheeran Perfect",
+        "ytsearch1:Ed Sheeran Thinking Out Loud",
+        "ytsearch1:Ed Sheeran Bad Habits",
+        "ytsearch1:Lewis Capaldi Someone You Loved",
+        "ytsearch1:Tones And I Dance Monkey",
+        "ytsearch1:Post Malone Circles",
+        "ytsearch1:Post Malone Sunflower",
+        "ytsearch1:Post Malone Rockstar ft 21 Savage",
+        "ytsearch1:Post Malone Congratulations",
         "ytsearch1:Dua Lipa Levitating",
+        "ytsearch1:Dua Lipa Don't Start Now",
+        "ytsearch1:Dua Lipa New Rules",
+        "ytsearch1:Harry Styles As It Was",
+        "ytsearch1:Harry Styles Watermelon Sugar",
+        "ytsearch1:Olivia Rodrigo drivers license",
+        "ytsearch1:Olivia Rodrigo good 4 u",
+        "ytsearch1:Olivia Rodrigo vampire",
+        "ytsearch1:Billie Eilish bad guy",
+        "ytsearch1:Billie Eilish Lovely ft Khalid",
+        "ytsearch1:Billie Eilish Happier Than Ever",
+        "ytsearch1:Ariana Grande 7 rings",
+        "ytsearch1:Ariana Grande thank u next",
+        "ytsearch1:Ariana Grande positions",
+        "ytsearch1:Justin Bieber Peaches",
+        "ytsearch1:Justin Bieber Stay ft Kid LAROI",
+        "ytsearch1:Justin Bieber Sorry",
+        "ytsearch1:Justin Bieber Love Yourself",
+        "ytsearch1:Doja Cat Say So",
+        "ytsearch1:Doja Cat Kiss Me More ft SZA",
+        "ytsearch1:Doja Cat Paint The Town Red",
+        "ytsearch1:SZA Kill Bill",
+        "ytsearch1:SZA Snooze",
+        "ytsearch1:Miley Cyrus Flowers",
+        "ytsearch1:Sam Smith Unholy ft Kim Petras",
+        "ytsearch1:Glass Animals Heat Waves",
+        "ytsearch1:Lizzo About Damn Time",
+        "ytsearch1:Lil Nas X MONTERO",
+        "ytsearch1:Lil Nas X Old Town Road",
+        "ytsearch1:Drake One Dance",
+        "ytsearch1:Drake God's Plan",
+        "ytsearch1:Drake Hotline Bling",
+        "ytsearch1:Bad Bunny Titi Me Pregunto",
+        "ytsearch1:Bad Bunny Dakiti",
         "ytsearch1:Imagine Dragons Believer",
+        "ytsearch1:Imagine Dragons Radioactive",
+        "ytsearch1:Imagine Dragons Demons",
+        # === Pop Mega Hits ===
+        "ytsearch1:Bruno Mars Uptown Funk",
+        "ytsearch1:Bruno Mars 24K Magic",
+        "ytsearch1:Bruno Mars That's What I Like",
+        "ytsearch1:Bruno Mars Grenade",
+        "ytsearch1:Bruno Mars Locked Out Of Heaven",
+        "ytsearch1:Pharrell Williams Happy",
+        "ytsearch1:Luis Fonsi Despacito ft Daddy Yankee",
+        "ytsearch1:PSY Gangnam Style",
+        "ytsearch1:Shakira Waka Waka",
+        "ytsearch1:Shakira Hips Don't Lie",
+        "ytsearch1:Rihanna Umbrella",
+        "ytsearch1:Rihanna We Found Love ft Calvin Harris",
+        "ytsearch1:Rihanna Diamonds",
+        "ytsearch1:Rihanna Stay",
+        "ytsearch1:Lady Gaga Bad Romance",
+        "ytsearch1:Lady Gaga Poker Face",
+        "ytsearch1:Lady Gaga Shallow ft Bradley Cooper",
+        "ytsearch1:Lady Gaga Born This Way",
+        "ytsearch1:Beyonce Crazy In Love",
+        "ytsearch1:Beyonce Single Ladies",
+        "ytsearch1:Beyonce Halo",
+        "ytsearch1:Adele Rolling In The Deep",
+        "ytsearch1:Adele Someone Like You",
+        "ytsearch1:Adele Hello",
+        "ytsearch1:Adele Easy On Me",
+        "ytsearch1:Adele Set Fire To The Rain",
+        "ytsearch1:Taylor Swift Shake It Off",
+        "ytsearch1:Taylor Swift Anti-Hero",
+        "ytsearch1:Taylor Swift Blank Space",
+        "ytsearch1:Taylor Swift Love Story",
+        "ytsearch1:Taylor Swift Cruel Summer",
+        "ytsearch1:Katy Perry Roar",
+        "ytsearch1:Katy Perry Firework",
+        "ytsearch1:Katy Perry Dark Horse",
+        "ytsearch1:Sia Cheap Thrills",
+        "ytsearch1:Sia Chandelier",
+        "ytsearch1:The Chainsmokers Closer ft Halsey",
+        "ytsearch1:The Chainsmokers Don't Let Me Down",
+        "ytsearch1:Maroon 5 Sugar",
+        "ytsearch1:Maroon 5 Girls Like You ft Cardi B",
+        "ytsearch1:Maroon 5 Payphone",
+        "ytsearch1:Charlie Puth Attention",
+        "ytsearch1:Charlie Puth We Don't Talk Anymore",
+        "ytsearch1:Shawn Mendes Senorita ft Camila Cabello",
+        "ytsearch1:Shawn Mendes Stitches",
+        "ytsearch1:Calvin Harris Summer",
+        "ytsearch1:Calvin Harris This Is What You Came For ft Rihanna",
+        "ytsearch1:David Guetta Titanium ft Sia",
+        "ytsearch1:Clean Bandit Rockabye",
+        "ytsearch1:OneRepublic Counting Stars",
+        "ytsearch1:Fun We Are Young",
+        "ytsearch1:Gotye Somebody That I Used To Know",
+        "ytsearch1:Meghan Trainor All About That Bass",
+        "ytsearch1:John Legend All Of Me",
+        "ytsearch1:Sam Smith Stay With Me",
+        "ytsearch1:Ellie Goulding Love Me Like You Do",
+        "ytsearch1:Jason Derulo Talk Dirty",
+        "ytsearch1:Pitbull Timber ft Kesha",
+        "ytsearch1:Wiz Khalifa See You Again ft Charlie Puth",
+        # === Rap / Hip-Hop ===
+        "ytsearch1:Eminem Lose Yourself",
+        "ytsearch1:Eminem Without Me",
+        "ytsearch1:Eminem The Real Slim Shady",
+        "ytsearch1:Eminem Rap God",
+        "ytsearch1:Eminem Mockingbird",
+        "ytsearch1:Kendrick Lamar HUMBLE",
+        "ytsearch1:Kendrick Lamar Not Like Us",
+        "ytsearch1:Kendrick Lamar Swimming Pools",
+        "ytsearch1:Travis Scott SICKO MODE",
+        "ytsearch1:Travis Scott goosebumps",
+        "ytsearch1:Travis Scott HIGHEST IN THE ROOM",
+        "ytsearch1:Kanye West Stronger",
+        "ytsearch1:Kanye West Gold Digger",
+        "ytsearch1:Kanye West Heartless",
+        "ytsearch1:Dr Dre Still D.R.E. ft Snoop Dogg",
+        "ytsearch1:50 Cent In Da Club",
+        "ytsearch1:50 Cent Candy Shop",
+        "ytsearch1:Jay-Z Empire State Of Mind",
+        "ytsearch1:Juice WRLD Lucid Dreams",
+        "ytsearch1:Juice WRLD Robbery",
+        "ytsearch1:XXXTENTACION Moonlight",
+        "ytsearch1:XXXTENTACION SAD",
+        "ytsearch1:Mac Miller Self Care",
+        "ytsearch1:Cardi B Bodak Yellow",
+        "ytsearch1:Cardi B I Like It",
+        "ytsearch1:Megan Thee Stallion Savage",
+        "ytsearch1:Nicki Minaj Super Bass",
+        "ytsearch1:Nicki Minaj Starships",
+        "ytsearch1:Tyler The Creator See You Again",
+        "ytsearch1:A$AP Rocky Praise The Lord",
+        "ytsearch1:Lil Uzi Vert XO Tour Llif3",
+        "ytsearch1:21 Savage A Lot",
+        "ytsearch1:J Cole No Role Modelz",
+        "ytsearch1:Future Mask Off",
+        # === Rock / Alt Legends ===
         "ytsearch1:Queen Bohemian Rhapsody",
+        "ytsearch1:Queen Don't Stop Me Now",
+        "ytsearch1:Queen We Will Rock You",
+        "ytsearch1:Queen Somebody To Love",
+        "ytsearch1:Nirvana Smells Like Teen Spirit",
+        "ytsearch1:Nirvana Come As You Are",
+        "ytsearch1:Guns N Roses Sweet Child O Mine",
+        "ytsearch1:Guns N Roses Welcome To The Jungle",
+        "ytsearch1:AC/DC Back In Black",
+        "ytsearch1:AC/DC Thunderstruck",
+        "ytsearch1:AC/DC Highway To Hell",
+        "ytsearch1:Linkin Park In The End",
+        "ytsearch1:Linkin Park Numb",
+        "ytsearch1:Linkin Park Crawling",
+        "ytsearch1:Metallica Enter Sandman",
+        "ytsearch1:Metallica Nothing Else Matters",
+        "ytsearch1:Arctic Monkeys Do I Wanna Know",
+        "ytsearch1:Arctic Monkeys R U Mine",
+        "ytsearch1:Gorillaz Feel Good Inc",
+        "ytsearch1:Gorillaz Clint Eastwood",
+        "ytsearch1:Coldplay Viva La Vida",
+        "ytsearch1:Coldplay The Scientist",
+        "ytsearch1:Coldplay Yellow",
+        "ytsearch1:Coldplay Fix You",
+        "ytsearch1:Oasis Wonderwall",
+        "ytsearch1:Oasis Don't Look Back In Anger",
+        "ytsearch1:The Killers Mr Brightside",
+        "ytsearch1:Bon Jovi Livin On A Prayer",
+        "ytsearch1:Bon Jovi It's My Life",
+        "ytsearch1:Eagles Hotel California",
+        "ytsearch1:Led Zeppelin Stairway To Heaven",
+        "ytsearch1:Pink Floyd Comfortably Numb",
+        "ytsearch1:Red Hot Chili Peppers Californication",
+        "ytsearch1:Red Hot Chili Peppers Can't Stop",
+        "ytsearch1:Foo Fighters Everlong",
+        "ytsearch1:Foo Fighters The Pretender",
+        "ytsearch1:System Of A Down Chop Suey",
+        "ytsearch1:System Of A Down Toxicity",
+        "ytsearch1:Green Day Boulevard Of Broken Dreams",
+        "ytsearch1:Green Day American Idiot",
+        "ytsearch1:Blink 182 All The Small Things",
+        "ytsearch1:My Chemical Romance Welcome To The Black Parade",
+        "ytsearch1:Radiohead Creep",
+        "ytsearch1:Muse Supermassive Black Hole",
+        "ytsearch1:Toto Africa",
+        "ytsearch1:A-ha Take On Me",
+        "ytsearch1:Journey Don't Stop Believin",
+        "ytsearch1:Rick Astley Never Gonna Give You Up",
+        "ytsearch1:Michael Jackson Billie Jean",
+        "ytsearch1:Michael Jackson Smooth Criminal",
+        "ytsearch1:Michael Jackson Beat It",
+        "ytsearch1:Michael Jackson Thriller",
+        "ytsearch1:Stevie Wonder Superstition",
+        "ytsearch1:The Police Every Breath You Take",
+        "ytsearch1:Dire Straits Sultans Of Swing",
+        "ytsearch1:Deep Purple Smoke On The Water",
+        "ytsearch1:Twenty One Pilots Stressed Out",
+        "ytsearch1:Twenty One Pilots Heathens",
+        # === EDM / Eletronica ===
+        "ytsearch1:Avicii Wake Me Up",
+        "ytsearch1:Avicii Levels",
+        "ytsearch1:Avicii Waiting For Love",
+        "ytsearch1:Avicii The Nights",
+        "ytsearch1:Martin Garrix Animals",
+        "ytsearch1:Martin Garrix In The Name Of Love",
+        "ytsearch1:Marshmello Alone",
+        "ytsearch1:Marshmello Happier ft Bastille",
+        "ytsearch1:Daft Punk Get Lucky",
+        "ytsearch1:Daft Punk Around The World",
+        "ytsearch1:Daft Punk One More Time",
+        "ytsearch1:Alan Walker Faded",
+        "ytsearch1:Alan Walker Alone",
+        "ytsearch1:Kygo Firestone",
+        "ytsearch1:Kygo It Ain't Me ft Selena Gomez",
+        "ytsearch1:Zedd Clarity ft Foxes",
+        "ytsearch1:Zedd The Middle ft Maren Morris",
+        "ytsearch1:Major Lazer Lean On ft DJ Snake",
+        "ytsearch1:DJ Snake Taki Taki ft Selena Gomez",
+        "ytsearch1:DJ Snake Let Me Love You ft Justin Bieber",
+        "ytsearch1:Skrillex Bangarang",
+        "ytsearch1:Deadmau5 Ghosts N Stuff",
+        "ytsearch1:Tiesto Red Lights",
+        "ytsearch1:Swedish House Mafia Don't You Worry Child",
+        "ytsearch1:Robin Schulz Sugar",
+        "ytsearch1:Flume Never Be Like You",
+        # === Recent Viral / TikTok ===
+        "ytsearch1:Ice Spice In Ha Mood",
+        "ytsearch1:Metro Boomin Creepin ft The Weeknd 21 Savage",
+        "ytsearch1:Rema Calm Down",
+        "ytsearch1:Jain Makeba",
+        "ytsearch1:Benson Boone Beautiful Things",
+        "ytsearch1:Hozier Too Sweet",
+        "ytsearch1:Sabrina Carpenter Espresso",
+        "ytsearch1:Chappell Roan Good Luck Babe",
+        "ytsearch1:Tommy Richman Million Dollar Baby",
+        "ytsearch1:Dua Lipa Training Season",
+        "ytsearch1:Tyla Water",
+        "ytsearch1:Teddy Swims Lose Control",
+        "ytsearch1:Noah Kahan Stick Season",
+        "ytsearch1:Zach Bryan Something In The Orange",
+        "ytsearch1:Laufey From The Start",
+        "ytsearch1:Jack Harlow First Class",
+        "ytsearch1:Steve Lacy Bad Habit",
+        "ytsearch1:Doja Cat Woman",
+        "ytsearch1:Lizzo Truth Hurts",
+        "ytsearch1:Dua Lipa Physical",
     ]
+    _last_random: Optional[str] = None
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
         """Responde pergunta usando IA. Se image_urls fornecido, usa modelo com visão."""
@@ -1357,8 +1747,13 @@ def register_voice(bot: commands.Bot) -> None:
             return
         elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
         m, s = divmod(elapsed, 60)
+        dur = session.current_duration
+        dur_str = ""
+        if dur > 0:
+            dm, ds = divmod(int(dur), 60)
+            dur_str = f" / {dm:02d}:{ds:02d}"
         fila_info = f"\n📋 Fila: {len(session.queue_display)} musica(s)" if session.queue_display else ""
-        await ctx.send(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{fila_info}")
+        await ctx.send(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}")
 
     @bot.command(name="pl", help="Playlists salvas: $pl save <nome> | $pl load <nome> | $pl list | $pl del <nome>")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
@@ -1455,6 +1850,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="r", help="Toca música aleatória (random): $r")
     async def cmd_random(ctx: commands.Context):
+        nonlocal _last_random
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
@@ -1464,7 +1860,9 @@ def register_voice(bot: commands.Bot) -> None:
         if not sess:
             return
         import random
-        query = random.choice(_RANDOM_SONGS)
+        choices = [s for s in _RANDOM_SONGS if s != _last_random] or _RANDOM_SONGS
+        query = random.choice(choices)
+        _last_random = query
         display = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
@@ -1487,12 +1885,31 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música.")
             return
         display = query
-        if not re.match(r"^https?://", query):
+        is_url = bool(re.match(r"^https?://", query))
+        # Spotify/Deezer/Apple Music: resolver nome da música e buscar no YouTube
+        if _detect_music_platform(query):
+            resolved = await _music_platform_to_search(query)
+            if resolved:
+                display = re.sub(r"^ytsearch\d*:", "", resolved).strip()
+                query = resolved
+            else:
+                await ctx.send("❌ Não consegui resolver esse link. Tenta com o nome da música.")
+                return
+        elif not is_url:
             query = f"ytsearch1:{query}"
+        # Suprimir embeds da mensagem do usuário para não poluir o chat
+        if is_url:
+            try:
+                await ctx.message.edit(suppress=True)
+            except Exception:
+                pass
+        # Para URLs, não mostrar o link na resposta (evita embed duplicado)
+        if is_url:
+            display = "link recebido"
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
         if not sess.current_song and len(sess.queue_display) == 1:
-            await ctx.send(f"🎵 Buscando: **{display[:100]}**...")
+            await ctx.send(f"🎵 Buscando **{display[:100]}**...")
         else:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(f"🎵 **#{pos}/10** na fila: **{display[:100]}**")
@@ -1514,12 +1931,15 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$q` — Lista todas as músicas na fila.\n"
             "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
             "`t$cl` — Para a reprodução e limpa a fila inteira.\n"
-            "`t$r` — Adiciona uma música aleatória à fila.\n\n"
+            "`t$r` — Adiciona uma música aleatória à fila.\n"
+            "`t$ff <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n\n"
             "**📂 Playlists**\n"
             "`t$pl save <nome>` — Salva a fila atual como playlist.\n"
             "`t$pl load <nome>` — Carrega uma playlist salva na fila.\n"
             "`t$pl list` — Lista as playlists salvas neste servidor.\n"
             "`t$pl del <nome>` — Apaga uma playlist permanentemente.\n\n"
+            "**🔧 Outros**\n"
+            "`t$st` — Estatísticas da sessão (admin).\n"
             "`t$h` — Mostra esta ajuda."
         )
         await ctx.send(help_text)
@@ -1603,6 +2023,73 @@ def register_voice(bot: commands.Bot) -> None:
             vc.stop()
         session.current_song = ""
         await ctx.send("🗑️ Fila limpa e reproducao parada.")
+
+    @bot.command(name="ff", help="Pula para um ponto da musica: $ff +30, $ff -15, $ff 1:30")
+    async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            return
+        if not session.current_song or not session.current_file:
+            await ctx.send("⚠️ Nenhuma música tocando.")
+            return
+        if not time_arg:
+            dur = session.current_duration
+            dur_str = f" (duração: {int(dur)//60}:{int(dur)%60:02d})" if dur > 0 else ""
+            await ctx.send(f"⏩ Use: `t$ff +30` (avançar 30s), `t$ff -15` (voltar 15s), `t$ff 1:30` (ir para 1m30s){dur_str}")
+            return
+        # Calcular tempo atual
+        elapsed = time.monotonic() - session.song_start_time if session.song_start_time else 0
+        # Parsear argumento
+        time_arg = time_arg.strip()
+        relative = False
+        if time_arg.startswith("+") or time_arg.startswith("-"):
+            relative = True
+            sign = 1 if time_arg.startswith("+") else -1
+            time_arg = time_arg[1:]
+        # Parsear mm:ss ou segundos
+        if ":" in time_arg:
+            parts = time_arg.split(":")
+            try:
+                target_sec = int(parts[0]) * 60 + int(parts[1])
+            except ValueError:
+                await ctx.send("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`")
+                return
+        else:
+            try:
+                target_sec = int(time_arg)
+            except ValueError:
+                await ctx.send("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`")
+                return
+        if relative:
+            target_sec = elapsed + (sign * target_sec)
+        target_sec = max(0, target_sec)
+        # Validar contra duração da música
+        dur = session.current_duration
+        if dur > 0 and target_sec >= dur:
+            dm, ds = divmod(int(dur), 60)
+            await ctx.send(f"⚠️ A música só tem **{dm}:{ds:02d}** de duração. Escolha um tempo menor.")
+            return
+        # Recriar source com seek
+        new_source = _YTSource.from_file(session.current_file, seek_sec=target_sec)
+        if not new_source:
+            await ctx.send("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido.")
+            return
+        # Sinalizar seek para o play_worker não avançar
+        session.seeking = True
+        vc.stop()
+        await asyncio.sleep(0.3)
+        session.song_start_time = time.monotonic() - target_sec
+        vc.play(new_source)
+        tm, ts = divmod(int(target_sec), 60)
+        dur_str = ""
+        if dur > 0:
+            dm, ds = divmod(int(dur), 60)
+            dur_str = f" / {dm}:{ds:02d}"
+        await ctx.send(f"⏩ Pulando para **{tm:02d}:{ts:02d}{dur_str}**")
 
     @bot.command(name="su", help="Resume o conteudo de um link: $su <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
@@ -1806,10 +2293,30 @@ def register_voice(bot: commands.Bot) -> None:
                 )
                 _sessions[gid] = session
                 log.info("Reconectado automaticamente guild=%s canal=%s", gid, channel.name)
+                # Restaurar fila musical salva
+                restored = 0
+                current_q = info.get("current_query", "")
+                current_d = info.get("current_display", "")
+                saved_queries = info.get("queue_queries", [])
+                saved_displays = info.get("queue_displays", [])
+                # Re-enfileirar a música que estava tocando
+                if current_q:
+                    session.queue_display.append(current_d or current_q)
+                    await session.music_queue.put(current_q)
+                    restored += 1
+                # Re-enfileirar o restante da fila
+                for i, sq in enumerate(saved_queries):
+                    sd = saved_displays[i] if i < len(saved_displays) else sq
+                    session.queue_display.append(sd)
+                    await session.music_queue.put(sq)
+                    restored += 1
                 text_ch = bot.get_channel(text_channel_id)
                 if text_ch and hasattr(text_ch, "send"):
                     try:
-                        await text_ch.send("🔄 Voltei! A fila foi resetada mas estou pronta.")
+                        if restored > 0:
+                            await text_ch.send(f"🔄 Voltei! Restaurando **{restored}** música(s) na fila.")
+                        else:
+                            await text_ch.send("🔄 Voltei! Estou pronta.")
                     except discord.HTTPException:
                         pass
             except Exception as e:
