@@ -1,0 +1,21 @@
+{
+  "name": "tiffany-music-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@lavaclient/core": "^2.3.0",
+    "@lavaclient/discord.js": "^1.1.0",
+    "spotify-url-info": "^3.1.1",
+    "dotenv": "^16.4.5",
+    "luxon": "^3.4.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

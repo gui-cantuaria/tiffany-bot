@@ -258,6 +258,10 @@ def _extract_from_jsonld(product: dict) -> Optional[dict]:
         except (ValueError, TypeError):
             pass
 
+    # Usar resolução maior (600px) em vez do thumbnail (120/268px)
+    if isinstance(image, str) and "i.promobit.com.br/" in image:
+        image = re.sub(r"i\.promobit\.com\.br/\d+/", "i.promobit.com.br/600/", image)
+
     return {
         "title": title,
         "price": price,
@@ -391,7 +395,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     photo = server_offer.get("offerPhoto")
     if photo:
         if photo.startswith("/"):
-            deal["image"] = f"https://i.promobit.com.br/268{photo}"
+            deal["image"] = f"https://i.promobit.com.br/600{photo}"
         elif photo.startswith("http"):
             deal["image"] = photo
 

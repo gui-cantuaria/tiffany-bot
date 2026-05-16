@@ -12,7 +12,15 @@
       "Bash(python3 -m py_compile notices.py)",
       "Bash(python3 -m py_compile launcher.py)",
       "WebSearch",
-      "Bash(py -m py_compile \"C:\\\\Users\\\\T-GAMER\\\\OneDrive\\\\Documentos\\\\Cursor\\\\Tiffany Bot\\\\notices.py\")"
+      "Bash(py -m py_compile \"C:\\\\Users\\\\T-GAMER\\\\OneDrive\\\\Documentos\\\\Cursor\\\\Tiffany Bot\\\\notices.py\")",
+      "Bash(ls:*)",
+      "WebFetch(domain:www.promobit.com.br)",
+      "Bash(cd:*)",
+      "Bash(python3 -c \":*)",
+      "Read(//c/Users/T-GAMER/AppData/Local/Programs/Python/**)",
+      "Bash(ls /c/Python*/python.exe)",
+      "Bash(py --version)",
+      "Bash(/c/Users/T-GAMER/AppData/Local/Programs/Python/Python313/python.exe -c \":*)"
     ]
   }
 }

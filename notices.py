@@ -10,6 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import html as html_lib
 import hashlib
+import struct
 import atexit
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -631,27 +632,69 @@ async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
                 await asyncio.sleep(1)
     return None
 
+MIN_IMG_WIDTH = 400
+MIN_IMG_HEIGHT = 200
+
+def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
+    """Extrai (width, height) dos headers de PNG, JPEG ou GIF sem lib externa."""
+    if len(data) < 24:
+        return None
+    # PNG
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        if len(data) >= 24:
+            w = struct.unpack(">I", data[16:20])[0]
+            h = struct.unpack(">I", data[20:24])[0]
+            return w, h
+    # GIF
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        w = struct.unpack("<H", data[6:8])[0]
+        h = struct.unpack("<H", data[8:10])[0]
+        return w, h
+    # JPEG
+    if data[:2] == b"\xff\xd8":
+        idx = 2
+        while idx < len(data) - 9:
+            if data[idx] != 0xFF:
+                break
+            marker = data[idx + 1]
+            if marker in (0xC0, 0xC1, 0xC2):
+                h = struct.unpack(">H", data[idx + 5 : idx + 7])[0]
+                w = struct.unpack(">H", data[idx + 7 : idx + 9])[0]
+                return w, h
+            seg_len = struct.unpack(">H", data[idx + 2 : idx + 4])[0]
+            idx += 2 + seg_len
+    # WebP
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        if data[12:16] == b"VP8 " and len(data) >= 30:
+            w = struct.unpack("<H", data[26:28])[0] & 0x3FFF
+            h = struct.unpack("<H", data[28:30])[0] & 0x3FFF
+            return w, h
+        if data[12:16] == b"VP8L" and len(data) >= 25:
+            bits = struct.unpack("<I", data[21:25])[0]
+            w = (bits & 0x3FFF) + 1
+            h = ((bits >> 14) & 0x3FFF) + 1
+            return w, h
+    return None
+
 async def validar_imagem(url: str) -> bool:
-    """GET request para verificar se URL é imagem válida (>5KB, status 200/206)."""
+    """Verifica se URL e imagem valida (>5KB, status 200/206, dimensoes minimas)."""
     if not url:
         return False
     if not http_session:
-        # Sem sessão HTTP: aceita apenas por extensão (menos seguro)
         return bool(IMG_EXT_RE.search(url))
     try:
         async with http_session.get(
             url,
-            headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-8191"},
+            headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-32767"},
             timeout=aiohttp.ClientTimeout(total=8),
             allow_redirects=True,
         ) as r:
-            # Aceitar somente 200 (OK) ou 206 (Partial Content - Range honrado)
             if r.status not in (200, 206):
                 return False
             ct = r.headers.get("Content-Type", "").lower()
             if "image/" not in ct:
                 return False
-            # Verificar tamanho: preferir Content-Range quando Range foi honrado
+            # Verificar tamanho total
             cr = r.headers.get("Content-Range", "")
             if cr and "/" in cr:
                 total = cr.rsplit("/", 1)[-1]
@@ -660,6 +703,14 @@ async def validar_imagem(url: str) -> bool:
             else:
                 cl = r.headers.get("Content-Length", "")
                 if cl.isdigit() and int(cl) < 5000:
+                    return False
+            # Ler bytes iniciais para checar dimensoes
+            chunk = await r.content.read(32768)
+            dims = _img_dimensions_from_bytes(chunk)
+            if dims:
+                w, h = dims
+                if w < MIN_IMG_WIDTH or h < MIN_IMG_HEIGHT:
+                    log.info(f"Imagem rejeitada por dimensao: {w}x{h} ({url[:80]})")
                     return False
             return True
     except Exception as e:
