@@ -386,10 +386,17 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     elif deal["original_price"] and deal["price"] and deal["original_price"] > deal["price"]:
         deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
 
-    # Cupom
+    # Cupom (pode vir como string, dict ou lista)
     coupon = server_offer.get("offerCoupon")
-    if coupon and isinstance(coupon, str) and coupon.strip():
-        deal["coupon"] = coupon.strip()
+    if coupon:
+        if isinstance(coupon, dict):
+            coupon = coupon.get("code") or coupon.get("name") or ""
+        elif isinstance(coupon, list):
+            coupon = coupon[0] if coupon else ""
+            if isinstance(coupon, dict):
+                coupon = coupon.get("code") or coupon.get("name") or ""
+        if isinstance(coupon, str) and coupon.strip():
+            deal["coupon"] = coupon.strip()
 
     # Imagem (melhor resolução)
     photo = server_offer.get("offerPhoto")
@@ -569,13 +576,12 @@ def _format_description(deal: dict) -> str:
 
     if rating_parts:
         lines.append(" ".join(rating_parts))
-    elif deal.get("stars") is None and deal.get("sales_count") is None:
-        lines.append("⭐ Sem dados de avaliação")
+    # Se não tem dados de avaliação, não exibe nada (evita poluição visual)
 
     # Tags (ex: Frete Grátis)
     tags = deal.get("tags") or []
     if tags:
-        tags_str = " • ".join(str(t) for t in tags[:3])
+        tags_str = " • ".join(t["name"] if isinstance(t, dict) else str(t) for t in tags[:3])
         lines.append(f"🏷️ {tags_str}")
 
     return "\n".join(lines)
@@ -617,7 +623,7 @@ def _build_embed(deal: dict) -> discord.Embed:
     buy_url = deal.get("store_url") or deal["url"]
     embed.add_field(
         name="",
-        value=f"👉 **[Comprar com desconto]({buy_url})**",
+        value=f"👉 **[COMPRAR COM DESCONTO]({buy_url})**",
         inline=False,
     )
 
