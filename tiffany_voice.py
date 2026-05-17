@@ -2006,8 +2006,13 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$pl load <nome>` — Carrega uma playlist salva na fila.\n"
             "`t$pl list` — Lista as playlists salvas neste servidor.\n"
             "`t$pl del <nome>` — Apaga uma playlist permanentemente.\n\n"
+            "**🎙️ Voz (na call)**\n"
+            "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
+            "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
+            "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
             "**🔧 Outros**\n"
             "`t$st` — Estatísticas da sessão (admin).\n"
+            "`/status` — Status do bot (admin, slash command).\n"
             "`t$h` — Mostra esta ajuda."
         )
         await ctx.send(help_text)
