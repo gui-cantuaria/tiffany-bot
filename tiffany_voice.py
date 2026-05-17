@@ -608,6 +608,8 @@ _MUSIC_PLATFORM_OEMBED = {
     "spotify:": "https://open.spotify.com/oembed?url={url}",
     "deezer.com": "https://api.deezer.com/oembed?url={url}",
     "music.apple.com": "https://music.apple.com/services/oembed?url={url}",
+    "music.amazon": None,  # sem oEmbed, resolve via URL parsing
+    "amazon.com/music": None,
 }
 
 
@@ -619,14 +621,39 @@ def _detect_music_platform(url: str) -> Optional[str]:
     return None
 
 
+def _amazon_music_url_to_search(url: str) -> Optional[str]:
+    """Extrai nome da música de URLs do Amazon Music.
+    Ex: music.amazon.com.br/albums/B0DQXL3N81?trackAsin=B0DQXHX1DG
+    ou: music.amazon.com/tracks/B0DQXHX1DG"""
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(url)
+    path = parsed.path
+    # Tentar extrair texto legível do path (ex: /tracks/nome-da-musica)
+    parts = [p for p in path.split("/") if p and not p.startswith("B0") and len(p) > 3]
+    for p in reversed(parts):
+        clean = p.replace("-", " ").replace("_", " ").strip()
+        if clean and not clean.isdigit():
+            log.info("Amazon Music fallback URL: %s", clean)
+            return f"ytsearch1:{clean}"
+    # Se não tem texto na URL, sem como resolver
+    log.debug("Amazon Music: URL sem texto legível: %s", url[:80])
+    return None
+
+
 async def _music_platform_to_search(url: str) -> Optional[str]:
-    """Converte URL de Spotify/Deezer/Apple Music em query de busca YouTube via oEmbed."""
+    """Converte URL de Spotify/Deezer/Apple Music/Amazon Music em query de busca YouTube."""
     platform = _detect_music_platform(url)
     if not platform:
         return None
+    oembed_url = _MUSIC_PLATFORM_OEMBED.get(platform)
+    if not oembed_url:
+        # Plataformas sem oEmbed (Amazon Music): extrair da URL
+        if "amazon" in platform:
+            return _amazon_music_url_to_search(url)
+        return None
     try:
         import aiohttp as _aiohttp
-        oembed_url = _MUSIC_PLATFORM_OEMBED[platform].format(url=url)
+        oembed_url = oembed_url.format(url=url)
         async with _aiohttp.ClientSession() as sess:
             async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
                 if r.status == 200:
