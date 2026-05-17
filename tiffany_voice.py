@@ -1006,6 +1006,12 @@ async def _voice_listen_loop(
             log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             log.info("Enviando %d bytes de áudio para STT...", len(wav))
+            # Debug: salvar último WAV para análise (sobrescreve a cada captura)
+            try:
+                with open("/tmp/tiffany_debug_audio.wav", "wb") as _dbg:
+                    _dbg.write(wav)
+            except Exception:
+                pass
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
                 log.warning("STT não reconheceu áudio (pode ser ruído ou sotaque)")
