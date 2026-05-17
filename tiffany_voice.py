@@ -560,7 +560,23 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
         return None
 
 
+def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
+    """Converte WAV 48kHz mono para WAV 16kHz mono via FFmpeg (melhor para STT)."""
+    exe = FFMPEG_EXECUTABLE or "ffmpeg"
+    try:
+        proc = subprocess.Popen(
+            [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        wav_16k, _ = proc.communicate(wav_48k)
+        return wav_16k if wav_16k else wav_48k
+    except Exception:
+        return wav_48k
+
+
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
+    # Converter para 16kHz (melhor para todos os engines STT)
+    wav = _wav_48k_to_16k(wav)
     # Tenta Google STT primeiro (mais preciso, especialmente com áudio curto)
     try:
         sr = importlib.import_module("speech_recognition")
@@ -573,7 +589,7 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
             log.info("Google STT: %r", text)
             return text
         except sr.UnknownValueError:
-            log.debug("Google STT não reconheceu áudio")
+            log.info("Google STT: áudio não reconhecido (UnknownValueError)")
         except sr.RequestError as e:
             log.warning("Google STT indisponível: %s", e)
     except ModuleNotFoundError:
