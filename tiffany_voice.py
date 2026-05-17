@@ -29,6 +29,20 @@ from discord.ext import commands
 try:
     from discord.ext import voice_recv as voice_recv
     _VOICE_RECV_AVAILABLE = True
+    # Monkey-patch: pacotes Opus corrompidos retornam silêncio em vez de crashar o router
+    # O sink filtra esses frames de silêncio para não diluir o áudio real
+    try:
+        import discord.opus as _dopus
+        _original_decode = _dopus.Decoder.decode
+        _SILENCE_FRAME = b"\x00" * 3840
+        def _safe_decode(self, data, *, fec=False):
+            try:
+                return _original_decode(self, data, fec=fec)
+            except _dopus.OpusError:
+                return _SILENCE_FRAME
+        _dopus.Decoder.decode = _safe_decode
+    except Exception:
+        pass
 except Exception as _e:
     voice_recv = None  # type: ignore
     _VOICE_RECV_AVAILABLE = False
@@ -711,6 +725,10 @@ class _PCMBufferSink(_AudioSinkBase):
             # Nova biblioteca pode enviar lista de bytes; converte para bytes único
             if isinstance(pcm, list):
                 pcm = b"".join(pcm)
+
+            # Filtrar frames de silêncio puro (gerados pelo patch de OpusError)
+            if pcm == b"\x00" * len(pcm):
+                return
 
             uid = user.id
             with self._session.buf_lock:
