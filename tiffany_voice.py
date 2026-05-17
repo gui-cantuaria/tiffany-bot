@@ -29,19 +29,6 @@ from discord.ext import commands
 try:
     from discord.ext import voice_recv as voice_recv
     _VOICE_RECV_AVAILABLE = True
-    # Monkey-patch: ignorar OpusError em pacotes corrompidos (retorna silêncio)
-    try:
-        import discord.opus as _dopus
-        _original_decode = _dopus.Decoder.decode
-        def _safe_decode(self, data, *, fec=False):
-            try:
-                return _original_decode(self, data, fec=fec)
-            except _dopus.OpusError:
-                # Retorna frame de silêncio (960 samples * 2 canais * 2 bytes = 3840)
-                return b"\x00" * 3840
-        _dopus.Decoder.decode = _safe_decode
-    except Exception:
-        pass
 except Exception as _e:
     voice_recv = None  # type: ignore
     _VOICE_RECV_AVAILABLE = False
@@ -560,29 +547,30 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
 
 
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # Tenta Vosk (offline, confiável em VPS) primeiro
+    # Tenta Google STT primeiro (mais preciso, especialmente com áudio curto)
+    try:
+        sr = importlib.import_module("speech_recognition")
+        r = sr.Recognizer()
+        r.dynamic_energy_threshold = True
+        with sr.AudioFile(io.BytesIO(wav)) as source:
+            audio = r.record(source)
+        try:
+            text = r.recognize_google(audio, language="pt-BR")
+            log.info("Google STT: %r", text)
+            return text
+        except sr.UnknownValueError:
+            log.debug("Google STT não reconheceu áudio")
+        except sr.RequestError as e:
+            log.warning("Google STT indisponível: %s", e)
+    except ModuleNotFoundError:
+        log.warning("Pacote SpeechRecognition não instalado.")
+    except Exception as e:
+        log.warning("Erro no Google STT: %s", e)
+    # Fallback: Vosk (offline)
     result = _transcribe_with_vosk(wav)
     if result is not None:
         return result
-    # Fallback: Google STT
-    try:
-        sr = importlib.import_module("speech_recognition")
-    except ModuleNotFoundError:
-        log.warning("Pacote SpeechRecognition não instalado; STT desativado.")
-        return None
-    r = sr.Recognizer()
-    r.dynamic_energy_threshold = True
-    with sr.AudioFile(io.BytesIO(wav)) as source:
-        audio = r.record(source)
-    try:
-        text = r.recognize_google(audio, language="pt-BR")
-        log.info("Google STT: %r", text)
-        return text
-    except sr.UnknownValueError:
-        return None
-    except sr.RequestError as e:
-        log.warning("Google STT indisponível: %s", e)
-        return None
+    return None
 
 
 _MUSIC_PLATFORM_OEMBED = {
