@@ -1,90 +1,195 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Project Overview
 
-Tiffany Bot is a Discord news aggregation bot that autonomously collects tech news from 15 RSS feeds (Brazilian and international), filters them using AI analysis (OpenRouter/Llama 3.3 70B), and posts curated articles as rich embeds to a Discord channel. It runs on the Discloud hosting platform.
+Tiffany Bot is a multi-purpose Discord bot with three modules:
+1. **News Bot** (`notices.py`) — Curates tech news from RSS feeds using AI analysis
+2. **Offers Bot** (`offers.py`) — Posts tech deals scraped from Promobit
+3. **Voice/Music Bot** (`tiffany_voice.py`) — Music player, voice assistant, and AI chat
+
+Deployed on a Hostinger VPS (Ubuntu 22.04) via `launcher.py` supervisor.
 
 ## Running the Bot
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Run via watchdog supervisor (production entry point)
-python launcher.py
-
-# Run bot directly (no auto-restart)
-python notices.py
+python launcher.py          # Production: runs notices.py + offers.py as subprocesses
+python notices.py            # Direct: news + voice/music (tiffany_voice.py is imported)
 ```
 
-The bot requires a `.env` file with `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`, `ID_CARGO_PARA_MARCAR`, and `GUILD_ID`. See `.env` for all configuration parameters.
-
-Deployed to Discloud via `discloud.config` with `launcher.py` as the main entry point.
+Requires `.env` with: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`, `ID_CARGO_PARA_MARCAR`, `GUILD_ID`. See `.env` for all parameters.
 
 ## Architecture
 
-**launcher.py** — Process supervisor/watchdog. Spawns `notices.py` as a subprocess, monitors health every 10 seconds, and auto-restarts on crash.
-
-**notices.py** — Core bot logic (~1,365 lines). Three responsibilities:
-1. **RSS Collection**: Fetches from 15 feeds every 30 minutes using `feedparser` + `asyncio.to_thread()`. Only operates during business hours (8–18h São Paulo time).
-2. **AI Analysis**: Sends each article to OpenRouter API for translation, summarization, categorization, and relevance scoring (0–100). Sequential calls with 20-second cooldown.
-3. **Discord Publishing**: Posts top-scored articles (≥75, ≥82 for games) as embeds with category emoji/color, images, source attribution, and auto-created discussion threads.
-
-**notices_history.json** — File-based dedup state. Tracks processed articles via URL hashes and SimHash fingerprinting (Hamming distance ≤3, 36-hour TTL). Auto-cleans entries older than 7 days.
-
-## Data Flow
-
 ```
-RSS Feeds → feedparser → Image extraction → AI scoring (OpenRouter)
-→ Filter pipeline (dedup, score threshold, skip flags)
-→ Discord embed + thread creation → History persistence
+launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
+  ├── notices.py (news bot + voice module)
+  │     └── imports tiffany_voice.py
+  └── offers.py (deals bot, independent process)
 ```
 
-## Key Design Decisions
+**launcher.py** — Spawns `notices.py` and `offers.py` as subprocesses, monitors health every 10s, auto-restarts on crash. Uses `fcntl` lockfile to prevent duplicate instances.
 
-- **No database**: All state is in `notices_history.json` (JSON file persistence).
-- **Rate limiting everywhere**: `MAX_CONCORRENCIA_IA=1` (sequential AI calls), 20-second cooldown between calls, max 6 AI calls per cycle, 5-minute intervals between Discord posts.
-- **SimHash deduplication**: Near-duplicate detection using content hashing with Hamming distance threshold, not just exact URL matching.
-- **Pre-filter before AI**: Rejects coupons, deals, rumors, and articles without images before spending AI calls.
-- **All content in Portuguese**: AI translates English sources and generates Portuguese summaries. English sources get a "Fonte em inglês" tag.
+**notices.py** — Core bot (~1,700 lines). Handles:
+- RSS collection from 15+ feeds every 45 minutes (slots at xx:00 and xx:45)
+- AI analysis via OpenRouter (Llama 3.3 70B for text, Llama 4 Maverick for image validation)
+- Discord publishing with embeds, threads, and image attachments
+- Command normalization (`on_message` handler for spaceless commands like `T$Phttps://...`)
+- Imports and registers `tiffany_voice.py` commands
 
-## Content Categories
+**tiffany_voice.py** — Voice and music module (~2,300 lines). Handles:
+- Music playback via yt-dlp download + FFmpeg (download-to-file approach, not streaming)
+- Platform resolution: Spotify, Deezer, Apple Music, Amazon Music → YouTube search
+- Voice recognition: discord-ext-voice-recv → Opus decode → Google STT / Vosk fallback
+- AI chat (`t$c`), URL summarization (`t$su`), TTS responses
+- Session persistence across restarts (`voice_state.json`)
+- Playlist save/load system (`playlists.json`)
 
-8 main categories with emoji and color codes: Hardware, Inteligência Artificial, Games, Cibersegurança, Sistemas Operacionais, Mobile, Big Techs, Ciência & Espaço. Articles scoring 90+ get an emergency indicator (🚨).
+**offers.py** — Deals bot (~750 lines). Handles:
+- Promobit scraping (JSON-LD listing + serverOffer detail pages)
+- 7 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer
+- 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
+- Filters: 15%+ discount, image required
+- Coupon extraction, tag display, store redirect URLs
+- Posts to channel 1385327938529919006, mentions role 1386386059390357575
 
-## Important Notes
+## Key Files
 
-- The `tiffany-bot/` subdirectory is a duplicate/mirror of the root files.
-- The bot language is Portuguese (Brazilian). All user-facing strings, AI prompts, and logs are in Portuguese.
-- `.env` is gitignored and contains all API keys and tunable parameters (score thresholds, intervals, feed limits, etc.).
+| File | Purpose |
+|---|---|
+| `notices.py` | News bot + Discord client + voice module loader |
+| `tiffany_voice.py` | Music, voice commands, AI chat, playlists |
+| `offers.py` | Deals/offers bot (separate process) |
+| `launcher.py` | Process supervisor with lockfile |
+| `notices_history.json` | Dedup state (URL hashes + SimHash, 7-day cleanup) |
+| `offers_history.json` | Processed offers (7-day cleanup) |
+| `voice_state.json` | Music session persistence (current song, queue) |
+| `playlists.json` | Saved playlists per guild |
+| `cookies.txt` | YouTube cookies for yt-dlp (optional) |
+| `vosk-model-small-pt-0.3/` | Vosk STT model (offline fallback) |
 
-# Contexto do Projeto: Tiffany Bot (Discord News Bot)
+## Bot Commands (prefix: `t$`, case-insensitive)
 
-Você atuará como um Engenheiro de Software Sênior especialista em Python e `discord.py`. O nosso projeto atual é um bot de Discord chamado "Tiffany", focado em fazer a curadoria, sumarização e publicação automatizada de notícias premium usando Inteligência Artificial.
+**Chat & IA:**
+- `t$c <pergunta>` — AI chat (accepts image attachments)
+- `t$su <URL>` — Summarize any URL
 
-## 🎯 Objetivo Principal e Nicho
-O bot deve publicar **ESTRITAMENTE notícias relacionadas ao mundo da tecnologia, programação e desenvolvimento de software**. 
-- **Tópicos desejados:** Inteligência Artificial, Engenharia de Software, Cibersegurança, Cloud/DevOps, Big Techs, Hardwares relevantes para devs e Sistemas Operacionais.
-- **Tópicos proibidos:** Ciência genérica (ex: biologia, astronomia não espacial/tech, paleontologia), fofocas, entretenimento genérico, ofertas/cupons de lojas, ou reviews de celulares de entrada.
+**Music:**
+- `t$e` / `t$l` — Enter/leave voice channel
+- `t$p <music or URL>` — Play (YouTube, Spotify, Deezer, Apple Music, Amazon Music)
+- `t$np` — Now playing with elapsed time
+- `t$pa` / `t$re` — Pause / Resume
+- `t$q` — Show queue
+- `t$s` — Skip (voting if 3+ people)
+- `t$cl` — Clear queue and stop
+- `t$r` — Random song (~210 international hits)
+- `t$ff <time>` — Seek: `+30`, `-15`, `1:30`
 
-## 🎨 Padrão Visual Obrigatório (Layout do Discord)
-A formatação do Embed do Discord já foi validada e está perfeita. Sob nenhuma hipótese o layout abaixo deve ser alterado sem minha autorização expressa:
+**Playlists:**
+- `t$pl save/load/list/del <name>`
 
-1. **Author Line:** `Via {Nome do Site} • {Categoria} {Emoji da Categoria}`
-2. **Título (Title):** Explicativo, jornalístico, não-clickbait. Começa com 🚨 se a nota de relevância for >= 90. A cor do embed varia conforme a categoria ou urgência.
-3. **Corpo do Texto (Description):** OBRIGATORIAMENTE um **único parágrafo** longo, denso e bem construído (4 a 6 frases). Deve começar com letra maiúscula (texto formal). NUNCA usar bullet points, quebras de linha ou resumos de uma linha só. O texto deve explicar o contexto, o fato e o impacto da notícia.
-4. **Call to Action (Field):** Um link com o texto exato: `👉 **[Clique aqui para ler a matéria completa]({link})**`
-5. **Imagem (Image):** Imagem horizontal (16:9) extraída da notícia original.
-6. **Rodapé (Footer):** Deve exibir `Notícia resumida por IA`. Se a fonte original for gringa, deve concatenar dinamicamente para: `Notícia resumida por IA • Fonte em inglês`.
-7. **Thread:** O bot deve criar uma thread automaticamente na mensagem publicada com o nome: `💬 {Categoria}: {Título da Notícia}`.
+**Voice (in call):**
+- "Tiffany, toca [song]" — Add to queue
+- "Tiffany, para/pula/sai" — Control playback
+- "Tiffany, [question]" — AI question via voice
 
-## ⚙️ Stack Tecnológica e Regras de Negócio Atuais
-- **Linguagem/Libs:** Python 3, `discord.py`, `feedparser`, `pytz`, pacote `openai` (apontando para a API do OpenRouter usando Llama 3.3).
-- **Loop e Horário:** O bot usa `@tasks.loop(minutes=30)` para varrer os RSS feeds. Existe uma trava de fuso horário (`America/Sao_Paulo`) que impede o bot de postar fora do horário comercial (funciona apenas das 08h00 às 17h59).
-- **Banco de Dados:** Atualmente usa um arquivo `.json` local (`notices_history.json`) para salvar os links processados e evitar duplicidade. Há uma função de limpeza automática para apagar links com mais de 7 dias.
-- **Resiliência:** A chamada de IA possui um bloco de `retry` (3 tentativas) com `timeout` para evitar que instabilidades na API do OpenRouter travem o bot.
-- **A IA Summarizadora:** O prompt enviado ao LLM exige que ele retorne um formato JSON estrito contendo: `pular` (boolean para descartar irrelevantes), `titulo` (traduzido e adaptado), `nota` (relevância de 0 a 100), `categoria` e o `resumo` de um parágrafo.
+**Admin:**
+- `t$st` — Session stats
+- `/status` — Bot status (slash command)
 
-Sempre que eu pedir atualizações, refatorações ou novas features, mantenha essas regras como sua base absoluta de código.
+**Important:** Always add new commands to `t$h` (cmd_help in tiffany_voice.py) AND to `_CMD_NAMES` tuple in notices.py (for spaceless command detection).
+
+## News Bot Rules
+
+### Score Thresholds
+- General: >= 80 (NOTA_MIN_APROVACAO)
+- Games: >= 85 (NOTA_MIN_GAMES)
+- Urgent (role ping): >= 90 (NOTA_URGENTE)
+
+### Schedule
+- Hours: 8h-18h Sao Paulo time (America/Sao_Paulo, UTC-3)
+- Slots: xx:00 and xx:45 (45-minute intervals)
+- Pre-heating: 7:45 for RSS collection before 8:00
+
+### Embed Layout (DO NOT CHANGE without authorization)
+1. **Author:** `Via {Site} . {Category} {Emoji}`
+2. **Title:** Journalistic, non-clickbait. Starts with alert emoji if nota >= 90
+3. **Description:** Single dense paragraph (4-6 sentences), formal Portuguese
+4. **CTA Field:** `Click here to read full article` link
+5. **Image:** Downloaded and attached as `discord.File` (not URL embed)
+6. **Footer:** `Noticia resumida por IA` (+ `Fonte em ingles` for EN sources)
+7. **Thread:** Auto-created: `Chat {Category}: {Title}`
+
+### AI Models
+- **Text analysis:** meta-llama/llama-3.3-70b-instruct (via OpenRouter)
+- **Image validation:** meta-llama/llama-4-maverick (vision model, checks image relevance)
+
+### Image Pipeline
+- Extract from RSS `<media:content>`, `<enclosure>`, og:image meta tags
+- Validate: min 400x200px, no 403 responses, AI vision relevance check
+- Download and attach as `discord.File` (never post without image)
+
+## Offers Bot Rules
+
+### Embed Layout
+- Title: `Fire emoji {product} — {discount}% OFF`
+- Prices: `R$ {original} -> R$ {current} (-{discount}%)`
+- Coupon: `Tag emoji Cupom: **{code}**`
+- CTA: `Point right emoji **[COMPRAR COM DESCONTO]({url})**` (CAPSLOCK)
+- Tags: Extract `name` from tag dicts (e.g., "Frete Gratis", "Parcelado")
+- Footer: `Oferta verificada automaticamente`
+
+### Schedule
+- Hours: 8h-18h SP, 30min cycle, max 5 posts, 3min spacing
+
+## Music Technical Details
+
+### Platform Resolution
+| Platform | Method |
+|---|---|
+| YouTube | Direct yt-dlp download |
+| Spotify | oEmbed API (artist + title) |
+| Deezer | oEmbed + /track/{id} API fallback |
+| Apple Music | oEmbed + URL parsing fallback |
+| Amazon Music | URL path parsing |
+
+### Playback Architecture
+- Download audio to temp file via yt-dlp (through WARP SOCKS5 proxy on VPS)
+- Play local file with FFmpeg (no proxy needed)
+- Seek (`t$ff`): reuse downloaded file with FFmpeg `-ss` parameter
+- Session persistence: save current_query + queue to `voice_state.json`
+
+### Voice Recognition Pipeline
+```
+Discord voice packets → discord-ext-voice-recv → Opus decode
+→ PCM buffer (per user, silence-gated) → WAV 48kHz mono
+→ FFmpeg resample to 16kHz → Google STT (primary) / Vosk (fallback)
+→ _parse_voice_command() → action dispatch
+```
+
+### Known Issues
+- Opus decoder may throw `OpusError: corrupted stream` — monkey-patched to return silence frames, filtered in sink
+- VPS YouTube blocking — resolved via Cloudflare WARP SOCKS5 proxy at 127.0.0.1:40000
+
+## VPS Deploy Workflow
+
+```bash
+# On VPS (Hostinger):
+cd /opt/tiffany-bot && git fetch && git checkout origin/main -- <files>
+pkill -9 -f "python" ; rm -f /tmp/tiffany_launcher.lock /tmp/tuffine_launcher.lock
+sleep 2 && PYTHONUNBUFFERED=1 nohup python3 launcher.py > bot.log 2>&1 &
+```
+
+Never use `git pull` on VPS (has local uncommitted .env changes). Always use `git checkout origin/main -- <specific files>`.
+
+## Code Conventions
+
+- **Language:** All user-facing strings, AI prompts, and logs in Portuguese (BR)
+- **Bot prefix:** `t$` (case-insensitive)
+- **File naming:** English (offers.py not ofertas.py)
+- **No database:** All state in JSON files
+- **Rate limiting:** Sequential AI calls, cooldowns between Discord posts
+- **Images:** Always download and attach — never post news without image
+- **Pings:** Only mention notification role for nota >= 90 (urgent news)
