@@ -1914,7 +1914,15 @@ def register_voice(bot: commands.Bot) -> None:
         if session:
             fila = len(session.queue_display)
             lines.append(f"📋 Fila atual: **{fila}/10**")
-        await ctx.send("\n".join(lines))
+        try:
+            await ctx.author.send("\n".join(lines))
+            await ctx.send("📩 Enviei as estatísticas na sua DM!", delete_after=8)
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        except discord.Forbidden:
+            await ctx.send("\n".join(lines))
 
     @bot.command(name="r", help="Toca música aleatória (random): $r")
     async def cmd_random(ctx: commands.Context):
@@ -2015,7 +2023,15 @@ def register_voice(bot: commands.Bot) -> None:
             "`/status` — Status do bot (admin, slash command).\n"
             "`t$h` — Mostra esta ajuda."
         )
-        await ctx.send(help_text)
+        try:
+            await ctx.author.send(help_text)
+            await ctx.send("📩 Enviei os comandos na sua DM!", delete_after=8)
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        except discord.Forbidden:
+            await ctx.send(help_text)
 
     @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
