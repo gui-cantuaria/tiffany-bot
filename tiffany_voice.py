@@ -1914,15 +1914,7 @@ def register_voice(bot: commands.Bot) -> None:
         if session:
             fila = len(session.queue_display)
             lines.append(f"📋 Fila atual: **{fila}/10**")
-        try:
-            await ctx.author.send("\n".join(lines))
-            await ctx.send("📩 Enviei as estatísticas na sua DM!", delete_after=8)
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-        except discord.Forbidden:
-            await ctx.send("\n".join(lines))
+        await ctx.send("\n".join(lines))
 
     @bot.command(name="r", help="Toca música aleatória (random): $r")
     async def cmd_random(ctx: commands.Context):
@@ -2001,37 +1993,26 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$e` — Entra no seu canal de voz.\n"
             "`t$l` — Sai do canal de voz e encerra a sessão.\n"
             "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
-            "`t$np` — Mostra a música tocando agora e o tempo decorrido.\n"
             "`t$pa` — Pausa a reprodução.\n"
             "`t$re` — Retoma de onde pausou.\n"
-            "`t$q` — Lista todas as músicas na fila.\n"
             "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
             "`t$cl` — Para a reprodução e limpa a fila inteira.\n"
             "`t$r` — Adiciona uma música aleatória à fila.\n"
             "`t$ff <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n\n"
             "**📂 Playlists**\n"
-            "`t$pl save <nome>` — Salva a fila atual como playlist.\n"
-            "`t$pl load <nome>` — Carrega uma playlist salva na fila.\n"
-            "`t$pl list` — Lista as playlists salvas neste servidor.\n"
-            "`t$pl del <nome>` — Apaga uma playlist permanentemente.\n\n"
+            "`t$pl save/load/list/del <nome>`\n\n"
             "**🎙️ Voz (na call)**\n"
             "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
             "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
             "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
-            "**🔧 Outros**\n"
-            "`t$st` — Estatísticas da sessão (admin).\n"
-            "`/status` — Status do bot (admin, slash command).\n"
-            "`t$h` — Mostra esta ajuda."
+            "**🔧 Info** *(só você vê)*\n"
+            "`/help` — Mostra esta ajuda.\n"
+            "`/np` — Música tocando agora.\n"
+            "`/queue` — Fila de músicas.\n"
+            "`/stats` — Estatísticas da sessão.\n"
+            "`/status` — Status do bot (admin)."
         )
-        try:
-            await ctx.author.send(help_text)
-            await ctx.send("📩 Enviei os comandos na sua DM!", delete_after=8)
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-        except discord.Forbidden:
-            await ctx.send(help_text)
+        await ctx.send(help_text)
 
     @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -2410,5 +2391,110 @@ def register_voice(bot: commands.Bot) -> None:
                         pass
             except Exception as e:
                 log.warning("Erro ao reconectar guild %s no on_ready: %s", gid_str, e)
+
+    # ============================
+    # SLASH COMMANDS (ephemeral)
+    # ============================
+
+    @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
+    async def slash_help(interaction: discord.Interaction):
+        help_text = (
+            "**— Tiffany · Comandos —**\n\n"
+            "**💬 Chat & IA**\n"
+            "`t$c <pergunta>` — Faz uma pergunta à IA. Aceita imagens anexadas.\n"
+            "`t$su <URL>` — Resume o conteúdo de qualquer link em um parágrafo.\n\n"
+            "**🎵 Música**\n"
+            "`t$e` — Entra no seu canal de voz.\n"
+            "`t$l` — Sai do canal de voz e encerra a sessão.\n"
+            "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
+            "`t$pa` — Pausa a reprodução.\n"
+            "`t$re` — Retoma de onde pausou.\n"
+            "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
+            "`t$cl` — Para a reprodução e limpa a fila inteira.\n"
+            "`t$r` — Adiciona uma música aleatória à fila.\n"
+            "`t$ff <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n\n"
+            "**📂 Playlists**\n"
+            "`t$pl save/load/list/del <nome>`\n\n"
+            "**🎙️ Voz (na call)**\n"
+            "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
+            "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
+            "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
+            "**🔧 Info**\n"
+            "`/help` — Mostra esta ajuda.\n"
+            "`/np` — Música tocando agora.\n"
+            "`/queue` — Fila de músicas.\n"
+            "`/stats` — Estatísticas da sessão.\n"
+            "`/status` — Status do bot (admin)."
+        )
+        await interaction.response.send_message(help_text, ephemeral=True)
+
+    @bot.tree.command(name="np", description="Mostra a música tocando agora")
+    async def slash_np(interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
+            return
+        session = _sessions.get(interaction.guild.id)
+        vc = interaction.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await interaction.response.send_message("⚠️ Não estou em nenhum canal de voz.", ephemeral=True)
+            return
+        if not session.current_song:
+            await interaction.response.send_message("📭 Nada tocando no momento.", ephemeral=True)
+            return
+        elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
+        m, s = divmod(elapsed, 60)
+        dur = session.current_duration
+        dur_str = ""
+        if dur > 0:
+            dm, ds = divmod(int(dur), 60)
+            dur_str = f" / {dm:02d}:{ds:02d}"
+        fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
+        await interaction.response.send_message(
+            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}",
+            ephemeral=True,
+        )
+
+    @bot.tree.command(name="queue", description="Mostra a fila de músicas")
+    async def slash_queue(interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
+            return
+        session = _sessions.get(interaction.guild.id)
+        vc = interaction.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await interaction.response.send_message("⚠️ Não estou em nenhum canal de voz.", ephemeral=True)
+            return
+        lines = []
+        if session.current_song:
+            lines.append(f"▶️ **Tocando agora:** {session.current_song[:80]}")
+        if session.queue_display:
+            lines.append("")
+            for i, name in enumerate(session.queue_display[:10], start=1):
+                lines.append(f"`{i}.` {name[:80]}")
+            if len(session.queue_display) > 10:
+                lines.append(f"*... e mais {len(session.queue_display) - 10} músicas*")
+        if not lines:
+            await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
+            return
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @bot.tree.command(name="stats", description="Estatísticas da sessão atual da Tiffany")
+    async def slash_stats(interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
+            return
+        users_with_context = len(_user_context)
+        lines = [
+            "**Estatísticas da Tiffany (sessão atual):**",
+            f"🎵 Músicas tocadas: **{_stats['songs_played']}**",
+            f"💬 Perguntas respondidas: **{_stats['questions_answered']}**",
+            f"⌨️ Comandos usados: **{_stats['commands_used']}**",
+            f"🧠 Contextos ativos: **{users_with_context}/{_CONTEXT_MAX_USERS}**",
+        ]
+        session = _sessions.get(interaction.guild.id)
+        if session:
+            fila = len(session.queue_display)
+            lines.append(f"📋 Fila atual: **{fila}/10**")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
