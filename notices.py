@@ -1067,20 +1067,30 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 ═══ TÍTULO ═══
 - OBRIGATÓRIO: EXATAMENTE ENTRE 8 E 15 PALAVRAS. NUNCA MENOS QUE 8.
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
-- Traduza para PT-BR. Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
+- TRADUÇÃO OBRIGATÓRIA: Traduza TODO o título para PT-BR, incluindo termos técnicos em inglês. Use equivalentes em português ou explique o conceito. Exemplos:
+  ✗ "Kit de phishing hijacka contas" → ✓ "Golpe digital rouba contas"
+  ✗ "Exploit zero-day afeta devices" → ✓ "Falha de segurança inédita afeta dispositivos"
+  ✗ "Ransomware ataca supply chain" → ✓ "Vírus sequestrador ataca cadeia de fornecedores"
+  Termos amplamente conhecidos podem ser mantidos: "Windows", "iPhone", "ChatGPT", "Google", "WhatsApp", "Android", "Bluetooth", "Wi-Fi", "Linux", "API".
+  Termos técnicos de nicho DEVEM ser traduzidos ou explicados: "phishing" → "golpe digital", "hijack" → "sequestro/roubo", "exploit" → "falha explorada", "device-code" → remover ou simplificar.
+- Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
 - Entre 80 e 150 caracteres. Conta as palavras ANTES de enviar.
 - EXEMPLOS DE TÍTULOS BONS:
   ✓ "Meta enfrenta processo milionário por uso indevido de livros no treinamento de IA"
-  ✓ "Nova versão do ChatGPT reduz alucinações em aplicações médicas e jurídicas"
+  ✓ "Nova versão do ChatGPT reduz erros em aplicações médicas e jurídicas"
+  ✓ "Golpe digital usa código de dispositivo para roubar contas do Microsoft 365"
   ✗ "Meta processada" (RUIM: apenas 2 palavras)
-  ✗ "OpenAI lança GPT-5" (RUIM: apenas 4 palavras)
+  ✗ "Kit de phishing Tycoon2FA hijacka contas via device-code" (RUIM: inglês técnico incompreensível)
 
 ═══ RESUMO ═══
-- Um único parágrafo contínuo, 4 a 6 frases. Sem bullet points, sem quebras de linha.
+- Um único parágrafo contínuo, 4 a 6 FRASES SEPARADAS POR PONTO FINAL. Sem bullet points, sem quebras de linha.
+- CADA FRASE deve ter no máximo 40 palavras. Frases curtas e diretas. NUNCA escreva uma frase com mais de 2 linhas.
 - Estilo Filipe Deschamps: engajante, contextualizado, explica o fato, o porquê e o impacto real.
 - Estrutura: CONTEXTO/GANCHO → FATO PRINCIPAL → DETALHE RELEVANTE → IMPACTO ou REAÇÃO.
 - Linguagem jornalística mas acessível: não seco, não acadêmico. Faz o leitor entender por que isso importa.
-- Traduza termos técnicos quando necessário. Em PT-BR com gramática impecável.
+- TRADUÇÃO: Traduza termos técnicos para português acessível. Se um termo em inglês for essencial, explique-o entre parênteses na primeira menção. Ex: "phishing (golpe digital)", "ransomware (vírus sequestrador)".
+- NÃO REPITA a mesma ideia com palavras diferentes. Cada frase deve trazer informação NOVA.
+- Em PT-BR com gramática impecável.
 - LIMITE: entre 600 e 1000 caracteres. Não ultrapasse 1000.
 
 ═══ FILTROS ESPECIAIS ═══
@@ -1098,7 +1108,7 @@ Texto da Notícia: {texto_base[:8000]}
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. O campo 'resumo' deve ter entre 600 e 1000 caracteres: parágrafo único, 4-6 frases, estilo jornalístico engajante."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título 100% em português — traduza TODOS os termos técnicos em inglês. 2) Resumo: 4-6 frases CURTAS separadas por ponto final, cada frase com no máximo 40 palavras. Nunca repita a mesma ideia. 3) Entre 600 e 1000 caracteres no resumo."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
