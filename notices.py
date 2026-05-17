@@ -1085,12 +1085,10 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
   ✗ "Kit de phishing Tycoon2FA hijacka contas via device-code" (RUIM: verbos aportuguesados + jargões obscuros acumulados)
 
 ═══ RESUMO ═══
-- Um único parágrafo contínuo, 4 a 6 FRASES SEPARADAS POR PONTO FINAL. Sem bullet points, sem quebras de linha.
-- CADA FRASE deve ter no máximo 40 palavras. Frases curtas e diretas. NUNCA escreva uma frase com mais de 2 linhas.
+- Um único parágrafo contínuo, 4 a 6 frases. Sem bullet points, sem quebras de linha.
 - Estilo Filipe Deschamps: engajante, contextualizado, explica o fato, o porquê e o impacto real.
 - Estrutura: CONTEXTO/GANCHO → FATO PRINCIPAL → DETALHE RELEVANTE → IMPACTO ou REAÇÃO.
-- Linguagem jornalística mas acessível: não seco, não acadêmico. Faz o leitor entender por que isso importa.
-- Jargões tech comuns podem ser usados sem tradução (phishing, ransomware, malware, exploit, etc). Mas o texto deve ser claro — não acumule termos técnicos sem explicar o contexto.
+- Linguagem jornalística mas acessível: não seco, não acadêmico, não telegráfico. Faz o leitor entender por que isso importa.
 - NÃO REPITA a mesma ideia com palavras diferentes. Cada frase deve trazer informação NOVA.
 - Em PT-BR com gramática impecável.
 - LIMITE: entre 600 e 1000 caracteres. Não ultrapasse 1000.
@@ -1110,7 +1108,7 @@ Texto da Notícia: {texto_base[:8000]}
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: 4-6 frases CURTAS separadas por ponto final, cada frase com no máximo 40 palavras. Nunca repita a mesma ideia. 3) Entre 600 e 1000 caracteres no resumo."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: parágrafo denso com 4-6 frases, estilo jornalístico engajante, entre 600 e 1000 caracteres. Nunca repita a mesma ideia."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
