@@ -1090,6 +1090,12 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - Estrutura: CONTEXTO/GANCHO → FATO PRINCIPAL → DETALHE RELEVANTE → IMPACTO ou REAÇÃO.
 - Linguagem jornalística mas acessível: não seco, não acadêmico, não telegráfico. Faz o leitor entender por que isso importa.
 - NÃO REPITA a mesma ideia com palavras diferentes. Cada frase deve trazer informação NOVA.
+- PROIBIDO frases genéricas de enchimento como:
+  ✗ "pode ter implicações significativas" / "o que pode ser um grande diferencial"
+  ✗ "além disso, essa novidade pode influenciar..." / "isso pode impactar o mercado"
+  ✗ "a comunidade aguarda com expectativa" / "destaca a importância de..."
+  ✗ Qualquer frase que poderia ser colada em QUALQUER notícia sem mudar nada. Cada frase deve conter FATOS CONCRETOS da notícia.
+- PROIBIDO inventar informações ou confundir empresas/produtos. Se a notícia não menciona um dado, NÃO invente.
 - Em PT-BR com gramática impecável.
 - LIMITE: entre 600 e 1000 caracteres. Não ultrapasse 1000.
 
@@ -1108,7 +1114,7 @@ Texto da Notícia: {texto_base[:8000]}
             response = await ai_client.chat.completions.create(
                 model="meta-llama/llama-3.3-70b-instruct",
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: parágrafo denso com 4-6 frases, estilo jornalístico engajante, entre 600 e 1000 caracteres. Nunca repita a mesma ideia."},
+                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: parágrafo denso com 4-6 frases, entre 600 e 1000 caracteres. Cada frase deve trazer FATOS CONCRETOS — PROIBIDO frases genéricas de enchimento como 'pode ter implicações significativas' ou 'destaca a importância'. 3) NUNCA invente informações que não estão na notícia."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
@@ -1470,6 +1476,9 @@ async def verificar_feeds():
                 "simhash": sh,
                 "feed_url": FONTES_RSS.get(nome_site, ""),
             })
+            # Registrar título e simhash IMEDIATAMENTE para dedup cross-site no mesmo ciclo
+            title_add(history, title)
+            simhash_add(history, sh)
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
 
@@ -1528,7 +1537,7 @@ async def verificar_feeds():
         # Dedup extra: verificar se assunto já foi aprovado neste ciclo
         titulo_lower = cand["title"].lower()
         assunto_keywords = set()
-        for palavra in ["meta", "openai", "google", "microsoft", "apple", "amazon", "facebook", "jwst", "james webb", "call of duty", "activision"]:
+        for palavra in ["meta", "openai", "google", "microsoft", "apple", "amazon", "facebook", "jwst", "james webb", "call of duty", "activision", "nvidia", "amd", "intel", "samsung", "lg", "sony", "valve", "steam", "musk", "altman", "zuckerberg", "spacex", "tesla", "chatgpt", "gemini", "copilot", "windows", "android", "iphone", "pixel"]:
             if palavra in titulo_lower:
                 assunto_keywords.add(palavra)
         
