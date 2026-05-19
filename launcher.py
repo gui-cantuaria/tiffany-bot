@@ -17,7 +17,7 @@ except IOError:
 # --- LISTA DE BOTS ---
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
-    {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},
+    # {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},  # Pausado até configurar afiliados
 ]
 
 LOG_DIR = "logs"
