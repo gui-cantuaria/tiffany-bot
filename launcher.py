@@ -3,7 +3,12 @@ import time
 import sys
 import os
 import fcntl
+import urllib.request
+import json
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- LOCKFILE: garante que só uma instância roda ---
 _LOCKFILE = "/tmp/tiffany_launcher.lock"
@@ -32,6 +37,19 @@ def log(mensagem):
     print(f"[{agora}] {mensagem}")
 
 
+def webhook_notify(message: str):
+    """Envia notificação de healthcheck via webhook do Discord."""
+    url = os.environ.get("DISCORD_WEBHOOK_HEALTHCHECK")
+    if not url:
+        return
+    try:
+        data = json.dumps({"content": f"🤖 **Tiffany Healthcheck**\n{message}"}).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass
+
+
 def iniciar_bot(bot_config):
     """Inicia um bot e retorna o processo, capturando stdout/stderr em arquivo de log"""
     log(f"👉 Iniciando {bot_config['nome']}...")
@@ -56,6 +74,7 @@ for bot in bots:
     processos[bot["nome"]] = {"processo": proc, "log_file": log_file, "config": bot}
 
 log("✅ Bots ativos! Monitorando quedas (Watchdog ativado)...")
+webhook_notify(f"✅ Sistema iniciado com {len(bots)} bot(s)")
 
 try:
     while True:
@@ -71,6 +90,7 @@ try:
                 log(
                     f"⚠️ ALERTA: {nome} caiu (exit code: {p.returncode})! Reiniciando imediatamente..."
                 )
+                webhook_notify(f"⚠️ {nome} caiu (exit code: {p.returncode})! Reiniciando...")
                 # Fechar log file antigo
                 if dados.get("log_file"):
                     dados["log_file"].close()
@@ -81,6 +101,7 @@ try:
 except KeyboardInterrupt:
     # Quando você mandar parar (Ctrl+C no terminal ou desligar na Discloud)
     log("🛑 Comando de parada recebido. Desligando bots...")
+    webhook_notify("🛑 Sistema encerrado manualmente.")
     for nome, dados in processos.items():
         dados["processo"].terminate()
         dados["processo"].wait()

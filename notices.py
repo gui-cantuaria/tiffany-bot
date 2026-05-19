@@ -366,11 +366,11 @@ def save_history(h: dict) -> None:
     # Limpar entradas com mais de 7 dias
     cutoff = int(time.time()) - (7 * 86400)
     novo = {}
-    # Preservar índices internos
+    # Preservar índices internos (com pruning para não crescerem sem limite)
     if "_simhash_idx" in h:
-        novo["_simhash_idx"] = h["_simhash_idx"]
+        novo["_simhash_idx"] = _simhash_prune(h["_simhash_idx"])
     if "_title_idx" in h:
-        novo["_title_idx"] = h["_title_idx"]
+        novo["_title_idx"] = _title_idx_prune(h["_title_idx"])
     for k, v in h.items():
         if k in ("_simhash_idx", "_title_idx"):
             continue
@@ -537,9 +537,16 @@ def _get_title_index(h: dict) -> dict[str, int]:
     idx = h.get("_title_idx")
     return idx if isinstance(idx, dict) else {}
 
+MAX_TITLE_INDEX = 500
+
 def _title_idx_prune(idx: dict[str, int]) -> dict[str, int]:
     cutoff = int(time.time()) - (TITLE_IDX_TTL_HORAS * 3600)
-    return {k: ts for k, ts in idx.items() if ts >= cutoff}
+    pruned = {k: ts for k, ts in idx.items() if ts >= cutoff}
+    # Limitar tamanho: manter apenas os mais recentes
+    if len(pruned) > MAX_TITLE_INDEX:
+        sorted_items = sorted(pruned.items(), key=lambda x: x[1], reverse=True)
+        pruned = dict(sorted_items[:MAX_TITLE_INDEX])
+    return pruned
 
 def title_is_dup(h: dict, titulo: str) -> bool:
     """Checa se um título normalizado já foi processado (qualquer site)."""
@@ -1109,10 +1116,15 @@ Título Original: {titulo_original}
 Texto da Notícia: {texto_base[:8000]}
 """
 
+    modelo_principal = "openai/gpt-4o-mini"
+    modelo_fallback = "meta-llama/llama-3.3-70b-instruct"
+
     for attempt in range(3):
+        modelo = modelo_fallback if attempt == 2 else modelo_principal
+        log.info(f"IA tentativa {attempt+1}/3 usando modelo: {modelo}")
         try:
             response = await ai_client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct",
+                model=modelo,
                 messages=[
                     {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: parágrafo denso com 4-6 frases, entre 600 e 1000 caracteres. Cada frase deve trazer FATOS CONCRETOS — PROIBIDO frases genéricas de enchimento como 'pode ter implicações significativas' ou 'destaca a importância'. 3) NUNCA invente informações que não estão na notícia."},
                     {"role": "user", "content": prompt},
@@ -1130,8 +1142,11 @@ Texto da Notícia: {texto_base[:8000]}
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
         except Exception as e:
-            log.warning(f"IA tentativa {attempt+1}/3 falhou: {e}")
-            await asyncio.sleep(2)
+            log.warning(f"IA tentativa {attempt+1}/3 falhou ({modelo}): {e}")
+            if attempt < 2:
+                backoff = 2 ** (attempt + 1)
+                log.info(f"Aguardando {backoff}s antes da próxima tentativa...")
+                await asyncio.sleep(backoff)
     return None
 
 # =========================

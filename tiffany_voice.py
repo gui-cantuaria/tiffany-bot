@@ -248,8 +248,31 @@ def _add_to_context(user_id: int, question: str, answer: str) -> None:
 # Semáforo global: max 1 chamada simultânea à API de IA (evita estouro de rate limit)
 _ai_semaphore: asyncio.Semaphore  # inicializado em register_voice (precisa de loop)
 
-# Estatísticas em memória (resetam no restart)
-_stats: dict[str, int] = {"songs_played": 0, "questions_answered": 0, "commands_used": 0}
+# Estatísticas persistentes em JSON
+STATS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_stats.json")
+
+def _load_stats() -> dict[str, int]:
+    """Carrega estatísticas do JSON, retorna defaults se não existir."""
+    defaults = {"songs_played": 0, "questions_answered": 0, "commands_used": 0}
+    try:
+        with open(STATS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for k in defaults:
+            if k not in data or not isinstance(data[k], int):
+                data[k] = defaults[k]
+        return data
+    except Exception:
+        return defaults
+
+def _save_stats() -> None:
+    """Salva _stats no JSON."""
+    try:
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(_stats, f)
+    except Exception:
+        pass
+
+_stats: dict[str, int] = _load_stats()
 
 # Playlists salvas em JSON por servidor
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
@@ -574,10 +597,55 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return wav_48k
 
 
+def _transcribe_whisper_groq(wav: bytes) -> Optional[str]:
+    """STT via Whisper large-v3 na Groq (grátis e rápido)."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import urllib.request
+        import uuid
+        boundary = uuid.uuid4().hex
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n'
+            f"Content-Type: audio/wav\r\n\r\n"
+        ).encode("utf-8") + wav + (
+            f"\r\n--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="model"\r\n\r\n'
+            f"whisper-large-v3\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="language"\r\n\r\n'
+            f"pt\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        text = result.get("text", "").strip()
+        if text:
+            log.info("Whisper/Groq STT: %r", text)
+            return text
+    except Exception as e:
+        log.warning("Whisper/Groq STT erro: %s", e)
+    return None
+
+
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
     # Converter para 16kHz (melhor para todos os engines STT)
     wav = _wav_48k_to_16k(wav)
-    # Tenta Google STT primeiro (mais preciso, especialmente com áudio curto)
+    # 1) Whisper via Groq (mais preciso, grátis)
+    result = _transcribe_whisper_groq(wav)
+    if result:
+        return result
+    # 2) Google STT (fallback online)
     try:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
@@ -596,7 +664,7 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         log.warning("Pacote SpeechRecognition não instalado.")
     except Exception as e:
         log.warning("Erro no Google STT: %s", e)
-    # Fallback: Vosk (offline)
+    # 3) Vosk (fallback offline)
     result = _transcribe_with_vosk(wav)
     if result is not None:
         return result
@@ -927,6 +995,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
 
                     session.song_start_time = time.monotonic()
                     _stats["songs_played"] += 1
+                    _save_stats()
                     # Salvar estado para restaurar após restart
                     if vc.channel:
                         _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
@@ -1170,8 +1239,9 @@ async def _join_voice_recv_client(
 
 
 def register_voice(bot: commands.Bot) -> None:
-    global _ai_semaphore
+    global _ai_semaphore, _stats
     _ai_semaphore = asyncio.Semaphore(1)
+    _stats = _load_stats()
 
     _RANDOM_SONGS = [
         # === Most Streamed / Viral ===
@@ -1493,6 +1563,7 @@ def register_voice(bot: commands.Bot) -> None:
             if _ctx_id:
                 _add_to_context(_ctx_id, question, answer)
             _stats["questions_answered"] += 1
+            _save_stats()
 
             # TTS se habilitado
             if session and session.tts_enabled and vc and vc.is_connected():
@@ -2311,6 +2382,28 @@ def register_voice(bot: commands.Bot) -> None:
                         pass
             except Exception:
                 log.exception("Erro no watchdog de canal vazio")
+
+            # Limpeza de temp dirs de yt-dlp (dirs tiffany_* com mais de 10 min)
+            try:
+                import glob as _glob
+                _tmp_base = tempfile.gettempdir()
+                for d in _glob.glob(os.path.join(_tmp_base, "tiffany_*")):
+                    try:
+                        age = time.time() - os.path.getmtime(d)
+                        if age > 600:  # mais de 10 minutos
+                            if os.path.isdir(d):
+                                shutil.rmtree(d, ignore_errors=True)
+                                log.debug("Temp dir removido: %s", d)
+                            elif os.path.isfile(d):
+                                os.remove(d)
+                                log.debug("Temp file removido: %s", d)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Persistir estatísticas periodicamente
+            _save_stats()
 
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
