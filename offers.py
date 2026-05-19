@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urljoin
 
+import io
 import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -567,16 +568,9 @@ def _format_description(deal: dict) -> str:
     if deal.get("expiration"):
         lines.append(f"⏰ Expira: {deal['expiration']}")
 
-    # Estrelas e vendas
-    rating_parts = []
-    if deal.get("stars"):
-        rating_parts.append(f"⭐ {deal['stars']}/5")
-    if deal.get("sales_count"):
-        rating_parts.append(f"({deal['sales_count']} avaliações)")
-
-    if rating_parts:
-        lines.append(" ".join(rating_parts))
-    # Se não tem dados de avaliação, não exibe nada (evita poluição visual)
+    # Estrelas e vendas (só exibe se tiver dados reais)
+    if deal.get("stars") and deal.get("sales_count"):
+        lines.append(f"⭐ {deal['stars']}/5 ({deal['sales_count']} avaliações)")
 
     # Tags (ex: Frete Grátis)
     tags = deal.get("tags") or []
@@ -585,6 +579,26 @@ def _format_description(deal: dict) -> str:
         lines.append(f"🏷️ {tags_str}")
 
     return "\n".join(lines)
+
+
+async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[bytes]:
+    """Baixa imagem e retorna bytes. Retorna None se falhar."""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        }
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status != 200:
+                log.debug(f"Imagem HTTP {resp.status}: {url[:80]}")
+                return None
+            data = await resp.read()
+            if len(data) < 1000:  # imagem muito pequena
+                return None
+            return data
+    except Exception as e:
+        log.debug(f"Erro ao baixar imagem: {e}")
+        return None
 
 
 def _build_embed(deal: dict) -> discord.Embed:
@@ -615,9 +629,10 @@ def _build_embed(deal: dict) -> discord.Embed:
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
 
-    # Imagem
+    # Imagem — será anexada como arquivo separado (set_image com attachment://)
+    # A URL real é baixada no momento de postar
     if deal.get("image"):
-        embed.set_image(url=deal["image"])
+        embed.set_image(url="attachment://oferta.jpg")
 
     # CTA
     buy_url = deal.get("store_url") or deal["url"]
@@ -717,9 +732,19 @@ async def _run_deals_cycle() -> None:
     for deal in approved[:MAX_POSTS_POR_CICLO]:
         embed = _build_embed(deal)
 
+        # Baixar imagem e anexar como arquivo
+        file = None
+        if deal.get("image"):
+            img_data = await _download_image(http_session, deal["image"])
+            if img_data:
+                file = discord.File(io.BytesIO(img_data), filename="oferta.jpg")
+            else:
+                # Fallback: tentar URL direto no embed
+                embed.set_image(url=deal["image"])
+
         try:
             content = f"<@&{ID_CARGO_OFERTAS}>" if ID_CARGO_OFERTAS else None
-            msg = await channel.send(content=content, embed=embed)
+            msg = await channel.send(content=content, embed=embed, file=file)
 
             try:
                 thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:80]}"
