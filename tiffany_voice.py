@@ -810,6 +810,8 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
 
 async def _music_platform_to_search(url: str) -> Optional[str]:
     """Converte URL de Spotify/Deezer/Apple Music/Amazon Music em query de busca YouTube."""
+    # Normalizar URLs do Spotify: remover segmento /intl-XX/
+    url = re.sub(r"open\.spotify\.com/intl-[a-z]{2}/", "open.spotify.com/", url)
     platform = _detect_music_platform(url)
     if not platform:
         return None
@@ -2218,6 +2220,10 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         is_url = bool(re.match(r"^https?://", query))
+
+        # Normalizar URLs do Spotify: remover segmento /intl-XX/
+        if is_url and "spotify.com/intl-" in query:
+            query = re.sub(r"open\.spotify\.com/intl-[a-z]{2}/", "open.spotify.com/", query)
 
         # Playlist: extrair tracks e adicionar à fila
         if is_url and _is_playlist_url(query):
