@@ -708,6 +708,98 @@ def _amazon_music_url_to_search(url: str) -> Optional[str]:
     return None
 
 
+def _is_playlist_url(url: str) -> bool:
+    """Detecta se a URL é uma playlist (YouTube, Spotify, Deezer)."""
+    if "youtube.com/playlist" in url or "list=" in url:
+        return True
+    if "open.spotify.com/playlist/" in url:
+        return True
+    if "deezer.com/playlist/" in url or "deezer.com/br/playlist/" in url:
+        return True
+    return False
+
+
+async def _extract_playlist_tracks(url: str) -> list[dict]:
+    """Extrai tracks de uma playlist. Retorna lista de {query, display}."""
+    tracks: list[dict] = []
+
+    # YouTube playlist: usar yt-dlp --flat-playlist
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            import yt_dlp
+            ydl_opts = {
+                **YDL_OPTS,
+                "extract_flat": True,
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": False,
+            }
+            def _extract():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    if not info:
+                        return []
+                    entries = info.get("entries") or []
+                    result = []
+                    for entry in entries:
+                        title = entry.get("title") or entry.get("id", "")
+                        vid_url = entry.get("url") or entry.get("webpage_url") or ""
+                        if vid_url and not vid_url.startswith("http"):
+                            vid_url = f"https://www.youtube.com/watch?v={vid_url}"
+                        if title:
+                            result.append({"query": vid_url or f"ytsearch1:{title}", "display": title})
+                    return result
+            tracks = await asyncio.get_event_loop().run_in_executor(None, _extract)
+            log.info("YouTube playlist: %d tracks extraídas de %s", len(tracks), url[:60])
+        except Exception as e:
+            log.warning("Erro ao extrair playlist YouTube: %s", e)
+
+    # Spotify playlist: scraping da página embed
+    elif "open.spotify.com/playlist/" in url:
+        try:
+            import aiohttp as _aiohttp
+            # Usar a API embed para pegar nome da playlist + tracks
+            embed_url = f"https://open.spotify.com/oembed?url={url}"
+            async with _aiohttp.ClientSession() as sess:
+                # Tentar scraping da página embed do Spotify
+                playlist_url = url.replace("open.spotify.com/playlist/", "open.spotify.com/embed/playlist/")
+                async with sess.get(playlist_url, timeout=_aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status == 200:
+                        html = await r.text()
+                        # Extrair tracks do JSON embutido no HTML
+                        import re as _re
+                        # Procurar por tracks no HTML embed
+                        track_matches = _re.findall(r'"name":"([^"]+)"[^}]*"artists":\[{"name":"([^"]+)"', html)
+                        for title, artist in track_matches:
+                            query = f"{artist} {title}"
+                            tracks.append({"query": f"ytsearch1:{query}", "display": query})
+                        log.info("Spotify playlist: %d tracks extraídas", len(tracks))
+        except Exception as e:
+            log.warning("Erro ao extrair playlist Spotify: %s", e)
+
+    # Deezer playlist: API pública
+    elif "deezer.com" in url and "playlist" in url:
+        try:
+            import aiohttp as _aiohttp
+            playlist_id = url.rstrip("/").split("/")[-1].split("?")[0]
+            if playlist_id.isdigit():
+                async with _aiohttp.ClientSession() as sess:
+                    async with sess.get(f"https://api.deezer.com/playlist/{playlist_id}", timeout=_aiohttp.ClientTimeout(total=15)) as r:
+                        if r.status == 200:
+                            data = await r.json()
+                            for track in data.get("tracks", {}).get("data", []):
+                                artist = track.get("artist", {}).get("name", "")
+                                title = track.get("title", "")
+                                if title:
+                                    query = f"{artist} {title}".strip()
+                                    tracks.append({"query": f"ytsearch1:{query}", "display": query})
+                            log.info("Deezer playlist: %d tracks extraídas", len(tracks))
+        except Exception as e:
+            log.warning("Erro ao extrair playlist Deezer: %s", e)
+
+    return tracks
+
+
 async def _music_platform_to_search(url: str) -> Optional[str]:
     """Converte URL de Spotify/Deezer/Apple Music/Amazon Music em query de busca YouTube."""
     platform = _detect_music_platform(url)
@@ -2013,7 +2105,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
         if not query:
-            await ctx.send("🎵 Use: `$p <nome da música ou URL>`")
+            await ctx.send("🎵 Use: `t$p <nome da música ou URL>`")
             return
         _stats["commands_used"] += 1
         sess, vc = await _ensure_connected(ctx)
@@ -2023,8 +2115,34 @@ def register_voice(bot: commands.Bot) -> None:
         if fila_atual >= 10:
             await ctx.send(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música.")
             return
-        display = query
+
         is_url = bool(re.match(r"^https?://", query))
+
+        # Playlist: extrair tracks e adicionar à fila
+        if is_url and _is_playlist_url(query):
+            try:
+                await ctx.message.edit(suppress=True)
+            except Exception:
+                pass
+            await ctx.send("📋 Extraindo músicas da playlist...")
+            tracks = await _extract_playlist_tracks(query)
+            if not tracks:
+                await ctx.send("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública.")
+                return
+            vagas = 10 - fila_atual
+            added = 0
+            for track in tracks[:vagas]:
+                sess.queue_display.append(track["display"])
+                await sess.music_queue.put(track["query"])
+                added += 1
+            skipped = len(tracks) - added
+            msg = f"📋 **{added}** música(s) da playlist adicionadas à fila."
+            if skipped > 0:
+                msg += f" ({skipped} ignoradas — fila cheia)"
+            await ctx.send(msg)
+            return
+
+        display = query
         # Spotify/Deezer/Apple Music: resolver nome da música e buscar no YouTube
         if _detect_music_platform(query):
             resolved = await _music_platform_to_search(query)
@@ -2053,37 +2171,7 @@ def register_voice(bot: commands.Bot) -> None:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(f"🎵 **#{pos}/10** na fila: **{display[:100]}**")
 
-    @bot.command(name="h", help="Lista comandos da Tiffany: $h (help)")
-    async def cmd_help(ctx: commands.Context):
-        help_text = (
-            "**— Tiffany · Comandos —**\n\n"
-            "**💬 Chat & IA**\n"
-            "`t$c <pergunta>` — Faz uma pergunta à IA. Aceita imagens anexadas.\n"
-            "`t$su <URL>` — Resume o conteúdo de qualquer link em um parágrafo.\n\n"
-            "**🎵 Música**\n"
-            "`t$e` — Entra no seu canal de voz.\n"
-            "`t$l` — Sai do canal de voz e encerra a sessão.\n"
-            "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
-            "`t$pa` — Pausa a reprodução.\n"
-            "`t$re` — Retoma de onde pausou.\n"
-            "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
-            "`t$cl` — Para a reprodução e limpa a fila inteira.\n"
-            "`t$r` — Adiciona uma música aleatória à fila.\n"
-            "`t$ff <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n\n"
-            "**📂 Playlists**\n"
-            "`t$pl save/load/list/del <nome>`\n\n"
-            "**🎙️ Voz (na call)**\n"
-            "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
-            "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
-            "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
-            "**🔧 Info** *(só você vê)*\n"
-            "`/help` — Mostra esta ajuda.\n"
-            "`/np` — Música tocando agora.\n"
-            "`/queue` — Fila de músicas.\n"
-            "`/stats` — Estatísticas da sessão.\n"
-            "`/status` — Status do bot (admin)."
-        )
-        await ctx.send(help_text)
+    # t$h removido — use /help (ephemeral)
 
     @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -2500,6 +2588,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$e` — Entra no seu canal de voz.\n"
             "`t$l` — Sai do canal de voz e encerra a sessão.\n"
             "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
+            "`t$p <playlist URL>` — Adiciona playlist inteira (YouTube, Spotify, Deezer).\n"
             "`t$pa` — Pausa a reprodução.\n"
             "`t$re` — Retoma de onde pausou.\n"
             "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
@@ -2512,7 +2601,7 @@ def register_voice(bot: commands.Bot) -> None:
             "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
             "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
             "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
-            "**🔧 Info**\n"
+            "**🔧 Info** *(só você vê)*\n"
             "`/help` — Mostra esta ajuda.\n"
             "`/np` — Música tocando agora.\n"
             "`/queue` — Fila de músicas.\n"
