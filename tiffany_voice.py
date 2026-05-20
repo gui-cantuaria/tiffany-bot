@@ -393,6 +393,7 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, sess
             entry["current_display"] = session.current_song
             entry["queue_queries"] = queue_queries
             entry["queue_displays"] = queue_displays
+        entry["saved_at"] = time.time()
         data[str(guild_id)] = entry
         with open(_VOICE_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
@@ -1590,6 +1591,99 @@ def register_voice(bot: commands.Bot) -> None:
         "ytsearch1:Doja Cat Woman",
         "ytsearch1:Lizzo Truth Hurts",
         "ytsearch1:Dua Lipa Physical",
+        # === R&B / Soul ===
+        "ytsearch1:The Weeknd After Hours",
+        "ytsearch1:The Weeknd I Feel It Coming ft Daft Punk",
+        "ytsearch1:Frank Ocean Nights",
+        "ytsearch1:Frank Ocean Thinkin Bout You",
+        "ytsearch1:Frank Ocean Ivy",
+        "ytsearch1:Daniel Caesar Best Part ft H.E.R.",
+        "ytsearch1:Khalid Young Dumb And Broke",
+        "ytsearch1:Khalid Talk",
+        "ytsearch1:H.E.R. Best Part",
+        "ytsearch1:Usher Yeah ft Lil Jon Ludacris",
+        "ytsearch1:Usher DJ Got Us Fallin In Love",
+        "ytsearch1:Chris Brown Under The Influence",
+        "ytsearch1:Chris Brown No Guidance ft Drake",
+        "ytsearch1:Miguel Adorn",
+        "ytsearch1:Alicia Keys No One",
+        "ytsearch1:John Legend Ordinary People",
+        "ytsearch1:Bruno Mars When I Was Your Man",
+        "ytsearch1:Bruno Mars Just The Way You Are",
+        "ytsearch1:Giveon Heartbreak Anniversary",
+        "ytsearch1:Summer Walker Playing Games",
+        # === Latin / Reggaeton ===
+        "ytsearch1:Daddy Yankee Gasolina",
+        "ytsearch1:J Balvin Mi Gente",
+        "ytsearch1:Ozuna Taki Taki",
+        "ytsearch1:Bad Bunny Yonaguni",
+        "ytsearch1:Bad Bunny Moscow Mule",
+        "ytsearch1:Rosalia Despecha",
+        "ytsearch1:Rauw Alejandro Todo De Ti",
+        "ytsearch1:Karol G Tusa ft Nicki Minaj",
+        "ytsearch1:Karol G Bichota",
+        "ytsearch1:Shakira Bzrp Music Sessions 53",
+        "ytsearch1:Maluma Hawai",
+        "ytsearch1:Nicky Jam X ft J Balvin",
+        "ytsearch1:Enrique Iglesias Bailando ft Descemer Bueno",
+        "ytsearch1:Enrique Iglesias Hero",
+        # === Indie / Alternative ===
+        "ytsearch1:Tame Impala The Less I Know The Better",
+        "ytsearch1:Tame Impala Let It Happen",
+        "ytsearch1:Mac DeMarco Chamber Of Reflection",
+        "ytsearch1:Cage The Elephant Ain't No Rest For The Wicked",
+        "ytsearch1:MGMT Electric Feel",
+        "ytsearch1:MGMT Kids",
+        "ytsearch1:Foster The People Pumped Up Kicks",
+        "ytsearch1:Vampire Weekend A-Punk",
+        "ytsearch1:The Neighbourhood Sweater Weather",
+        "ytsearch1:Imagine Dragons Thunder",
+        "ytsearch1:Imagine Dragons Whatever It Takes",
+        "ytsearch1:Florence And The Machine Dog Days Are Over",
+        "ytsearch1:Hozier Take Me To Church",
+        "ytsearch1:alt-J Breezeblocks",
+        "ytsearch1:Portugal The Man Feel It Still",
+        "ytsearch1:Gotye Eyes Wide Open",
+        "ytsearch1:Lorde Royals",
+        "ytsearch1:Lorde Green Light",
+        "ytsearch1:Phoebe Bridgers Motion Sickness",
+        "ytsearch1:Wallows Are You Bored Yet",
+        # === Classic Pop / 80s-90s ===
+        "ytsearch1:Prince Purple Rain",
+        "ytsearch1:Whitney Houston I Will Always Love You",
+        "ytsearch1:Whitney Houston I Wanna Dance With Somebody",
+        "ytsearch1:George Michael Careless Whisper",
+        "ytsearch1:Cyndi Lauper Girls Just Want To Have Fun",
+        "ytsearch1:Tears For Fears Everybody Wants To Rule The World",
+        "ytsearch1:Eurythmics Sweet Dreams",
+        "ytsearch1:Depeche Mode Enjoy The Silence",
+        "ytsearch1:The Cure Friday I'm In Love",
+        "ytsearch1:New Order Blue Monday",
+        "ytsearch1:Duran Duran Hungry Like The Wolf",
+        "ytsearch1:Phil Collins In The Air Tonight",
+        "ytsearch1:Fleetwood Mac Dreams",
+        "ytsearch1:Fleetwood Mac The Chain",
+        "ytsearch1:Backstreet Boys I Want It That Way",
+        "ytsearch1:NSYNC Bye Bye Bye",
+        "ytsearch1:Spice Girls Wannabe",
+        "ytsearch1:TLC No Scrubs",
+        "ytsearch1:Destiny's Child Say My Name",
+        "ytsearch1:No Doubt Don't Speak",
+        "ytsearch1:Alanis Morissette You Oughta Know",
+        "ytsearch1:Smash Mouth All Star",
+        "ytsearch1:Third Eye Blind Semi-Charmed Life",
+        # === 2024-2025 Hits ===
+        "ytsearch1:Billie Eilish Birds Of A Feather",
+        "ytsearch1:Sabrina Carpenter Please Please Please",
+        "ytsearch1:Chappell Roan Pink Pony Club",
+        "ytsearch1:Gracie Abrams That's So True",
+        "ytsearch1:Kendrick Lamar TV Off ft Lefty Gunplay",
+        "ytsearch1:Lady Gaga Die With A Smile ft Bruno Mars",
+        "ytsearch1:The Weeknd Timeless ft Playboi Carti",
+        "ytsearch1:Shaboozey A Bar Song Tipsy",
+        "ytsearch1:Charli XCX 360",
+        "ytsearch1:Charli XCX Apple",
+        "ytsearch1:Artemas I Like The Way You Kiss Me",
     ]
     _last_random: Optional[str] = None
 
@@ -2251,6 +2345,7 @@ def register_voice(bot: commands.Bot) -> None:
         if vc.is_playing() or vc.is_paused():
             vc.stop()
         session.current_song = ""
+        _clear_voice_state(ctx.guild.id)
         await ctx.send("🗑️ Fila limpa e reproducao parada.")
 
     @bot.command(name="ff", help="Pula para um ponto da musica: $ff +30, $ff -15, $ff 1:30")
@@ -2544,7 +2639,19 @@ def register_voice(bot: commands.Bot) -> None:
                 )
                 _sessions[gid] = session
                 log.info("Reconectado automaticamente guild=%s canal=%s", gid, channel.name)
-                # Restaurar fila musical salva
+                # Restaurar fila musical salva (só se o state é recente — crash, não deploy)
+                saved_at = info.get("saved_at", 0)
+                age = time.time() - saved_at if saved_at else 9999
+                if age > 120:
+                    log.info("State antigo (%.0fs), ignorando fila salva (provável deploy manual)", age)
+                    _clear_voice_state(gid)
+                    text_ch = bot.get_channel(text_channel_id)
+                    if text_ch and hasattr(text_ch, "send"):
+                        try:
+                            await text_ch.send("🔄 Voltei! Estou pronta.")
+                        except Exception:
+                            pass
+                    continue
                 restored = 0
                 current_q = info.get("current_query", "")
                 current_d = info.get("current_display", "")
