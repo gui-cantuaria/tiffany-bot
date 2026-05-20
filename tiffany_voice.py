@@ -2655,7 +2655,7 @@ def register_voice(bot: commands.Bot) -> None:
                 # Restaurar fila musical salva (só se o state é recente — crash, não deploy)
                 saved_at = info.get("saved_at", 0)
                 age = time.time() - saved_at if saved_at else 9999
-                if age > 120:
+                if age > 600:
                     log.info("State antigo (%.0fs), ignorando fila salva (provável deploy manual)", age)
                     _clear_voice_state(gid)
                     text_ch = bot.get_channel(text_channel_id)
