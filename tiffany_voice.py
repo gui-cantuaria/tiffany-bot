@@ -710,9 +710,16 @@ def _amazon_music_url_to_search(url: str) -> Optional[str]:
 
 
 def _is_playlist_url(url: str) -> bool:
-    """Detecta se a URL é uma playlist (YouTube, Spotify, Deezer)."""
-    if "youtube.com/playlist" in url or "list=" in url:
-        return True
+    """Detecta se a URL é uma playlist (YouTube, Spotify, Deezer).
+    Ignora Radio/Mix do YouTube (list=RD...) que são auto-geradas."""
+    if "youtube.com" in url or "youtu.be" in url:
+        import re
+        m = re.search(r"[?&]list=([^&]+)", url)
+        if m and not m.group(1).startswith("RD"):
+            return True
+        if "youtube.com/playlist" in url and m:
+            return True
+        return False
     if "open.spotify.com/playlist/" in url:
         return True
     if "deezer.com/playlist/" in url or "deezer.com/br/playlist/" in url:
@@ -2235,6 +2242,12 @@ def register_voice(bot: commands.Bot) -> None:
                 msg += f" ({skipped} ignoradas — fila cheia)"
             await ctx.send(msg)
             return
+
+        # Limpar parâmetros de Radio/Mix do YouTube (list=RD...) para tocar só o vídeo
+        if is_url and ("youtube.com" in query or "youtu.be" in query):
+            query = re.sub(r"[&?](list=RD[^&]*|start_radio=[^&]*|index=[^&]*)", "", query)
+            # Limpar '?' perdido no final
+            query = query.rstrip("?&")
 
         display = query
         # Spotify/Deezer/Apple Music: resolver nome da música e buscar no YouTube
