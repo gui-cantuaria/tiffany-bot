@@ -677,6 +677,7 @@ _MUSIC_PLATFORM_OEMBED = {
     "spotify:": "https://open.spotify.com/oembed?url={url}",
     "deezer.com": "https://api.deezer.com/oembed?url={url}",
     "music.apple.com": "https://music.apple.com/services/oembed?url={url}",
+    "music.youtube.com": None,  # converter para youtube.com e tratar como YouTube direto
     "music.amazon": None,  # sem oEmbed, resolve via URL parsing
     "amazon.com/music": None,
 }
@@ -688,6 +689,18 @@ def _detect_music_platform(url: str) -> Optional[str]:
         if pattern in url:
             return pattern
     return None
+
+
+def _normalize_music_url(url: str) -> str:
+    """Normaliza URLs de plataformas musicais para formato canônico."""
+    # Spotify: remover /intl-XX/
+    url = re.sub(r"open\.spotify\.com/intl-[a-z]{2,3}/", "open.spotify.com/", url)
+    # YouTube Music → YouTube normal (yt-dlp entende ambos, mas garante compatibilidade)
+    url = url.replace("music.youtube.com", "www.youtube.com")
+    # Limpar tracking params comuns (si=, utm_*, feature=)
+    url = re.sub(r"[&?](si|utm_\w+|feature|context)=[^&]*", "", url)
+    url = re.sub(r"\?&", "?", url).rstrip("?&")
+    return url
 
 
 def _amazon_music_url_to_search(url: str) -> Optional[str]:
@@ -809,62 +822,153 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
 
 
 async def _music_platform_to_search(url: str) -> Optional[str]:
-    """Converte URL de Spotify/Deezer/Apple Music/Amazon Music em query de busca YouTube."""
-    # Normalizar URLs do Spotify: remover segmento /intl-XX/
-    url = re.sub(r"open\.spotify\.com/intl-[a-z]{2}/", "open.spotify.com/", url)
+    """Converte URL de Spotify/Deezer/Apple Music/Amazon Music em query de busca YouTube.
+    Extrai artista + título e busca no YouTube via ytsearch."""
+    url = _normalize_music_url(url)
     platform = _detect_music_platform(url)
     if not platform:
         return None
-    oembed_url = _MUSIC_PLATFORM_OEMBED.get(platform)
-    if not oembed_url:
-        # Plataformas sem oEmbed (Amazon Music): extrair da URL
-        if "amazon" in platform:
-            return _amazon_music_url_to_search(url)
-        return None
-    try:
-        import aiohttp as _aiohttp
-        oembed_url = oembed_url.format(url=url)
-        async with _aiohttp.ClientSession() as sess:
-            async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
-                if r.status == 200:
-                    data = await r.json()
-                    title = data.get("title", "")
-                    artist = data.get("author_name", "")
-                    if title:
-                        # Limpa sufixos comuns tipo " - Single", " - EP"
-                        title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
-                        query = f"{artist} {title}".strip() if artist else title
-                        log.info("Plataforma resolvida: %s → %s", url[:60], query)
-                        return f"ytsearch1:{query}"
-    except Exception as e:
-        log.debug("Erro ao resolver plataforma musical (%s): %s", platform, e)
-    # Fallback: tentar extrair nome da URL para Apple Music / Deezer
-    try:
-        if "music.apple.com" in url:
-            # Ex: music.apple.com/us/album/song-name/12345?i=67890
-            parts = url.split("/")
-            for p in reversed(parts):
-                clean = p.split("?")[0].replace("-", " ").strip()
-                if clean and not clean.isdigit() and len(clean) > 3:
-                    log.info("Apple Music fallback URL: %s", clean)
-                    return f"ytsearch1:{clean}"
-        elif "deezer.com" in url and "/track/" in url:
-            # Ex: deezer.com/track/12345 — tenta via API pública
-            track_id = url.rsplit("/", 1)[-1].split("?")[0]
-            if track_id.isdigit():
-                import aiohttp as _aiohttp
+    # YouTube Music já foi convertido para youtube.com — tratar como URL direta
+    if "music.youtube.com" in platform:
+        return None  # será tratado como URL YouTube normal
+    # Amazon Music: sem oEmbed, extrair da URL
+    if "amazon" in platform:
+        return _amazon_music_url_to_search(url)
+
+    import aiohttp as _aiohttp
+
+    # --- Spotify: oEmbed + fallback via embed page scraping ---
+    if "spotify.com" in platform or "spotify:" in platform:
+        # Método 1: oEmbed API
+        try:
+            oembed_url = f"https://open.spotify.com/oembed?url={url}"
+            async with _aiohttp.ClientSession() as sess:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        title = data.get("title", "")
+                        artist = data.get("author_name", "")
+                        if title and artist:
+                            title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
+                            query = f"{artist} {title}"
+                            log.info("Spotify oEmbed: %s → %s", url[:60], query)
+                            return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Spotify oEmbed falhou: %s", e)
+        # Método 2: scraping da página embed (meta tags og:title / og:description)
+        try:
+            track_path = re.search(r"/(track|album|episode)/([a-zA-Z0-9]+)", url)
+            if track_path:
+                embed_url = f"https://open.spotify.com/embed/{track_path.group(1)}/{track_path.group(2)}"
                 async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(f"https://api.deezer.com/track/{track_id}", timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=10),
+                                        headers={"User-Agent": "Mozilla/5.0"}) as r:
+                        if r.status == 200:
+                            html = await r.text()
+                            # og:title costuma ter "Música - Artista"
+                            og_title = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
+                            og_desc = re.search(r'<meta\s+property="og:description"\s+content="([^"]+)"', html)
+                            if og_title:
+                                raw = og_title.group(1)
+                                # Formato: "Song · Artist" ou "Song - Artist"
+                                for sep in [" · ", " — ", " - "]:
+                                    if sep in raw:
+                                        parts = raw.split(sep, 1)
+                                        query = f"{parts[1].strip()} {parts[0].strip()}"
+                                        log.info("Spotify embed scraping: %s → %s", url[:60], query)
+                                        return f"ytsearch1:{query}"
+                                # Sem separador — usar og:description como artista
+                                if og_desc:
+                                    query = f"{og_desc.group(1).split('·')[0].strip()} {raw}"
+                                    log.info("Spotify embed fallback: %s → %s", url[:60], query)
+                                    return f"ytsearch1:{query}"
+                                log.info("Spotify embed title only: %s → %s", url[:60], raw)
+                                return f"ytsearch1:{raw}"
+        except Exception as e:
+            log.debug("Spotify embed scraping falhou: %s", e)
+        return None
+
+    # --- Deezer: oEmbed + fallback API pública ---
+    if "deezer.com" in platform:
+        # Método 1: oEmbed
+        try:
+            oembed_url = f"https://api.deezer.com/oembed?url={url}"
+            async with _aiohttp.ClientSession() as sess:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        title = data.get("title", "")
+                        artist = data.get("author_name", "")
+                        if title:
+                            title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
+                            query = f"{artist} {title}".strip() if artist else title
+                            log.info("Deezer oEmbed: %s → %s", url[:60], query)
+                            return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Deezer oEmbed falhou: %s", e)
+        # Método 2: API pública (/track/{id} ou /album/{id})
+        try:
+            track_match = re.search(r"/track/(\d+)", url)
+            album_match = re.search(r"/album/(\d+)", url)
+            if track_match:
+                async with _aiohttp.ClientSession() as sess:
+                    async with sess.get(f"https://api.deezer.com/track/{track_match.group(1)}",
+                                        timeout=_aiohttp.ClientTimeout(total=8)) as r:
                         if r.status == 200:
                             data = await r.json()
                             artist = data.get("artist", {}).get("name", "")
                             title = data.get("title", "")
                             if title:
                                 query = f"{artist} {title}".strip()
-                                log.info("Deezer API resolvido: %s → %s", url[:60], query)
+                                log.info("Deezer API track: %s → %s", url[:60], query)
                                 return f"ytsearch1:{query}"
-    except Exception as e:
-        log.debug("Fallback de plataforma falhou: %s", e)
+            elif album_match:
+                async with _aiohttp.ClientSession() as sess:
+                    async with sess.get(f"https://api.deezer.com/album/{album_match.group(1)}",
+                                        timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                        if r.status == 200:
+                            data = await r.json()
+                            artist = data.get("artist", {}).get("name", "")
+                            title = data.get("title", "")
+                            if title:
+                                query = f"{artist} {title}".strip()
+                                log.info("Deezer API album: %s → %s", url[:60], query)
+                                return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Deezer API falhou: %s", e)
+        return None
+
+    # --- Apple Music: oEmbed + fallback URL parsing ---
+    if "music.apple.com" in platform:
+        try:
+            oembed_url = f"https://music.apple.com/services/oembed?url={url}"
+            async with _aiohttp.ClientSession() as sess:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        title = data.get("title", "")
+                        artist = data.get("author_name", "")
+                        if title:
+                            title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
+                            query = f"{artist} {title}".strip() if artist else title
+                            log.info("Apple Music oEmbed: %s → %s", url[:60], query)
+                            return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Apple Music oEmbed falhou: %s", e)
+        # Fallback: extrair do path da URL
+        # Ex: music.apple.com/br/album/song-name/12345?i=67890
+        try:
+            parts = url.split("/")
+            # Pegar o nome do álbum/música do path (antes do ID numérico)
+            for p in reversed(parts):
+                clean = p.split("?")[0].replace("-", " ").strip()
+                if clean and not clean.isdigit() and len(clean) > 3:
+                    log.info("Apple Music fallback URL: %s", clean)
+                    return f"ytsearch1:{clean}"
+        except Exception:
+            pass
+        return None
+
     return None
 
 
@@ -2221,9 +2325,9 @@ def register_voice(bot: commands.Bot) -> None:
 
         is_url = bool(re.match(r"^https?://", query))
 
-        # Normalizar URLs do Spotify: remover segmento /intl-XX/
-        if is_url and "spotify.com/intl-" in query:
-            query = re.sub(r"open\.spotify\.com/intl-[a-z]{2}/", "open.spotify.com/", query)
+        # Normalizar URLs de plataformas (Spotify /intl-XX/, YouTube Music, tracking params)
+        if is_url:
+            query = _normalize_music_url(query)
 
         # Playlist: extrair tracks e adicionar à fila
         if is_url and _is_playlist_url(query):
@@ -2252,16 +2356,17 @@ def register_voice(bot: commands.Bot) -> None:
         # Limpar parâmetros de Radio/Mix do YouTube (list=RD...) para tocar só o vídeo
         if is_url and ("youtube.com" in query or "youtu.be" in query):
             query = re.sub(r"[&?](list=RD[^&]*|start_radio=[^&]*|index=[^&]*)", "", query)
-            # Limpar '?' perdido no final
             query = query.rstrip("?&")
 
         display = query
-        # Spotify/Deezer/Apple Music: resolver nome da música e buscar no YouTube
+        resolved_from_platform = False
+        # Spotify/Deezer/Apple Music/Amazon: resolver artista + título e buscar no YouTube
         if _detect_music_platform(query):
             resolved = await _music_platform_to_search(query)
             if resolved:
                 display = re.sub(r"^ytsearch\d*:", "", resolved).strip()
                 query = resolved
+                resolved_from_platform = True
             else:
                 await ctx.send("❌ Não consegui resolver esse link. Tenta com o nome da música.")
                 return
@@ -2273,8 +2378,8 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-        # Para URLs, não mostrar o link na resposta (evita embed duplicado)
-        if is_url:
+        # Mostrar nome da música resolvida, ou "link recebido" para YouTube direto
+        if is_url and not resolved_from_platform:
             display = "link recebido"
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
@@ -2714,6 +2819,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$e` — Entra no seu canal de voz.\n"
             "`t$l` — Sai do canal de voz e encerra a sessão.\n"
             "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
+            "  Aceita: YouTube, YouTube Music, Spotify, Deezer, Apple Music, Amazon Music.\n"
             "`t$p <playlist URL>` — Adiciona playlist inteira (YouTube, Spotify, Deezer).\n"
             "`t$pa` — Pausa a reprodução.\n"
             "`t$re` — Retoma de onde pausou.\n"
