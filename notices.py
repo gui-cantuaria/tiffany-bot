@@ -1328,8 +1328,9 @@ async def verificar_feeds():
         log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:45 + 08h-18h).")
         return
 
-    if not http_session:
-        http_session = aiohttp.ClientSession()
+    if not http_session or http_session.closed:
+        connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
+        http_session = aiohttp.ClientSession(connector=connector)
 
     channel = discord_client.get_channel(CANAL_NOTICIAS_ID)
     if not channel:
@@ -1544,7 +1545,6 @@ async def verificar_feeds():
                 log.info(f"  ✗ Imagem irrelevante (IA): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "imagem_irrelevante_ia"})
                 total_img_ia_rejeitada += 1
-                total_sem_imagem += 1
                 continue
             cand["img"] = img
             candidatos.append(cand)
@@ -1552,7 +1552,7 @@ async def verificar_feeds():
     log.info(
         f"Fase 1 concluída: {total_examinados} examinados, "
         f"{total_antigas} antigas, {total_dedup} dedup, {total_prefiltrados} prefiltrados, "
-        f"{total_sem_imagem} sem imagem ({total_img_ia_rejeitada} rejeitadas por IA) "
+        f"{total_sem_imagem} sem imagem, {total_img_ia_rejeitada} imagem irrelevante (IA) "
         f"→ {len(candidatos)} candidatos para IA"
     )
 
@@ -1709,6 +1709,9 @@ async def verificar_feeds():
     # Enfileirar restantes para próximo ciclo
     if para_fila:
         queue_atual = load_queue()
+        # Validar campos obrigatórios antes de enfileirar
+        _campos_obrigatorios = ("titulo", "imagem", "link", "nota")
+        para_fila = [n for n in para_fila if all(n.get(c) for c in _campos_obrigatorios)]
         queue_atual.extend(para_fila)
         # Limitar fila a 10 itens (evitar acúmulo infinito)
         queue_atual = sorted(queue_atual, key=lambda x: x.get("nota", 0), reverse=True)[:10]

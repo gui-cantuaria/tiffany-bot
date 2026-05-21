@@ -793,26 +793,34 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
         except Exception as e:
             log.warning("Erro ao extrair playlist YouTube: %s", e)
 
-    # Spotify playlist: scraping da página embed
+    # Spotify playlist: scraping do JSON embutido na página embed
     elif "open.spotify.com/playlist/" in url:
         try:
             import aiohttp as _aiohttp
-            # Usar a API embed para pegar nome da playlist + tracks
-            embed_url = f"https://open.spotify.com/oembed?url={url}"
-            async with _aiohttp.ClientSession() as sess:
-                # Tentar scraping da página embed do Spotify
-                playlist_url = url.replace("open.spotify.com/playlist/", "open.spotify.com/embed/playlist/")
-                async with sess.get(playlist_url, timeout=_aiohttp.ClientTimeout(total=15)) as r:
-                    if r.status == 200:
-                        html = await r.text()
-                        # Extrair tracks do JSON embutido no HTML
-                        import re as _re
-                        # Procurar por tracks no HTML embed
-                        track_matches = _re.findall(r'"name":"([^"]+)"[^}]*"artists":\[{"name":"([^"]+)"', html)
-                        for title, artist in track_matches:
-                            query = f"{artist} {title}"
-                            tracks.append({"query": f"ytsearch1:{query}", "display": query})
-                        log.info("Spotify playlist: %d tracks extraídas", len(tracks))
+            playlist_id = re.search(r"playlist/([a-zA-Z0-9]+)", url)
+            if playlist_id:
+                embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id.group(1)}"
+                async with _aiohttp.ClientSession() as sess:
+                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=15),
+                                        headers={"User-Agent": "Mozilla/5.0"}) as r:
+                        if r.status == 200:
+                            html = await r.text()
+                            # Extrair pares de track name + artist name do JSON embutido
+                            # Padrão: "name":"Track","uri":"spotify:track:...","uid":"...","artists":[{"name":"Artist"
+                            track_matches = re.findall(
+                                r'"name"\s*:\s*"([^"]+)"\s*,\s*"uri"\s*:\s*"spotify:track:[^"]+"\s*,\s*"[^"]*"\s*:\s*"[^"]*"\s*,\s*"artists"\s*:\s*\[\s*\{\s*"name"\s*:\s*"([^"]+)"',
+                                html
+                            )
+                            if not track_matches:
+                                # Fallback: regex mais simples
+                                track_matches = re.findall(r'"name":"([^"]+)"[^}]*?"artists":\[{"name":"([^"]+)"', html)
+                            for title, artist in track_matches:
+                                # Ignorar nomes que parecem ser da playlist (muito longos ou genéricos)
+                                if len(title) > 200:
+                                    continue
+                                query = f"{artist} {title}"
+                                tracks.append({"query": f"ytsearch1:{query}", "display": query})
+                            log.info("Spotify playlist: %d tracks extraídas", len(tracks))
         except Exception as e:
             log.warning("Erro ao extrair playlist Spotify: %s", e)
 
@@ -1186,10 +1194,13 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
                 continue
-            # Pegar nome de display da fila (primeiro item)
+            # Pegar nome de display da fila (sincronizado com music_queue)
             display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
-            if session.queue_display:
-                display_name = session.queue_display.pop(0)
+            try:
+                if session.queue_display:
+                    display_name = session.queue_display.pop(0)
+            except (IndexError, AttributeError):
+                pass  # fallback para display extraído da query
             # Nunca mostrar URLs como display — usar placeholder até yt-dlp resolver o título
             if re.match(r"^https?://", display_name):
                 display_name = "link recebido"
@@ -1378,6 +1389,9 @@ async def _voice_listen_loop(
                 return
             
             if action == "question" and arg:
+                if not _check_cooldown(speaker_uid):
+                    await _notify(bot, session.text_channel_id, "⏳ Aguarde alguns segundos antes de perguntar novamente.")
+                    continue
                 await session.question_queue.put((speaker_uid, arg))
                 await _notify(bot, session.text_channel_id, f"💬 Pergunta recebida: «{arg[:80]}» — processando...")
                 continue
@@ -1933,8 +1947,8 @@ def register_voice(bot: commands.Bot) -> None:
                     try:
                         mention = f"<@{user_id}> " if user_id else ""
                         await ch.send(f"{mention}💬 **Resposta:** {answer}")
-                    except Exception:
-                        pass
+                    except discord.HTTPException as e:
+                        log.warning("Falha ao enviar resposta de voz: %s", e)
                 session.question_queue.task_done()
         except asyncio.CancelledError:
             raise
@@ -2287,8 +2301,10 @@ def register_voice(bot: commands.Bot) -> None:
             for song in songs:
                 if fila_atual + added >= 10:
                     break
-                sess.queue_display.append(song["display"])
-                await sess.music_queue.put(song["query"])
+                display = song.get("display", song.get("query", "???"))
+                query = song.get("query", f"ytsearch1:{display}")
+                sess.queue_display.append(display)
+                await sess.music_queue.put(query)
                 added += 1
             await ctx.send(f"▶️ Playlist **{name}**: {added} musica(s) adicionadas a fila.")
 

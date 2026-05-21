@@ -54,11 +54,30 @@ def webhook_notify(message: str):
         pass
 
 
+MAX_LOG_SIZE = 5 * 1024 * 1024  # 5MB por arquivo de log
+
+
+def _truncar_log_se_grande(log_path: str) -> None:
+    """Trunca arquivo de log se exceder MAX_LOG_SIZE, mantendo as últimas linhas."""
+    try:
+        if os.path.exists(log_path) and os.path.getsize(log_path) > MAX_LOG_SIZE:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                f.seek(max(0, os.path.getsize(log_path) - MAX_LOG_SIZE // 2))
+                f.readline()  # descarta linha parcial
+                conteudo = f.read()
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(f"--- Log truncado em {datetime.now().isoformat()} ---\n")
+                f.write(conteudo)
+    except Exception:
+        pass
+
+
 def iniciar_bot(bot_config):
     """Inicia um bot e retorna o processo, capturando stdout/stderr em arquivo de log"""
     log(f"👉 Iniciando {bot_config['nome']}...")
     nome_base = os.path.splitext(bot_config["arquivo"])[0]
     log_path = os.path.join(LOG_DIR, f"{nome_base}.log")
+    _truncar_log_se_grande(log_path)
     log_file = open(log_path, "a", encoding="utf-8")
     log_file.write(f"\n--- Iniciado em {datetime.now().isoformat()} ---\n")
     log_file.flush()

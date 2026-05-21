@@ -54,7 +54,7 @@ CATEGORIAS_PROMOBIT = [
 ]
 
 LOJAS_WHITELIST = {
-    "kabum", "kabuḿ", "kabum!",
+    "kabum", "kabum!",
     "terabyte", "terabyteshop",
     "magalu", "magazine luiza",
     "pichau", "pichau informática",
@@ -497,7 +497,15 @@ def _normalize_store(store: str) -> str:
 
 def _store_allowed(store: str) -> bool:
     norm = _normalize_store(store)
-    return any(allowed in norm for allowed in LOJAS_WHITELIST)
+    # Match exato ou por palavra (evita "amazonas" casar com "amazon")
+    if norm in LOJAS_WHITELIST:
+        return True
+    # Verificar se alguma loja da whitelist é o início do nome normalizado
+    # Ex: "kabum" casa com "kabum informatica"
+    for allowed in LOJAS_WHITELIST:
+        if norm.startswith(allowed) or allowed.startswith(norm):
+            return True
+    return False
 
 
 def _passes_filters(deal: dict) -> tuple[bool, str]:
@@ -807,6 +815,15 @@ async def on_ready():
 @bot.event
 async def on_disconnect():
     log.warning("⚠️ Bot desconectado do Discord.")
+
+
+@bot.event
+async def on_close():
+    global http_session
+    if http_session and not http_session.closed:
+        await http_session.close()
+        http_session = None
+    log.info("🔌 Sessão HTTP fechada. Bot desligando.")
 
 
 # =========================
