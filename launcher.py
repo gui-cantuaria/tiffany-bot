@@ -29,6 +29,10 @@ LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 processos = {}
+_restart_times = {}  # nome -> lista de timestamps de restarts recentes
+MAX_RESTARTS_RAPIDOS = 3  # máximo de restarts em janela
+RESTART_JANELA = 60  # janela em segundos
+RESTART_COOLDOWN = 300  # cooldown após restart storm (5 min)
 
 
 def log(mensagem):
@@ -88,12 +92,25 @@ try:
             # Se o poll() retornar algo diferente de None, significa que o bot MORREU/FECHOU
             if p.poll() is not None:
                 log(
-                    f"⚠️ ALERTA: {nome} caiu (exit code: {p.returncode})! Reiniciando imediatamente..."
+                    f"⚠️ ALERTA: {nome} caiu (exit code: {p.returncode})!"
                 )
-                webhook_notify(f"⚠️ {nome} caiu (exit code: {p.returncode})! Reiniciando...")
+                webhook_notify(f"⚠️ {nome} caiu (exit code: {p.returncode})!")
+                # Anti restart-storm: verificar se está crashando em loop
+                agora = time.time()
+                if nome not in _restart_times:
+                    _restart_times[nome] = []
+                _restart_times[nome].append(agora)
+                # Manter só restarts recentes (dentro da janela)
+                _restart_times[nome] = [t for t in _restart_times[nome] if agora - t < RESTART_JANELA]
+                if len(_restart_times[nome]) >= MAX_RESTARTS_RAPIDOS:
+                    log(f"🚨 {nome} crashou {MAX_RESTARTS_RAPIDOS}x em {RESTART_JANELA}s! Aguardando {RESTART_COOLDOWN}s...")
+                    webhook_notify(f"🚨 {nome} em restart storm! Cooldown de {RESTART_COOLDOWN//60} min.")
+                    time.sleep(RESTART_COOLDOWN)
+                    _restart_times[nome].clear()
                 # Fechar log file antigo
                 if dados.get("log_file"):
                     dados["log_file"].close()
+                log(f"🔄 Reiniciando {nome}...")
                 proc, log_file = iniciar_bot(bot_config)
                 processos[nome]["processo"] = proc
                 processos[nome]["log_file"] = log_file

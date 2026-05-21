@@ -703,21 +703,39 @@ def _normalize_music_url(url: str) -> str:
     return url
 
 
-def _amazon_music_url_to_search(url: str) -> Optional[str]:
+async def _amazon_music_url_to_search(url: str) -> Optional[str]:
     """Extrai nome da música de URLs do Amazon Music.
     Ex: music.amazon.com.br/albums/B0DQXL3N81?trackAsin=B0DQXHX1DG
     ou: music.amazon.com/tracks/B0DQXHX1DG"""
-    from urllib.parse import urlparse, parse_qs
+    # Método 1: scraping da página (og:title)
+    try:
+        import aiohttp as _aiohttp
+        async with _aiohttp.ClientSession() as sess:
+            async with sess.get(url, timeout=_aiohttp.ClientTimeout(total=5),
+                                headers={"User-Agent": "Mozilla/5.0"}) as r:
+                if r.status == 200:
+                    html = await r.text()
+                    og = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
+                    if og:
+                        raw = og.group(1)
+                        # Limpar sufixos como " - Amazon Music" ou " on Amazon Music"
+                        raw = re.sub(r'\s*[-–]\s*Amazon\s*Music.*$', '', raw, flags=re.IGNORECASE)
+                        raw = re.sub(r'\s+on\s+Amazon\s*Music.*$', '', raw, flags=re.IGNORECASE)
+                        if raw and len(raw) > 3:
+                            log.info("Amazon Music scraping: %s → %s", url[:60], raw)
+                            return f"ytsearch1:{raw}"
+    except Exception as e:
+        log.debug("Amazon Music scraping falhou: %s", e)
+    # Método 2: extrair do path da URL
+    from urllib.parse import urlparse
     parsed = urlparse(url)
     path = parsed.path
-    # Tentar extrair texto legível do path (ex: /tracks/nome-da-musica)
     parts = [p for p in path.split("/") if p and not p.startswith("B0") and len(p) > 3]
     for p in reversed(parts):
         clean = p.replace("-", " ").replace("_", " ").strip()
         if clean and not clean.isdigit():
             log.info("Amazon Music fallback URL: %s", clean)
             return f"ytsearch1:{clean}"
-    # Se não tem texto na URL, sem como resolver
     log.debug("Amazon Music: URL sem texto legível: %s", url[:80])
     return None
 
@@ -833,59 +851,53 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
         return None  # será tratado como URL YouTube normal
     # Amazon Music: sem oEmbed, extrair da URL
     if "amazon" in platform:
-        return _amazon_music_url_to_search(url)
+        return await _amazon_music_url_to_search(url)
 
     import aiohttp as _aiohttp
 
-    # --- Spotify: oEmbed + fallback via embed page scraping ---
+    # --- Spotify: embed JSON scraping (mais confiável) + oEmbed fallback ---
     if "spotify.com" in platform or "spotify:" in platform:
-        # Método 1: oEmbed API
-        try:
-            oembed_url = f"https://open.spotify.com/oembed?url={url}"
-            async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
-                    if r.status == 200:
-                        data = await r.json()
-                        title = data.get("title", "")
-                        artist = data.get("author_name", "")
-                        if title and artist:
-                            title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
-                            query = f"{artist} {title}"
-                            log.info("Spotify oEmbed: %s → %s", url[:60], query)
-                            return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Spotify oEmbed falhou: %s", e)
-        # Método 2: scraping da página embed (meta tags og:title / og:description)
+        # Método 1: scraping do JSON embutido na página embed (tem artista + título sempre)
         try:
             track_path = re.search(r"/(track|album|episode)/([a-zA-Z0-9]+)", url)
             if track_path:
                 embed_url = f"https://open.spotify.com/embed/{track_path.group(1)}/{track_path.group(2)}"
                 async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=10),
+                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=5),
                                         headers={"User-Agent": "Mozilla/5.0"}) as r:
                         if r.status == 200:
                             html = await r.text()
-                            # og:title costuma ter "Música - Artista"
-                            og_title = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
-                            og_desc = re.search(r'<meta\s+property="og:description"\s+content="([^"]+)"', html)
-                            if og_title:
-                                raw = og_title.group(1)
-                                # Formato: "Song · Artist" ou "Song - Artist"
-                                for sep in [" · ", " — ", " - "]:
-                                    if sep in raw:
-                                        parts = raw.split(sep, 1)
-                                        query = f"{parts[1].strip()} {parts[0].strip()}"
-                                        log.info("Spotify embed scraping: %s → %s", url[:60], query)
-                                        return f"ytsearch1:{query}"
-                                # Sem separador — usar og:description como artista
-                                if og_desc:
-                                    query = f"{og_desc.group(1).split('·')[0].strip()} {raw}"
-                                    log.info("Spotify embed fallback: %s → %s", url[:60], query)
-                                    return f"ytsearch1:{query}"
-                                log.info("Spotify embed title only: %s → %s", url[:60], raw)
-                                return f"ytsearch1:{raw}"
+                            # Extrair do JSON embutido: "name":"Track" e "artists":[{"name":"Artist"}]
+                            track_name = re.search(r'"name"\s*:\s*"([^"]+)"', html)
+                            artist_match = re.search(r'"artists"\s*:\s*\[\s*\{\s*"name"\s*:\s*"([^"]+)"', html)
+                            if track_name and artist_match:
+                                title = track_name.group(1)
+                                artist = artist_match.group(1)
+                                query = f"{artist} {title}"
+                                log.info("Spotify embed JSON: %s → %s", url[:60], query)
+                                return f"ytsearch1:{query}"
+                            # Fallback: só título do JSON
+                            if track_name:
+                                log.info("Spotify embed JSON (só título): %s → %s", url[:60], track_name.group(1))
+                                return f"ytsearch1:{track_name.group(1)}"
         except Exception as e:
             log.debug("Spotify embed scraping falhou: %s", e)
+        # Método 2: oEmbed API (nem sempre retorna author_name)
+        try:
+            oembed_url = f"https://open.spotify.com/oembed?url={url}"
+            async with _aiohttp.ClientSession() as sess:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        title = data.get("title", "")
+                        artist = data.get("author_name", "")
+                        if title:
+                            title = re.sub(r'\s*-\s*(Single|EP)$', '', title)
+                            query = f"{artist} {title}".strip() if artist else title
+                            log.info("Spotify oEmbed: %s → %s", url[:60], query)
+                            return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Spotify oEmbed falhou: %s", e)
         return None
 
     # --- Deezer: oEmbed + fallback API pública ---
@@ -894,7 +906,7 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
         try:
             oembed_url = f"https://api.deezer.com/oembed?url={url}"
             async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
                     if r.status == 200:
                         data = await r.json()
                         title = data.get("title", "")
@@ -913,7 +925,7 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
             if track_match:
                 async with _aiohttp.ClientSession() as sess:
                     async with sess.get(f"https://api.deezer.com/track/{track_match.group(1)}",
-                                        timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                                        timeout=_aiohttp.ClientTimeout(total=3)) as r:
                         if r.status == 200:
                             data = await r.json()
                             artist = data.get("artist", {}).get("name", "")
@@ -925,7 +937,7 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
             elif album_match:
                 async with _aiohttp.ClientSession() as sess:
                     async with sess.get(f"https://api.deezer.com/album/{album_match.group(1)}",
-                                        timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                                        timeout=_aiohttp.ClientTimeout(total=3)) as r:
                         if r.status == 200:
                             data = await r.json()
                             artist = data.get("artist", {}).get("name", "")
@@ -938,12 +950,13 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
             log.debug("Deezer API falhou: %s", e)
         return None
 
-    # --- Apple Music: oEmbed + fallback URL parsing ---
+    # --- Apple Music: oEmbed + fallback scraping + URL parsing ---
     if "music.apple.com" in platform:
+        # Método 1: oEmbed
         try:
             oembed_url = f"https://music.apple.com/services/oembed?url={url}"
             async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=8)) as r:
+                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
                     if r.status == 200:
                         data = await r.json()
                         title = data.get("title", "")
@@ -955,11 +968,29 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                             return f"ytsearch1:{query}"
         except Exception as e:
             log.debug("Apple Music oEmbed falhou: %s", e)
-        # Fallback: extrair do path da URL
-        # Ex: music.apple.com/br/album/song-name/12345?i=67890
+        # Método 2: scraping da página (og:title)
+        try:
+            async with _aiohttp.ClientSession() as sess:
+                async with sess.get(url, timeout=_aiohttp.ClientTimeout(total=5),
+                                    headers={"User-Agent": "Mozilla/5.0"}) as r:
+                    if r.status == 200:
+                        html = await r.text()
+                        og = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
+                        if og:
+                            raw = og.group(1)
+                            # Formato comum: "Song by Artist"
+                            by_match = re.match(r"(.+?)\s+by\s+(.+)", raw, re.IGNORECASE)
+                            if by_match:
+                                query = f"{by_match.group(2).strip()} {by_match.group(1).strip()}"
+                            else:
+                                query = raw
+                            log.info("Apple Music scraping: %s → %s", url[:60], query)
+                            return f"ytsearch1:{query}"
+        except Exception as e:
+            log.debug("Apple Music scraping falhou: %s", e)
+        # Método 3: extrair do path da URL
         try:
             parts = url.split("/")
-            # Pegar o nome do álbum/música do path (antes do ID numérico)
             for p in reversed(parts):
                 clean = p.split("?")[0].replace("-", " ").strip()
                 if clean and not clean.isdigit() and len(clean) > 3:
@@ -2534,7 +2565,12 @@ def register_voice(bot: commands.Bot) -> None:
             return
         # Sinalizar seek para o play_worker não avançar
         session.seeking = True
-        vc.stop()
+        try:
+            vc.stop()
+        except Exception:
+            session.seeking = False
+            await ctx.send("⚠️ Erro ao fazer seek.")
+            return
         await asyncio.sleep(0.3)
         session.song_start_time = time.monotonic() - target_sec
         vc.play(new_source)

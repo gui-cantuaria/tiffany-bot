@@ -1006,14 +1006,17 @@ def _normalizar_resumo_final(texto: str) -> str:
     frases = []
     for parte in re.split(r"[.!?]+", bruto):
         parte = parte.strip()
-        if parte:
-            parte = _corrigir_prefixos_estranhos(parte)
-            parte = _fix_sentence_case(parte)
-            if not parte[0].isupper():
-                parte = parte[0].upper() + parte[1:]
-            if not parte.endswith("."):
-                parte += "."
-            frases.append(parte)
+        if not parte:
+            continue
+        parte = _corrigir_prefixos_estranhos(parte)
+        parte = _fix_sentence_case(parte)
+        if not parte:
+            continue
+        if not parte[0].isupper():
+            parte = parte[0].upper() + parte[1:]
+        if not parte.endswith("."):
+            parte += "."
+        frases.append(parte)
     
     resultado = " ".join(frases)
     log.info(f"Resumo final: {len(resultado)} caracteres")
@@ -1120,7 +1123,7 @@ Texto da Notícia: {texto_base[:8000]}
     modelo_fallback = "meta-llama/llama-3.3-70b-instruct"
 
     for attempt in range(3):
-        modelo = modelo_fallback if attempt == 2 else modelo_principal
+        modelo = modelo_principal if attempt == 0 else modelo_fallback
         log.info(f"IA tentativa {attempt+1}/3 usando modelo: {modelo}")
         try:
             response = await ai_client.chat.completions.create(
@@ -1133,9 +1136,26 @@ Texto da Notícia: {texto_base[:8000]}
                 timeout=120.0,
             )
             resp = response.choices[0].message.content.strip()
-            match = re.search(r"\{.*\}", resp, re.DOTALL)
-            if match:
-                data = json.loads(match.group(0))
+            # Extrair JSON: tenta achar o primeiro objeto JSON válido
+            json_start = resp.find("{")
+            data = None
+            if json_start >= 0:
+                depth = 0
+                json_end = -1
+                for i, ch in enumerate(resp[json_start:], json_start):
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            json_end = i + 1
+                            break
+                if json_end > 0:
+                    try:
+                        data = json.loads(resp[json_start:json_end])
+                    except json.JSONDecodeError:
+                        pass
+            if data:
                 if isinstance(data.get("resumo"), str):
                     data["resumo"] = _normalizar_resumo_final(data["resumo"])
                 if isinstance(data.get("titulo"), str):
