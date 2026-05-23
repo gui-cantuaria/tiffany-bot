@@ -913,10 +913,11 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
             import yt_dlp
             ydl_opts = {
                 **YDL_OPTS,
-                "extract_flat": True,
+                "extract_flat": "in_playlist",
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": False,
+                "ignoreerrors": True,   # Pular vídeos indisponíveis em vez de abortar
             }
             def _extract():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -926,45 +927,66 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                     entries = info.get("entries") or []
                     result = []
                     for entry in entries:
-                        title = entry.get("title") or entry.get("id", "")
-                        vid_url = entry.get("url") or entry.get("webpage_url") or ""
-                        if vid_url and not vid_url.startswith("http"):
-                            vid_url = f"https://www.youtube.com/watch?v={vid_url}"
-                        if title:
-                            result.append({"query": vid_url or f"ytsearch1:{title}", "display": title})
+                        if not entry:
+                            continue  # entrada None = vídeo removido/privado
+                        title = entry.get("title") or ""
+                        vid_id = entry.get("id") or ""
+                        vid_url = entry.get("webpage_url") or entry.get("url") or ""
+                        if vid_id and (not vid_url or not vid_url.startswith("http")):
+                            vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+                        if not title:
+                            continue
+                        result.append({"query": vid_url or f"ytsearch1:{title}", "display": title})
                     return result
             tracks = await asyncio.get_running_loop().run_in_executor(None, _extract)
             log.info("YouTube playlist: %d tracks extraídas de %s", len(tracks), url[:60])
         except Exception as e:
             log.warning("Erro ao extrair playlist YouTube: %s", e)
 
-    # Spotify playlist: scraping do JSON embutido na página embed
+    # Spotify playlist: tenta __NEXT_DATA__ (formato atual) + fallback regex legado
     elif "open.spotify.com/playlist/" in url:
         try:
             import aiohttp as _aiohttp
+            import json as _json
             playlist_id = re.search(r"playlist/([a-zA-Z0-9]+)", url)
             if playlist_id:
                 embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id.group(1)}"
                 async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=15),
-                                        headers={"User-Agent": "Mozilla/5.0"}) as r:
+                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=20),
+                                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}) as r:
                         if r.status == 200:
                             html = await r.text()
-                            # Extrair pares de track name + artist name do JSON embutido
-                            # Padrão: "name":"Track","uri":"spotify:track:...","uid":"...","artists":[{"name":"Artist"
-                            track_matches = re.findall(
-                                r'"name"\s*:\s*"([^"]+)"\s*,\s*"uri"\s*:\s*"spotify:track:[^"]+"\s*,\s*"[^"]*"\s*:\s*"[^"]*"\s*,\s*"artists"\s*:\s*\[\s*\{\s*"name"\s*:\s*"([^"]+)"',
-                                html
-                            )
-                            if not track_matches:
-                                # Fallback: regex mais simples
-                                track_matches = re.findall(r'"name":"([^"]+)"[^}]*?"artists":\[{"name":"([^"]+)"', html)
-                            for title, artist in track_matches:
-                                # Ignorar nomes vazios ou muito longos
-                                if not title or not artist or len(title) > 200:
-                                    continue
-                                query = f"{artist} {title}"
-                                tracks.append({"query": f"ytsearch1:{query}", "display": query})
+                            # Método 1: __NEXT_DATA__ (formato atual do Spotify, Next.js)
+                            next_data_m = re.search(r'<script id="__NEXT_DATA__"[^>]*>([^<]+)</script>', html)
+                            if next_data_m:
+                                try:
+                                    nd = _json.loads(next_data_m.group(1))
+                                    # Navegar pelos possíveis caminhos do JSON
+                                    entity = (nd.get("props", {}).get("pageProps", {})
+                                                .get("state", {}).get("data", {}).get("entity", {}))
+                                    track_list = entity.get("trackList") or []
+                                    for item in track_list:
+                                        if not isinstance(item, dict):
+                                            continue
+                                        title = item.get("title", "")
+                                        artist = item.get("subtitle", "")
+                                        if title and artist:
+                                            q = f"{artist} {title}"
+                                            tracks.append({"query": f"ytsearch1:{q}", "display": q})
+                                except Exception as _je:
+                                    log.debug("Spotify __NEXT_DATA__ parse error: %s", _je)
+
+                            # Método 2: fallback regex legado
+                            if not tracks:
+                                track_matches = re.findall(
+                                    r'"name":"([^"]+)"[^}]*?"artists":\[{"name":"([^"]+)"', html
+                                )
+                                for title, artist in track_matches:
+                                    if not title or not artist or len(title) > 200:
+                                        continue
+                                    q = f"{artist} {title}"
+                                    tracks.append({"query": f"ytsearch1:{q}", "display": q})
+
                             log.info("Spotify playlist: %d tracks extraídas", len(tracks))
         except Exception as e:
             log.warning("Erro ao extrair playlist Spotify: %s", e)
@@ -1323,6 +1345,9 @@ async def _notify(bot: discord.Client, channel_id: int, content: str) -> None:
     ch = bot.get_channel(channel_id)
     if ch and hasattr(ch, "send"):
         try:
+            # Truncar conteúdo para não estourar limite de embed (4096 chars)
+            if len(content) > 4000:
+                content = content[:4000] + "..."
             await ch.send(embed=_embed(content))
         except discord.HTTPException:
             log.warning("Falha ao enviar mensagem no canal %s", channel_id)
@@ -2729,6 +2754,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not query:
             await ctx.send("🎵 Use: `t$p <nome da música ou URL>`")
             return
+        # Limitar tamanho da query para evitar abuso
+        query = query[:500]
         _stats["commands_used"] += 1
         sess, vc = await _ensure_connected(ctx)
         if not sess:
@@ -3077,7 +3104,30 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.listen("on_voice_state_update")
     async def _on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
-        """Desconecta automaticamente quando todos saem do canal (safety net)."""
+        """Desconecta automaticamente quando todos saem do canal (safety net).
+        Também detecta quando o bot é desconectado por um admin."""
+        # Detectar quando o bot foi desconectado ou movido por admin
+        if member.id == bot.user.id:
+            gid = member.guild.id
+            if before.channel and not after.channel:
+                # Bot foi desconectado (kicked da call)
+                log.info("Bot desconectado da call por admin guild=%s", gid)
+                sess = _sessions.pop(gid, None)
+                if sess:
+                    if sess.listen_task:
+                        sess.listen_task.cancel()
+                    if sess.music_task:
+                        sess.music_task.cancel()
+                    if sess.question_task:
+                        sess.question_task.cancel()
+                _clear_voice_state(gid)
+            elif before.channel and after.channel and before.channel.id != after.channel.id:
+                # Bot foi movido para outro canal — atualizar voice_state
+                sess = _sessions.get(gid)
+                if sess:
+                    _save_voice_state(gid, after.channel.id, sess.text_channel_id, sess)
+                    log.info("Bot movido de canal guild=%s: %s → %s", gid, before.channel.name, after.channel.name)
+            return
         if member.bot:
             return
         guild = member.guild

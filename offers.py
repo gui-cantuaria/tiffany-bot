@@ -820,7 +820,11 @@ async def _run_deals_cycle_inner() -> None:
             # Marcar como postado ANTES de enviar para evitar duplicatas se o send falhar parcialmente
             _mark_posted(history, deal["url"], deal["title"])
 
-            content = f"<@&{ID_CARGO_OFERTAS}>" if ID_CARGO_OFERTAS else None
+            content = None
+            if ID_CARGO_OFERTAS:
+                guild = getattr(channel, "guild", None)
+                if guild and guild.get_role(ID_CARGO_OFERTAS):
+                    content = f"<@&{ID_CARGO_OFERTAS}>"
             msg = await channel.send(content=content, embed=embed, file=file)
 
             try:

@@ -1170,6 +1170,10 @@ Texto da Notícia: {texto_base[:8000]}
                 timeout=60.0,
             )
             resp = response.choices[0].message.content.strip()
+            # Descartar respostas absurdamente grandes (evita hang no parsing)
+            if len(resp) > 50_000:
+                log.error("Resposta da IA muito grande (%d chars), descartando", len(resp))
+                continue
             # Extrair JSON: tenta achar o primeiro objeto JSON válido
             json_start = resp.find("{")
             data = None
@@ -1279,10 +1283,17 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 
     emoji = EMOJIS_CATEGORIA.get(noticia["categoria"], "🔌")
 
+    titulo_embed = f"{'🚨 ' if noticia['nota'] >= NOTA_URGENTE else ''}{noticia['titulo']}"
+    resumo_embed = noticia["resumo"]
+    # Discord limits: title 256 chars, description 4096 chars
+    if len(titulo_embed) > 256:
+        titulo_embed = titulo_embed[:253] + "..."
+    if len(resumo_embed) > 4096:
+        resumo_embed = resumo_embed[:4093] + "..."
     embed = discord.Embed(
-        title=f"{'🚨 ' if noticia['nota'] >= NOTA_URGENTE else ''}{noticia['titulo']}",
+        title=titulo_embed,
         url=noticia["link"],
-        description=noticia["resumo"],
+        description=resumo_embed,
         color=CORES_CATEGORIA.get(noticia["categoria"], COR_PADRAO),
     )
     embed.set_author(
@@ -1302,16 +1313,23 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
     embed.set_footer(text=texto_rodape)
 
     try:
-        # Só menciona o cargo para notícias de extrema relevância (nota >= 90)
-        mention = f"<@&{ID_CARGO_PARA_MARCAR}>" if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR else None
+        # Só menciona o cargo se ele existe e a nota é urgente
+        mention = None
+        if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR:
+            guild = getattr(channel, "guild", None)
+            if guild and guild.get_role(ID_CARGO_PARA_MARCAR):
+                mention = f"<@&{ID_CARGO_PARA_MARCAR}>"
         msg = await channel.send(
             content=mention,
             embed=embed,
             file=attachment,
         )
         try:
+            thread_name = f"💬 {noticia['categoria']}: {noticia['titulo'][:80]}"
+            if len(thread_name) > 100:
+                thread_name = thread_name[:97] + "..."
             await msg.create_thread(
-                name=f"💬 {noticia['categoria']}: {noticia['titulo'][:80]}",
+                name=thread_name,
                 auto_archive_duration=1440,
             )
         except Exception as e:
@@ -1797,26 +1815,31 @@ _CMD_NAMES = (
 @discord_client.event
 async def on_message(message: discord.Message):
     """Normaliza comandos sem espaço (ex: t$phttps://... → t$p https://...)."""
-    if message.author.bot:
-        return
-    content = message.content
-    lower = content.lower()
-    if lower.startswith("t$"):
-        after_prefix = content[2:]
-        matched = False
-        # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/st/su)
-        for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
-            if after_prefix.lower().startswith(cmd) and len(after_prefix) > len(cmd):
-                char_after = after_prefix[len(cmd)]
-                if char_after != " ":
-                    # Insere espaço entre comando e argumento
-                    message.content = f"t${cmd} {after_prefix[len(cmd):]}"
-                    matched = True
-                    break
-        # Normaliza prefixo para minúsculo (T$ → t$)
-        if not matched and content[:2] != "t$":
-            message.content = f"t${content[2:]}"
-    await discord_client.process_commands(message)
+    try:
+        if message.author.bot:
+            return
+        content = message.content
+        if not content:
+            return
+        lower = content.lower()
+        if lower.startswith("t$"):
+            after_prefix = content[2:]
+            matched = False
+            # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/st/su)
+            for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
+                if after_prefix.lower().startswith(cmd) and len(after_prefix) > len(cmd):
+                    char_after = after_prefix[len(cmd)]
+                    if char_after != " ":
+                        # Insere espaço entre comando e argumento
+                        message.content = f"t${cmd} {after_prefix[len(cmd):]}"
+                        matched = True
+                        break
+            # Normaliza prefixo para minúsculo (T$ → t$)
+            if not matched and content[:2] != "t$":
+                message.content = f"t${content[2:]}"
+        await discord_client.process_commands(message)
+    except Exception:
+        log.exception("Erro no on_message")
 
 
 @discord_client.event
