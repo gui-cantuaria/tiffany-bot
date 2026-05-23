@@ -3351,4 +3351,4 @@ def register_voice(bot: commands.Bot) -> None:
             lines.append(f"📋 Fila atual: **{fila}/10**")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-    log.info("Comandos de voz registrados: $e, $l, $s, $r, $c, $h")
+    log.info("Comandos de voz registrados (t$help, t$play, t$loop, ...)")
