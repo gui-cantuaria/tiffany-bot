@@ -115,8 +115,15 @@ http_session: Optional[aiohttp.ClientSession] = None
 
 # --- Feed cooldown state ---
 _feed_cooldown_until: dict[str, float] = {}
+_FEED_COOLDOWN_MAX_ENTRIES = 200
 
 def _set_feed_cooldown(nome_site: str) -> None:
+    # Limpar entradas expiradas se o dict ficou grande
+    if len(_feed_cooldown_until) > _FEED_COOLDOWN_MAX_ENTRIES:
+        now = time.time()
+        expired = [k for k, v in _feed_cooldown_until.items() if now >= v]
+        for k in expired:
+            del _feed_cooldown_until[k]
     _feed_cooldown_until[nome_site] = time.time() + (FEED_COOLDOWN_MIN * 60)
 
 def _feed_em_cooldown(nome_site: str) -> bool:
@@ -394,9 +401,16 @@ def save_history(h: dict) -> None:
         else:
             novo[k] = v
     tmp = f"{HISTORY_FILE}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(novo, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, HISTORY_FILE)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(novo, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, HISTORY_FILE)
+    except Exception:
+        log.exception("Erro ao salvar histórico")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 # =========================
 # MÉTRICAS PERSISTENTES
@@ -1057,6 +1071,7 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
     wait = (_last_ai_call + IA_COOLDOWN_SEC) - now
     if wait > 0:
         await asyncio.sleep(wait)
+    # Atualizar timestamp ANTES da chamada (protege contra exceções)
     _last_ai_call = time.monotonic()
 
     prompt = f"""Analise a notícia abaixo e responda APENAS com JSON válido, sem markdown.
@@ -1152,7 +1167,7 @@ Texto da Notícia: {texto_base[:8000]}
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
-                timeout=120.0,
+                timeout=60.0,
             )
             resp = response.choices[0].message.content.strip()
             # Extrair JSON: tenta achar o primeiro objeto JSON válido
@@ -1351,8 +1366,6 @@ async def verificar_feeds():
         return
 
     if not http_session or http_session.closed:
-        if http_session and not http_session.closed:
-            await http_session.close()
         connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
         http_session = aiohttp.ClientSession(connector=connector)
 
@@ -1439,8 +1452,14 @@ async def verificar_feeds():
             return nome_site, None
 
     resultados_feeds = await asyncio.gather(
-        *[_fetch_feed(n, u) for n, u in FONTES_RSS.items()]
+        *[_fetch_feed(n, u) for n, u in FONTES_RSS.items()],
+        return_exceptions=True,
     )
+    # Filtrar exceções inesperadas do gather
+    resultados_feeds = [
+        r for r in resultados_feeds
+        if not isinstance(r, BaseException)
+    ]
 
     # Filtrar candidatos (sem validação de imagem ainda)
     pre_candidatos = []

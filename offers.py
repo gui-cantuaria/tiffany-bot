@@ -136,8 +136,17 @@ def _load_history() -> dict:
 
 
 def _save_history(history: dict) -> None:
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+    tmp = f"{HISTORY_FILE}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, HISTORY_FILE)
+    except Exception:
+        log.exception("Erro ao salvar histórico de ofertas")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _deal_hash(url: str) -> str:
@@ -758,13 +767,15 @@ async def _run_deals_cycle_inner() -> None:
     enriched = []
     for deal in candidates[:20]:  # Limitar para não abusar
         try:
-            deal = await _enrich_deal(http_session, deal)
+            deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
 
             # Tenta buscar rating na loja (B)
             if deal.get("stars") is None and deal.get("store_url"):
-                deal = await _try_fetch_store_rating(http_session, deal)
+                deal = await asyncio.wait_for(_try_fetch_store_rating(http_session, deal), timeout=20.0)
                 await asyncio.sleep(1)
+        except asyncio.TimeoutError:
+            log.warning(f"Timeout ao enriquecer oferta {deal.get('title', '?')[:50]}")
         except Exception as e:
             log.warning(f"Erro ao enriquecer oferta {deal.get('title', '?')[:50]}: {e}")
 

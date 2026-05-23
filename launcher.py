@@ -18,6 +18,8 @@ if sys.platform != "win32":
     try:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (IOError, OSError):
+        _lock_fd.close()
+        _lock_fd = None
         print("[LOCK] Outra instância do launcher já está rodando. Encerrando duplicata.")
         sys.exit(0)
 
@@ -154,7 +156,12 @@ except KeyboardInterrupt:
     webhook_notify("🛑 Sistema encerrado manualmente.")
     for nome, dados in processos.items():
         dados["processo"].terminate()
-        dados["processo"].wait()
+        try:
+            dados["processo"].wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            log(f"⚠️ {nome} não encerrou em 15s, forçando kill...")
+            dados["processo"].kill()
+            dados["processo"].wait(timeout=5)
         if dados.get("log_file"):
             dados["log_file"].close()
         log(f"💤 {nome} desligado com sucesso.")

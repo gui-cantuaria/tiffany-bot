@@ -495,6 +495,7 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, sess
                     item = session.music_queue.get_nowait()
                     temp_items.append(item)
                     queue_queries.append(item)
+                    session.music_queue.task_done()
             except Exception:
                 pass  # QueueEmpty — drenagem completa
             # Recolocar na fila
@@ -1470,8 +1471,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         if err:
                             log.error("Erro no player: %s", err)
                             playback_error.append(err)
-                        if not fut.done():
-                            loop.call_soon_threadsafe(fut.set_result, None)
+                        try:
+                            if not fut.done() and not loop.is_closed():
+                                loop.call_soon_threadsafe(fut.set_result, None)
+                        except RuntimeError:
+                            pass  # loop fechado durante shutdown
 
                     session.song_start_time = time.monotonic()
                     _stats["songs_played"] += 1
@@ -1516,11 +1520,13 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             f"⚠️ Áudio interrompido: `{str(playback_error[0])[:120]}`",
                         )
             except Exception:
-                log.exception("Erro no worker de música")
+                log.exception("Erro no worker de música guild=%s", guild_id)
                 session.current_song = ""
+                session.seeking = False
                 if session.current_tmpdir:
                     shutil.rmtree(session.current_tmpdir, ignore_errors=True)
                     session.current_tmpdir = None
+                await asyncio.sleep(1)  # Evitar crash-loop rápido
             finally:
                 if from_queue:
                     try:
@@ -2293,6 +2299,8 @@ def register_voice(bot: commands.Bot) -> None:
                 except Exception:
                     log.exception("Erro ao processar pergunta de voz guild=%s", guild_id)
                     answer = "Desculpa, tive um problema ao processar sua pergunta. Tenta de novo!"
+                finally:
+                    session.question_queue.task_done()
                 ch = bot.get_channel(session.text_channel_id)
                 if ch:
                     try:
@@ -2300,7 +2308,6 @@ def register_voice(bot: commands.Bot) -> None:
                         await ch.send(mention, embed=_embed(f"💬 {answer}"))
                     except discord.HTTPException as e:
                         log.warning("Falha ao enviar resposta de voz: %s", e)
-                session.question_queue.task_done()
         except asyncio.CancelledError:
             raise
         except Exception:
