@@ -2,7 +2,6 @@ import subprocess
 import time
 import sys
 import os
-import fcntl
 import urllib.request
 import json
 from datetime import datetime
@@ -11,13 +10,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- LOCKFILE: garante que só uma instância roda ---
-_LOCKFILE = "/tmp/tiffany_launcher.lock"
-_lock_fd = open(_LOCKFILE, "w")
-try:
-    fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-except IOError:
-    print(f"[LOCK] Outra instância do launcher já está rodando. Encerrando duplicata.")
-    sys.exit(0)
+_lock_fd = None
+if sys.platform != "win32":
+    import fcntl
+    _LOCKFILE = "/tmp/tiffany_launcher.lock"
+    _lock_fd = open(_LOCKFILE, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        print("[LOCK] Outra instância do launcher já está rodando. Encerrando duplicata.")
+        sys.exit(0)
 
 # --- LISTA DE BOTS ---
 bots = [
@@ -30,9 +32,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 processos = {}
 _restart_times = {}  # nome -> lista de timestamps de restarts recentes
+_total_restarts = {}  # nome -> total de restarts desde o início
 MAX_RESTARTS_RAPIDOS = 3  # máximo de restarts em janela
 RESTART_JANELA = 60  # janela em segundos
 RESTART_COOLDOWN = 300  # cooldown após restart storm (5 min)
+MAX_TOTAL_RESTARTS = 15  # circuit breaker: desiste após N restarts totais
 
 
 def log(mensagem):
@@ -81,11 +85,15 @@ def iniciar_bot(bot_config):
     log_file = open(log_path, "a", encoding="utf-8")
     log_file.write(f"\n--- Iniciado em {datetime.now().isoformat()} ---\n")
     log_file.flush()
-    proc = subprocess.Popen(
-        [sys.executable, "-u", bot_config["arquivo"]],
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-    )
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-u", bot_config["arquivo"]],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+    except Exception as e:
+        log_file.close()
+        raise RuntimeError(f"Falha ao iniciar {bot_config['nome']}: {e}") from e
     return proc, log_file
 
 
@@ -104,7 +112,7 @@ try:
         # Checa a saúde dos bots a cada 10 segundos
         time.sleep(10)
 
-        for nome, dados in processos.items():
+        for nome, dados in list(processos.items()):
             p = dados["processo"]
             bot_config = dados["config"]
 
@@ -114,6 +122,12 @@ try:
                     f"⚠️ ALERTA: {nome} caiu (exit code: {p.returncode})!"
                 )
                 webhook_notify(f"⚠️ {nome} caiu (exit code: {p.returncode})!")
+                # Circuit breaker: desistir se crashou demais no total
+                _total_restarts[nome] = _total_restarts.get(nome, 0) + 1
+                if _total_restarts[nome] >= MAX_TOTAL_RESTARTS:
+                    log(f"💀 {nome} crashou {MAX_TOTAL_RESTARTS}x no total! Desistindo permanentemente.")
+                    webhook_notify(f"💀 {nome} desativado — crashou {MAX_TOTAL_RESTARTS}x. Requer restart manual.")
+                    continue
                 # Anti restart-storm: verificar se está crashando em loop
                 agora = time.time()
                 if nome not in _restart_times:
@@ -146,3 +160,13 @@ except KeyboardInterrupt:
         log(f"💤 {nome} desligado com sucesso.")
 
     log("👋 Sistema Tuffine encerrado com segurança.")
+finally:
+    # Liberar lockfile para permitir nova instância
+    if _lock_fd:
+        try:
+            if sys.platform != "win32":
+                import fcntl
+                fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+            _lock_fd.close()
+        except Exception:
+            pass

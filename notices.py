@@ -12,6 +12,7 @@ from logging.handlers import RotatingFileHandler
 import html as html_lib
 import hashlib
 import struct
+import calendar
 import atexit
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -595,10 +596,10 @@ def extrair_imagem_rss(entry, feed_url: str) -> Optional[str]:
     """Extrai URL de imagem do entry RSS (sem HTTP)."""
     img = None
     try:
-        if "media_content" in entry:
-            img = _norm_img_url(entry.media_content[0]["url"], feed_url)
-        if not img and "media_thumbnail" in entry:
-            img = _norm_img_url(entry.media_thumbnail[0]["url"], feed_url)
+        if "media_content" in entry and entry.media_content and len(entry.media_content) > 0:
+            img = _norm_img_url(entry.media_content[0].get("url", ""), feed_url)
+        if not img and "media_thumbnail" in entry and entry.media_thumbnail and len(entry.media_thumbnail) > 0:
+            img = _norm_img_url(entry.media_thumbnail[0].get("url", ""), feed_url)
         if not img and "enclosures" in entry:
             for e in entry.enclosures:
                 if "image" in (e.get("type") or "") or IMG_EXT_RE.search(e.get("href") or ""):
@@ -606,7 +607,7 @@ def extrair_imagem_rss(entry, feed_url: str) -> Optional[str]:
                     break
         if not img:
             content = ""
-            if "content" in entry:
+            if "content" in entry and entry.content and len(entry.content) > 0:
                 content = entry.content[0].get("value", "")
             summary = entry.get("summary", "")
             m = IMG_SRC_RE.search(content) or IMG_SRC_RE.search(summary)
@@ -627,9 +628,12 @@ async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
     for attempt in range(retries):
         try:
             async with http_session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                if r.status >= 500:
+                    continue  # retry em 5xx
                 if r.status != 200:
                     return None
-                html = await r.text()
+                raw = await r.content.read(1_000_000)  # max 1MB
+                html = raw.decode("utf-8", errors="replace")
                 m = OG_IMG_RE.search(html) or OG_IMG_RE_ALT.search(html)
                 if m:
                     return _norm_img_url(m.group(1), url)
@@ -662,7 +666,10 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
     if data[:2] == b"\xff\xd8":
         idx = 2
         while idx < len(data) - 9:
-            if data[idx] != 0xFF:
+            # Pular bytes de padding 0xFF
+            while idx < len(data) - 1 and data[idx] == 0xFF and data[idx + 1] == 0xFF:
+                idx += 1
+            if idx >= len(data) - 9 or data[idx] != 0xFF:
                 break
             marker = data[idx + 1]
             if marker in (0xC0, 0xC1, 0xC2):
@@ -670,6 +677,8 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
                 w = struct.unpack(">H", data[idx + 7 : idx + 9])[0]
                 return w, h
             seg_len = struct.unpack(">H", data[idx + 2 : idx + 4])[0]
+            if seg_len < 2:
+                break  # segmento malformado
             idx += 2 + seg_len
     # WebP
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
@@ -681,6 +690,11 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
             bits = struct.unpack("<I", data[21:25])[0]
             w = (bits & 0x3FFF) + 1
             h = ((bits >> 14) & 0x3FFF) + 1
+            return w, h
+        # VP8X (extended WebP — formato mais comum moderno)
+        if data[12:16] == b"VP8X" and len(data) >= 30:
+            w = (data[24] | (data[25] << 8) | (data[26] << 16)) + 1
+            h = (data[27] | (data[28] << 8) | (data[29] << 16)) + 1
             return w, h
     return None
 
@@ -1158,6 +1172,9 @@ Texto da Notícia: {texto_base[:8000]}
             if data:
                 if isinstance(data.get("resumo"), str):
                     data["resumo"] = _normalizar_resumo_final(data["resumo"])
+                    if not data["resumo"]:
+                        log.warning("Resumo vazio após normalização, rejeitando")
+                        return None
                 if isinstance(data.get("titulo"), str):
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
@@ -1177,7 +1194,7 @@ def entry_datetime_utc(entry) -> Optional[datetime]:
     if not st:
         return None
     try:
-        return datetime.fromtimestamp(time.mktime(st), tz=timezone.utc)
+        return datetime.fromtimestamp(calendar.timegm(st), tz=timezone.utc)
     except Exception:
         return None
 
@@ -1329,6 +1346,8 @@ async def verificar_feeds():
         return
 
     if not http_session or http_session.closed:
+        if http_session and not http_session.closed:
+            await http_session.close()
         connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
         http_session = aiohttp.ClientSession(connector=connector)
 
@@ -1532,9 +1551,14 @@ async def verificar_feeds():
                 return cand, img
 
         resultados_img = await asyncio.gather(
-            *[_validar_img(c) for c in pre_candidatos]
+            *[_validar_img(c) for c in pre_candidatos],
+            return_exceptions=True,
         )
-        for cand, img in resultados_img:
+        for result in resultados_img:
+            if isinstance(result, Exception):
+                log.warning("Erro na validação de imagem: %s", result)
+                continue
+            cand, img = result
             if not img:
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem"})
                 total_sem_imagem += 1
@@ -1601,7 +1625,16 @@ async def verificar_feeds():
             log.info(f"  ✗ IA rejeitou: [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
-        nota = res.get("nota", 0)
+        # Validar campos obrigatórios da resposta da IA
+        if not res.get("titulo") or not res.get("resumo"):
+            historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "ia_campos_faltando"})
+            log.warning(f"  ✗ IA retornou sem titulo/resumo: [{cand['nome_site']}] {cand['title'][:60]}")
+            continue
+
+        try:
+            nota = int(res.get("nota", 0))
+        except (ValueError, TypeError):
+            nota = 0
         categoria = res.get("categoria", "Outros")
 
         # Threshold de nota
@@ -1765,7 +1798,6 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
-            discord_client.tree.copy_global_to(guild=guild)
             await discord_client.tree.sync(guild=guild)
         else:
             await discord_client.tree.sync()
@@ -1881,8 +1913,22 @@ async def _shutdown_cleanup():
 
 def _sync_cleanup():
     """Cleanup síncrono de emergência via atexit."""
+    global http_session
     if http_session and not http_session.closed:
-        log.warning("⚠️ http_session não foi fechada gracefully (atexit).")
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                loop.create_task(http_session.close())
+            else:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(http_session.close())
+                loop.close()
+        except Exception:
+            pass
+        log.warning("⚠️ http_session fechada via atexit (shutdown forçado).")
 
 atexit.register(_sync_cleanup)
 

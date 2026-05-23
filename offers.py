@@ -16,6 +16,7 @@ import io
 import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+import affiliate_config
 
 # =========================
 # CONFIGURAÇÕES
@@ -107,6 +108,17 @@ CATEGORIAS_EMOJI = {
     "Processador": "⚡",
     "Placa-mãe": "🔧",
     "PC Gamer": "🎮",
+}
+
+# Mapeia slugs de URL para nomes corretos de categoria
+_SLUG_TO_CATEGORY = {
+    "hardware-perifericos": "Hardware e periféricos",
+    "notebooks": "Notebook",
+    "notebook-gamer": "PC Gamer",
+    "monitor": "Monitor",
+    "processador": "Processador",
+    "placa-mae": "Placa-mãe",
+    "pc-gamer": "PC Gamer",
 }
 
 # =========================
@@ -342,7 +354,9 @@ def _parse_price(text: str) -> Optional[float]:
 
 async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     """Busca a página individual da oferta no Promobit e extrai serverOffer (Next.js JSON)."""
-    url = deal["url"]
+    url = deal.get("url")
+    if not url:
+        return deal
     html = await _fetch_page(session, url)
     if not html:
         return deal
@@ -372,20 +386,29 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
 
     # Preço original
     old_price = server_offer.get("offerOldPrice")
-    if old_price and old_price > 0:
-        deal["original_price"] = float(old_price)
+    try:
+        if old_price and float(old_price) > 0:
+            deal["original_price"] = float(old_price)
+    except (ValueError, TypeError):
+        pass
 
     # Preço atualizado (pode diferir do listado)
     cur_price = server_offer.get("offerPrice")
-    if cur_price:
-        deal["price"] = float(cur_price)
+    try:
+        if cur_price:
+            deal["price"] = float(cur_price)
+    except (ValueError, TypeError):
+        pass
 
     # Desconto
     disc = server_offer.get("offerDiscontPercentage")
-    if disc:
-        deal["discount_pct"] = float(disc)
-    elif deal["original_price"] and deal["price"] and deal["original_price"] > deal["price"]:
-        deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
+    try:
+        if disc:
+            deal["discount_pct"] = float(disc)
+        elif deal.get("original_price") and deal.get("price") and deal["original_price"] > deal["price"]:
+            deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
+    except (ValueError, TypeError):
+        pass
 
     # Cupom (pode vir como string, dict ou lista)
     coupon = server_offer.get("offerCoupon")
@@ -408,7 +431,6 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
             deal["image"] = photo
 
     # Link para a loja (redirect do Promobit)
-    store_domain = server_offer.get("storeDomain", "")
     offer_slug = server_offer.get("offerSlug", "")
     if offer_slug:
         deal["store_url"] = f"{PROMOBIT_BASE}/redirect/oferta/{offer_slug}/"
@@ -423,7 +445,10 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
 
     total_reviews = server_offer.get("totalReviews")
     if total_reviews:
-        deal["sales_count"] = int(total_reviews)
+        try:
+            deal["sales_count"] = int(float(total_reviews))
+        except (ValueError, TypeError):
+            pass
 
     # Tags (ex: Frete Grátis)
     tags = server_offer.get("offerTags") or []
@@ -451,6 +476,8 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
         ) as resp:
             if resp.status != 200:
                 return deal
+            # Capturar URL real da loja (pos-redirect do Promobit)
+            deal["real_store_url"] = str(resp.url)
             html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
@@ -463,7 +490,7 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
             el = soup.select_one(sel)
             if el:
                 raw = el.get("content") or el.get("data-rating") or el.get_text()
-                m = re.search(r"(\d[.,]\d)", raw)
+                m = re.search(r"(\d+[.,]\d+)", raw)
                 if m:
                     deal["stars"] = float(m.group(1).replace(",", "."))
                     break
@@ -503,7 +530,7 @@ def _store_allowed(store: str) -> bool:
     # Verificar se alguma loja da whitelist é o início do nome normalizado
     # Ex: "kabum" casa com "kabum informatica"
     for allowed in LOJAS_WHITELIST:
-        if norm.startswith(allowed) or allowed.startswith(norm):
+        if norm.startswith(allowed):
             return True
     return False
 
@@ -550,7 +577,7 @@ def _format_price_line(deal: dict) -> str:
     else:
         parts.append(f"**{price_new}**")
 
-    if deal.get("discount_pct"):
+    if deal.get("discount_pct") and 0 < deal["discount_pct"] <= 100:
         parts.append(f"(-{deal['discount_pct']:.0f}%)")
 
     return " ".join(parts)
@@ -583,7 +610,7 @@ def _format_description(deal: dict) -> str:
     # Tags (ex: Frete Grátis)
     tags = deal.get("tags") or []
     if tags:
-        tags_str = " • ".join(t["name"] if isinstance(t, dict) else str(t) for t in tags[:3])
+        tags_str = " • ".join(t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:3])
         lines.append(f"🏷️ {tags_str}")
 
     return "\n".join(lines)
@@ -617,10 +644,17 @@ def _build_embed(deal: dict) -> discord.Embed:
     # Título: emoji + produto resumido + desconto
     title = f"{EMOJI_FOGO} {deal['title'][:200]} — {discount:.0f}% OFF"
 
+    desc = _format_description(deal)
+    if len(desc) > 4096:
+        desc = desc[:4093] + "..."
+    # URL unificada para título e CTA (evita inconsistência)
+    raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
+    buy_url = affiliate_config.build_affiliate_url(deal.get("store", ""), raw_url)
+
     embed = discord.Embed(
-        title=title,
-        url=deal.get("store_url") or deal["url"],
-        description=_format_description(deal),
+        title=title[:256],
+        url=buy_url,
+        description=desc,
         color=cor,
     )
 
@@ -637,21 +671,19 @@ def _build_embed(deal: dict) -> discord.Embed:
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
 
-    # Imagem — será anexada como arquivo separado (set_image com attachment://)
-    # A URL real é baixada no momento de postar
-    if deal.get("image"):
-        embed.set_image(url="attachment://oferta.jpg")
-
-    # CTA
-    buy_url = deal.get("store_url") or deal["url"]
+    # Imagem — definida no momento de postar (_build_embed não seta aqui
+    # para evitar set_image duplo se o download falhar)
     embed.add_field(
         name="",
         value=f"👉 **[COMPRAR COM DESCONTO]({buy_url})**",
         inline=False,
     )
 
-    # Footer sutil
-    embed.set_footer(text="Oferta verificada automaticamente")
+    # Footer sutil (indica afiliado quando aplicavel)
+    if buy_url != raw_url:
+        embed.set_footer(text="Oferta verificada automaticamente | Link de afiliado")
+    else:
+        embed.set_footer(text="Oferta verificada automaticamente")
 
     return embed
 
@@ -660,11 +692,29 @@ def _build_embed(deal: dict) -> discord.Embed:
 # CICLO PRINCIPAL
 # =========================
 
+_cycle_running = False  # guard contra execuções paralelas
+
 async def _run_deals_cycle() -> None:
     """Executa um ciclo completo de coleta e publicação."""
+    global http_session, _cycle_running
+    if _cycle_running:
+        log.warning("Ciclo anterior ainda rodando, pulando este.")
+        return
+    _cycle_running = True
+    try:
+        await _run_deals_cycle_inner()
+    finally:
+        _cycle_running = False
+
+async def _run_deals_cycle_inner() -> None:
+    """Lógica real do ciclo de ofertas."""
     global http_session
 
-    if not http_session or http_session.closed:
+    if http_session and not http_session.closed:
+        pass  # Reutilizar sessão existente
+    else:
+        if http_session and http_session.closed:
+            http_session = None
         http_session = aiohttp.ClientSession()
 
     history = _load_history()
@@ -683,7 +733,8 @@ async def _run_deals_cycle() -> None:
 
         deals = _parse_deals_from_html(html, cat_path)
         # Extrai nome da categoria do path
-        cat_name = cat_path.strip("/").split("/")[-2].replace("-", " ").title()
+        cat_slug = cat_path.strip("/").split("/")[-2]
+        cat_name = _SLUG_TO_CATEGORY.get(cat_slug, cat_slug.replace("-", " ").title())
         for d in deals:
             d["category"] = cat_name
 
@@ -706,13 +757,16 @@ async def _run_deals_cycle() -> None:
     # Enriquecer cada oferta (buscar detalhes)
     enriched = []
     for deal in candidates[:20]:  # Limitar para não abusar
-        deal = await _enrich_deal(http_session, deal)
-        await asyncio.sleep(1.5)
+        try:
+            deal = await _enrich_deal(http_session, deal)
+            await asyncio.sleep(1.5)
 
-        # Tenta buscar rating na loja (B)
-        if deal.get("stars") is None and deal.get("store_url"):
-            deal = await _try_fetch_store_rating(http_session, deal)
-            await asyncio.sleep(1)
+            # Tenta buscar rating na loja (B)
+            if deal.get("stars") is None and deal.get("store_url"):
+                deal = await _try_fetch_store_rating(http_session, deal)
+                await asyncio.sleep(1)
+        except Exception as e:
+            log.warning(f"Erro ao enriquecer oferta {deal.get('title', '?')[:50]}: {e}")
 
         enriched.append(deal)
 
@@ -746,16 +800,20 @@ async def _run_deals_cycle() -> None:
             img_data = await _download_image(http_session, deal["image"])
             if img_data:
                 file = discord.File(io.BytesIO(img_data), filename="oferta.jpg")
+                embed.set_image(url="attachment://oferta.jpg")
             else:
                 # Fallback: tentar URL direto no embed
                 embed.set_image(url=deal["image"])
 
         try:
+            # Marcar como postado ANTES de enviar para evitar duplicatas se o send falhar parcialmente
+            _mark_posted(history, deal["url"], deal["title"])
+
             content = f"<@&{ID_CARGO_OFERTAS}>" if ID_CARGO_OFERTAS else None
             msg = await channel.send(content=content, embed=embed, file=file)
 
             try:
-                thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:80]}"
+                thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:70]}"[:100]
                 await msg.create_thread(
                     name=thread_name,
                     auto_archive_duration=1440,
@@ -763,7 +821,6 @@ async def _run_deals_cycle() -> None:
             except Exception as e:
                 log.warning(f"Erro ao criar thread: {e}")
 
-            _mark_posted(history, deal["url"], deal["title"])
             posted += 1
             log.info(f"  🛒 Postada: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
 
@@ -808,6 +865,12 @@ async def _before_deals_loop():
 @bot.event
 async def on_ready():
     log.info(f"✅ Deals bot conectado como {bot.user} (ID: {bot.user.id})")
+    # Log de programas de afiliado ativos
+    progs = affiliate_config.active_programs()
+    if progs:
+        log.info(f"💰 Afiliados ativos: {', '.join(progs)}")
+    else:
+        log.warning("⚠️ Nenhum programa de afiliado configurado no .env")
     if not deals_loop.is_running():
         deals_loop.start()
 

@@ -15,6 +15,8 @@ import tempfile
 import logging
 import os
 import re
+import atexit
+import collections
 import shutil
 import time
 import threading
@@ -196,6 +198,88 @@ _CONTEXT_MAX_USERS = 50  # máximo de usuários rastreados em memória
 _CONTEXT_TTL_SEC = 3600  # 1 hora sem interagir → contexto expira
 _user_context: dict[int, dict] = {}
 
+# --- Memória persistente: salva contexto em disco para sobreviver restarts ---
+_MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chat_memory.json")
+_MEMORY_MAX_TURNS = 3     # turnos persistidos por usuário (menos que in-memory)
+_MEMORY_MAX_USERS = 200   # máximo de usuários na memória persistente
+_MEMORY_TTL_SEC = 86400   # 24h sem interagir → memória expira
+_last_memory_save: float = 0.0  # monotonic timestamp do último save
+
+
+def _load_memory() -> None:
+    """Carrega contextos persistidos do disco para _user_context."""
+    global _user_context
+    try:
+        with open(_MEMORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return
+    now_real = time.time()
+    now_mono = time.monotonic()
+    loaded = 0
+    for uid_str, entry in data.items():
+        try:
+            uid = int(uid_str)
+        except (ValueError, TypeError):
+            continue
+        ts = entry.get("last_used_real", 0)
+        if (now_real - ts) > _MEMORY_TTL_SEC:
+            continue  # expirado
+        history = entry.get("history", [])
+        if not history:
+            continue
+        # Só carregar se o usuário não tem contexto in-memory mais recente
+        if uid not in _user_context:
+            _user_context[uid] = {
+                "history": history[-_MEMORY_MAX_TURNS:],
+                "last_used": now_mono - (now_real - ts),  # ajustar monotonic
+            }
+            loaded += 1
+    if loaded:
+        log.info("Memória persistente: %d contextos restaurados", loaded)
+
+
+def _save_memory_debounced() -> None:
+    """Salva contextos em disco (debounce: max 1x a cada 30s)."""
+    global _last_memory_save
+    now = time.monotonic()
+    if (now - _last_memory_save) < 30:
+        return
+    _last_memory_save = now
+    _save_memory_now()
+
+
+def _save_memory_now() -> None:
+    """Salva contextos em disco imediatamente."""
+    now_real = time.time()
+    now_mono = time.monotonic()
+    data = {}
+    # Ordenar por last_used (mais recente primeiro) e limitar
+    sorted_users = sorted(
+        _user_context.items(),
+        key=lambda x: x[1]["last_used"],
+        reverse=True,
+    )[:_MEMORY_MAX_USERS]
+    for uid, entry in sorted_users:
+        history = entry.get("history", [])
+        if not history:
+            continue
+        elapsed = now_mono - entry["last_used"]
+        data[str(uid)] = {
+            "history": history[-_MEMORY_MAX_TURNS:],
+            "last_used_real": now_real - elapsed,
+        }
+    try:
+        with open(_MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+# Carregar memória persistente na importação do módulo
+_load_memory()
+atexit.register(_save_memory_now)  # salvar ao encerrar
+
 
 def _get_context_messages(user_id: int) -> list[dict]:
     """Retorna as mensagens de histórico do usuário para incluir no prompt da IA."""
@@ -224,6 +308,11 @@ def _check_cooldown(user_id: int) -> bool:
     if (now - last) < _CMD_COOLDOWN_SEC:
         return False
     _user_last_cmd[user_id] = now
+    # Limpar entradas antigas (>5min) para evitar vazamento de memória
+    if len(_user_last_cmd) > 100:
+        stale = [uid for uid, ts in _user_last_cmd.items() if (now - ts) > 300]
+        for uid in stale:
+            del _user_last_cmd[uid]
     return True
 
 
@@ -242,11 +331,30 @@ def _add_to_context(user_id: int, question: str, answer: str) -> None:
     if len(_user_context) > _CONTEXT_MAX_USERS:
         oldest = min(_user_context, key=lambda uid: _user_context[uid]["last_used"])
         _user_context.pop(oldest, None)
+    # Persistir em disco (debounced)
+    _save_memory_debounced()
 
 
 
-# Semáforo global: max 1 chamada simultânea à API de IA (evita estouro de rate limit)
-_ai_semaphore: asyncio.Semaphore  # inicializado em register_voice (precisa de loop)
+# Semáforo global: max 3 chamadas simultâneas à API de IA
+_ai_semaphore = asyncio.Semaphore(3)
+
+# --- Rate limit global: protege créditos contra spam massivo ---
+_GLOBAL_RL_WINDOW = 60    # janela em segundos
+_GLOBAL_RL_MAX = 15       # máximo de chamadas na janela
+_global_ai_calls: collections.deque = collections.deque()  # timestamps das chamadas recentes
+
+
+def _global_rate_limit_ok() -> bool:
+    """Retorna True se o uso global está dentro do limite. Registra a chamada."""
+    now = time.monotonic()
+    # Limpar chamadas fora da janela
+    while _global_ai_calls and (now - _global_ai_calls[0]) > _GLOBAL_RL_WINDOW:
+        _global_ai_calls.popleft()
+    if len(_global_ai_calls) >= _GLOBAL_RL_MAX:
+        return False
+    _global_ai_calls.append(now)
+    return True
 
 # Estatísticas persistentes em JSON
 STATS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_stats.json")
@@ -379,13 +487,13 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, sess
             queue_displays = list(session.queue_display)
             # Extrair queries da fila (asyncio.Queue não é iterável, fazer cópia)
             temp_items = []
-            while not session.music_queue.empty():
-                try:
+            try:
+                while True:
                     item = session.music_queue.get_nowait()
                     temp_items.append(item)
                     queue_queries.append(item)
-                except Exception:
-                    break
+            except Exception:
+                pass  # QueueEmpty — drenagem completa
             # Recolocar na fila
             for item in temp_items:
                 session.music_queue.put_nowait(item)
@@ -526,8 +634,9 @@ def _tts_bytes_to_pcm(tts_bytes: bytes) -> Optional[bytes]:
     """Converte bytes de MP3 (gTTS) para PCM usando FFmpeg."""
     if not tts_bytes:
         return None
+    import subprocess
+    proc = None
     try:
-        import subprocess
         exe = FFMPEG_EXECUTABLE or "ffmpeg"
         proc = subprocess.Popen(
             [exe, "-i", "pipe:0", "-f", "s16le", "-ac", "2", "-ar", "48000", "pipe:1"],
@@ -535,9 +644,18 @@ def _tts_bytes_to_pcm(tts_bytes: bytes) -> Optional[bytes]:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
-        pcm, _ = proc.communicate(tts_bytes)
+        pcm, _ = proc.communicate(tts_bytes, timeout=30)
         return pcm
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.wait()
+        log.warning("FFmpeg TTS timeout após 30s")
+        return None
     except Exception as e:
+        if proc:
+            proc.kill()
+            proc.wait()
         log.warning("Erro convertendo TTS para PCM: %s", e)
         return None
 
@@ -560,9 +678,10 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
     model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vosk-model-small-pt-0.3")
     if not os.path.isdir(model_path):
         return None
+    import subprocess
+    proc = None
     try:
         from vosk import KaldiRecognizer
-        import json, subprocess
         model = _get_vosk_model(model_path)
         exe = FFMPEG_EXECUTABLE or "ffmpeg"
         # Converte WAV 48kHz → PCM raw 16kHz mono (formato que o Vosk espera)
@@ -570,7 +689,7 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
             [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "s16le", "pipe:1"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
-        pcm_16k, _ = proc.communicate(wav_48k)
+        pcm_16k, _ = proc.communicate(wav_48k, timeout=30)
         if not pcm_16k:
             return None
         rec = KaldiRecognizer(model, 16000)
@@ -579,22 +698,41 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
         text = result.get("text", "").strip()
         log.info("Vosk STT: %r", text)
         return text if text else None
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.wait()
+        log.warning("Vosk FFmpeg timeout após 30s")
+        return None
     except Exception as e:
+        if proc:
+            proc.kill()
+            proc.wait()
         log.warning("Vosk error: %s", e)
         return None
 
 
 def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
     """Converte WAV 48kHz mono para WAV 16kHz mono via FFmpeg (melhor para STT)."""
+    import subprocess
     exe = FFMPEG_EXECUTABLE or "ffmpeg"
+    proc = None
     try:
         proc = subprocess.Popen(
             [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
-        wav_16k, _ = proc.communicate(wav_48k)
+        wav_16k, _ = proc.communicate(wav_48k, timeout=30)
         return wav_16k if wav_16k else wav_48k
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.wait()
+        return wav_48k
     except Exception:
+        if proc:
+            proc.kill()
+            proc.wait()
         return wav_48k
 
 
@@ -640,18 +778,18 @@ def _transcribe_whisper_groq(wav: bytes) -> Optional[str]:
 
 
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # Converter para 16kHz (melhor para todos os engines STT)
-    wav = _wav_48k_to_16k(wav)
-    # 1) Whisper via Groq (mais preciso, grátis)
+    # 1) Whisper via Groq — aceita 48kHz nativo (melhor qualidade)
     result = _transcribe_whisper_groq(wav)
     if result:
         return result
+    # Converter para 16kHz apenas para Google/Vosk (que precisam)
+    wav_16k = _wav_48k_to_16k(wav)
     # 2) Google STT (fallback online)
     try:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
         r.dynamic_energy_threshold = True
-        with sr.AudioFile(io.BytesIO(wav)) as source:
+        with sr.AudioFile(io.BytesIO(wav_16k)) as source:
             audio = r.record(source)
         try:
             text = r.recognize_google(audio, language="pt-BR")
@@ -666,7 +804,7 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
     except Exception as e:
         log.warning("Erro no Google STT: %s", e)
     # 3) Vosk (fallback offline)
-    result = _transcribe_with_vosk(wav)
+    result = _transcribe_with_vosk(wav_16k)
     if result is not None:
         return result
     return None
@@ -788,7 +926,7 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                         if title:
                             result.append({"query": vid_url or f"ytsearch1:{title}", "display": title})
                     return result
-            tracks = await asyncio.get_event_loop().run_in_executor(None, _extract)
+            tracks = await asyncio.get_running_loop().run_in_executor(None, _extract)
             log.info("YouTube playlist: %d tracks extraídas de %s", len(tracks), url[:60])
         except Exception as e:
             log.warning("Erro ao extrair playlist YouTube: %s", e)
@@ -815,8 +953,8 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                                 # Fallback: regex mais simples
                                 track_matches = re.findall(r'"name":"([^"]+)"[^}]*?"artists":\[{"name":"([^"]+)"', html)
                             for title, artist in track_matches:
-                                # Ignorar nomes que parecem ser da playlist (muito longos ou genéricos)
-                                if len(title) > 200:
+                                # Ignorar nomes vazios ou muito longos
+                                if not title or not artist or len(title) > 200:
                                     continue
                                 query = f"{artist} {title}"
                                 tracks.append({"query": f"ytsearch1:{query}", "display": query})
@@ -1124,11 +1262,24 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
     return raw, uid
 
 
+TIFFANY_PINK = 0xFF69B4  # cor rosa da logo
+
+
+def _embed(description: str, *, title: str = None, footer: str = None) -> discord.Embed:
+    """Cria embed padrão da Tiffany na cor rosa."""
+    em = discord.Embed(description=description, color=TIFFANY_PINK)
+    if title:
+        em.set_author(name=title)
+    if footer:
+        em.set_footer(text=footer)
+    return em
+
+
 async def _notify(bot: discord.Client, channel_id: int, content: str) -> None:
     ch = bot.get_channel(channel_id)
     if ch and hasattr(ch, "send"):
         try:
-            await ch.send(content)
+            await ch.send(embed=_embed(content))
         except discord.HTTPException:
             log.warning("Falha ao enviar mensagem no canal %s", channel_id)
 
@@ -1184,12 +1335,18 @@ class _YTSource(PCMVolumeTransformer):
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
     log.info("Music worker started guild=%s", guild_id)
+    _no_session_count = 0
     try:
         while vc.is_connected():
             session = _sessions.get(guild_id)
             if not session:
+                _no_session_count += 1
+                if _no_session_count > 40:  # ~10s sem sessão → sair
+                    log.info("Music worker: sessão removida, encerrando guild=%s", guild_id)
+                    break
                 await asyncio.sleep(0.25)
                 continue
+            _no_session_count = 0
             try:
                 query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
@@ -1219,7 +1376,6 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             session.text_channel_id,
                             f"❌ Não consegui achar audio para: `{display_name[:80]}`\n> `{info[:200]}`",
                         )
-                        session.music_queue.task_done()
                         continue
                     # Salvar referência ao arquivo para seek
                     session.current_file = dl_fp or ""
@@ -1250,6 +1406,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     await _notify(bot, session.text_channel_id, f"▶️ **Tocando agora:** {display_name[:100]}")
                     vc.play(source, after=_after)
                     # Watchdog: se travar por mais de 8 min sem terminar, força skip
+                    # shield() protege fut de ser cancelado pelo timeout, permitindo await fut após vc.stop()
                     try:
                         await asyncio.wait_for(asyncio.shield(fut), timeout=480.0)
                     except asyncio.TimeoutError:
@@ -1279,6 +1436,9 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
             except Exception:
                 log.exception("Erro no worker de música")
                 session.current_song = ""
+                if session.current_tmpdir:
+                    shutil.rmtree(session.current_tmpdir, ignore_errors=True)
+                    session.current_tmpdir = None
             finally:
                 try:
                     session.music_queue.task_done()
@@ -1301,6 +1461,7 @@ async def _voice_listen_loop(
     await _notify(bot, session.text_channel_id, "🎙️ Tiffany entrou na call.")
     _empty_since = None
     _empty_check_counter = 0
+    _stt_fail_count = 0  # contador de falhas STT consecutivas
     try:
         while vc.is_connected():
             await asyncio.sleep(0.5)
@@ -1311,7 +1472,7 @@ async def _voice_listen_loop(
             _empty_check_counter += 1
             if _empty_check_counter >= 20:
                 _empty_check_counter = 0
-                agora = asyncio.get_event_loop().time()
+                agora = asyncio.get_running_loop().time()
                 if vc.channel:
                     ch_id = vc.channel.id
                     members_in_vc = [
@@ -1350,16 +1511,22 @@ async def _voice_listen_loop(
             log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             log.info("Enviando %d bytes de áudio para STT...", len(wav))
-            # Debug: salvar último WAV para análise (sobrescreve a cada captura)
-            try:
-                with open("/tmp/tiffany_debug_audio.wav", "wb") as _dbg:
-                    _dbg.write(wav)
-            except Exception:
-                pass
+            # Debug: salvar último WAV para análise (apenas se DEBUG_STT=1)
+            if os.getenv("DEBUG_STT"):
+                try:
+                    with open("/tmp/tiffany_debug_audio.wav", "wb") as _dbg:
+                        _dbg.write(wav)
+                except Exception:
+                    pass
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
                 log.warning("STT não reconheceu áudio (pode ser ruído ou sotaque)")
+                _stt_fail_count += 1
+                # Só avisar na 1ª e a cada 5 falhas (evita spam)
+                if _stt_fail_count == 1 or _stt_fail_count % 5 == 0:
+                    await _notify(bot, session.text_channel_id, "🎙️ Não consegui entender o que foi dito. Tente falar mais perto do microfone.")
                 continue
+            _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "none":
@@ -1367,7 +1534,20 @@ async def _voice_listen_loop(
                 await _notify(bot, session.text_channel_id, f"🗣️ Ouvi: «{text[:80]}» *(diga «Tiffany, ...» para comandos)*")
                 continue
             
-            if action == "stop" or action == "skip":
+            if action == "stop":
+                vc.stop()
+                # Limpar asyncio.Queue (não tem .clear())
+                try:
+                    while True:
+                        session.music_queue.get_nowait()
+                        session.music_queue.task_done()
+                except Exception:
+                    pass  # QueueEmpty — fila limpa
+                session.queue_display.clear()
+                await _notify(bot, session.text_channel_id, "⏹️ Música parada (comando de voz).")
+                continue
+
+            if action == "skip":
                 vc.stop()
                 await _notify(bot, session.text_channel_id, "⏭️ Faixa pulada (comando de voz).")
                 continue
@@ -1491,7 +1671,6 @@ async def _join_voice_recv_client(
 
 def register_voice(bot: commands.Bot) -> None:
     global _ai_semaphore, _stats
-    _ai_semaphore = asyncio.Semaphore(1)
     _stats = _load_stats()
 
     _RANDOM_SONGS = [
@@ -1866,7 +2045,8 @@ def register_voice(bot: commands.Bot) -> None:
                     "Você trata os membros pelo nome quando possível e adapta o tom — se alguém brinca, você brinca de volta; "
                     "se alguém faz uma pergunta séria, você responde com precisão. "
                     "Responda SEMPRE em português do Brasil, de forma objetiva. "
-                    "Lembre-se do que já foi dito nesta conversa para dar respostas coerentes e personalizadas. "
+                    "Voce tem memoria: lembra do que cada usuario ja conversou com voce, mesmo em sessoes anteriores. "
+                    "Use essas informacoes para dar respostas coerentes e personalizadas, mas sem repetir o que ja disse. "
                     "SEMPRE termine sua resposta de forma completa — nunca corte no meio de uma frase ou lista. "
                     "Se o pedido for longo demais, resuma de forma que caiba em uma resposta coerente e fechada.\n\n"
                     "REGRA DE TAMANHO: Suas respostas devem ser CURTAS e DIRETAS. Máximo 2-3 parágrafos curtos. "
@@ -1915,14 +2095,15 @@ def register_voice(bot: commands.Bot) -> None:
             _stats["questions_answered"] += 1
             _save_stats()
 
-            # TTS se habilitado
+            # TTS se habilitado (só se não tiver música tocando)
             if session and session.tts_enabled and vc and vc.is_connected():
-                tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
-                if tts_bytes:
-                    pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
-                    if pcm:
-                        source = discord.PCMAudio(io.BytesIO(pcm))
-                        vc.play(source)
+                if not vc.is_playing() and not vc.is_paused():
+                    tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
+                    if tts_bytes:
+                        pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
+                        if pcm:
+                            source = discord.PCMAudio(io.BytesIO(pcm))
+                            vc.play(source)
 
             return answer
         except Exception as e:
@@ -1940,13 +2121,28 @@ def register_voice(bot: commands.Bot) -> None:
                     user_id, question = await asyncio.wait_for(session.question_queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
                     continue
-                
-                answer = await _answer_question(question, guild_id, session, vc, user_id=user_id)
+
+                # Rate limit global (protege créditos em uso massivo)
+                if not _global_rate_limit_ok():
+                    ch = bot.get_channel(session.text_channel_id)
+                    if ch:
+                        try:
+                            await ch.send("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos.", delete_after=8)
+                        except Exception:
+                            pass
+                    session.question_queue.task_done()
+                    continue
+
+                try:
+                    answer = await _answer_question(question, guild_id, session, vc, user_id=user_id)
+                except Exception:
+                    log.exception("Erro ao processar pergunta de voz guild=%s", guild_id)
+                    answer = "Desculpa, tive um problema ao processar sua pergunta. Tenta de novo!"
                 ch = bot.get_channel(session.text_channel_id)
                 if ch:
                     try:
                         mention = f"<@{user_id}> " if user_id else ""
-                        await ch.send(f"{mention}💬 **Resposta:** {answer}")
+                        await ch.send(mention, embed=_embed(f"💬 {answer}"))
                     except discord.HTTPException as e:
                         log.warning("Falha ao enviar resposta de voz: %s", e)
                 session.question_queue.task_done()
@@ -1968,7 +2164,7 @@ def register_voice(bot: commands.Bot) -> None:
         vc = guild.voice_client
 
         if sess and vc and vc.is_connected():
-            if specific_channel and vc.channel.id != specific_channel.id:
+            if specific_channel and vc.channel and vc.channel.id != specific_channel.id:
                 try:
                     await vc.move_to(specific_channel)
                     return sess, vc
@@ -2090,7 +2286,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
         _save_voice_state(gid, channel.id, ctx.channel.id)
-        await ctx.send(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**.")
+        await ctx.send(embed=_embed(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**."))
         return session, vc
 
     @bot.command(name="e", help="Entra (enter) no canal de voz: $e ou $e #canal")
@@ -2101,7 +2297,7 @@ def register_voice(bot: commands.Bot) -> None:
         sess, vc = await _ensure_connected(ctx, specific_channel=channel)
         if not sess:
             return
-        await ctx.send("🎙️ **Tiffany está ouvindo...** Diga «Tiffany, ...» para comandos ou perguntas.")
+        await ctx.send(embed=_embed("🎙️ **Tiffany está ouvindo...** Diga «Tiffany, ...» para comandos ou perguntas."))
 
     @bot.command(name="l", help="Sai (leave) do canal de voz: $l")
     async def cmd_sair(ctx: commands.Context):
@@ -2145,7 +2341,7 @@ def register_voice(bot: commands.Bot) -> None:
                 saiu = True
 
         if saiu or sess:
-            await ctx.send("👋 **Tiffany saiu** do canal de voz.")
+            await ctx.send(embed=_embed("👋 **Tiffany saiu** do canal de voz."))
         else:
             await ctx.send("⚠️ Não estou em nenhum canal de voz.")
 
@@ -2178,9 +2374,9 @@ def register_voice(bot: commands.Bot) -> None:
             prox = session.queue_display[0] if session.queue_display else None
             vc.stop()
             if prox:
-                await ctx.send(f"⏭️ Pulado. Proxima: **{prox[:80]}**")
+                await ctx.send(embed=_embed(f"⏭️ Pulado. Proxima: **{prox[:80]}**"))
             else:
-                await ctx.send("⏭️ Pulado. Fila vazia.")
+                await ctx.send(embed=_embed("⏭️ Pulado. Fila vazia."))
         else:
             session.skip_votes.add(ctx.author.id)
             current_votes = len(session.skip_votes)
@@ -2189,14 +2385,14 @@ def register_voice(bot: commands.Bot) -> None:
                 prox = session.queue_display[0] if session.queue_display else None
                 vc.stop()
                 if prox:
-                    await ctx.send(f"⏭️ {required}/{required} votos — pulando! Proxima: **{prox[:80]}**")
+                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Proxima: **{prox[:80]}**"))
                 else:
-                    await ctx.send(f"⏭️ {required}/{required} votos — pulando! Fila vazia.")
+                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Fila vazia."))
             else:
-                await ctx.send(
+                await ctx.send(embed=_embed(
                     f"🗳️ Voto registrado ({current_votes}/{required}) para pular "
                     f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
-                )
+                ))
 
     @bot.command(name="q", help="Lista a fila de músicas: $q")
     async def cmd_queue(ctx: commands.Context):
@@ -2217,9 +2413,9 @@ def register_voice(bot: commands.Bot) -> None:
             if len(session.queue_display) > 10:
                 lines.append(f"*... e mais {len(session.queue_display) - 10} músicas*")
         if not lines:
-            await ctx.send("📭 Fila vazia.")
+            await ctx.send(embed=_embed("📭 Fila vazia."))
             return
-        await ctx.send("\n".join(lines))
+        await ctx.send(embed=_embed("\n".join(lines)))
 
     @bot.command(name="np", help="Mostra a musica tocando agora: $np")
     async def cmd_now_playing(ctx: commands.Context):
@@ -2232,7 +2428,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
             return
         if not session.current_song:
-            await ctx.send("📭 Nada tocando no momento.")
+            await ctx.send(embed=_embed("📭 Nada tocando no momento."))
             return
         elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
         m, s = divmod(elapsed, 60)
@@ -2242,7 +2438,7 @@ def register_voice(bot: commands.Bot) -> None:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm:02d}:{ds:02d}"
         fila_info = f"\n📋 Fila: {len(session.queue_display)} musica(s)" if session.queue_display else ""
-        await ctx.send(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}")
+        await ctx.send(embed=_embed(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}"))
 
     @bot.command(name="pl", help="Playlists salvas: $pl save <nome> | $pl load <nome> | $pl list | $pl del <nome>")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
@@ -2255,12 +2451,12 @@ def register_voice(bot: commands.Bot) -> None:
             data = _load_playlists()
             guild_pls = data.get(gid, {})
             if not guild_pls:
-                await ctx.send("📭 Nenhuma playlist salva neste servidor.")
+                await ctx.send(embed=_embed("📭 Nenhuma playlist salva neste servidor."))
                 return
             lines = [f"**Playlists salvas:**"]
             for pname, songs in guild_pls.items():
                 lines.append(f"`{pname}` — {len(songs)} musica(s)")
-            await ctx.send("\n".join(lines))
+            await ctx.send(embed=_embed("\n".join(lines)))
             return
 
         if not name:
@@ -2286,7 +2482,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             guild_pls[name] = songs
             _save_playlists(data)
-            await ctx.send(f"💾 Playlist **{name}** salva com {len(songs)} musica(s).")
+            await ctx.send(embed=_embed(f"💾 Playlist **{name}** salva com {len(songs)} musica(s)."))
 
         elif action == "load":
             songs = guild_pls.get(name)
@@ -2306,7 +2502,7 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.queue_display.append(display)
                 await sess.music_queue.put(query)
                 added += 1
-            await ctx.send(f"▶️ Playlist **{name}**: {added} musica(s) adicionadas a fila.")
+            await ctx.send(embed=_embed(f"▶️ Playlist **{name}**: {added} musica(s) adicionadas a fila."))
 
         elif action == "del":
             if name not in guild_pls:
@@ -2314,7 +2510,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             del guild_pls[name]
             _save_playlists(data)
-            await ctx.send(f"🗑️ Playlist **{name}** deletada.")
+            await ctx.send(embed=_embed(f"🗑️ Playlist **{name}** deletada."))
 
         else:
             await ctx.send("⚠️ Acao invalida. Use: `save`, `load`, `list` ou `del`.")
@@ -2337,7 +2533,7 @@ def register_voice(bot: commands.Bot) -> None:
         if session:
             fila = len(session.queue_display)
             lines.append(f"📋 Fila atual: **{fila}/10**")
-        await ctx.send("\n".join(lines))
+        await ctx.send(embed=_embed("\n".join(lines)))
 
     @bot.command(name="r", help="Toca música aleatória (random): $r")
     async def cmd_random(ctx: commands.Context):
@@ -2357,7 +2553,7 @@ def register_voice(bot: commands.Bot) -> None:
         display = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
-        await ctx.send(f"🎲 Música aleatória na fila: **{display}**")
+        await ctx.send(embed=_embed(f"🎲 Música aleatória na fila: **{display}**"))
 
     @bot.command(name="p", help="Toca uma música: !p <nome ou URL>")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
@@ -2388,7 +2584,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-            await ctx.send("📋 Extraindo músicas da playlist...")
+            await ctx.send(embed=_embed("📋 Extraindo músicas da playlist..."))
             tracks = await _extract_playlist_tracks(query)
             if not tracks:
                 await ctx.send("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública.")
@@ -2403,7 +2599,7 @@ def register_voice(bot: commands.Bot) -> None:
             msg = f"📋 **{added}** música(s) da playlist adicionadas à fila."
             if skipped > 0:
                 msg += f" ({skipped} ignoradas — fila cheia)"
-            await ctx.send(msg)
+            await ctx.send(embed=_embed(msg))
             return
 
         # Limpar parâmetros de Radio/Mix do YouTube (list=RD...) para tocar só o vídeo
@@ -2437,10 +2633,10 @@ def register_voice(bot: commands.Bot) -> None:
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
         if not sess.current_song and len(sess.queue_display) == 1:
-            await ctx.send(f"🎵 Buscando **{display[:100]}**...")
+            await ctx.send(embed=_embed(f"🎵 Buscando **{display[:100]}**..."))
         else:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
-            await ctx.send(f"🎵 **#{pos}/10** na fila: **{display[:100]}**")
+            await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
 
     # t$h removido — use /help (ephemeral)
 
@@ -2453,6 +2649,10 @@ def register_voice(bot: commands.Bot) -> None:
         # Cooldown: 5s por usuário
         if not _check_cooldown(ctx.author.id):
             await ctx.send("⏳ Aguarde alguns segundos antes de perguntar novamente.", delete_after=5)
+            return
+        # Rate limit global: protege créditos quando muita gente pergunta ao mesmo tempo
+        if not _global_rate_limit_ok():
+            await ctx.send("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos e tenta de novo.", delete_after=8)
             return
 
         # Coleta URLs de imagens anexadas à mensagem
@@ -2471,7 +2671,7 @@ def register_voice(bot: commands.Bot) -> None:
                 image_urls=image_urls if image_urls else None,
                 user_id=ctx.author.id,
             )
-        await ctx.reply(f"💬 **Resposta:** {answer}")
+        await ctx.reply(embed=_embed(f"💬 {answer}"))
 
     @bot.command(name="pa", help="Pausa a musica: $pa")
     async def cmd_pause(ctx: commands.Context):
@@ -2485,7 +2685,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ Nao tem musica tocando agora.")
             return
         vc.pause()
-        await ctx.send("⏸️ Pausado.")
+        await ctx.send(embed=_embed("⏸️ Pausado."))
 
     @bot.command(name="re", help="Retoma a musica pausada: $re")
     async def cmd_resume(ctx: commands.Context):
@@ -2499,7 +2699,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ A musica nao esta pausada.")
             return
         vc.resume()
-        await ctx.send("▶️ Retomando.")
+        await ctx.send(embed=_embed("▶️ Retomando."))
 
     @bot.command(name="cl", help="Limpa a fila de musicas: $cl")
     async def cmd_clear(ctx: commands.Context):
@@ -2511,19 +2711,19 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
             return
         # Esvazia a fila interna e o display
-        while not session.music_queue.empty():
-            try:
+        try:
+            while True:
                 session.music_queue.get_nowait()
                 session.music_queue.task_done()
-            except Exception:
-                break
+        except Exception:
+            pass  # QueueEmpty — fila limpa
         session.queue_display.clear()
         # Para a musica atual tambem
         if vc.is_playing() or vc.is_paused():
             vc.stop()
         session.current_song = ""
         _clear_voice_state(ctx.guild.id)
-        await ctx.send("🗑️ Fila limpa e reproducao parada.")
+        await ctx.send(embed=_embed("🗑️ Fila limpa e reproducao parada."))
 
     @bot.command(name="ff", help="Pula para um ponto da musica: $ff +30, $ff -15, $ff 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -2540,7 +2740,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not time_arg:
             dur = session.current_duration
             dur_str = f" (duração: {int(dur)//60}:{int(dur)%60:02d})" if dur > 0 else ""
-            await ctx.send(f"⏩ Use: `t$ff +30` (avançar 30s), `t$ff -15` (voltar 15s), `t$ff 1:30` (ir para 1m30s){dur_str}")
+            await ctx.send(embed=_embed(f"⏩ Use: `t$ff +30` (avançar 30s), `t$ff -15` (voltar 15s), `t$ff 1:30` (ir para 1m30s){dur_str}"))
             return
         # Calcular tempo atual
         elapsed = time.monotonic() - session.song_start_time if session.song_start_time else 0
@@ -2555,8 +2755,12 @@ def register_voice(bot: commands.Bot) -> None:
         if ":" in time_arg:
             parts = time_arg.split(":")
             try:
-                target_sec = int(parts[0]) * 60 + int(parts[1])
-            except ValueError:
+                mins, secs = int(parts[0]), int(parts[1])
+                if mins > 600 or secs > 59:
+                    await ctx.send("⚠️ Tempo fora do limite (máx 600:59).")
+                    return
+                target_sec = mins * 60 + secs
+            except (ValueError, IndexError):
                 await ctx.send("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`")
                 return
         else:
@@ -2589,13 +2793,18 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await asyncio.sleep(0.3)
         session.song_start_time = time.monotonic() - target_sec
-        vc.play(new_source)
+        try:
+            vc.play(new_source)
+        except Exception:
+            session.seeking = False
+            await ctx.send("⚠️ Erro ao retomar playback após seek.")
+            return
         tm, ts = divmod(int(target_sec), 60)
         dur_str = ""
         if dur > 0:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm}:{ds:02d}"
-        await ctx.send(f"⏩ Pulando para **{tm:02d}:{ts:02d}{dur_str}**")
+        await ctx.send(embed=_embed(f"⏩ Pulando para **{tm:02d}:{ts:02d}{dur_str}**"))
 
     @bot.command(name="su", help="Resume o conteudo de um link: $su <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
@@ -2607,6 +2816,9 @@ def register_voice(bot: commands.Bot) -> None:
         if not _check_cooldown(ctx.author.id):
             await ctx.send("⏳ Aguarde alguns segundos antes de usar novamente.", delete_after=5)
             return
+        if not _global_rate_limit_ok():
+            await ctx.send("🧠 Muitas requisições ao mesmo tempo! Espera uns segundos.", delete_after=8)
+            return
         _stats["commands_used"] += 1
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -2614,7 +2826,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         async with ctx.typing():
             summary = await _summarize_url(url, api_key)
-        await ctx.reply(f"📄 **Resumo do link:**\n{summary}")
+        await ctx.reply(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
+        # Salvar no contexto do usuário para referência futura em t$c
+        _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
 
     @bot.listen("on_message")
     async def _antispam_everyone(message: discord.Message) -> None:
@@ -2679,7 +2893,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         # Canal ficou vazio — espera 60s e desconecta
         await asyncio.sleep(60)
-        if not vc.is_connected():
+        # Re-buscar vc atualizado (pode ter mudado durante o sleep)
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
             return
         bot_channel = vc.channel
         if bot_channel:
