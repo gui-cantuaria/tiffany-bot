@@ -10,9 +10,12 @@ git checkout origin/main -- launcher.py notices.py tiffany_voice.py affiliate_co
   git checkout origin/main -- launcher.py notices.py tiffany_voice.py
 
 echo "==> Parando instâncias antigas (só Tiffany)..."
+# Mata todos os launchers/notices (evita duplicata 2630336 + 2631295)
 pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
+sleep 1
 pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
 pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
+sleep 1
 rm -f /tmp/tiffany_launcher.lock
 echo '{}' > voice_state.json
 
