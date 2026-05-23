@@ -1385,7 +1385,16 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_song = display_name
                     session.current_query = query
                     session.skip_votes.clear()
-                    source, info, dl_fp, dl_tmpdir, dl_duration = await _YTSource.from_query(query)
+                    # Timeout no download: max 120s para evitar travar em vídeos enormes
+                    try:
+                        source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
+                            _YTSource.from_query(query), timeout=120.0
+                        )
+                    except asyncio.TimeoutError:
+                        session.current_song = ""
+                        log.warning("Download timeout (120s): %s", display_name[:80])
+                        await _notify(bot, session.text_channel_id, f"⏳ Download demorou demais, pulando: `{display_name[:80]}`")
+                        continue
                     if source is None:
                         session.current_song = ""
                         await _notify(
@@ -1394,6 +1403,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             f"❌ Não consegui achar audio para: `{display_name[:80]}`\n> `{info[:200]}`",
                         )
                         continue
+                    # Verificar se ainda está conectado após download (pode ter desconectado durante)
+                    if not vc.is_connected():
+                        source.cleanup()
+                        break
                     # Salvar referência ao arquivo para seek
                     session.current_file = dl_fp or ""
                     session.current_tmpdir = dl_tmpdir
@@ -1428,7 +1441,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     try:
                         await asyncio.wait_for(asyncio.shield(fut), timeout=watchdog_timeout)
                     except asyncio.TimeoutError:
-                        log.warning("Watchdog: playback travado por 8 min, forçando skip.")
+                        log.warning("Watchdog: playback travado por %.0fs, forçando skip: %s", watchdog_timeout, display_name[:60])
                         vc.stop()
                         await fut
                     # Se foi um seek, não avançar para próxima música
@@ -1687,9 +1700,29 @@ async def _join_voice_recv_client(
         return await channel.connect(self_deaf=False)
 
 
+def _cleanup_stale_tempfiles() -> None:
+    """Remove temp dirs antigos do tiffany_ que ficaram após crashes."""
+    try:
+        tmp_root = tempfile.gettempdir()
+        now = time.time()
+        for name in os.listdir(tmp_root):
+            if not name.startswith("tiffany_"):
+                continue
+            path = os.path.join(tmp_root, name)
+            if not os.path.isdir(path):
+                continue
+            age = now - os.path.getmtime(path)
+            if age > 1800:  # mais de 30 min
+                shutil.rmtree(path, ignore_errors=True)
+                log.info("Temp dir removido: %s (%.0f min)", name, age / 60)
+    except Exception:
+        pass
+
+
 def register_voice(bot: commands.Bot) -> None:
     global _ai_semaphore, _stats
     _stats = _load_stats()
+    _cleanup_stale_tempfiles()
 
     _RANDOM_SONGS = [
         # === Most Streamed / Viral ===
