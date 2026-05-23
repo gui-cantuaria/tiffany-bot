@@ -1,0 +1,28 @@
+[Unit]
+Description=Tiffany Bot (Discord)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/tiffany-bot
+ExecStart=/usr/bin/python3 -u launcher.py
+Restart=on-failure
+RestartSec=10
+
+# Mata TODOS os processos filhos ao parar (resolve processos órfãos)
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# Variáveis de ambiente
+Environment=PYTHONUNBUFFERED=1
+
+# Logs via journalctl (substitui bot.log + nohup)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tiffany-bot
+
+[Install]
+WantedBy=multi-user.target
