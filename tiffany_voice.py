@@ -190,6 +190,7 @@ class _GuildVoiceSession:
     loop_enabled: bool = False
     loop_query: str = ""
     loop_display: str = ""
+    last_activity: float = field(default_factory=time.monotonic)  # timestamp da última interação
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -317,6 +318,16 @@ def _check_cooldown(user_id: int) -> bool:
         for uid in stale:
             del _user_last_cmd[uid]
     return True
+
+
+_IDLE_TIMEOUT_SEC = 5 * 60  # 5 minutos sem interação → sair da call
+
+
+def _touch_activity(guild_id: int) -> None:
+    """Atualiza o timestamp de última atividade da sessão."""
+    sess = _sessions.get(guild_id)
+    if sess:
+        sess.last_activity = time.monotonic()
 
 
 def _add_to_context(user_id: int, question: str, answer: str) -> None:
@@ -1503,6 +1514,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             pass  # loop fechado durante shutdown
 
                     session.song_start_time = time.monotonic()
+                    session.last_activity = time.monotonic()
                     _stats["songs_played"] += 1
                     _save_stats()
                     # Salvar estado para restaurar após restart
@@ -2554,6 +2566,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         humans = [m for m in vc.channel.members if not m.bot] if vc.channel else []
         required = 2 if len(humans) >= 3 else 1
 
@@ -2612,6 +2625,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
@@ -2636,6 +2650,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         gid = str(ctx.guild.id)
 
         if action == "list":
@@ -2712,6 +2727,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         users_with_context = len(_user_context)
         lines = [
             "**Estatisticas da Tiffany (sessao atual):**",
@@ -2757,6 +2773,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Limitar tamanho da query para evitar abuso
         query = query[:500]
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
@@ -2852,6 +2869,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         # Cooldown: 5s por usuário
         if not _check_cooldown(ctx.author.id):
             await ctx.send("⏳ Aguarde alguns segundos antes de perguntar novamente.", delete_after=5)
@@ -3049,6 +3067,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send("🧠 Muitas requisições ao mesmo tempo! Espera uns segundos.", delete_after=8)
             return
         _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             await ctx.send("⚠️ Chave da API nao configurada.")
@@ -3176,11 +3195,34 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             pass
 
+    async def _disconnect_idle(guild, vc, reason: str) -> None:
+        """Desconecta o bot de um canal de voz e limpa a sessão."""
+        gid = guild.id
+        sess = _sessions.pop(gid, None)
+        if sess:
+            if sess.listen_task:
+                sess.listen_task.cancel()
+            if sess.music_task:
+                sess.music_task.cancel()
+            if sess.question_task:
+                sess.question_task.cancel()
+            text_ch = bot.get_channel(sess.text_channel_id)
+            if text_ch and hasattr(text_ch, "send"):
+                try:
+                    await text_ch.send(reason)
+                except Exception:
+                    pass
+        _clear_voice_state(gid)
+        try:
+            await vc.disconnect(force=True)
+        except Exception:
+            pass
+
     async def _empty_channel_watchdog() -> None:
-        """Safety net: desconecta de canais vazios a cada 5 minutos, independente de eventos."""
+        """Safety net: desconecta de canais vazios ou inativos a cada 60s."""
         await asyncio.sleep(90)  # aguarda startup completo
         while True:
-            await asyncio.sleep(300)  # verifica a cada 5 minutos
+            await asyncio.sleep(60)  # verifica a cada 1 minuto
             try:
                 for guild in bot.guilds:
                     vc = guild.voice_client
@@ -3189,30 +3231,26 @@ def register_voice(bot: commands.Bot) -> None:
                     bot_channel = vc.channel
                     if not bot_channel:
                         continue
-                    humans = [m for m in bot_channel.members if not m.bot]
-                    if humans:
-                        continue
                     gid = guild.id
-                    log.info("Watchdog: canal vazio detectado guild=%s, desconectando.", gid)
-                    sess = _sessions.pop(gid, None)
-                    if sess:
-                        if sess.listen_task:
-                            sess.listen_task.cancel()
-                        if sess.music_task:
-                            sess.music_task.cancel()
-                        if sess.question_task:
-                            sess.question_task.cancel()
-                        text_ch = bot.get_channel(sess.text_channel_id)
-                        if text_ch and hasattr(text_ch, "send"):
-                            try:
-                                await text_ch.send("👋 **Tiffany saiu** — canal ficou vazio.")
-                            except Exception:
-                                pass
-                    _clear_voice_state(gid)
-                    try:
-                        await vc.disconnect(force=True)
-                    except Exception:
-                        pass
+
+                    # Canal vazio: desconectar imediatamente
+                    humans = [m for m in bot_channel.members if not m.bot]
+                    if not humans:
+                        log.info("Watchdog: canal vazio guild=%s, desconectando.", gid)
+                        await _disconnect_idle(guild, vc, "👋 **Tiffany saiu** — canal ficou vazio.")
+                        continue
+
+                    # Inatividade: sem música e sem interação por 5 minutos
+                    sess = _sessions.get(gid)
+                    if not sess:
+                        continue
+                    tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
+                    if tocando:
+                        continue  # música ativa = não é inatividade
+                    idle_sec = time.monotonic() - sess.last_activity
+                    if idle_sec >= _IDLE_TIMEOUT_SEC:
+                        log.info("Watchdog: inatividade de %.0fs guild=%s, desconectando.", idle_sec, gid)
+                        await _disconnect_idle(guild, vc, f"💤 **Tiffany saiu** — {_IDLE_TIMEOUT_SEC // 60} minutos sem interação.")
             except Exception:
                 log.exception("Erro no watchdog de canal vazio")
 
