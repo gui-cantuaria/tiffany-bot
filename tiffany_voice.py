@@ -187,6 +187,9 @@ class _GuildVoiceSession:
     tts_enabled: bool = _TTS_ENABLED
     song_start_time: float = 0.0          # monotonic timestamp — para t$np
     skip_votes: set = field(default_factory=set)  # user_ids que votaram skip
+    loop_enabled: bool = False
+    loop_query: str = ""
+    loop_display: str = ""
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -570,6 +573,9 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
 
     if re.search(r"tiffany\s*,\s*(pula|próxim[ao]|next|skip)\b", t, re.IGNORECASE):
         return "skip", None
+
+    if re.search(r"tiffany\s*,\s*(loop|repete|repetir)\b", t, re.IGNORECASE):
+        return "loop", None
 
     # Detectar pergunta após "tiffany"
     if re.search(r"tiffany\s*,", t):
@@ -1152,6 +1158,26 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
 MAX_SONG_DURATION_SEC = 3600  # 1 hora — rejeita vídeos acima disso
 
 
+def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
+    """Extrai duração/título sem baixar. Retorna (duration_sec ou None, título ou erro)."""
+    if not _YTDLP_AVAILABLE:
+        return None, ""
+    extract_opts = {**YDL_OPTS, "quiet": True, "no_warnings": True}
+    try:
+        with yt_dlp.YoutubeDL(extract_opts) as ydl:
+            info = ydl.extract_info(query, download=False)
+            if info and "entries" in info:
+                info = info["entries"][0] if info["entries"] else None
+            if not info:
+                return None, ""
+            duration = float(info.get("duration") or 0) or None
+            title = info.get("title") or info.get("id") or ""
+            return duration, title
+    except Exception as e:
+        log.debug("ytdl probe falhou: %s", e)
+        return None, ""
+
+
 def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str], float]:
     """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
     Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso."""
@@ -1350,9 +1376,16 @@ class _YTSource(PCMVolumeTransformer):
         return cls(src, volume=volume, tmpdir=None)
 
 
+def _clear_loop(session: _GuildVoiceSession) -> None:
+    session.loop_enabled = False
+    session.loop_query = ""
+    session.loop_display = ""
+
+
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
     log.info("Music worker started guild=%s", guild_id)
     _no_session_count = 0
+    _replay: Optional[tuple[str, str]] = None
     try:
         while vc.is_connected():
             session = _sessions.get(guild_id)
@@ -1364,17 +1397,25 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 await asyncio.sleep(0.25)
                 continue
             _no_session_count = 0
+            from_queue = True
             try:
-                query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
+                if _replay and session.loop_enabled:
+                    query, display_name = _replay
+                    _replay = None
+                    from_queue = False
+                else:
+                    _replay = None
+                    query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
+                    display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
             except asyncio.TimeoutError:
                 continue
             # Pegar nome de display da fila (sincronizado com music_queue)
-            display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
-            try:
-                if session.queue_display:
-                    display_name = session.queue_display.pop(0)
-            except (IndexError, AttributeError):
-                pass  # fallback para display extraído da query
+            if from_queue:
+                try:
+                    if session.queue_display:
+                        display_name = session.queue_display.pop(0)
+                except (IndexError, AttributeError):
+                    pass  # fallback para display extraído da query
             # Nunca mostrar URLs como display — usar placeholder até yt-dlp resolver o título
             if re.match(r"^https?://", display_name):
                 display_name = "link recebido"
@@ -1385,6 +1426,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_song = display_name
                     session.current_query = query
                     session.skip_votes.clear()
+                    if from_queue:
+                        _clear_loop(session)
+                    elif session.loop_enabled:
+                        session.loop_query = query
+                        session.loop_display = display_name
                     # Timeout no download: max 120s para evitar travar em vídeos enormes
                     try:
                         source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
@@ -1452,6 +1498,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         # Aguardar o novo playback terminar
                         while vc.is_playing() or vc.is_paused():
                             await asyncio.sleep(0.5)
+                    if session.loop_enabled and session.current_query:
+                        _replay = (
+                            session.loop_query or session.current_query,
+                            session.loop_display or session.current_song or display_name,
+                        )
                     session.current_song = ""
                     session.current_query = ""
                     session.current_file = ""
@@ -1471,10 +1522,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     shutil.rmtree(session.current_tmpdir, ignore_errors=True)
                     session.current_tmpdir = None
             finally:
-                try:
-                    session.music_queue.task_done()
-                except ValueError:
-                    pass
+                if from_queue:
+                    try:
+                        session.music_queue.task_done()
+                    except ValueError:
+                        pass
     except asyncio.CancelledError:
         raise
     finally:
@@ -1551,22 +1603,21 @@ async def _voice_listen_loop(
                     pass
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
-                log.warning("STT não reconheceu áudio (pode ser ruído ou sotaque)")
+                log.debug("STT não reconheceu áudio (pode ser ruído ou sotaque)")
                 _stt_fail_count += 1
-                # Só avisar na 1ª e a cada 5 falhas (evita spam)
-                if _stt_fail_count == 1 or _stt_fail_count % 5 == 0:
-                    await _notify(bot, session.text_channel_id, "🎙️ Não consegui entender o que foi dito. Tente falar mais perto do microfone.")
+                # Não spammar no chat — só logar silenciosamente
                 continue
             _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "none":
-                # Mostra o que foi ouvido para ajudar a calibrar
-                await _notify(bot, session.text_channel_id, f"🗣️ Ouvi: «{text[:80]}» *(diga «Tiffany, ...» para comandos)*")
+                # Só logar, não spammar no chat com falas que não são comandos
+                log.debug("STT ignorado (sem comando): %r", text[:80])
                 continue
             
             if action == "stop":
                 vc.stop()
+                _clear_loop(session)
                 # Limpar asyncio.Queue (não tem .clear())
                 try:
                     while True:
@@ -1579,8 +1630,27 @@ async def _voice_listen_loop(
                 continue
 
             if action == "skip":
+                _clear_loop(session)
                 vc.stop()
                 await _notify(bot, session.text_channel_id, "⏭️ Faixa pulada (comando de voz).")
+                continue
+
+            if action == "loop":
+                if not session.current_query:
+                    await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
+                    continue
+                session.loop_enabled = not session.loop_enabled
+                if session.loop_enabled:
+                    session.loop_query = session.current_query
+                    session.loop_display = session.current_song or session.current_query
+                    await _notify(
+                        bot,
+                        session.text_channel_id,
+                        f"🔁 Loop ativado: **{session.loop_display[:80]}**",
+                    )
+                else:
+                    _clear_loop(session)
+                    await _notify(bot, session.text_channel_id, "🔁 Loop desativado.")
                 continue
             
             if action == "leave":
@@ -1717,6 +1787,40 @@ def _cleanup_stale_tempfiles() -> None:
                 log.info("Temp dir removido: %s (%.0f min)", name, age / 60)
     except Exception:
         pass
+
+
+_HELP_TEXT = (
+    "**— Tiffany · Comandos —**\n\n"
+    "**💬 Chat & IA**\n"
+    "`t$c` / `t$chat <pergunta>` — Faz uma pergunta à IA. Aceita imagens anexadas.\n"
+    "`t$su` / `t$summary <URL>` — Resume o conteúdo de qualquer link em um parágrafo.\n\n"
+    "**🎵 Música**\n"
+    "`t$e` / `t$enter` — Entra no seu canal de voz.\n"
+    "`t$leave` / `t$lv` — Sai do canal de voz e encerra a sessão.\n"
+    "`t$p` / `t$play <música ou URL>` — Adiciona uma música à fila (até 10).\n"
+    "  Aceita: YouTube, YouTube Music, Spotify, Deezer, Apple Music, Amazon Music.\n"
+    "`t$play <playlist URL>` — Adiciona playlist inteira (YouTube, Spotify, Deezer).\n"
+    "`t$pa` / `t$pause` — Pausa a reprodução.\n"
+    "`t$re` / `t$resume` — Retoma de onde pausou.\n"
+    "`t$s` / `t$skip` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
+    "`t$l` / `t$loop` — Repete a música que está tocando (liga/desliga).\n"
+    "`t$cl` / `t$clear` — Para a reprodução e limpa a fila inteira.\n"
+    "`t$r` / `t$random` — Adiciona uma música aleatória à fila.\n"
+    "`t$ff` / `t$seek <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n"
+    "`t$q` / `t$queue` — Mostra a fila de músicas.\n"
+    "`t$np` / `t$nowplaying` — Música tocando agora (com tempo e loop).\n\n"
+    "**📂 Playlists**\n"
+    "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
+    "**🎙️ Voz (na call)**\n"
+    "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
+    "Diga **«Tiffany, para»**, **«pula»**, **«loop»** ou **«sai»** para controlar.\n"
+    "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
+    "**🔧 Info**\n"
+    "`t$h` / `t$help` — Esta ajuda no chat.\n"
+    "`t$st` / `t$stats` — Estatísticas da sessão (admin).\n"
+    "`/help`, `/np`, `/queue`, `/stats` — Slash (só você vê).\n"
+    "`/status` — Status do bot (admin)."
+)
 
 
 def register_voice(bot: commands.Bot) -> None:
@@ -2340,7 +2444,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**."))
         return session, vc
 
-    @bot.command(name="e", help="Entra (enter) no canal de voz: $e ou $e #canal")
+    @bot.command(name="e", aliases=["enter", "entra"], help="Entra no canal de voz: t$e / t$enter")
     async def cmd_entrar(ctx: commands.Context, channel: Optional[discord.VoiceChannel] = None):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
@@ -2350,7 +2454,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=_embed("🎙️ **Tiffany está ouvindo...** Diga «Tiffany, ...» para comandos ou perguntas."))
 
-    @bot.command(name="l", help="Sai (leave) do canal de voz: $l")
+    @bot.command(name="leave", aliases=["lv"], help="Sai do canal de voz: t$leave / t$lv")
     async def cmd_sair(ctx: commands.Context):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
@@ -2360,6 +2464,7 @@ def register_voice(bot: commands.Bot) -> None:
         gid = ctx.guild.id
         sess = _sessions.pop(gid, None)
         if sess:
+            _clear_loop(sess)
             if sess.listen_task:
                 sess.listen_task.cancel()
             if sess.music_task:
@@ -2396,7 +2501,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send("⚠️ Não estou em nenhum canal de voz.")
 
-    @bot.command(name="s", help="Pula (skip) a faixa atual: $s  —  votação se 3+ pessoas")
+    @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t$s / t$skip — votação se 3+ pessoas")
     async def cmd_pular(ctx: commands.Context):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
@@ -2422,6 +2527,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         if required == 1:
             session.skip_votes.clear()
+            _clear_loop(session)
             prox = session.queue_display[0] if session.queue_display else None
             vc.stop()
             if prox:
@@ -2433,6 +2539,7 @@ def register_voice(bot: commands.Bot) -> None:
             current_votes = len(session.skip_votes)
             if current_votes >= required:
                 session.skip_votes.clear()
+                _clear_loop(session)
                 prox = session.queue_display[0] if session.queue_display else None
                 vc.stop()
                 if prox:
@@ -2445,7 +2552,7 @@ def register_voice(bot: commands.Bot) -> None:
                     f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
                 ))
 
-    @bot.command(name="q", help="Lista a fila de músicas: $q")
+    @bot.command(name="q", aliases=["queue"], help="Lista a fila de músicas: t$q / t$queue")
     async def cmd_queue(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -2468,7 +2575,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=_embed("\n".join(lines)))
 
-    @bot.command(name="np", help="Mostra a musica tocando agora: $np")
+    @bot.command(name="np", aliases=["nowplaying"], help="Música tocando agora: t$np / t$nowplaying")
     async def cmd_now_playing(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -2489,9 +2596,10 @@ def register_voice(bot: commands.Bot) -> None:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm:02d}:{ds:02d}"
         fila_info = f"\n📋 Fila: {len(session.queue_display)} musica(s)" if session.queue_display else ""
-        await ctx.send(embed=_embed(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}"))
+        loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
+        await ctx.send(embed=_embed(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}{loop_info}"))
 
-    @bot.command(name="pl", help="Playlists salvas: $pl save <nome> | $pl load <nome> | $pl list | $pl del <nome>")
+    @bot.command(name="pl", aliases=["playlist"], help="Playlists salvas: t$pl / t$playlist save|load|list|del <nome>")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
         if not ctx.guild:
             return
@@ -2566,7 +2674,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send("⚠️ Acao invalida. Use: `save`, `load`, `list` ou `del`.")
 
-    @bot.command(name="st", help="Estatisticas da sessao (admin): $st")
+    @bot.command(name="st", aliases=["stats"], help="Estatísticas da sessão (admin): t$st / t$stats")
     @commands.has_permissions(administrator=True)
     async def cmd_stats(ctx: commands.Context):
         if not ctx.guild:
@@ -2586,7 +2694,7 @@ def register_voice(bot: commands.Bot) -> None:
             lines.append(f"📋 Fila atual: **{fila}/10**")
         await ctx.send(embed=_embed("\n".join(lines)))
 
-    @bot.command(name="r", help="Toca música aleatória (random): $r")
+    @bot.command(name="r", aliases=["random"], help="Música aleatória na fila: t$r / t$random")
     async def cmd_random(ctx: commands.Context):
         nonlocal _last_random
         if not _voice_enabled():
@@ -2606,7 +2714,7 @@ def register_voice(bot: commands.Bot) -> None:
         await sess.music_queue.put(query)
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila: **{display}**"))
 
-    @bot.command(name="p", help="Toca uma música: !p <nome ou URL>")
+    @bot.command(name="p", aliases=["play"], help="Toca uma música: t$p / t$play <nome ou URL>")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
@@ -2681,6 +2789,17 @@ def register_voice(bot: commands.Bot) -> None:
         # Mostrar nome da música resolvida, ou "link recebido" para YouTube direto
         if is_url and not resolved_from_platform:
             display = "link recebido"
+        # Checar duração antes de enfileirar (evita baixar vídeos de 10h+)
+        dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
+        if dur and dur > MAX_SONG_DURATION_SEC:
+            await ctx.send(
+                embed=_embed(
+                    f"⚠️ Muito longo (**{int(dur // 60)} min**). Máximo **{MAX_SONG_DURATION_SEC // 60} min** por faixa."
+                )
+            )
+            return
+        if probe_title and (display == "link recebido" or display == query):
+            display = probe_title
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
         if not sess.current_song and len(sess.queue_display) == 1:
@@ -2689,9 +2808,11 @@ def register_voice(bot: commands.Bot) -> None:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
 
-    # t$h removido — use /help (ephemeral)
+    @bot.command(name="h", aliases=["help"], help="Lista todos os comandos: t$h / t$help")
+    async def cmd_help(ctx: commands.Context):
+        await ctx.send(embed=_embed(_HELP_TEXT))
 
-    @bot.command(name="c", help="Pergunta via chat: t$c <pergunta> (aceita imagens anexadas)")
+    @bot.command(name="c", aliases=["chat"], help="Pergunta via chat: t$c / t$chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
             return
@@ -2724,7 +2845,29 @@ def register_voice(bot: commands.Bot) -> None:
             )
         await ctx.reply(embed=_embed(f"💬 {answer}"))
 
-    @bot.command(name="pa", help="Pausa a musica: $pa")
+    @bot.command(name="l", aliases=["loop"], help="Loop da musica atual (liga/desliga): t$l ou t$loop")
+    async def cmd_loop(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            return
+        if not session.current_query:
+            await ctx.send("⚠️ Nada tocando no momento. Use `t$p` primeiro.")
+            return
+        session.loop_enabled = not session.loop_enabled
+        if session.loop_enabled:
+            session.loop_query = session.current_query
+            session.loop_display = session.current_song or session.current_query
+            nome = session.loop_display[:100]
+            await ctx.send(embed=_embed(f"🔁 Loop **ativado** — repetindo: **{nome}**"))
+        else:
+            _clear_loop(session)
+            await ctx.send(embed=_embed("🔁 Loop **desativado**."))
+
+    @bot.command(name="pa", aliases=["pause"], help="Pausa a música: t$pa / t$pause")
     async def cmd_pause(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -2738,7 +2881,7 @@ def register_voice(bot: commands.Bot) -> None:
         vc.pause()
         await ctx.send(embed=_embed("⏸️ Pausado."))
 
-    @bot.command(name="re", help="Retoma a musica pausada: $re")
+    @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t$re / t$resume")
     async def cmd_resume(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -2752,7 +2895,7 @@ def register_voice(bot: commands.Bot) -> None:
         vc.resume()
         await ctx.send(embed=_embed("▶️ Retomando."))
 
-    @bot.command(name="cl", help="Limpa a fila de musicas: $cl")
+    @bot.command(name="cl", aliases=["clear"], help="Limpa a fila de músicas: t$cl / t$clear")
     async def cmd_clear(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -2769,6 +2912,7 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             pass  # QueueEmpty — fila limpa
         session.queue_display.clear()
+        _clear_loop(session)
         # Para a musica atual tambem
         if vc.is_playing() or vc.is_paused():
             vc.stop()
@@ -2776,7 +2920,7 @@ def register_voice(bot: commands.Bot) -> None:
         _clear_voice_state(ctx.guild.id)
         await ctx.send(embed=_embed("🗑️ Fila limpa e reproducao parada."))
 
-    @bot.command(name="ff", help="Pula para um ponto da musica: $ff +30, $ff -15, $ff 1:30")
+    @bot.command(name="ff", aliases=["seek"], help="Pula na música: t$ff / t$seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
         if not ctx.guild:
             return
@@ -2857,7 +3001,7 @@ def register_voice(bot: commands.Bot) -> None:
             dur_str = f" / {dm}:{ds:02d}"
         await ctx.send(embed=_embed(f"⏩ Pulando para **{tm:02d}:{ts:02d}{dur_str}**"))
 
-    @bot.command(name="su", help="Resume o conteudo de um link: $su <URL>")
+    @bot.command(name="su", aliases=["summary"], help="Resume um link: t$su / t$summary <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
         if not ctx.guild:
             return
@@ -3135,37 +3279,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
-        help_text = (
-            "**— Tiffany · Comandos —**\n\n"
-            "**💬 Chat & IA**\n"
-            "`t$c <pergunta>` — Faz uma pergunta à IA. Aceita imagens anexadas.\n"
-            "`t$su <URL>` — Resume o conteúdo de qualquer link em um parágrafo.\n\n"
-            "**🎵 Música**\n"
-            "`t$e` — Entra no seu canal de voz.\n"
-            "`t$l` — Sai do canal de voz e encerra a sessão.\n"
-            "`t$p <música ou URL>` — Adiciona uma música à fila (até 10).\n"
-            "  Aceita: YouTube, YouTube Music, Spotify, Deezer, Apple Music, Amazon Music.\n"
-            "`t$p <playlist URL>` — Adiciona playlist inteira (YouTube, Spotify, Deezer).\n"
-            "`t$pa` — Pausa a reprodução.\n"
-            "`t$re` — Retoma de onde pausou.\n"
-            "`t$s` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
-            "`t$cl` — Para a reprodução e limpa a fila inteira.\n"
-            "`t$r` — Adiciona uma música aleatória à fila.\n"
-            "`t$ff <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n\n"
-            "**📂 Playlists**\n"
-            "`t$pl save/load/list/del <nome>`\n\n"
-            "**🎙️ Voz (na call)**\n"
-            "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
-            "Diga **«Tiffany, para»**, **«pula»** ou **«sai»** para controlar.\n"
-            "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
-            "**🔧 Info** *(só você vê)*\n"
-            "`/help` — Mostra esta ajuda.\n"
-            "`/np` — Música tocando agora.\n"
-            "`/queue` — Fila de músicas.\n"
-            "`/stats` — Estatísticas da sessão.\n"
-            "`/status` — Status do bot (admin)."
-        )
-        await interaction.response.send_message(help_text, ephemeral=True)
+        await interaction.response.send_message(_HELP_TEXT, ephemeral=True)
 
     @bot.tree.command(name="np", description="Mostra a música tocando agora")
     async def slash_np(interaction: discord.Interaction):
@@ -3188,8 +3302,9 @@ def register_voice(bot: commands.Bot) -> None:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm:02d}:{ds:02d}"
         fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
+        loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
         await interaction.response.send_message(
-            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}",
+            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}{loop_info}",
             ephemeral=True,
         )
 

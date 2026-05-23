@@ -1764,7 +1764,11 @@ async def verificar_feeds():
     log.info("Ciclo concluído.")
 
 
-_CMD_NAMES = ("p", "r", "e", "l", "s", "q", "c", "np", "pa", "re", "cl", "pl", "st", "su", "ff")
+_CMD_NAMES = (
+    "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
+    "queue", "enter", "entra", "leave", "loop", "play", "help", "chat", "seek", "stats",
+    "np", "pa", "re", "cl", "pl", "st", "su", "ff", "h", "l", "e", "s", "q", "c", "p", "r", "lv",
+)
 
 @discord_client.event
 async def on_message(message: discord.Message):

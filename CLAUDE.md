@@ -21,6 +21,9 @@ python notices.py            # Direct: news + voice/music (tiffany_voice.py is i
 
 Requires `.env` with: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`, `ID_CARGO_PARA_MARCAR`, `GUILD_ID`. See `.env` for all parameters.
 
+Affiliate env vars (all optional — bot works without them):
+`AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`
+
 ## Architecture
 
 ```
@@ -67,28 +70,22 @@ launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
 | `offers_history.json` | Processed offers (7-day cleanup) |
 | `voice_state.json` | Music session persistence (current song, queue) |
 | `playlists.json` | Saved playlists per guild |
+| `affiliate_config.py` | Affiliate link builder per store (env-driven) |
+| `chat_memory.json` | Persistent conversation context (t$c learning) |
 | `cookies.txt` | YouTube cookies for yt-dlp (optional) |
 | `vosk-model-small-pt-0.3/` | Vosk STT model (offline fallback) |
 
 ## Bot Commands (prefix: `t$`, case-insensitive)
 
-**Chat & IA:**
-- `t$c <pergunta>` — AI chat (accepts image attachments)
-- `t$su <URL>` — Summarize any URL
+Cada comando tem forma curta e longa (ex.: `t$h` / `t$help`). Lista completa em `t$h` ou `_HELP_TEXT` em `tiffany_voice.py`.
 
-**Music:**
-- `t$e` / `t$l` — Enter/leave voice channel
-- `t$p <music or URL>` — Play (YouTube, Spotify, Deezer, Apple Music, Amazon Music)
-- `t$np` — Now playing with elapsed time
-- `t$pa` / `t$re` — Pause / Resume
-- `t$q` — Show queue
-- `t$s` — Skip (voting if 3+ people)
-- `t$cl` — Clear queue and stop
-- `t$r` — Random song (~210 international hits)
-- `t$ff <time>` — Seek: `+30`, `-15`, `1:30`
+**Chat & IA:** `t$c`/`t$chat`, `t$su`/`t$summary`
 
-**Playlists:**
-- `t$pl save/load/list/del <name>`
+**Music:** `t$e`/`t$enter`, `t$leave`/`t$lv`, `t$p`/`t$play`, `t$pa`/`t$pause`, `t$re`/`t$resume`, `t$s`/`t$skip`, `t$l`/`t$loop`, `t$cl`/`t$clear`, `t$r`/`t$random`, `t$ff`/`t$seek`, `t$q`/`t$queue`, `t$np`/`t$nowplaying`
+
+**Playlists:** `t$pl`/`t$playlist`
+
+**Help:** `t$h`/`t$help`
 
 **Voice (in call):**
 - "Tiffany, toca [song]" — Add to queue
@@ -99,7 +96,7 @@ launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
 - `t$st` — Session stats
 - `/status` — Bot status (slash command)
 
-**Important:** Always add new commands to `t$h` (cmd_help in tiffany_voice.py) AND to `_CMD_NAMES` tuple in notices.py (for spaceless command detection).
+**Important:** Always add new commands to `_HELP_TEXT` / `t$h` in `tiffany_voice.py` AND to `_CMD_NAMES` in `notices.py` (for spaceless command detection).
 
 ## News Bot Rules
 
@@ -175,11 +172,17 @@ Discord voice packets → discord-ext-voice-recv → Opus decode
 
 ## VPS Deploy Workflow
 
+**Não use** `pkill -9 -f "python"` — mata o bot que acabou de iniciar se você rodar o comando duas vezes seguidas (Exit 137).
+
 ```bash
-# On VPS (Hostinger):
-cd /opt/tiffany-bot && git fetch && git checkout origin/main -- <files>
-pkill -9 -f "python" ; rm -f /tmp/tiffany_launcher.lock /tmp/tuffine_launcher.lock
-sleep 2 && PYTHONUNBUFFERED=1 nohup python3 launcher.py > bot.log 2>&1 &
+# Na VPS — preferir o script:
+cd /opt/tiffany-bot && git fetch && bash scripts/vps-restart.sh
+
+# Ou manual (pkill específico do Tiffany):
+cd /opt/tiffany-bot && git fetch && git checkout origin/main -- launcher.py notices.py tiffany_voice.py
+pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null; pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null
+rm -f /tmp/tiffany_launcher.lock; echo '{}' > voice_state.json
+sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 ```
 
 Never use `git pull` on VPS (has local uncommitted .env changes). Always use `git checkout origin/main -- <specific files>`.
