@@ -1149,6 +1149,9 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
     return None
 
 
+MAX_SONG_DURATION_SEC = 3600  # 1 hora — rejeita vídeos acima disso
+
+
 def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str], float]:
     """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
     Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso."""
@@ -1156,15 +1159,12 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
         return None, "yt-dlp não disponível", None, 0
 
     tmp_dir = tempfile.mkdtemp(prefix="tiffany_")
-    ydl_opts = {
+    # Extrair info primeiro (sem download) para checar duração
+    extract_opts = {
         **YDL_OPTS,
-        # m4a/mp3 são mais estáveis para o FFmpeg ler de arquivo local
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best",
-        "outtmpl": os.path.join(tmp_dir, "audio.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
     }
-
     queries = [query]
     if query.startswith("ytsearch"):
         term = re.sub(r"^ytsearch\d*:", "", query).strip()
@@ -1176,14 +1176,31 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
     for q in queries:
         try:
             log.info("yt-dlp baixando: %s", q)
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(q, download=True)
+            # Fase 1: extract_info sem download para checar duração
+            with yt_dlp.YoutubeDL(extract_opts) as ydl:
+                info = ydl.extract_info(q, download=False)
                 if info and "entries" in info:
                     info = info["entries"][0] if info["entries"] else None
                 if not info:
                     continue
-                title = info.get("title") or info.get("id") or "audio"
                 duration = float(info.get("duration") or 0)
+                title = info.get("title") or info.get("id") or "audio"
+                if duration > MAX_SONG_DURATION_SEC:
+                    dur_min = int(duration // 60)
+                    log.warning("Rejeitado por duração: %s (%d min)", title, dur_min)
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    return None, f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)", None, 0
+
+            # Fase 2: download real
+            dl_opts = {
+                **YDL_OPTS,
+                "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best",
+                "outtmpl": os.path.join(tmp_dir, "audio.%(ext)s"),
+                "quiet": True,
+                "no_warnings": True,
+            }
+            with yt_dlp.YoutubeDL(dl_opts) as ydl:
+                ydl.download([q])
                 for fname in os.listdir(tmp_dir):
                     fp = os.path.join(tmp_dir, fname)
                     if os.path.isfile(fp) and os.path.getsize(fp) > 1024:
@@ -1405,10 +1422,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
                     await _notify(bot, session.text_channel_id, f"▶️ **Tocando agora:** {display_name[:100]}")
                     vc.play(source, after=_after)
-                    # Watchdog: se travar por mais de 8 min sem terminar, força skip
+                    # Watchdog: timeout proporcional à duração (mín 10 min, máx duração + 2 min)
+                    watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
                     # shield() protege fut de ser cancelado pelo timeout, permitindo await fut após vc.stop()
                     try:
-                        await asyncio.wait_for(asyncio.shield(fut), timeout=480.0)
+                        await asyncio.wait_for(asyncio.shield(fut), timeout=watchdog_timeout)
                     except asyncio.TimeoutError:
                         log.warning("Watchdog: playback travado por 8 min, forçando skip.")
                         vc.stop()
