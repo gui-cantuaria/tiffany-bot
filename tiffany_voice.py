@@ -1818,7 +1818,7 @@ _HELP_TEXT = (
     "**🔧 Info**\n"
     "`t$h` / `t$help` — Esta ajuda no chat.\n"
     "`t$st` / `t$stats` — Estatísticas da sessão (admin).\n"
-    "`/help`, `/np`, `/queue`, `/stats` — Slash (só você vê).\n"
+    "`/ajuda`, `/np`, `/queue`, `/stats` — Slash (só você vê).\n"
     "`/status` — Status do bot (admin)."
 )
 
@@ -2808,7 +2808,7 @@ def register_voice(bot: commands.Bot) -> None:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
 
-    @bot.command(name="h", aliases=["help"], help="Lista todos os comandos: t$h / t$help")
+    @bot.command(name="help", aliases=["h"], help="Lista todos os comandos: t$help / t$h")
     async def cmd_help(ctx: commands.Context):
         await ctx.send(embed=_embed(_HELP_TEXT))
 
@@ -3277,7 +3277,7 @@ def register_voice(bot: commands.Bot) -> None:
     # SLASH COMMANDS (ephemeral)
     # ============================
 
-    @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
+    @bot.tree.command(name="ajuda", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
         await interaction.response.send_message(_HELP_TEXT, ephemeral=True)
 
