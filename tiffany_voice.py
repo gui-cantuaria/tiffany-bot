@@ -2601,6 +2601,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_queue(ctx: commands.Context):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
@@ -2667,6 +2668,11 @@ def register_voice(bot: commands.Bot) -> None:
 
         if not name:
             await ctx.send("⚠️ Uso: `t$pl save <nome>` | `t$pl load <nome>` | `t$pl list` | `t$pl del <nome>`")
+            return
+        # Sanitizar nome: limitar tamanho e remover caracteres problemáticos
+        name = name.strip()[:50]
+        if not name:
+            await ctx.send("⚠️ Nome da playlist inválido.")
             return
 
         data = _load_playlists()
