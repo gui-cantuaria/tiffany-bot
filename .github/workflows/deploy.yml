@@ -13,13 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup SSH key
+        env:
+          SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "-----BEGIN OPENSSH PRIVATE KEY-----" > ~/.ssh/deploy_key
-          echo "${{ secrets.VPS_SSH_KEY }}" >> ~/.ssh/deploy_key
-          echo "-----END OPENSSH PRIVATE KEY-----" >> ~/.ssh/deploy_key
+          echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy via SSH
         run: |
