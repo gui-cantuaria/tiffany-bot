@@ -550,9 +550,10 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if not deal.get("image"):
         return False, "sem imagem"
 
-    # Deve ter desconto >= 15%
-    if not deal.get("discount_pct") or deal["discount_pct"] < DESCONTO_MINIMO:
-        return False, f"desconto {deal.get('discount_pct', 0)}% < {DESCONTO_MINIMO}%"
+    # Deve ter desconto >= 15% e <= 100% (rejeita valores absurdos/negativos)
+    disc = deal.get("discount_pct", 0)
+    if not disc or disc < DESCONTO_MINIMO or disc > 100:
+        return False, f"desconto {disc}% fora do range ({DESCONTO_MINIMO}-100%)"
 
     # Loja deve estar na whitelist
     if not _store_allowed(deal.get("store", "")):

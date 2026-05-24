@@ -1657,6 +1657,12 @@ async def _voice_listen_loop(
                 # Só logar, não spammar no chat com falas que não são comandos
                 log.debug("STT ignorado (sem comando): %r", text[:80])
                 continue
+            # Verificar se o speaker está no mesmo canal que o bot
+            if vc.channel and speaker_uid:
+                speaker_in_channel = any(m.id == speaker_uid for m in vc.channel.members if not m.bot)
+                if not speaker_in_channel:
+                    log.debug("STT ignorado: speaker %s não está no canal do bot", speaker_uid)
+                    continue
             
             if action == "stop":
                 vc.stop()
@@ -2773,9 +2779,10 @@ def register_voice(bot: commands.Bot) -> None:
         if not _voice_enabled():
             await ctx.send("⚠️ A função de voz está desativada no momento.")
             return
-        if not query:
+        if not query or not query.strip():
             await ctx.send("🎵 Use: `t$p <nome da música ou URL>`")
             return
+        query = query.strip()
         # Limitar tamanho da query para evitar abuso
         query = query[:500]
         _stats["commands_used"] += 1
@@ -2891,9 +2898,10 @@ def register_voice(bot: commands.Bot) -> None:
             if a.content_type and a.content_type.startswith("image/")
         ]
 
-        if not question and not image_urls:
+        if not (question and question.strip()) and not image_urls:
             await ctx.send("💬 Use: `t$c <sua pergunta>` ou anexe uma imagem com uma pergunta.")
             return
+        question = question.strip() if question else ""
 
         async with ctx.typing():
             answer = await _answer_question(
