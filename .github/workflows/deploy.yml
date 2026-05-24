@@ -12,19 +12,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Debug secrets
+      - name: Setup SSH key
         run: |
-          echo "VPS_HOST length: ${#VPS_HOST}"
-          echo "VPS_SSH_KEY length: ${#VPS_SSH_KEY}"
-          echo "VPS_SSH_KEY first 30 chars: ${VPS_SSH_KEY:0:30}"
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          mkdir -p ~/.ssh
+          echo "-----BEGIN OPENSSH PRIVATE KEY-----" > ~/.ssh/deploy_key
+          echo "${{ secrets.VPS_SSH_KEY }}" >> ~/.ssh/deploy_key
+          echo "-----END OPENSSH PRIVATE KEY-----" >> ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: bash /opt/tiffany-bot/scripts/deploy.sh
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} "bash /opt/tiffany-bot/scripts/deploy.sh"
