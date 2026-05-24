@@ -1252,7 +1252,7 @@ async def _baixar_imagem(url: str) -> Optional[tuple[bytes, str]]:
             ct = r.headers.get("Content-Type", "").lower()
             if "image/" not in ct:
                 return None
-            data = await r.read()
+            data = await r.content.read(10 * 1024 * 1024)  # max 10MB
             if len(data) < 5000:
                 return None
             # Determinar extensão pelo content-type

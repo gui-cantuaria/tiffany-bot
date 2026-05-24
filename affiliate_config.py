@@ -20,6 +20,7 @@ TERABYTE_ID = os.getenv("TERABYTE_AFFILIATE_ID", "")
 SHOPINFO_ID = os.getenv("SHOPINFO_AFFILIATE_ID", "")
 SHOPINFO_PARAM = os.getenv("SHOPINFO_PARAM_NAME", "ref")
 ALIEXPRESS_ID = os.getenv("ALIEXPRESS_AFFILIATE_ID", "")
+SHOPEE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "")
 
 # Awin advertiser IDs (fixos por loja)
 AWIN_ADVERTISER_KABUM = 23202
@@ -102,8 +103,10 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if "aliexpress" in domain and ALIEXPRESS_ID:
         return _add_param(real_url, "aff_fcid", ALIEXPRESS_ID)
 
-    # --- Shopee: precisa de API, nao da pra injetar param simples ---
-    # Implementar quando tiver SHOPEE_APP_ID e SHOPEE_APP_SECRET
+    # --- Shopee (redirect com affiliate_id) ---
+    if "shopee" in domain and SHOPEE_ID:
+        from urllib.parse import quote
+        return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&affiliate_id={SHOPEE_ID}"
 
     # Sem afiliado configurado para essa loja
     return real_url
@@ -114,6 +117,7 @@ def has_any_affiliate() -> bool:
     return bool(
         AMAZON_TAG or MERCADOLIVRE_ID or AWIN_PUBLISHER_ID
         or MAGALU_SLUG or TERABYTE_ID or SHOPINFO_ID or ALIEXPRESS_ID
+        or SHOPEE_ID
     )
 
 
@@ -134,4 +138,6 @@ def active_programs() -> List[str]:
         progs.append(f"ShopInfo ({SHOPINFO_ID})")
     if ALIEXPRESS_ID:
         progs.append(f"AliExpress ({ALIEXPRESS_ID})")
+    if SHOPEE_ID:
+        progs.append(f"Shopee ({SHOPEE_ID})")
     return progs

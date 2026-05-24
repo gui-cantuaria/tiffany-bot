@@ -2,6 +2,7 @@ import subprocess
 import time
 import sys
 import os
+import signal
 import urllib.request
 import json
 from datetime import datetime
@@ -22,6 +23,15 @@ if sys.platform != "win32":
         _lock_fd = None
         print("[LOCK] Outra instância do launcher já está rodando. Encerrando duplicata.")
         sys.exit(0)
+
+# --- SIGTERM: systemctl stop envia SIGTERM, tratar como Ctrl+C ---
+def _sigterm_handler(signum, frame):
+    raise KeyboardInterrupt
+
+
+if sys.platform != "win32":
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+
 
 # --- LISTA DE BOTS ---
 bots = [
@@ -146,9 +156,13 @@ try:
                 if dados.get("log_file"):
                     dados["log_file"].close()
                 log(f"🔄 Reiniciando {nome}...")
-                proc, log_file = iniciar_bot(bot_config)
-                processos[nome]["processo"] = proc
-                processos[nome]["log_file"] = log_file
+                try:
+                    proc, log_file = iniciar_bot(bot_config)
+                    processos[nome]["processo"] = proc
+                    processos[nome]["log_file"] = log_file
+                except Exception as e:
+                    log(f"💀 Falha ao reiniciar {nome}: {e}")
+                    webhook_notify(f"💀 Falha ao reiniciar {nome}: {e}")
 
 except KeyboardInterrupt:
     # Quando você mandar parar (Ctrl+C no terminal ou desligar na Discloud)

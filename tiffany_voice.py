@@ -353,6 +353,9 @@ def _add_to_context(user_id: int, question: str, answer: str) -> None:
 # Semáforo global: max 3 chamadas simultâneas à API de IA
 _ai_semaphore = asyncio.Semaphore(3)
 
+# Semáforo global: max 3 downloads yt-dlp simultâneos (protege VPS)
+_download_semaphore = asyncio.Semaphore(3)
+
 # --- Rate limit global: protege créditos contra spam massivo ---
 _GLOBAL_RL_WINDOW = 60    # janela em segundos
 _GLOBAL_RL_MAX = 15       # máximo de chamadas na janela
@@ -1355,6 +1358,12 @@ def _embed(description: str, *, title: str = None, footer: str = None) -> discor
 async def _notify(bot: discord.Client, channel_id: int, content: str) -> None:
     ch = bot.get_channel(channel_id)
     if ch and hasattr(ch, "send"):
+        # Verificar permissoes antes de enviar
+        if hasattr(ch, "guild") and ch.guild and ch.guild.me:
+            perms = ch.permissions_for(ch.guild.me)
+            if not perms.send_messages or not perms.embed_links:
+                log.warning("Sem permissão send_messages/embed_links no canal %s", channel_id)
+                return
         try:
             # Truncar conteúdo para não estourar limite de embed (4096 chars)
             if len(content) > 4000:
@@ -1392,7 +1401,8 @@ class _YTSource(PCMVolumeTransformer):
     async def from_query(cls, query: str, *, volume: float = 0.35, seek_sec: float = 0) -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
         """Retorna (source, title, filepath, tmpdir, duration). Se seek_sec > 0, pula para essa posição."""
         loop = asyncio.get_running_loop()
-        fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
+        async with _download_semaphore:
+            fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
         if not fp:
             return None, title, None, None, 0
         options = "-vn"
@@ -2010,7 +2020,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     async def _ensure_connected(ctx: commands.Context, specific_channel: Optional[discord.VoiceChannel] = None) -> tuple:
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
-            await ctx.send("⚠️ Use este comando em um servidor.")
+            await ctx.send(embed=_embed("⚠️ Esse comando só funciona em um servidor."))
             return None, None
 
         guild = ctx.guild
@@ -2057,12 +2067,18 @@ def register_voice(bot: commands.Bot) -> None:
             _sessions[gid] = session
             return session, vc
 
+        # Limite de sessoes simultaneas (protege recursos da VPS)
+        _MAX_VOICE_SESSIONS = 5
+        if len(_sessions) >= _MAX_VOICE_SESSIONS:
+            await ctx.send(embed=_embed("⚠️ O bot está no limite de canais de voz simultâneos. Tente novamente em breve."))
+            return None, None
+
         # Determinar canal de voz
         channel = specific_channel
         if not channel:
             user_vc = ctx.author.voice
             if not user_vc or not user_vc.channel:
-                await ctx.send("⚠️ Você precisa estar em um **canal de voz** primeiro.")
+                await ctx.send(embed=_embed("⚠️ Você precisa estar em um **canal de voz** primeiro. Use `t$e` pra me chamar!"))
                 return None, None
             channel = user_vc.channel
 
@@ -2071,7 +2087,7 @@ def register_voice(bot: commands.Bot) -> None:
         if bot_member:
             perms = channel.permissions_for(bot_member)
             if not perms.connect or not perms.speak:
-                await ctx.send("⚠️ Não tenho permissão para entrar ou falar neste canal de voz.")
+                await ctx.send(embed=_embed("⚠️ Não tenho permissão para entrar ou falar neste canal de voz."))
                 return None, None
 
         # Conectar
@@ -2149,7 +2165,7 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="e", aliases=["enter", "entra"], help="Entra no canal de voz: t$e / t$enter")
     async def cmd_entrar(ctx: commands.Context, channel: Optional[discord.VoiceChannel] = None):
         if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         sess, vc = await _ensure_connected(ctx, specific_channel=channel)
         if not sess:
@@ -2159,7 +2175,7 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="leave", aliases=["lv"], help="Sai do canal de voz: t$leave / t$lv")
     async def cmd_sair(ctx: commands.Context):
         if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
@@ -2201,26 +2217,26 @@ def register_voice(bot: commands.Bot) -> None:
         if saiu or sess:
             await ctx.send(embed=_embed("👋 **Tiffany saiu** do canal de voz."))
         else:
-            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
 
     @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t$s / t$skip — votação se 3+ pessoas")
     async def cmd_pular(ctx: commands.Context):
         if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
         guild = ctx.guild
         vc = guild.voice_client
         if not vc or not vc.is_connected():
-            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         session = _sessions.get(guild.id)
         if not session:
-            await ctx.send("⚠️ A sessão de voz não está ativa no momento.")
+            await ctx.send(embed=_embed("⚠️ A sessão de voz não está ativa no momento."))
             return
         if not vc.is_playing():
-            await ctx.send("⚠️ Não tem faixa tocando agora.")
+            await ctx.send(embed=_embed("⚠️ Não tem faixa tocando agora."))
             return
 
         _stats["commands_used"] += 1
@@ -2263,7 +2279,7 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         lines = []
         if session.current_song:
@@ -2288,7 +2304,7 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         if not session.current_song:
             await ctx.send(embed=_embed("📭 Nada tocando no momento."))
@@ -2325,12 +2341,12 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         if not name:
-            await ctx.send("⚠️ Uso: `t$pl save <nome>` | `t$pl load <nome>` | `t$pl list` | `t$pl del <nome>`")
+            await ctx.send(embed=_embed("⚠️ Uso: `t$pl save <nome>` | `t$pl load <nome>` | `t$pl list` | `t$pl del <nome>`"))
             return
         # Sanitizar nome: limitar tamanho e remover caracteres problemáticos
         name = name.strip()[:50]
         if not name:
-            await ctx.send("⚠️ Nome da playlist inválido.")
+            await ctx.send(embed=_embed("⚠️ Nome da playlist inválido."))
             return
 
         data = _load_playlists()
@@ -2339,7 +2355,7 @@ def register_voice(bot: commands.Bot) -> None:
         if action == "save":
             session = _sessions.get(ctx.guild.id)
             if not session:
-                await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+                await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
                 return
             songs = []
             if session.current_song:
@@ -2348,7 +2364,7 @@ def register_voice(bot: commands.Bot) -> None:
             for display in session.queue_display:
                 songs.append({"display": display, "query": f"ytsearch1:{display}"})
             if not songs:
-                await ctx.send("⚠️ Fila vazia — nada para salvar.")
+                await ctx.send(embed=_embed("⚠️ Fila vazia — nada para salvar."))
                 return
             guild_pls[name] = songs
             _save_playlists(data)
@@ -2383,7 +2399,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(f"🗑️ Playlist **{name}** deletada."))
 
         else:
-            await ctx.send("⚠️ Acao invalida. Use: `save`, `load`, `list` ou `del`.")
+            await ctx.send(embed=_embed("⚠️ Ação inválida. Use: `save`, `load`, `list` ou `del`."))
 
     @bot.command(name="st", aliases=["stats"], help="Estatísticas da sessão (admin): t$st / t$stats")
     @commands.has_permissions(administrator=True)
@@ -2407,10 +2423,11 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed("\n".join(lines)))
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória na fila: t$r / t$random")
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def cmd_random(ctx: commands.Context):
         nonlocal _last_random
         if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
@@ -2427,12 +2444,15 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila: **{display}**"))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t$p / t$play <nome ou URL>")
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
+        if not ctx.guild:
+            return
         if not _voice_enabled():
-            await ctx.send("⚠️ A função de voz está desativada no momento.")
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not query or not query.strip():
-            await ctx.send("🎵 Use: `t$p <nome da música ou URL>`")
+            await ctx.send(embed=_embed("🎵 Use: `t$p <nome da música ou URL>`"))
             return
         query = query.strip()
         # Limitar tamanho da query para evitar abuso
@@ -2444,7 +2464,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
         if fila_atual >= 10:
-            await ctx.send(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música.")
+            await ctx.send(embed=_embed(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música."))
             return
 
         is_url = bool(re.match(r"^https?://", query))
@@ -2537,11 +2557,11 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         # Cooldown: 5s por usuário
         if not _check_cooldown(ctx.author.id):
-            await ctx.send("⏳ Aguarde alguns segundos antes de perguntar novamente.", delete_after=5)
+            await ctx.send(embed=_embed("⏳ Aguarde alguns segundos antes de perguntar novamente."), delete_after=5)
             return
         # Rate limit global: protege créditos quando muita gente pergunta ao mesmo tempo
         if not _global_rate_limit_ok():
-            await ctx.send("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos e tenta de novo.", delete_after=8)
+            await ctx.send(embed=_embed("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos e tenta de novo."), delete_after=8)
             return
 
         # Coleta URLs de imagens anexadas à mensagem
@@ -2551,7 +2571,7 @@ def register_voice(bot: commands.Bot) -> None:
         ]
 
         if not (question and question.strip()) and not image_urls:
-            await ctx.send("💬 Use: `t$c <sua pergunta>` ou anexe uma imagem com uma pergunta.")
+            await ctx.send(embed=_embed("💬 Use: `t$c <sua pergunta>` ou anexe uma imagem com uma pergunta."))
             return
         question = question.strip() if question else ""
 
@@ -2570,10 +2590,10 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         if not session.current_query:
-            await ctx.send("⚠️ Nada tocando no momento. Use `t$p` primeiro.")
+            await ctx.send(embed=_embed("⚠️ Nada tocando no momento. Use `t$p` primeiro."))
             return
         session.loop_enabled = not session.loop_enabled
         if session.loop_enabled:
@@ -2591,13 +2611,13 @@ def register_voice(bot: commands.Bot) -> None:
             return
         vc = ctx.guild.voice_client
         if not vc or not vc.is_connected():
-            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         if not vc.is_playing():
-            await ctx.send("⚠️ Nao tem musica tocando agora.")
+            await ctx.send(embed=_embed("⚠️ Não tem música tocando agora."))
             return
         vc.pause()
-        await ctx.send(embed=_embed("⏸️ Pausado."))
+        await ctx.send(embed=_embed("⏸️ Pausei a música. Diz `t$re` quando quiser continuar."))
 
     @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t$re / t$resume")
     async def cmd_resume(ctx: commands.Context):
@@ -2605,13 +2625,13 @@ def register_voice(bot: commands.Bot) -> None:
             return
         vc = ctx.guild.voice_client
         if not vc or not vc.is_connected():
-            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         if not vc.is_paused():
-            await ctx.send("⚠️ A musica nao esta pausada.")
+            await ctx.send(embed=_embed("⚠️ A música não está pausada."))
             return
         vc.resume()
-        await ctx.send(embed=_embed("▶️ Retomando."))
+        await ctx.send(embed=_embed("▶️ Voltando de onde parou!"))
 
     @bot.command(name="cl", aliases=["clear"], help="Limpa a fila de músicas: t$cl / t$clear")
     async def cmd_clear(ctx: commands.Context):
@@ -2620,7 +2640,7 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send("⚠️ Nao estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         # Esvazia a fila interna e o display
         try:
@@ -2636,7 +2656,7 @@ def register_voice(bot: commands.Bot) -> None:
             vc.stop()
         session.current_song = ""
         _clear_voice_state(ctx.guild.id)
-        await ctx.send(embed=_embed("🗑️ Fila limpa e reproducao parada."))
+        await ctx.send(embed=_embed("🗑️ Pronto, limpei tudo! Fila zerada."))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t$ff / t$seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -2645,10 +2665,10 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send("⚠️ Não estou em nenhum canal de voz.")
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         if not session.current_song or not session.current_file:
-            await ctx.send("⚠️ Nenhuma música tocando.")
+            await ctx.send(embed=_embed("⚠️ Nenhuma música tocando."))
             return
         if not time_arg:
             dur = session.current_duration
@@ -2670,17 +2690,17 @@ def register_voice(bot: commands.Bot) -> None:
             try:
                 mins, secs = int(parts[0]), int(parts[1])
                 if mins > 600 or secs > 59:
-                    await ctx.send("⚠️ Tempo fora do limite (máx 600:59).")
+                    await ctx.send(embed=_embed("⚠️ Tempo fora do limite (máx 600:59)."))
                     return
                 target_sec = mins * 60 + secs
             except (ValueError, IndexError):
-                await ctx.send("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`")
+                await ctx.send(embed=_embed("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`"))
                 return
         else:
             try:
                 target_sec = int(time_arg)
             except ValueError:
-                await ctx.send("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`")
+                await ctx.send(embed=_embed("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`"))
                 return
         if relative:
             target_sec = elapsed + (sign * target_sec)
@@ -2694,7 +2714,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Recriar source com seek
         new_source = _YTSource.from_file(session.current_file, seek_sec=target_sec)
         if not new_source:
-            await ctx.send("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido.")
+            await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
             return
         # Sinalizar seek para o play_worker não avançar
         session.seeking = True
@@ -2702,7 +2722,7 @@ def register_voice(bot: commands.Bot) -> None:
             vc.stop()
         except Exception:
             session.seeking = False
-            await ctx.send("⚠️ Erro ao fazer seek.")
+            await ctx.send(embed=_embed("⚠️ Erro ao fazer seek."))
             return
         await asyncio.sleep(0.3)
         session.song_start_time = time.monotonic() - target_sec
@@ -2710,7 +2730,7 @@ def register_voice(bot: commands.Bot) -> None:
             vc.play(new_source)
         except Exception:
             session.seeking = False
-            await ctx.send("⚠️ Erro ao retomar playback após seek.")
+            await ctx.send(embed=_embed("⚠️ Erro ao retomar playback após seek."))
             return
         tm, ts = divmod(int(target_sec), 60)
         dur_str = ""
@@ -2724,19 +2744,19 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         if not url or not re.match(r"^https?://", url):
-            await ctx.send("⚠️ Uso: `t$su <URL>` — precisa ser um link completo (https://...)")
+            await ctx.send(embed=_embed("⚠️ Uso: `t$su <URL>` — precisa ser um link completo (https://...)"))
             return
         if not _check_cooldown(ctx.author.id):
-            await ctx.send("⏳ Aguarde alguns segundos antes de usar novamente.", delete_after=5)
+            await ctx.send(embed=_embed("⏳ Aguarde alguns segundos antes de usar novamente."), delete_after=5)
             return
         if not _global_rate_limit_ok():
-            await ctx.send("🧠 Muitas requisições ao mesmo tempo! Espera uns segundos.", delete_after=8)
+            await ctx.send(embed=_embed("🧠 Muitas requisições ao mesmo tempo! Espera uns segundos."), delete_after=8)
             return
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            await ctx.send("⚠️ Chave da API nao configurada.")
+            await ctx.send(embed=_embed("⚠️ Chave da API não configurada."))
             return
         async with ctx.typing():
             summary = await _summarize_url(url, api_key)
@@ -2776,14 +2796,18 @@ def register_voice(bot: commands.Bot) -> None:
     # Erros de permissao em comandos admin (ex: t$st sem ser admin)
     @bot.listen("on_command_error")
     async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
-        if isinstance(error, commands.MissingPermissions):
-            await ctx.send("⚠️ Você não tem permissão para usar este comando.", delete_after=5)
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.send(embed=_embed(f"⏳ Calma! Espera {error.retry_after:.0f}s pra usar de novo."), delete_after=4)
+        elif isinstance(error, commands.MissingPermissions):
+            await ctx.send(embed=_embed("⚠️ Você não tem permissão para usar este comando."), delete_after=5)
+        elif isinstance(error, commands.NoPrivateMessage):
+            await ctx.send(embed=_embed("⚠️ Esse comando só funciona em um servidor."))
         elif isinstance(error, commands.CommandNotFound):
             pass  # ignora comandos desconhecidos silenciosamente
         elif isinstance(error, commands.CommandInvokeError):
             log.exception("Erro ao executar comando %s: %s", ctx.command, error.original)
             try:
-                await ctx.send(f"❌ Erro interno ao executar `t${ctx.command}`. Tente novamente.", delete_after=10)
+                await ctx.send(embed=_embed(f"❌ Erro interno ao executar `t${ctx.command}`. Tente novamente."), delete_after=10)
             except Exception:
                 pass
 

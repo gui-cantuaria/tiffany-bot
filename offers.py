@@ -184,19 +184,26 @@ def _clean_history(history: dict) -> None:
 # SCRAPING PROMOBIT
 # =========================
 
-async def _fetch_page(session: aiohttp.ClientSession, url: str) -> Optional[str]:
+async def _fetch_page(session: aiohttp.ClientSession, url: str, retries: int = 2) -> Optional[str]:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         "Accept-Language": "pt-BR,pt;q=0.9",
     }
-    try:
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-            if resp.status == 200:
-                return await resp.text()
-            log.warning(f"HTTP {resp.status} ao acessar {url}")
-    except Exception as e:
-        log.error(f"Erro ao buscar {url}: {e}")
+    for attempt in range(retries + 1):
+        try:
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status == 200:
+                    return await resp.text()
+                if resp.status in (429, 503) and attempt < retries:
+                    await asyncio.sleep(3 * (attempt + 1))
+                    continue
+                log.warning(f"HTTP {resp.status} ao acessar {url}")
+        except Exception as e:
+            if attempt < retries:
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            log.error(f"Erro ao buscar {url}: {e}")
     return None
 
 
@@ -771,8 +778,9 @@ async def _run_deals_cycle_inner() -> None:
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
 
-            # Tenta buscar rating na loja (B)
-            if deal.get("stars") is None and deal.get("store_url"):
+            # Sempre resolver URL real da loja (necessário para afiliados)
+            # + tenta buscar rating se ainda não tem
+            if deal.get("store_url") and not deal.get("real_store_url"):
                 deal = await asyncio.wait_for(_try_fetch_store_rating(http_session, deal), timeout=20.0)
                 await asyncio.sleep(1)
         except asyncio.TimeoutError:
@@ -818,15 +826,15 @@ async def _run_deals_cycle_inner() -> None:
                 embed.set_image(url=deal["image"])
 
         try:
-            # Marcar como postado ANTES de enviar para evitar duplicatas se o send falhar parcialmente
-            _mark_posted(history, deal["url"], deal["title"])
-
             content = None
             if ID_CARGO_OFERTAS:
                 guild = getattr(channel, "guild", None)
                 if guild and guild.get_role(ID_CARGO_OFERTAS):
                     content = f"<@&{ID_CARGO_OFERTAS}>"
             msg = await channel.send(content=content, embed=embed, file=file)
+
+            # Marcar como postado DEPOIS de enviar com sucesso
+            _mark_posted(history, deal["url"], deal["title"])
 
             try:
                 thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:70]}"[:100]
