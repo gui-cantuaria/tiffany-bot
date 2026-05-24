@@ -13,8 +13,16 @@ echo "[deploy] Aplicando arquivos atualizados..."
 git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers.py affiliate_config.py random_songs.py 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/tiffany-bot.service 2>/dev/null || true
 
-echo "[deploy] Reiniciando serviço..."
-systemctl restart tiffany-bot
+echo "[deploy] Parando serviço e processos órfãos..."
+systemctl stop tiffany-bot 2>/dev/null || true
+pkill -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
+pkill -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
+pkill -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
+rm -f /tmp/tiffany_launcher.lock
+sleep 2
+
+echo "[deploy] Iniciando serviço..."
+systemctl start tiffany-bot
 
 echo "[deploy] Aguardando inicialização..."
 sleep 3
