@@ -2776,10 +2776,6 @@ def register_voice(bot: commands.Bot) -> None:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
 
-    @bot.command(name="help", aliases=["h"], hidden=True)
-    async def cmd_help(ctx: commands.Context):
-        await ctx.send(embed=_embed("Use `/help` para ver todos os comandos (só você vê a resposta)."), delete_after=10)
-
     @bot.command(name="c", aliases=["chat"], help="Pergunta via chat: t$c / t$chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
@@ -3463,7 +3459,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
-        await interaction.response.send_message(_HELP_TEXT, ephemeral=True)
+        await interaction.response.send_message(embed=_embed(_HELP_TEXT), ephemeral=True)
 
     @bot.tree.command(name="np", description="Mostra a música tocando agora")
     async def slash_np(interaction: discord.Interaction):

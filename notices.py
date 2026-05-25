@@ -1813,10 +1813,10 @@ async def verificar_feeds():
 
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "queue", "enter", "entra", "leave", "loop", "play", "help", "chat", "seek", "stats",
+    "queue", "enter", "entra", "leave", "loop", "play", "chat", "seek", "stats",
     "shuffle", "replay", "history", "autoplay", "nonstop", "lyrics", "roll", "dice",
     "np", "pa", "re", "cl", "pl", "st", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv",
-    "h", "l", "e", "s", "q", "c", "p", "r", "d", "247",
+    "l", "e", "s", "q", "c", "p", "r", "d", "247",
 )
 
 @discord_client.event
