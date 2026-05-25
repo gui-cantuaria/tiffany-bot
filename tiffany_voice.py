@@ -1623,7 +1623,7 @@ async def _voice_listen_loop(
     session = _sessions.get(guild_id)
     if not session:
         return
-    await _notify(bot, session.text_channel_id, "🎙️ Tiffany entrou na call.")
+    # (mensagem de entrada já enviada por _ensure_connected)
     _empty_since = None
     _empty_check_counter = 0
     _stt_fail_count = 0  # contador de falhas STT consecutivas
@@ -2382,7 +2382,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
         _save_voice_state(gid, channel.id, ctx.channel.id)
-        await ctx.send(embed=_embed(f"✅ **Tiffany adicionada** ao canal de voz **{channel.name}**."))
+        await ctx.send(embed=_embed(f"🎙️ **Tiffany entrou** em **{channel.name}**."))
         return session, vc
 
     @bot.command(name="e", aliases=["enter", "entra"], help="Entra no canal de voz: t$e / t$enter")
@@ -2393,7 +2393,7 @@ def register_voice(bot: commands.Bot) -> None:
         sess, vc = await _ensure_connected(ctx, specific_channel=channel)
         if not sess:
             return
-        await ctx.send(embed=_embed("🎙️ **Tiffany está ouvindo...** Diga «Tiffany, ...» para comandos ou perguntas."))
+        # mensagem de entrada já enviada por _ensure_connected
 
     @bot.command(name="leave", aliases=["lv"], help="Sai do canal de voz: t$leave / t$lv")
     async def cmd_sair(ctx: commands.Context):
