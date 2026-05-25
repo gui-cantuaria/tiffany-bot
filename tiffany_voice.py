@@ -130,6 +130,9 @@ def _voice_connect_timeout_sec() -> float:
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.15)  # ~28kb — aceitar frases curtas como "Tiffany, para"
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
+# Clip: 30s de áudio mono 48kHz 16-bit = ~2.88MB
+CLIP_DURATION_SEC = 30
+CLIP_MAX_BYTES = 48000 * 2 * CLIP_DURATION_SEC  # mono 48kHz 16-bit
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 3
@@ -194,6 +197,21 @@ class _GuildVoiceSession:
     history: list[str] = field(default_factory=list)  # últimas músicas tocadas (display names)
     autoplay: bool = False  # autoplay: toca músicas similares quando fila acaba
     stay_24_7: bool = False  # modo 24/7: não desconecta por inatividade
+    # Quiz
+    quiz_active: bool = False
+    quiz_answer: str = ""  # resposta esperada (artista - titulo)
+    quiz_artist: str = ""
+    quiz_title: str = ""
+    quiz_scores: dict[int, int] = field(default_factory=dict)  # user_id -> pontos
+    quiz_round: int = 0
+    quiz_total_rounds: int = 0
+    quiz_task: Optional[asyncio.Task] = None
+    # Ambient
+    ambient_active: bool = False
+    ambient_name: str = ""
+    # Clip — buffer circular com os últimos 30s de áudio da call (todos os users mixados)
+    clip_buffer: bytearray = field(default_factory=bytearray)
+    clip_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -1324,6 +1342,11 @@ class _PCMBufferSink(_AudioSinkBase):
                 if len(buf) > MAX_PCM_BYTES:
                     del buf[: len(buf) - MAX_PCM_BYTES]
                 self._session.last_audio_ts[uid] = time.monotonic()
+            # Clip buffer — grava áudio de todos os users (circular, últimos 30s)
+            with self._session.clip_lock:
+                self._session.clip_buffer.extend(pcm)
+                if len(self._session.clip_buffer) > CLIP_MAX_BYTES:
+                    del self._session.clip_buffer[: len(self._session.clip_buffer) - CLIP_MAX_BYTES]
         except Exception as e:
             log.error("Erro ao processar áudio do usuário %s: %s", user.name if user else "?", e)
 
@@ -1940,6 +1963,14 @@ _HELP_TEXT = (
     "`t$ap` / `t$autoplay` — Liga/desliga autoplay (músicas similares).\n"
     "`t$247` / `t$nonstop` — Liga/desliga modo 24/7 (não sai por idle).\n"
     "`t$ly` / `t$lyrics` — Busca a letra da música atual.\n\n"
+    "**🎶 Quiz Musical**\n"
+    "`t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
+    "`t$quizstop` / `t$qs` — Para o quiz.\n\n"
+    "**🌧️ Ambient**\n"
+    "`t$ambient <tipo>` — Sons ambiente: rain, lofi, café, forest, fire, ocean, thunder.\n"
+    "`t$ambient stop` — Para o som ambiente.\n\n"
+    "**🎬 Clip**\n"
+    "`t$clip` — Salva os últimos 30s de áudio da call.\n\n"
     "**📂 Playlists**\n"
     "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
     "**🎲 RPG & Dados**\n"
@@ -3139,6 +3170,313 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.reply(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
         # Salvar no contexto do usuário para referência futura em t$c
         _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
+
+    # ============================
+    # MUSIC QUIZ
+    # ============================
+
+    _AMBIENT_SOUNDS: dict[str, str] = {
+        "rain": "ytsearch1:rain sounds for sleeping 10 hours",
+        "chuva": "ytsearch1:rain sounds for sleeping 10 hours",
+        "lofi": "ytsearch1:lofi hip hop radio beats to relax study to",
+        "café": "ytsearch1:coffee shop ambience with jazz music",
+        "cafe": "ytsearch1:coffee shop ambience with jazz music",
+        "forest": "ytsearch1:forest ambience birds chirping nature sounds",
+        "floresta": "ytsearch1:forest ambience birds chirping nature sounds",
+        "fire": "ytsearch1:fireplace crackling sounds 10 hours",
+        "lareira": "ytsearch1:fireplace crackling sounds 10 hours",
+        "ocean": "ytsearch1:ocean waves sounds for sleeping 10 hours",
+        "mar": "ytsearch1:ocean waves sounds for sleeping 10 hours",
+        "thunder": "ytsearch1:thunderstorm sounds for sleeping 10 hours",
+        "trovão": "ytsearch1:thunderstorm sounds for sleeping 10 hours",
+    }
+
+    async def _quiz_round_task(ctx: commands.Context, sess: _GuildVoiceSession, vc, rounds: int) -> None:
+        """Executa rodadas do quiz musical."""
+        import random as _rng
+        from random_songs import RANDOM_SONGS as _QUIZ_SONGS
+        bot_channel = ctx.channel
+
+        for rnd in range(1, rounds + 1):
+            if not sess.quiz_active or not vc.is_connected():
+                break
+            sess.quiz_round = rnd
+
+            # Escolher música
+            song_query = _rng.choice(_QUIZ_SONGS)
+            raw_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", song_query).strip()
+
+            # Extrair artista e título da string "Artist Song Title"
+            # Formato no random_songs.py: "Artist Name Song Title"
+            sess.quiz_answer = raw_name.lower()
+            # Separar por palavras — o artista geralmente são as primeiras 1-3 palavras
+            sess.quiz_artist = ""
+            sess.quiz_title = raw_name
+
+            await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
+
+            # Baixar e tocar trecho
+            try:
+                source, title, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
+                    _YTSource.from_query(song_query), timeout=60.0
+                )
+            except (asyncio.TimeoutError, Exception):
+                await bot_channel.send(embed=_embed("⚠️ Não consegui baixar a música, pulando rodada..."))
+                continue
+
+            if source is None:
+                await bot_channel.send(embed=_embed("⚠️ Música não encontrada, pulando..."))
+                if dl_tmpdir:
+                    shutil.rmtree(dl_tmpdir, ignore_errors=True)
+                continue
+
+            # Atualizar título real
+            if title and title != "sem resultado para a busca":
+                sess.quiz_answer = title.lower()
+                sess.quiz_title = title
+
+            # Tocar 20s do meio da música (ou do início se curta)
+            seek_pos = max(0, (dl_duration / 3)) if dl_duration > 30 else 0
+            if seek_pos > 0 and dl_fp:
+                source_seek = _YTSource.from_file(dl_fp, seek_sec=seek_pos)
+                if source_seek:
+                    source.cleanup()
+                    source = source_seek
+
+            loop = asyncio.get_running_loop()
+            fut: asyncio.Future = loop.create_future()
+
+            def _after_quiz(err):
+                try:
+                    if not fut.done() and not loop.is_closed():
+                        loop.call_soon_threadsafe(fut.set_result, None)
+                except RuntimeError:
+                    pass
+
+            vc.play(source, after=_after_quiz)
+
+            # Esperar resposta ou timeout de 20s
+            try:
+                await asyncio.wait_for(fut, timeout=20.0)
+            except asyncio.TimeoutError:
+                pass
+            if vc.is_playing():
+                vc.stop()
+
+            # Limpar arquivo temp
+            if dl_tmpdir:
+                shutil.rmtree(dl_tmpdir, ignore_errors=True)
+
+            # Verificar se alguém acertou (flag setada pelo listener)
+            if not sess.quiz_active:
+                break
+
+            # Se ninguém acertou
+            if sess.quiz_answer:  # ainda tem resposta = ninguém acertou
+                await bot_channel.send(embed=_embed(f"⏰ Tempo esgotado! Era: **{sess.quiz_title}**"))
+                sess.quiz_answer = ""
+
+            await asyncio.sleep(3)  # pausa entre rodadas
+
+        # Fim do quiz
+        sess.quiz_active = False
+        sess.quiz_answer = ""
+        if sess.quiz_scores:
+            ranking = sorted(sess.quiz_scores.items(), key=lambda x: x[1], reverse=True)
+            lines = ["🏆 **Placar Final:**"]
+            medals = ["🥇", "🥈", "🥉"]
+            for i, (uid, pts) in enumerate(ranking[:10]):
+                medal = medals[i] if i < 3 else f"`{i+1}.`"
+                lines.append(f"{medal} <@{uid}> — **{pts}** ponto(s)")
+            await bot_channel.send(embed=_embed("\n".join(lines)))
+        else:
+            await bot_channel.send(embed=_embed("🎵 Quiz encerrado! Ninguém pontuou."))
+        sess.quiz_scores.clear()
+        sess.quiz_round = 0
+
+    @bot.command(name="quiz", help="Quiz musical: t$quiz [rodadas] — adivinhe a música!")
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def cmd_quiz(ctx: commands.Context, rounds: int = 5):
+        if not ctx.guild:
+            return
+        if not _voice_enabled():
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
+            return
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        _touch_activity(ctx.guild.id)
+
+        if sess.quiz_active:
+            await ctx.send(embed=_embed("⚠️ Já tem um quiz rolando! Use `t$quizstop` pra parar."))
+            return
+
+        # Pausar música atual se tocando
+        if vc.is_playing():
+            vc.pause()
+
+        rounds = max(1, min(rounds, 20))
+        sess.quiz_active = True
+        sess.quiz_scores.clear()
+        sess.quiz_total_rounds = rounds
+        await ctx.send(embed=_embed(f"🎶 **Music Quiz!** {rounds} rodadas — ouça e digite o nome da música!"))
+        sess.quiz_task = asyncio.create_task(_quiz_round_task(ctx, sess, vc, rounds))
+
+    @bot.command(name="quizstop", aliases=["qs"], help="Para o quiz musical: t$quizstop / t$qs")
+    async def cmd_quizstop(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        sess = _sessions.get(ctx.guild.id)
+        if not sess or not sess.quiz_active:
+            await ctx.send(embed=_embed("⚠️ Nenhum quiz ativo."))
+            return
+        sess.quiz_active = False
+        if sess.quiz_task and not sess.quiz_task.done():
+            sess.quiz_task.cancel()
+        vc = ctx.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+        await ctx.send(embed=_embed("⏹️ Quiz parado!"))
+
+    @bot.listen("on_message")
+    async def _quiz_answer_listener(message: discord.Message) -> None:
+        """Detecta respostas do quiz em mensagens normais."""
+        if message.author.bot or not message.guild:
+            return
+        sess = _sessions.get(message.guild.id)
+        if not sess or not sess.quiz_active or not sess.quiz_answer:
+            return
+        guess = message.content.strip().lower()
+        if len(guess) < 3:
+            return
+        answer = sess.quiz_answer
+        # Aceita se o palpite contém parte significativa do título ou artista
+        # Normaliza removendo pontuação
+        clean = re.sub(r"[^\w\s]", "", answer)
+        clean_guess = re.sub(r"[^\w\s]", "", guess)
+        # Divide a resposta em palavras significativas (>2 chars)
+        answer_words = [w for w in clean.split() if len(w) > 2]
+        guess_words = [w for w in clean_guess.split() if len(w) > 2]
+        if not answer_words:
+            return
+        # Conta quantas palavras da resposta o jogador acertou
+        matched = sum(1 for w in answer_words if any(w in gw or gw in w for gw in guess_words))
+        # Precisa acertar pelo menos 40% das palavras significativas
+        if matched < max(1, len(answer_words) * 0.4):
+            return
+        # Acertou!
+        uid = message.author.id
+        sess.quiz_scores[uid] = sess.quiz_scores.get(uid, 0) + 1
+        pts = sess.quiz_scores[uid]
+        sess.quiz_answer = ""  # limpa para não aceitar mais respostas nesta rodada
+        vc = message.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+        await message.reply(
+            embed=_embed(f"✅ **{message.author.display_name}** acertou! Era: **{sess.quiz_title}**\nPontuação: **{pts}** ponto(s)"),
+            mention_author=False,
+        )
+
+    # ============================
+    # AUDIO CLIP
+    # ============================
+
+    @bot.command(name="clip", help="Salva os últimos 30s de áudio da call: t$clip")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def cmd_clip(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        sess = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not sess or not vc or not vc.is_connected():
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        _touch_activity(ctx.guild.id)
+
+        with sess.clip_lock:
+            raw = bytes(sess.clip_buffer)
+
+        if len(raw) < 48000 * 2:  # menos de 0.5s
+            await ctx.send(embed=_embed("⚠️ Pouco áudio capturado. Fale na call e tente novamente."))
+            return
+
+        # Converter PCM para WAV
+        import io
+        import wave
+        wav_buf = io.BytesIO()
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(2)  # stereo (Discord envia stereo)
+            wf.setsampwidth(2)  # 16-bit
+            wf.setframerate(48000)
+            wf.writeframes(raw)
+        wav_buf.seek(0)
+        duration = len(raw) / (48000 * 2 * 2)  # stereo 16-bit
+
+        await ctx.send(
+            embed=_embed(f"🎬 **Clip salvo!** ({duration:.0f}s de áudio)"),
+            file=discord.File(wav_buf, filename=f"clip_{ctx.guild.id}_{int(time.time())}.wav"),
+        )
+
+    # ============================
+    # AMBIENT SOUNDS
+    # ============================
+
+    @bot.command(name="ambient", aliases=["amb"], help="Sons ambiente: t$ambient <tipo> — rain, lofi, café, forest, fire, ocean, thunder")
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def cmd_ambient(ctx: commands.Context, *, sound_type: str = ""):
+        if not ctx.guild:
+            return
+        if not _voice_enabled():
+            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
+            return
+        sess, vc = await _ensure_connected(ctx)
+        if not sess:
+            return
+        _touch_activity(ctx.guild.id)
+
+        if not sound_type:
+            unique = []
+            seen = set()
+            for k, v in _AMBIENT_SOUNDS.items():
+                if v not in seen:
+                    unique.append(k)
+                    seen.add(v)
+            await ctx.send(embed=_embed(
+                "🌧️ **Sons Ambientes Disponíveis:**\n"
+                + ", ".join(f"`{n}`" for n in unique)
+                + "\n\nUso: `t$ambient rain`\nPara parar: `t$ambient stop`"
+            ))
+            return
+
+        key = sound_type.strip().lower()
+
+        if key in ("stop", "parar", "off"):
+            if vc.is_playing() and sess.ambient_active:
+                vc.stop()
+                sess.ambient_active = False
+                sess.ambient_name = ""
+                await ctx.send(embed=_embed("⏹️ Som ambiente parado."))
+            else:
+                await ctx.send(embed=_embed("⚠️ Nenhum som ambiente tocando."))
+            return
+
+        query = _AMBIENT_SOUNDS.get(key)
+        if not query:
+            await ctx.send(embed=_embed(f"⚠️ Tipo `{key}` não encontrado. Use `t$ambient` pra ver a lista."))
+            return
+
+        # Para música/ambient atual
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
+
+        sess.ambient_active = True
+        sess.ambient_name = key
+        sess.loop_enabled = True
+        sess.loop_query = query
+        sess.loop_display = f"🌧️ Ambient: {key}"
+        sess.queue_display.append(f"🌧️ Ambient: {key}")
+        await sess.music_queue.put(query)
+        await ctx.send(embed=_embed(f"🌧️ **Som ambiente:** `{key}` — use `t$ambient stop` para parar."))
 
     @bot.listen("on_message")
     async def _antispam_everyone(message: discord.Message) -> None:

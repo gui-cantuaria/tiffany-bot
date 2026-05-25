@@ -107,7 +107,7 @@ discord_client = commands.Bot(
     command_prefix=commands.when_mentioned_or("t$", "T$"),
     case_insensitive=True,
     intents=intents,
-    help_command=None,  # t$h / t$help substituem o help padrão do discord.py
+    help_command=None,  # /help (slash command) fornece a ajuda dos comandos
 )
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)
@@ -1812,11 +1812,11 @@ async def verificar_feeds():
 
 
 _CMD_NAMES = (
-    "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "queue", "enter", "entra", "leave", "loop", "play", "chat", "seek", "stats",
-    "shuffle", "replay", "history", "autoplay", "nonstop", "lyrics", "roll", "dice",
-    "np", "pa", "re", "cl", "pl", "st", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv",
-    "l", "e", "s", "q", "c", "p", "r", "d", "247",
+    "quizstop", "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
+    "ambient", "queue", "enter", "entra", "leave", "loop", "play", "chat", "seek", "stats",
+    "shuffle", "replay", "history", "autoplay", "nonstop", "lyrics", "roll", "dice", "clip", "quiz",
+    "np", "pa", "re", "cl", "pl", "st", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs",
+    "amb", "l", "e", "s", "q", "c", "p", "r", "d", "247",
 )
 
 @discord_client.event
