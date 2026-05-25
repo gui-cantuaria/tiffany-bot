@@ -191,6 +191,9 @@ class _GuildVoiceSession:
     loop_query: str = ""
     loop_display: str = ""
     last_activity: float = field(default_factory=time.monotonic)  # timestamp da última interação
+    history: list[str] = field(default_factory=list)  # últimas músicas tocadas (display names)
+    autoplay: bool = False  # autoplay: toca músicas similares quando fila acaba
+    stay_24_7: bool = False  # modo 24/7: não desconecta por inatividade
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -591,6 +594,15 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
 
     if re.search(r"tiffany\s*,\s*(loop|repete|repetir)\b", t, re.IGNORECASE):
         return "loop", None
+
+    if re.search(r"tiffany\s*,\s*(embaralha|shuffle|mistura)\b", t, re.IGNORECASE):
+        return "shuffle", None
+
+    if re.search(r"tiffany\s*,\s*(replay|de novo|denovo|repete essa)\b", t, re.IGNORECASE):
+        return "replay", None
+
+    if re.search(r"tiffany\s*,\s*(volume|abaixa|aumenta)\b", t, re.IGNORECASE):
+        return "none", None  # volume é por usuário no Discord, ignorar
 
     # Detectar pergunta após "tiffany"
     if re.search(r"tiffany\s*,", t):
@@ -1554,6 +1566,23 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             session.loop_query or session.current_query,
                             session.loop_display or session.current_song or display_name,
                         )
+                    # Adicionar ao histórico (max 20 últimas)
+                    if display_name and display_name != "link recebido":
+                        session.history.append(display_name)
+                        if len(session.history) > 20:
+                            session.history = session.history[-20:]
+                    # Autoplay: se fila vazia, sem loop, e autoplay ativo → buscar música similar
+                    if (
+                        session.autoplay
+                        and not session.loop_enabled
+                        and session.music_queue.empty()
+                        and not session.queue_display
+                        and display_name
+                        and not playback_error
+                    ):
+                        auto_query = f"ytsearch1:{display_name} mix"
+                        session.queue_display.append(f"▶ Auto: {display_name[:70]}")
+                        await session.music_queue.put(auto_query)
                     session.current_song = ""
                     session.current_query = ""
                     session.current_file = ""
@@ -1640,6 +1669,14 @@ async def _voice_listen_loop(
                 else:
                     _empty_since = None
 
+            # Echo cancellation: ignorar áudio captado quando o bot está tocando música
+            if vc.is_playing():
+                # Descartar buffers acumulados durante playback (eco do bot)
+                with session.buf_lock:
+                    for uid in list(session.pcm_buffers.keys()):
+                        session.pcm_buffers[uid] = bytearray()
+                continue
+
             # Processa áudio assim que o usuário faz pausa de ≥0.8s
             pcm, speaker_uid = _drain_ready_user_pcm(session)
             if not pcm:
@@ -1712,6 +1749,36 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, "🔁 Loop desativado.")
                 continue
             
+            if action == "shuffle":
+                import random as _rnd
+                if len(session.queue_display) >= 2:
+                    _rnd.shuffle(session.queue_display)
+                    await _notify(bot, session.text_channel_id, f"🔀 Fila embaralhada ({len(session.queue_display)} músicas).")
+                else:
+                    await _notify(bot, session.text_channel_id, "⚠️ Fila com menos de 2 músicas.")
+                continue
+
+            if action == "replay":
+                if session.current_query:
+                    q = session.current_query
+                    d = session.current_song or q
+                    session.queue_display.insert(0, d)
+                    items = [q]
+                    try:
+                        while True:
+                            items.append(session.music_queue.get_nowait())
+                            session.music_queue.task_done()
+                    except Exception:
+                        pass
+                    for item in items:
+                        await session.music_queue.put(item)
+                    _clear_loop(session)
+                    vc.stop()
+                    await _notify(bot, session.text_channel_id, f"🔄 Repetindo: **{d[:80]}**")
+                else:
+                    await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
+                continue
+
             if action == "leave":
                 # Sair do canal
                 text_ch_id = session.text_channel_id if session else None
@@ -1851,35 +1918,191 @@ def _cleanup_stale_tempfiles() -> None:
 _HELP_TEXT = (
     "**— Tiffany · Comandos —**\n\n"
     "**💬 Chat & IA**\n"
-    "`t$c` / `t$chat <pergunta>` — Faz uma pergunta à IA. Aceita imagens anexadas.\n"
-    "`t$su` / `t$summary <URL>` — Resume o conteúdo de qualquer link em um parágrafo.\n\n"
+    "`t$c` / `t$chat <pergunta>` — Pergunta à IA. Aceita imagens.\n"
+    "`t$su` / `t$summary <URL>` — Resume o conteúdo de um link.\n\n"
     "**🎵 Música**\n"
-    "`t$e` / `t$enter` — Entra no seu canal de voz.\n"
-    "`t$leave` / `t$lv` — Sai do canal de voz e encerra a sessão.\n"
-    "`t$p` / `t$play <música ou URL>` — Adiciona uma música à fila (até 10).\n"
-    "  Aceita: YouTube, YouTube Music, Spotify, Deezer, Apple Music, Amazon Music.\n"
-    "`t$play <playlist URL>` — Adiciona playlist inteira (YouTube, Spotify, Deezer).\n"
+    "`t$e` / `t$enter` — Entra no canal de voz.\n"
+    "`t$lv` / `t$leave` — Sai do canal de voz.\n"
+    "`t$p` / `t$play <música ou URL>` — Adiciona à fila (até 10).\n"
+    "  Aceita: YouTube, Spotify, Deezer, Apple Music, Amazon Music, YT Music.\n"
     "`t$pa` / `t$pause` — Pausa a reprodução.\n"
     "`t$re` / `t$resume` — Retoma de onde pausou.\n"
-    "`t$s` / `t$skip` — Pula a faixa atual. Com 3+ pessoas na call, exige 2 votos.\n"
-    "`t$l` / `t$loop` — Repete a música que está tocando (liga/desliga).\n"
-    "`t$cl` / `t$clear` — Para a reprodução e limpa a fila inteira.\n"
-    "`t$r` / `t$random` — Adiciona uma música aleatória à fila.\n"
+    "`t$s` / `t$skip` — Pula a faixa (vote skip com 3+ pessoas).\n"
+    "`t$l` / `t$loop` — Repete a música atual (liga/desliga).\n"
+    "`t$sh` / `t$shuffle` — Embaralha a fila.\n"
+    "`t$rp` / `t$replay` — Toca a música atual de novo do início.\n"
+    "`t$cl` / `t$clear` — Para tudo e limpa a fila.\n"
+    "`t$r` / `t$random` — Música aleatória na fila.\n"
     "`t$ff` / `t$seek <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n"
-    "`t$q` / `t$queue` — Mostra a fila de músicas.\n"
-    "`t$np` / `t$nowplaying` — Música tocando agora (com tempo e loop).\n\n"
+    "`t$q` / `t$queue` — Mostra a fila.\n"
+    "`t$np` / `t$nowplaying` — Música tocando agora.\n"
+    "`t$hi` / `t$history` — Últimas músicas tocadas.\n"
+    "`t$ap` / `t$autoplay` — Liga/desliga autoplay (músicas similares).\n"
+    "`t$247` / `t$nonstop` — Liga/desliga modo 24/7 (não sai por idle).\n"
+    "`t$ly` / `t$lyrics` — Busca a letra da música atual.\n\n"
     "**📂 Playlists**\n"
     "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
+    "**🎲 RPG & Dados**\n"
+    "`t$d` / `t$roll <expressão>` — Rola dados: `d20`, `2d6+3`, `4d6kh3`.\n"
+    "Inline: `[d20+5 ataque]` em qualquer mensagem.\n\n"
     "**🎙️ Voz (na call)**\n"
-    "Diga **«Tiffany, toca [música]»** para adicionar à fila.\n"
-    "Diga **«Tiffany, para»**, **«pula»**, **«loop»** ou **«sai»** para controlar.\n"
-    "Diga **«Tiffany, [pergunta]»** para perguntar à IA por voz.\n\n"
+    "«Tiffany, toca [música]» — Adiciona à fila.\n"
+    "«Tiffany, para/pula/loop/sai» — Controle por voz.\n"
+    "«Tiffany, [pergunta]» — Pergunta à IA por voz.\n\n"
     "**🔧 Info**\n"
-    "`t$h` / `t$help` — Esta ajuda no chat.\n"
-    "`t$st` / `t$stats` — Estatísticas da sessão (admin).\n"
-    "`/ajuda`, `/np`, `/queue`, `/stats` — Slash (só você vê).\n"
-    "`/status` — Status do bot (admin)."
+    "`/help` — Esta ajuda (só você vê).\n"
+    "`/np`, `/queue`, `/stats` — Info da sessão.\n"
+    "`/status` — Status do bot."
 )
+
+
+async def _fetch_lyrics(query: str) -> Optional[str]:
+    """Busca letra da música via API pública (lrclib.net)."""
+    import urllib.parse
+    try:
+        import aiohttp
+        url = f"https://lrclib.net/api/search?q={urllib.parse.quote(query[:100])}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                if not data:
+                    return None
+                # Pegar a primeira com letra
+                for item in data[:5]:
+                    plain = item.get("plainLyrics")
+                    if plain and len(plain.strip()) > 50:
+                        return plain.strip()
+                return None
+    except Exception:
+        return None
+
+
+def _roll_dice(expression: str) -> str:
+    """Parseia e rola expressões de dados estilo RPG.
+    Suporta: NdX, NdX+M, NdXkh/klN, NdX! (exploding), repetição N#expr."""
+    import random
+    expression = expression.strip().lower()
+    # Repetição: 6#4d6kh3
+    rep_match = re.match(r"^(\d+)#(.+)$", expression)
+    if rep_match:
+        count = min(int(rep_match.group(1)), 20)
+        sub_expr = rep_match.group(2)
+        results = []
+        for i in range(count):
+            results.append(_roll_single(sub_expr))
+        lines = [f"`{i+1}.` {r}" for i, r in enumerate(results)]
+        return f"**{expression}**\n" + "\n".join(lines)
+    return _roll_single(expression)
+
+
+def _roll_single(expression: str) -> str:
+    """Rola uma expressão de dados individual."""
+    import random
+    expression = expression.strip().lower()
+    # Regex para capturar: NdX com modificadores opcionais
+    dice_pattern = re.compile(
+        r"(\d*)d(\d+)"                    # NdX (N opcional, default 1)
+        r"(![<>]?\d*)?"                   # exploding: !, !5, !>5
+        r"((?:kh|kl|dh|dl)\d*)?"          # keep/drop: kh3, kl1, dh1, dl2
+    )
+    # Encontrar todos os dados na expressão
+    parts = []
+    last_end = 0
+    total = 0
+    detail_parts = []
+    for m in dice_pattern.finditer(expression):
+        # Texto antes do dado (operadores +/-)
+        before = expression[last_end:m.start()].strip()
+        last_end = m.end()
+        num_dice = int(m.group(1)) if m.group(1) else 1
+        num_dice = min(num_dice, 100)
+        sides = int(m.group(2))
+        if sides < 2 or sides > 1000:
+            return f"**{expression}** — dado inválido (d2 a d1000)"
+        explode_str = m.group(3) or ""
+        keep_str = m.group(4) or ""
+        # Rolar os dados
+        rolls = [random.randint(1, sides) for _ in range(num_dice)]
+        # Exploding
+        if explode_str:
+            threshold = sides  # default: explode no máximo
+            if len(explode_str) > 1:
+                th_str = explode_str.lstrip("!<>")
+                if th_str:
+                    threshold = int(th_str)
+            max_extra = num_dice * 10  # safety cap
+            extra = 0
+            for r in list(rolls):
+                while r >= threshold and extra < max_extra:
+                    new_r = random.randint(1, sides)
+                    rolls.append(new_r)
+                    extra += 1
+                    r = new_r
+        # Keep/Drop
+        sorted_rolls = sorted(rolls, reverse=True)
+        kept = list(rolls)
+        if keep_str:
+            kd_type = keep_str[:2]
+            kd_num = int(keep_str[2:]) if keep_str[2:] else 1
+            kd_num = min(kd_num, len(rolls))
+            if kd_type == "kh":
+                kept = sorted_rolls[:kd_num]
+            elif kd_type == "kl":
+                kept = sorted_rolls[-kd_num:]
+            elif kd_type == "dh":
+                kept = sorted_rolls[kd_num:]
+            elif kd_type == "dl":
+                kept = sorted_rolls[:len(rolls) - kd_num]
+        roll_sum = sum(kept)
+        # Determinar operador
+        sign = 1
+        if before and before[-1] == "-":
+            sign = -1
+        total += sign * roll_sum
+        rolls_str = ", ".join(str(r) for r in rolls[:20])
+        if len(rolls) > 20:
+            rolls_str += f"... (+{len(rolls)-20})"
+        if keep_str:
+            kept_str = ", ".join(str(r) for r in kept[:20])
+            detail_parts.append(f"[{rolls_str}] → mantém [{kept_str}] = {roll_sum}")
+        else:
+            detail_parts.append(f"[{rolls_str}] = {roll_sum}")
+    # Processar modificadores fixos (+5, -2, etc)
+    remaining = expression[last_end:].strip()
+    mod = 0
+    if remaining:
+        mod_match = re.findall(r"([+-]\s*\d+)", remaining)
+        for mm in mod_match:
+            mod += int(mm.replace(" ", ""))
+        if not mod_match and remaining.isdigit():
+            mod += int(remaining)
+    total += mod
+    if not detail_parts:
+        # Expressão simples sem dados — tenta como aritmética
+        try:
+            # Apenas permitir operações seguras
+            safe = re.sub(r"[^0-9+\-*/() ]", "", expression)
+            if safe:
+                result = eval(safe, {"__builtins__": {}}, {})
+                return f"**{expression}** = **{result}**"
+        except Exception:
+            pass
+        return f"**{expression}** — formato não reconhecido. Ex: `d20`, `2d6+3`, `4d6kh3`"
+    detail = " + ".join(detail_parts)
+    mod_str = f" + ({mod:+d})" if mod else ""
+    return f"**{expression}**: {detail}{mod_str} = **{total}**"
+
+
+def _parse_inline_rolls(content: str) -> list[str]:
+    """Detecta rolagens inline no formato [expressão] em mensagens."""
+    results = []
+    for m in re.finditer(r"\[(\d*d\d+[^\]]*)\]", content, re.IGNORECASE):
+        expr = m.group(1).strip()
+        if expr:
+            results.append(_roll_single(expr))
+    return results
 
 
 def register_voice(bot: commands.Bot) -> None:
@@ -2313,12 +2536,21 @@ def register_voice(bot: commands.Bot) -> None:
         m, s = divmod(elapsed, 60)
         dur = session.current_duration
         dur_str = ""
+        progress_bar = ""
         if dur > 0:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm:02d}:{ds:02d}"
-        fila_info = f"\n📋 Fila: {len(session.queue_display)} musica(s)" if session.queue_display else ""
+            # Progress bar visual
+            bar_len = 20
+            filled = min(bar_len, int((elapsed / dur) * bar_len))
+            progress_bar = f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
+        fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
         loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
-        await ctx.send(embed=_embed(f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}{loop_info}"))
+        autoplay_info = "\n▶️ Autoplay" if session.autoplay else ""
+        await ctx.send(embed=_embed(
+            f"▶️ **Tocando agora:** {session.current_song[:100]}\n"
+            f"⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}{autoplay_info}"
+        ))
 
     @bot.command(name="pl", aliases=["playlist"], help="Playlists salvas: t$pl / t$playlist save|load|list|del <nome>")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
@@ -2544,9 +2776,9 @@ def register_voice(bot: commands.Bot) -> None:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
             await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
 
-    @bot.command(name="help", aliases=["h"], help="Lista todos os comandos: t$help / t$h")
+    @bot.command(name="help", aliases=["h"], hidden=True)
     async def cmd_help(ctx: commands.Context):
-        await ctx.send(embed=_embed(_HELP_TEXT))
+        await ctx.send(embed=_embed("Use `/help` para ver todos os comandos (só você vê a resposta)."), delete_after=10)
 
     @bot.command(name="c", aliases=["chat"], help="Pergunta via chat: t$c / t$chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -2657,6 +2889,154 @@ def register_voice(bot: commands.Bot) -> None:
         session.current_song = ""
         _clear_voice_state(ctx.guild.id)
         await ctx.send(embed=_embed("🗑️ Pronto, limpei tudo! Fila zerada."))
+
+    @bot.command(name="sh", aliases=["shuffle"], help="Embaralha a fila: t$sh / t$shuffle")
+    async def cmd_shuffle(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        if len(session.queue_display) < 2:
+            await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+            return
+        import random
+        # Embaralhar queue_display e reconstruir music_queue na mesma ordem
+        combined = list(zip(session.queue_display, []))
+        random.shuffle(session.queue_display)
+        # Reconstruir a asyncio.Queue com a ordem embaralhada
+        new_queue = asyncio.Queue()
+        old_items = []
+        try:
+            while True:
+                old_items.append(session.music_queue.get_nowait())
+                session.music_queue.task_done()
+        except Exception:
+            pass
+        # Mapear displays para queries (mesma ordem original)
+        random.shuffle(old_items)
+        for item in old_items:
+            await new_queue.put(item)
+        session.music_queue = new_queue
+        _touch_activity(ctx.guild.id)
+        await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas)"))
+
+    @bot.command(name="rp", aliases=["replay"], help="Repete a música atual: t$rp / t$replay")
+    async def cmd_replay(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        if not session.current_query:
+            await ctx.send(embed=_embed("⚠️ Nada tocando no momento."))
+            return
+        _touch_activity(ctx.guild.id)
+        # Reenfileira a música atual no início
+        query = session.current_query
+        display = session.current_song or query
+        session.queue_display.insert(0, display)
+        # Inserir no início da queue (reconstruir)
+        items = [query]
+        try:
+            while True:
+                items.append(session.music_queue.get_nowait())
+                session.music_queue.task_done()
+        except Exception:
+            pass
+        for item in items:
+            await session.music_queue.put(item)
+        # Skip a atual para que ela recomece do zero
+        _clear_loop(session)
+        vc.stop()
+        await ctx.send(embed=_embed(f"🔄 Repetindo: **{display[:80]}**"))
+
+    @bot.command(name="hi", aliases=["history"], help="Últimas músicas tocadas: t$hi / t$history")
+    async def cmd_history(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        if not session:
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        if not session.history:
+            await ctx.send(embed=_embed("📭 Nenhuma música tocada nesta sessão ainda."))
+            return
+        _touch_activity(ctx.guild.id)
+        lines = ["**🕐 Histórico (últimas músicas):**\n"]
+        for i, song in enumerate(reversed(session.history[-10:]), 1):
+            lines.append(f"`{i}.` {song[:80]}")
+        await ctx.send(embed=_embed("\n".join(lines)))
+
+    @bot.command(name="ap", aliases=["autoplay"], help="Liga/desliga autoplay: t$ap / t$autoplay")
+    async def cmd_autoplay(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        _touch_activity(ctx.guild.id)
+        session.autoplay = not session.autoplay
+        if session.autoplay:
+            await ctx.send(embed=_embed("▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares."))
+        else:
+            await ctx.send(embed=_embed("⏹️ **Autoplay desativado**."))
+
+    @bot.command(name="247", aliases=["nonstop"], help="Modo 24/7 (não sai por idle): t$247 / t$nonstop")
+    async def cmd_247(ctx: commands.Context):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        vc = ctx.guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
+            return
+        _touch_activity(ctx.guild.id)
+        session.stay_24_7 = not session.stay_24_7
+        if session.stay_24_7:
+            await ctx.send(embed=_embed("🌙 **Modo 24/7 ativado** — não vou sair por inatividade."))
+        else:
+            await ctx.send(embed=_embed("☀️ **Modo 24/7 desativado** — volto a sair após 5 min sem uso."))
+
+    @bot.command(name="ly", aliases=["lyrics"], help="Busca letra da música: t$ly / t$lyrics")
+    async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
+        if not ctx.guild:
+            return
+        session = _sessions.get(ctx.guild.id)
+        # Se não passou query, usa a música atual
+        search_term = query.strip() if query.strip() else (session.current_song if session else "")
+        if not search_term:
+            await ctx.send(embed=_embed("⚠️ Nada tocando. Use: `t$ly <nome da música>`"))
+            return
+        _touch_activity(ctx.guild.id)
+        # Limpar prefixos de display (Auto:, ytsearch, etc)
+        search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
+        async with ctx.typing():
+            lyrics = await _fetch_lyrics(search_term)
+        if not lyrics:
+            await ctx.send(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
+            return
+        # Truncar para caber no embed (4096 chars)
+        if len(lyrics) > 3800:
+            lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
+        await ctx.send(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
+
+    @bot.command(name="d", aliases=["roll", "dice"], help="Rola dados: t$d / t$roll <expressão>")
+    async def cmd_roll(ctx: commands.Context, *, expression: str = ""):
+        if not ctx.guild:
+            return
+        if not expression.strip():
+            await ctx.send(embed=_embed("🎲 Use: `t$d d20`, `t$d 2d6+3`, `t$d 4d6kh3`"))
+            return
+        _touch_activity(ctx.guild.id)
+        result = _roll_dice(expression.strip())
+        await ctx.send(embed=_embed(f"🎲 {result}"))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t$ff / t$seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -2790,6 +3170,22 @@ def register_voice(bot: commands.Bot) -> None:
         msg = random.choice(_ANTISPAM_MSGS).format(mention=message.author.mention)
         try:
             await channel.send(msg)
+        except discord.HTTPException:
+            pass
+
+    @bot.listen("on_message")
+    async def _inline_dice_listener(message: discord.Message) -> None:
+        """Detecta rolagens inline [d20+5 ataque] em mensagens normais."""
+        if message.author.bot or not message.guild:
+            return
+        if not message.content or "[" not in message.content:
+            return
+        results = _parse_inline_rolls(message.content)
+        if not results:
+            return
+        lines = [f"🎲 {r}" for r in results[:5]]
+        try:
+            await message.reply("\n".join(lines), mention_author=False)
         except discord.HTTPException:
             pass
 
@@ -2934,6 +3330,9 @@ def register_voice(bot: commands.Bot) -> None:
                     sess = _sessions.get(gid)
                     if not sess:
                         continue
+                    # Modo 24/7: nunca desconecta por inatividade
+                    if sess.stay_24_7:
+                        continue
                     tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
                     if tocando:
                         continue  # música ativa = não é inatividade
@@ -3062,7 +3461,7 @@ def register_voice(bot: commands.Bot) -> None:
     # SLASH COMMANDS (ephemeral)
     # ============================
 
-    @bot.tree.command(name="ajuda", description="Mostra todos os comandos da Tiffany")
+    @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
         await interaction.response.send_message(_HELP_TEXT, ephemeral=True)
 
@@ -3083,13 +3482,17 @@ def register_voice(bot: commands.Bot) -> None:
         m, s = divmod(elapsed, 60)
         dur = session.current_duration
         dur_str = ""
+        progress_bar = ""
         if dur > 0:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm:02d}:{ds:02d}"
+            bar_len = 20
+            filled = min(bar_len, int((elapsed / dur) * bar_len))
+            progress_bar = f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
         fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
         loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
         await interaction.response.send_message(
-            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ Tempo: {m:02d}:{s:02d}{dur_str}{fila_info}{loop_info}",
+            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}",
             ephemeral=True,
         )
 
@@ -3136,4 +3539,4 @@ def register_voice(bot: commands.Bot) -> None:
             lines.append(f"📋 Fila atual: **{fila}/10**")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-    log.info("Comandos de voz registrados (t$help, t$play, t$loop, ...)")
+    log.info("Comandos de voz registrados (/help, t$play, t$shuffle, t$roll, ...)")
