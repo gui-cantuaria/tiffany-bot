@@ -2393,7 +2393,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not channel:
             user_vc = ctx.author.voice
             if not user_vc or not user_vc.channel:
-                await ctx.send(embed=_embed("⚠️ Você precisa estar em um **canal de voz** primeiro. Use `t$e` pra me chamar!"))
+                await ctx.send(embed=_embed("⚠️ Você precisa estar em um **canal de voz** primeiro! Entre em um canal e tente novamente."))
                 return None, None
             channel = user_vc.channel
 
