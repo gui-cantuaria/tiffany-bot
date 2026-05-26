@@ -1236,37 +1236,55 @@ def noticia_eh_recente(entry_dt: Optional[datetime]) -> bool:
 # =========================
 # POSTAR NOTÍCIA (extraído para reuso)
 # =========================
-async def _baixar_imagem(url: str) -> Optional[tuple[bytes, str]]:
-    """Baixa a imagem e retorna (bytes, extensão). Garante que Discord exiba."""
+async def _baixar_imagem(url: str, retries: int = 2) -> Optional[tuple[bytes, str]]:
+    """Baixa a imagem e retorna (bytes, extensão). Retry em caso de falha."""
     if not http_session or not url:
         return None
-    try:
-        async with http_session.get(
-            url,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=aiohttp.ClientTimeout(total=12),
-            allow_redirects=True,
-        ) as r:
-            if r.status not in (200, 206):
-                return None
-            ct = r.headers.get("Content-Type", "").lower()
-            if "image/" not in ct:
-                return None
-            data = await r.content.read(10 * 1024 * 1024)  # max 10MB
-            if len(data) < 5000:
-                return None
-            # Determinar extensão pelo content-type
-            ext = "jpg"
-            if "png" in ct:
-                ext = "png"
-            elif "webp" in ct:
-                ext = "webp"
-            elif "gif" in ct:
-                ext = "gif"
-            return data, ext
-    except Exception as e:
-        log.debug(f"Erro ao baixar imagem {url[:80]}: {e}")
-        return None
+    for attempt in range(retries):
+        try:
+            async with http_session.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                timeout=aiohttp.ClientTimeout(total=15),
+                allow_redirects=True,
+            ) as r:
+                if r.status not in (200, 206):
+                    log.debug(f"Imagem HTTP {r.status}: {url[:80]} (tentativa {attempt+1})")
+                    if attempt < retries - 1:
+                        await asyncio.sleep(2)
+                    continue
+                ct = r.headers.get("Content-Type", "").lower()
+                if "image/" not in ct:
+                    log.debug(f"Imagem Content-Type inválido ({ct}): {url[:80]}")
+                    return None
+                data = await r.content.read(10 * 1024 * 1024)  # max 10MB
+                if len(data) < 5000:
+                    log.debug(f"Imagem muito pequena ({len(data)} bytes): {url[:80]}")
+                    return None
+                # Validar magic bytes (primeiros bytes do arquivo)
+                if data[:2] == b'\xff\xd8':
+                    ext = "jpg"
+                elif data[:4] == b'\x89PNG':
+                    ext = "png"
+                elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+                    ext = "webp"
+                elif data[:4] == b'GIF8':
+                    ext = "gif"
+                else:
+                    # Fallback pelo content-type
+                    ext = "jpg"
+                    if "png" in ct:
+                        ext = "png"
+                    elif "webp" in ct:
+                        ext = "webp"
+                    elif "gif" in ct:
+                        ext = "gif"
+                return data, ext
+        except Exception as e:
+            log.debug(f"Erro ao baixar imagem {url[:80]} (tentativa {attempt+1}): {e}")
+            if attempt < retries - 1:
+                await asyncio.sleep(2)
+    return None
 
 
 async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
@@ -1284,7 +1302,9 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         return False
 
     img_bytes, img_ext = img_data
-    attachment = discord.File(io.BytesIO(img_bytes), filename=f"noticia.{img_ext}")
+    img_id = hashlib.md5(img_bytes[:1024]).hexdigest()[:8]
+    img_filename = f"noticia_{img_id}.{img_ext}"
+    attachment = discord.File(io.BytesIO(img_bytes), filename=img_filename)
 
     emoji = EMOJIS_CATEGORIA.get(noticia["categoria"], "🔌")
 
@@ -1305,7 +1325,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         name=f"Via {noticia['site']} • {noticia['categoria']} {emoji}",
         icon_url="https://cdn-icons-png.flaticon.com/512/2965/2965363.png",
     )
-    embed.set_image(url=f"attachment://noticia.{img_ext}")
+    embed.set_image(url=f"attachment://{img_filename}")
     embed.add_field(
         name="",
         value=f"👉 **[Clique aqui para ler a matéria completa]({noticia['link']})**",
@@ -1643,7 +1663,31 @@ async def verificar_feeds():
         # Dedup extra: verificar se assunto já foi aprovado neste ciclo
         titulo_lower = cand["title"].lower()
         assunto_keywords = set()
-        for palavra in ["meta", "openai", "google", "microsoft", "apple", "amazon", "facebook", "jwst", "james webb", "call of duty", "activision", "nvidia", "amd", "intel", "samsung", "lg", "sony", "valve", "steam", "musk", "altman", "zuckerberg", "spacex", "tesla", "chatgpt", "gemini", "copilot", "windows", "android", "iphone", "pixel"]:
+        for palavra in [
+            # Big techs & pessoas
+            "meta", "openai", "google", "microsoft", "apple", "amazon", "facebook",
+            "musk", "altman", "zuckerberg", "spacex", "tesla",
+            # IA
+            "chatgpt", "gemini", "copilot", "claude", "llama", "grok",
+            # Hardware
+            "nvidia", "amd", "intel", "samsung", "lg", "sony", "qualcomm", "tsmc",
+            "huawei", "corsair", "asus", "logitech",
+            # Gaming
+            "valve", "steam", "xbox", "playstation", "nintendo", "epic games",
+            "call of duty", "activision", "rocket league", "fortnite", "gta",
+            "the sims", "project rene",
+            # Software & OS
+            "windows", "android", "iphone", "pixel", "chrome", "firefox",
+            # Espaço & ciência
+            "jwst", "james webb", "nasa", "shenzhou", "tiangong", "artemis",
+            "spacex", "starship", "starlink",
+            # Segurança
+            "ransomware", "phishing", "malware", "cve-",
+            # Brasil & telecom
+            "anatel", "5g", "starlink",
+            # Veículos & hardware específico
+            "ddr5", "nand", "ssd", "gpu", "cpu",
+        ]:
             if palavra in titulo_lower:
                 assunto_keywords.add(palavra)
         
