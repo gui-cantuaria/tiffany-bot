@@ -662,19 +662,58 @@ def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
 
 
 def _text_to_speech(text: str) -> Optional[bytes]:
-    """Gera audio a partir de texto usando gTTS ou fallback."""
+    """Gera audio a partir de texto usando edge-tts (Microsoft) ou gTTS fallback."""
     if not _TTS_ENABLED:
         return None
+    # Limpar markdown e truncar para TTS
+    clean = re.sub(r"\*\*|__|\*|_|`|~{2}", "", text)  # remove formatação
+    clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)  # links -> texto
+    clean = clean[:500].strip()
+    if not clean:
+        return None
+
+    # Tentar edge-tts primeiro (voz natural Microsoft, gratuito)
     try:
-        gtts = importlib.import_module("gtts")
+        import edge_tts
+        import asyncio as _aio
+
+        async def _gen():
+            communicate = edge_tts.Communicate(clean, voice="pt-BR-FranciscaNeural", rate="+10%")
+            buf = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    buf.write(chunk["data"])
+            buf.seek(0)
+            return buf.read()
+
+        # Executar em event loop novo (estamos em thread)
+        try:
+            loop = _aio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            # Já estamos num loop — criar um novo em thread separada
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = pool.submit(lambda: _aio.run(_gen())).result(timeout=15)
+            return result
+        else:
+            return _aio.run(_gen())
+    except ModuleNotFoundError:
+        pass  # fallback para gTTS
+    except Exception as e:
+        log.warning("edge-tts falhou, tentando gTTS: %s", e)
+
+    # Fallback: gTTS (Google, gratuito)
+    try:
         from gtts import gTTS
-        tts = gTTS(text=text[:200], lang="pt-br", slow=False)
+        tts = gTTS(text=clean[:300], lang="pt-br", slow=False)
         buf = io.BytesIO()
         tts.write_to_fp(buf)
         buf.seek(0)
         return buf.read()
     except ModuleNotFoundError:
-        log.warning("gTTS não instalado; TTS desativado.")
+        log.warning("Nem edge-tts nem gTTS instalados; TTS desativado.")
         return None
     except Exception as e:
         log.warning("Erro no TTS: %s", e)
@@ -2215,15 +2254,37 @@ def register_voice(bot: commands.Bot) -> None:
             _stats["questions_answered"] += 1
             _save_stats()
 
-            # TTS se habilitado (só se não tiver música tocando)
+            # TTS se habilitado — pausa música, fala, retoma
             if session and session.tts_enabled and vc and vc.is_connected():
-                if not vc.is_playing() and not vc.is_paused():
-                    tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
-                    if tts_bytes:
-                        pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
-                        if pcm:
-                            source = discord.PCMAudio(io.BytesIO(pcm))
-                            vc.play(source)
+                tts_bytes = await asyncio.to_thread(_text_to_speech, answer)
+                if tts_bytes:
+                    pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
+                    if pcm:
+                        was_playing = vc.is_playing()
+                        if was_playing:
+                            vc.pause()
+                            await asyncio.sleep(0.3)
+                        tts_source = discord.PCMAudio(io.BytesIO(pcm))
+                        tts_loop = asyncio.get_running_loop()
+                        tts_fut: asyncio.Future = tts_loop.create_future()
+
+                        def _tts_after(err):
+                            try:
+                                if not tts_fut.done() and not tts_loop.is_closed():
+                                    tts_loop.call_soon_threadsafe(tts_fut.set_result, None)
+                            except RuntimeError:
+                                pass
+
+                        vc.play(tts_source, after=_tts_after)
+                        try:
+                            await asyncio.wait_for(tts_fut, timeout=30.0)
+                        except asyncio.TimeoutError:
+                            if vc.is_playing():
+                                vc.stop()
+                        # Retomar música se estava tocando
+                        if was_playing and vc.is_connected():
+                            await asyncio.sleep(0.3)
+                            vc.resume()
 
             return answer
         except Exception as e:

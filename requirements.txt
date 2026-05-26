@@ -7,6 +7,7 @@ openai
 yt-dlp
 imageio-ffmpeg
 SpeechRecognition
+edge-tts
 gTTS
 vosk
 beautifulsoup4
