@@ -130,9 +130,9 @@ def _voice_connect_timeout_sec() -> float:
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.15)  # ~28kb — aceitar frases curtas como "Tiffany, para"
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
-# Clip: 30s de áudio mono 48kHz 16-bit = ~2.88MB
+# Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
-CLIP_MAX_BYTES = 48000 * 2 * CLIP_DURATION_SEC  # mono 48kHz 16-bit
+CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 3
@@ -1547,7 +1547,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_song = display_name
                     session.current_query = query
                     session.skip_votes.clear()
-                    if from_queue:
+                    if from_queue and not session.ambient_active:
                         _clear_loop(session)
                     elif session.loop_enabled:
                         session.loop_query = query
@@ -1620,9 +1620,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         session.seeking = False
                         # Esperar o seek cmd iniciar o novo player
                         await asyncio.sleep(1)
-                        # Aguardar o novo playback terminar
-                        while vc.is_playing() or vc.is_paused():
+                        # Aguardar o novo playback terminar (safety timeout de 10min)
+                        _seek_wait = 0
+                        while (vc.is_playing() or vc.is_paused()) and _seek_wait < 1200:
                             await asyncio.sleep(0.5)
+                            _seek_wait += 1
                     if session.loop_enabled and session.current_query:
                         _replay = (
                             session.loop_query or session.current_query,
@@ -2006,20 +2008,21 @@ _HELP_TEXT = (
     "`t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
     "`t$quizstop` / `t$qs` — Para o quiz.\n\n"
     "**🌧️ Ambient**\n"
-    "`t$ambient <tipo>` — Sons ambiente: rain, lofi, café, forest, fire, ocean, thunder.\n"
+    "`t$ambient` / `t$amb <tipo>` — Sons ambiente: rain, lofi, café, forest, fire, ocean, thunder.\n"
     "`t$ambient stop` — Para o som ambiente.\n\n"
     "**🎬 Clip**\n"
     "`t$clip` — Salva os últimos 30s de áudio da call.\n\n"
     "**📂 Playlists**\n"
     "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
     "**🎲 RPG & Dados**\n"
-    "`t$d` / `t$roll <expressão>` — Rola dados: `d20`, `2d6+3`, `4d6kh3`.\n"
+    "`t$d` / `t$roll` / `t$dice <expressão>` — Rola dados: `d20`, `2d6+3`, `4d6kh3`.\n"
     "Inline: `[d20+5 ataque]` em qualquer mensagem.\n\n"
     "**🎙️ Voz (na call)**\n"
     "«Tiffany, toca [música]» — Adiciona à fila.\n"
     "«Tiffany, para/pula/loop/sai» — Controle por voz.\n"
     "«Tiffany, [pergunta]» — Pergunta à IA por voz.\n\n"
     "**🔧 Info**\n"
+    "`t$st` / `t$stats` — Estatísticas da sessão.\n"
     "`/help` — Esta ajuda (só você vê).\n"
     "`/np`, `/queue`, `/stats` — Info da sessão.\n"
     "`/status` — Status do bot."
@@ -2860,6 +2863,49 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if probe_title and (display == "link recebido" or display == query):
             display = probe_title
+
+        # Detecção de duplicata: verificar se a música já está tocando ou na fila
+        def _normalize_for_dup(s: str) -> str:
+            return re.sub(r'[^\w\s]', '', s).lower().strip()
+
+        dup_display = _normalize_for_dup(display)
+        is_dup = False
+        if dup_display and len(dup_display) > 3:
+            # Checar música atual
+            if sess.current_song and _normalize_for_dup(sess.current_song) == dup_display:
+                is_dup = True
+            # Checar query atual (URL ou busca)
+            if not is_dup and sess.current_query and sess.current_query == query:
+                is_dup = True
+            # Checar fila
+            if not is_dup:
+                for qd in sess.queue_display:
+                    if _normalize_for_dup(qd) == dup_display:
+                        is_dup = True
+                        break
+            # Checar loop ativo
+            if not is_dup and sess.loop_enabled and sess.loop_query == query:
+                is_dup = True
+
+        if is_dup:
+            confirm_msg = await ctx.send(
+                embed=_embed(f"⚠️ **{display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
+            )
+            def _check_confirm(m: discord.Message) -> bool:
+                return (
+                    m.author.id == ctx.author.id
+                    and m.channel.id == ctx.channel.id
+                    and m.content.strip().lower() in ("s", "n", "sim", "nao", "não", "y", "yes", "no")
+                )
+            try:
+                resp = await bot.wait_for("message", check=_check_confirm, timeout=15.0)
+                if resp.content.strip().lower() in ("n", "nao", "não", "no"):
+                    await confirm_msg.edit(embed=_embed("👌 Música não adicionada."))
+                    return
+            except asyncio.TimeoutError:
+                await confirm_msg.edit(embed=_embed("⏰ Tempo esgotado. Música não adicionada."))
+                return
+
         sess.queue_display.append(display)
         await sess.music_queue.put(query)
         if not sess.current_song and len(sess.queue_display) == 1:
@@ -2991,11 +3037,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
             return
         import random
-        # Embaralhar queue_display e reconstruir music_queue na mesma ordem
-        combined = list(zip(session.queue_display, []))
-        random.shuffle(session.queue_display)
-        # Reconstruir a asyncio.Queue com a ordem embaralhada
-        new_queue = asyncio.Queue()
+        # Drenar a asyncio.Queue para lista
         old_items = []
         try:
             while True:
@@ -3003,10 +3045,13 @@ def register_voice(bot: commands.Bot) -> None:
                 session.music_queue.task_done()
         except Exception:
             pass
-        # Mapear displays para queries (mesma ordem original)
-        random.shuffle(old_items)
-        for item in old_items:
-            await new_queue.put(item)
+        # Unir displays e queries, embaralhar juntos, separar
+        combined = list(zip(session.queue_display, old_items))
+        random.shuffle(combined)
+        session.queue_display = [d for d, _ in combined]
+        new_queue = asyncio.Queue()
+        for _, q in combined:
+            await new_queue.put(q)
         session.music_queue = new_queue
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas)"))
@@ -3276,7 +3321,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
 
-            # Baixar e tocar trecho
+            # Baixar e tocar trecho (from_query já usa _download_semaphore internamente)
             try:
                 source, title, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
                     _YTSource.from_query(song_query), timeout=60.0
@@ -3354,6 +3399,10 @@ def register_voice(bot: commands.Bot) -> None:
             await bot_channel.send(embed=_embed("🎵 Quiz encerrado! Ninguém pontuou."))
         sess.quiz_scores.clear()
         sess.quiz_round = 0
+        # Retomar música que estava tocando antes do quiz
+        if getattr(sess, "_quiz_was_playing", False) and vc.is_connected() and vc.is_paused():
+            vc.resume()
+            sess._quiz_was_playing = False
 
     @bot.command(name="quiz", help="Quiz musical: t$quiz [rodadas] — adivinhe a música!")
     @commands.cooldown(1, 5, commands.BucketType.guild)
@@ -3373,7 +3422,8 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         # Pausar música atual se tocando
-        if vc.is_playing():
+        sess._quiz_was_playing = vc.is_playing()
+        if sess._quiz_was_playing:
             vc.pause()
 
         rounds = max(1, min(rounds, 20))
@@ -3392,12 +3442,21 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Nenhum quiz ativo."))
             return
         sess.quiz_active = False
+        sess.quiz_answer = ""
         if sess.quiz_task and not sess.quiz_task.done():
             sess.quiz_task.cancel()
         vc = ctx.guild.voice_client
         if vc and vc.is_playing():
             vc.stop()
-        await ctx.send(embed=_embed("⏹️ Quiz parado!"))
+        # Mostrar placar final antes de limpar
+        if sess.quiz_scores:
+            ranking = sorted(sess.quiz_scores.items(), key=lambda x: x[1], reverse=True)
+            medals = ["🥇", "🥈", "🥉"]
+            lines = [f"{medals[i] if i < 3 else '▪️'} <@{uid}>: **{pts}** pts" for i, (uid, pts) in enumerate(ranking)]
+            await ctx.send(embed=_embed("⏹️ Quiz parado!\n\n" + "\n".join(lines)))
+            sess.quiz_scores.clear()
+        else:
+            await ctx.send(embed=_embed("⏹️ Quiz parado!"))
 
     @bot.listen("on_message")
     async def _quiz_answer_listener(message: discord.Message) -> None:
@@ -3644,7 +3703,15 @@ def register_voice(bot: commands.Bot) -> None:
         if humans:
             return
         # Canal ficou vazio — espera 60s e desconecta
+        # Guard: evitar múltiplos sleeps simultâneos por guild
+        sess = _sessions.get(guild.id)
+        if sess:
+            if getattr(sess, "_empty_channel_pending", False):
+                return
+            sess._empty_channel_pending = True
         await asyncio.sleep(60)
+        if sess:
+            sess._empty_channel_pending = False
         # Re-buscar vc atualizado (pode ter mudado durante o sleep)
         vc = guild.voice_client
         if not vc or not vc.is_connected():
@@ -3725,8 +3792,8 @@ def register_voice(bot: commands.Bot) -> None:
                     sess = _sessions.get(gid)
                     if not sess:
                         continue
-                    # Modo 24/7: nunca desconecta por inatividade
-                    if sess.stay_24_7:
+                    # Modo 24/7 ou quiz ativo: nunca desconecta por inatividade
+                    if sess.stay_24_7 or sess.quiz_active:
                         continue
                     tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
                     if tocando:

@@ -498,31 +498,33 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
 
         soup = BeautifulSoup(html, "html.parser")
 
-        # Estrelas — padrões comuns em lojas BR
-        for sel in [
-            "[itemprop='ratingValue']", "[data-rating]",
-            "[class*='rating'] [class*='value']", "[class*='stars']",
-        ]:
-            el = soup.select_one(sel)
-            if el:
-                raw = el.get("content") or el.get("data-rating") or el.get_text()
-                m = re.search(r"(\d+[.,]\d+)", raw)
-                if m:
-                    deal["stars"] = float(m.group(1).replace(",", "."))
-                    break
+        # Estrelas — só buscar se o Promobit não forneceu
+        if deal.get("stars") is None:
+            for sel in [
+                "[itemprop='ratingValue']", "[data-rating]",
+                "[class*='rating'] [class*='value']", "[class*='stars']",
+            ]:
+                el = soup.select_one(sel)
+                if el:
+                    raw = el.get("content") or el.get("data-rating") or el.get_text()
+                    m = re.search(r"(\d+[.,]\d+)", raw)
+                    if m:
+                        deal["stars"] = float(m.group(1).replace(",", "."))
+                        break
 
-        # Vendas / reviews
-        for sel in [
-            "[itemprop='reviewCount']", "[class*='review-count']",
-            "[class*='sold']", "[class*='vendido']",
-        ]:
-            el = soup.select_one(sel)
-            if el:
-                raw = el.get("content") or el.get_text()
-                m = re.search(r"(\d+)", raw.replace(".", ""))
-                if m:
-                    deal["sales_count"] = int(m.group(1))
-                    break
+        # Vendas / reviews — só buscar se o Promobit não forneceu
+        if deal.get("sales_count") is None:
+            for sel in [
+                "[itemprop='reviewCount']", "[class*='review-count']",
+                "[class*='sold']", "[class*='vendido']",
+            ]:
+                el = soup.select_one(sel)
+                if el:
+                    raw = el.get("content") or el.get_text()
+                    m = re.search(r"(\d+)", raw.replace(".", ""))
+                    if m:
+                        deal["sales_count"] = int(m.group(1))
+                        break
 
     except Exception as e:
         log.debug(f"Erro ao buscar rating da loja: {e}")
@@ -576,6 +578,10 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if sales is not None and sales < VENDAS_MINIMAS:
         return False, f"vendas {sales} < {VENDAS_MINIMAS}"
 
+    # Sem dados de qualidade: precisa de pelo menos estrelas OU vendas para aprovar
+    if stars is None and sales is None:
+        return False, "sem dados de qualidade (stars e sales ausentes)"
+
     return True, "ok"
 
 
@@ -628,7 +634,7 @@ def _format_description(deal: dict) -> str:
     tags = deal.get("tags") or []
     if tags:
         tags_str = " • ".join(t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:3])
-        lines.append(f"🏷️ {tags_str}")
+        lines.append(f"🔖 {tags_str}")
 
     return "\n".join(lines)
 
@@ -783,12 +789,11 @@ async def _run_deals_cycle_inner() -> None:
             if deal.get("store_url") and not deal.get("real_store_url"):
                 deal = await asyncio.wait_for(_try_fetch_store_rating(http_session, deal), timeout=20.0)
                 await asyncio.sleep(1)
+            enriched.append(deal)
         except asyncio.TimeoutError:
             log.warning(f"Timeout ao enriquecer oferta {deal.get('title', '?')[:50]}")
         except Exception as e:
             log.warning(f"Erro ao enriquecer oferta {deal.get('title', '?')[:50]}: {e}")
-
-        enriched.append(deal)
 
     # Aplicar filtros
     approved = []
@@ -879,7 +884,14 @@ async def deals_loop():
 @deals_loop.before_loop
 async def _before_deals_loop():
     await bot.wait_until_ready()
-    log.info("Bot de ofertas pronto. Iniciando primeiro ciclo.")
+    log.info("Bot de ofertas pronto. Executando primeiro ciclo imediatamente.")
+    # Executar primeiro ciclo imediatamente (sem esperar o intervalo de 30min)
+    agora = datetime.now(FUSO_HORARIO_BR)
+    if HORA_INICIO <= agora.hour < HORA_FIM:
+        try:
+            await _run_deals_cycle()
+        except Exception as e:
+            log.exception(f"Erro no primeiro ciclo de ofertas: {e}")
 
 
 # =========================

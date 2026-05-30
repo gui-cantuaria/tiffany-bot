@@ -62,7 +62,7 @@ NOTA_URGENTE = 90
 
 # --- Anti-dup ---
 SIMHASH_TTL_HORAS = 120
-SIMHASH_HAMMING_MAX = 4
+SIMHASH_HAMMING_MAX = 6
 TITLE_IDX_TTL_HORAS = 72
 MAX_IDADE_HORAS = 12
 
@@ -282,8 +282,8 @@ KEYWORDS_BLOCK = {
     "paleontologia", "arqueologia", "fóssil", "fossil",
     "dinossauro", "dinosaur",
     # Reviews / Guias de compra
-    "review", "análise de produto", "guia de compra", "buying guide",
-    "comparativo", "melhor custo-benefício", "vale a pena comprar",
+    "análise de produto", "guia de compra", "buying guide",
+    "melhor custo-benefício", "vale a pena comprar",
     "unboxing",
 }
 
@@ -295,6 +295,11 @@ def prefiltro_keywords(titulo: str, texto: str) -> bool:
     # Rejeitar se contém keyword bloqueada
     for kw in KEYWORDS_BLOCK:
         if kw in blob:
+            return False
+    # Keywords bloqueadas com word boundary (evitar falsos positivos com substrings)
+    _BLOCK_WORD_BOUNDARY = ("review", "comparativo")
+    for kw in _BLOCK_WORD_BOUNDARY:
+        if re.search(rf"\b{kw}\b", blob):
             return False
 
     # Aceitar se contém keyword tech
@@ -431,9 +436,16 @@ def load_metrics() -> dict:
 
 def save_metrics(m: dict) -> None:
     tmp = f"{METRICS_FILE}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(m, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, METRICS_FILE)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(m, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, METRICS_FILE)
+    except Exception as e:
+        log.error(f"Erro ao salvar métricas: {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 def metric_inc(m: dict, key: str, amount: int = 1) -> None:
     hoje = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
@@ -462,9 +474,16 @@ def load_queue() -> list:
 
 def save_queue(q: list) -> None:
     tmp = f"{QUEUE_FILE}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(q, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, QUEUE_FILE)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(q, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, QUEUE_FILE)
+    except Exception as e:
+        log.error(f"Erro ao salvar fila: {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 def _hist_payload(status: str, extra: Optional[dict] = None) -> dict:
     payload = {"status": status, "ts": int(time.time())}
@@ -536,10 +555,22 @@ def _simhash_prune(idx: dict[str, int]) -> dict[str, int]:
         pruned = dict(sorted_items[:MAX_SIMHASH_INDEX])
     return pruned
 
+_simhash_pruned_this_cycle = False
+
+def _ensure_simhash_pruned(h: dict) -> dict[str, int]:
+    """Prune o índice apenas uma vez por ciclo."""
+    global _simhash_pruned_this_cycle
+    idx = _get_simhash_index(h)
+    if not _simhash_pruned_this_cycle:
+        idx = _simhash_prune(idx)
+        h["_simhash_idx"] = idx
+        _simhash_pruned_this_cycle = True
+    return idx
+
 def simhash_is_dup(h: dict, sh: int) -> bool:
     if sh == 0:
         return False
-    idx = _simhash_prune(_get_simhash_index(h))
+    idx = _ensure_simhash_pruned(h)
     for hexv in idx.keys():
         try:
             if _hamming(sh, int(hexv, 16)) <= SIMHASH_HAMMING_MAX:
@@ -551,7 +582,7 @@ def simhash_is_dup(h: dict, sh: int) -> bool:
 def simhash_add(h: dict, sh: int) -> None:
     if sh == 0:
         return
-    idx = _simhash_prune(_get_simhash_index(h))
+    idx = _ensure_simhash_pruned(h)
     idx[f"{sh:016x}"] = int(time.time())
     h["_simhash_idx"] = idx
 
@@ -573,16 +604,28 @@ def _title_idx_prune(idx: dict[str, int]) -> dict[str, int]:
         pruned = dict(sorted_items[:MAX_TITLE_INDEX])
     return pruned
 
+_title_pruned_this_cycle = False
+
+def _ensure_title_pruned(h: dict) -> dict[str, int]:
+    """Prune o índice apenas uma vez por ciclo."""
+    global _title_pruned_this_cycle
+    idx = _get_title_index(h)
+    if not _title_pruned_this_cycle:
+        idx = _title_idx_prune(idx)
+        h["_title_idx"] = idx
+        _title_pruned_this_cycle = True
+    return idx
+
 def title_is_dup(h: dict, titulo: str) -> bool:
     """Checa se um título normalizado já foi processado (qualquer site)."""
     fp = _title_fingerprint(titulo)
-    idx = _title_idx_prune(_get_title_index(h))
+    idx = _ensure_title_pruned(h)
     return fp in idx
 
 def title_add(h: dict, titulo: str) -> None:
     """Registra título no índice para dedup futuro."""
     fp = _title_fingerprint(titulo)
-    idx = _title_idx_prune(_get_title_index(h))
+    idx = _ensure_title_pruned(h)
     idx[fp] = int(time.time())
     h["_title_idx"] = idx
 
@@ -757,6 +800,11 @@ async def validar_imagem(url: str) -> bool:
                 w, h = dims
                 if w < MIN_IMG_WIDTH or h < MIN_IMG_HEIGHT:
                     log.info(f"Imagem rejeitada por dimensao: {w}x{h} ({url[:80]})")
+                    return False
+                # Rejeitar aspect ratio extremo (banners, imagens cortadas)
+                ratio = w / h if h > 0 else 0
+                if ratio > 4.0 or ratio < 0.3:
+                    log.info(f"Imagem rejeitada por aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
                     return False
             return True
     except Exception as e:
@@ -1236,8 +1284,9 @@ def noticia_eh_recente(entry_dt: Optional[datetime]) -> bool:
 # =========================
 # POSTAR NOTÍCIA (extraído para reuso)
 # =========================
-async def _baixar_imagem(url: str, retries: int = 2) -> Optional[tuple[bytes, str]]:
-    """Baixa a imagem e retorna (bytes, extensão). Retry em caso de falha."""
+async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, str]]:
+    """Baixa a imagem e retorna (bytes, extensão). Retry em caso de falha.
+    Valida dimensões mínimas e aspect ratio para evitar imagens cortadas/banners."""
     if not http_session or not url:
         return None
     for attempt in range(retries):
@@ -1245,7 +1294,7 @@ async def _baixar_imagem(url: str, retries: int = 2) -> Optional[tuple[bytes, st
             async with http_session.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=aiohttp.ClientTimeout(total=30),
                 allow_redirects=True,
             ) as r:
                 if r.status not in (200, 206):
@@ -1257,15 +1306,58 @@ async def _baixar_imagem(url: str, retries: int = 2) -> Optional[tuple[bytes, st
                 if "image/" not in ct:
                     log.debug(f"Imagem Content-Type inválido ({ct}): {url[:80]}")
                     return None
-                data = await r.content.read(10 * 1024 * 1024)  # max 10MB
+                # Verificar Content-Length antes de baixar (rejeitar > 10MB)
+                cl_header = r.headers.get("Content-Length", "")
+                expected_size = int(cl_header) if cl_header.isdigit() else 0
+                if expected_size > 10 * 1024 * 1024:
+                    log.debug(f"Imagem grande demais ({expected_size} bytes): {url[:80]}")
+                    return None
+                data = await r.read()  # lê resposta completa (não trunca)
+                if len(data) > 10 * 1024 * 1024:
+                    log.debug(f"Imagem grande demais ({len(data)} bytes): {url[:80]}")
+                    return None
                 if len(data) < 5000:
                     log.debug(f"Imagem muito pequena ({len(data)} bytes): {url[:80]}")
                     return None
-                # Validar magic bytes (primeiros bytes do arquivo)
+                # Verificar integridade: Content-Length vs bytes recebidos
+                if expected_size and len(data) < expected_size:
+                    log.warning(f"Imagem incompleta ({len(data)}/{expected_size} bytes): {url[:80]}")
+                    if attempt < retries - 1:
+                        await asyncio.sleep(2)
+                    continue
+                # Validar dimensões da imagem completa (evita imagens cortadas/corrompidas)
+                dims = _img_dimensions_from_bytes(data)
+                if dims:
+                    w, h = dims
+                    if w < MIN_IMG_WIDTH or h < MIN_IMG_HEIGHT:
+                        log.warning(f"Imagem download rejeitada: {w}x{h} < {MIN_IMG_WIDTH}x{MIN_IMG_HEIGHT} ({url[:80]})")
+                        return None
+                    # Rejeitar aspect ratio extremo (banners finos, imagens muito altas)
+                    ratio = w / h if h > 0 else 0
+                    if ratio > 4.0 or ratio < 0.3:
+                        log.warning(f"Imagem rejeitada por aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
+                        return None
+                else:
+                    # Se não conseguiu extrair dimensões, rejeitar (imagem possivelmente corrompida)
+                    log.warning(f"Imagem rejeitada: impossível extrair dimensões ({url[:80]})")
+                    return None
+                # Validar magic bytes e integridade do EOF
                 if data[:2] == b'\xff\xd8':
                     ext = "jpg"
+                    # JPEG deve terminar com FFD9 (End of Image)
+                    if data[-2:] != b'\xff\xd9':
+                        log.warning(f"JPEG truncado (sem EOF marker): {url[:80]}")
+                        if attempt < retries - 1:
+                            await asyncio.sleep(2)
+                        continue
                 elif data[:4] == b'\x89PNG':
                     ext = "png"
+                    # PNG deve terminar com IEND chunk
+                    if b'IEND' not in data[-20:]:
+                        log.warning(f"PNG truncado (sem IEND): {url[:80]}")
+                        if attempt < retries - 1:
+                            await asyncio.sleep(2)
+                        continue
                 elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
                     ext = "webp"
                 elif data[:4] == b'GIF8':
@@ -1398,6 +1490,7 @@ def _deve_rodar_slot(agora: datetime) -> bool:
 @tasks.loop(minutes=1)
 async def verificar_feeds():
     global _ai_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
+    global _simhash_pruned_this_cycle, _title_pruned_this_cycle
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
@@ -1407,6 +1500,10 @@ async def verificar_feeds():
     if not _janela_ativa_ou_pre_aquecimento(agora):
         log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:45 + 08h-18h).")
         return
+
+    # Resetar flags de prune para este ciclo
+    _simhash_pruned_this_cycle = False
+    _title_pruned_this_cycle = False
 
     if not http_session or http_session.closed:
         connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
@@ -1511,6 +1608,9 @@ async def verificar_feeds():
     total_dedup = 0
     total_antigas = 0
     contagem_por_fonte: dict[str, int] = {}
+    # Sets de dedup in-cycle (não poluem o histórico persistente)
+    _cycle_titles: set[str] = set()
+    _cycle_simhashes: set[int] = set()
 
     for nome_site, feed in resultados_feeds:
         if not feed or not feed.entries:
@@ -1545,7 +1645,8 @@ async def verificar_feeds():
                 continue
 
             # Dedup por título normalizado (cross-site: mesma notícia em sites diferentes)
-            if title_is_dup(history, title):
+            _tfp = _title_fingerprint(title)
+            if title_is_dup(history, title) or _tfp in _cycle_titles:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_titulo"})
                 total_dedup += 1
                 continue
@@ -1553,7 +1654,7 @@ async def verificar_feeds():
             # SimHash dedup (conteúdo similar mesmo com títulos diferentes)
             texto_raw = limpar_html(str(entry.get("summary") or entry.get("description") or title))
             sh = _simhash64(f"{title} {texto_raw[:600]}")
-            if simhash_is_dup(history, sh):
+            if simhash_is_dup(history, sh) or sh in _cycle_simhashes:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_simhash"})
                 total_dedup += 1
                 continue
@@ -1598,9 +1699,9 @@ async def verificar_feeds():
                 "simhash": sh,
                 "feed_url": FONTES_RSS.get(nome_site, ""),
             })
-            # Registrar título e simhash IMEDIATAMENTE para dedup cross-site no mesmo ciclo
-            title_add(history, title)
-            simhash_add(history, sh)
+            # Dedup cross-site no mesmo ciclo: usar set em memória (não polui o histórico persistente)
+            _cycle_titles.add(_title_fingerprint(title))
+            _cycle_simhashes.add(sh)
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
 
@@ -1778,7 +1879,7 @@ async def verificar_feeds():
 
         metric_inc(metrics, "ia_aprovadas_hoje")
         aprovados.append({
-            "titulo": _normalize_news_title(res.get("titulo", cand["title"])),
+            "titulo": res.get("titulo", cand["title"]),  # já normalizado em gerar_analise_ia()
             "resumo": res.get("resumo", ""),
             "nota": nota,
             "categoria": categoria,
@@ -1818,6 +1919,7 @@ async def verificar_feeds():
     para_postar = com_imagem[:posts_restantes] if em_horario_ativo else []
     para_fila = com_imagem[posts_restantes:] if em_horario_ativo else com_imagem
 
+    posts_fase3 = 0
     for i, noticia in enumerate(para_postar):
         # Revalidar imagem no momento do post (URLs podem ter morrido)
         img = noticia.get("imagem")
@@ -1826,7 +1928,8 @@ async def verificar_feeds():
             historico_set(history, noticia["link_norm"], noticia["dedupe"], "skipped", {"reason": "sem_imagem_post"})
             continue
         log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
-        await _postar_noticia(channel, noticia, history, metrics)
+        if await _postar_noticia(channel, noticia, history, metrics):
+            posts_fase3 += 1
         if i < len(para_postar) - 1:
             await asyncio.sleep(POST_SPACING_SEC)
 
@@ -1849,7 +1952,7 @@ async def verificar_feeds():
         "examinados": total_examinados,
         "candidatos_ia": len(candidatos),
         "aprovados": len(aprovados),
-        "posts": posts_feitos + len(para_postar),
+        "posts": posts_feitos + posts_fase3,
         "fila": len(load_queue()),
     }
     log.info("Ciclo concluído.")
