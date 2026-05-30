@@ -3229,13 +3229,26 @@ def register_voice(bot: commands.Bot) -> None:
 
             vc.play(source, after=_after_quiz)
 
-            # Esperar resposta ou timeout de 20s
+            # Fase 1: tocar por 15s (para antes se alguém acertar)
             try:
-                await asyncio.wait_for(fut, timeout=20.0)
+                await asyncio.wait_for(asyncio.shield(fut), timeout=15.0)
             except asyncio.TimeoutError:
                 pass
             if vc.is_playing():
                 vc.stop()
+            # Aguardar _after_quiz ser chamado (até 1s)
+            try:
+                await asyncio.wait_for(fut, timeout=1.0)
+            except asyncio.TimeoutError:
+                pass
+
+            # Fase 2: aguardar resposta por 15s (se ainda não acertaram)
+            if sess.quiz_answer and sess.quiz_active:
+                await bot_channel.send(embed=_embed("🤔 Qual é a música? Você tem **15 segundos**!"))
+                for _ in range(75):  # 75 × 0.2s = 15s
+                    if not sess.quiz_answer or not sess.quiz_active:
+                        break
+                    await asyncio.sleep(0.2)
 
             # Limpar arquivo temp
             if dl_tmpdir:
