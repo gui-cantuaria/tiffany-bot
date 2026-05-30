@@ -11,7 +11,11 @@ git fetch origin main
 
 echo "[deploy] Aplicando arquivos atualizados..."
 git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers.py affiliate_config.py random_songs.py requirements.txt 2>/dev/null || true
-git checkout origin/main -- scripts/deploy.sh scripts/tiffany-bot.service 2>/dev/null || true
+git checkout origin/main -- scripts/deploy.sh scripts/tiffany-bot.service CLAUDE.md 2>/dev/null || true
+
+echo "[deploy] Atualizando service do systemd..."
+cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
+systemctl daemon-reload
 
 echo "[deploy] Instalando dependências novas..."
 pip3 install -q -r requirements.txt 2>/dev/null || true
