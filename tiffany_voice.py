@@ -487,7 +487,7 @@ async def _summarize_url(url: str, api_key: str) -> str:
         client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
-                model="google/gemini-2.5-flash-preview-05-20",
+                model="google/gemini-3.5-flash",
                 messages=[
                     {
                         "role": "system",
@@ -2190,10 +2190,10 @@ def register_voice(bot: commands.Bot) -> None:
                 user_content: list = [{"type": "text", "text": question or "O que está nessa imagem?"}]
                 for url in image_urls[:4]:  # máximo 4 imagens por mensagem
                     user_content.append({"type": "image_url", "image_url": {"url": url}})
-                model = "google/gemini-2.5-flash-preview-05-20"
+                model = "google/gemini-3.5-flash"
             else:
                 user_content = question
-                model = "google/gemini-2.5-flash-preview-05-20"
+                model = "google/gemini-3.5-flash"
 
             async with _ai_semaphore:
                 resp = await client.chat.completions.create(

@@ -840,7 +840,7 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
         return True  # Se não tem IA, assume válida (não bloqueia)
     try:
         resp = await ai_client.chat.completions.create(
-            model="google/gemini-2.5-flash-preview-05-20",
+            model="google/gemini-3.5-flash",
             messages=[
                 {
                     "role": "system",
@@ -1206,8 +1206,8 @@ Título Original: {titulo_original}
 Texto da Notícia: {texto_base[:8000]}
 """
 
-    modelo_principal = "google/gemini-2.5-flash-preview-05-20"
-    modelo_fallback = "google/gemini-2.5-flash-preview-05-20"
+    modelo_principal = "google/gemini-3.5-flash"
+    modelo_fallback = "google/gemini-3.5-flash"
 
     for attempt in range(3):
         modelo = modelo_principal if attempt == 0 else modelo_fallback

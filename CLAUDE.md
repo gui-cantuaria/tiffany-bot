@@ -152,7 +152,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 7. **Thread:** Auto-created: `Chat {Category}: {Title}` (max 100 chars)
 
 ### AI Model
-- **Unified model:** google/gemini-2.5-flash-preview-05-20 (via OpenRouter)
+- **Unified model:** google/gemini-3.5-flash (via OpenRouter)
 - Used for: text analysis, image validation (vision), chat (`t$c`), URL summary (`t$su`), voice questions
 - No fallback chain — same model for all attempts (3 retries with backoff)
 
@@ -221,7 +221,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 ```
 
 ### AI Chat (`t$c`)
-- Model: google/gemini-2.5-flash-preview-05-20 (via OpenRouter)
+- Model: google/gemini-3.5-flash (via OpenRouter)
 - AI semaphore: 3 concurrent calls max + global rate limit (15/min)
 - Per-user sliding window: 5 turns in-memory, 3 turns persisted in `chat_memory.json`, 24h TTL
 - Cooldown: 5s per user
