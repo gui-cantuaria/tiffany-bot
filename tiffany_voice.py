@@ -208,6 +208,8 @@ class _GuildVoiceSession:
     quiz_round: int = 0
     quiz_total_rounds: int = 0
     quiz_task: Optional[asyncio.Task] = None
+    # Restore seek (posição de playback a restaurar após restart)
+    restore_seek_sec: float = 0.0
     # Ambient
     ambient_active: bool = False
     ambient_name: str = ""
@@ -542,6 +544,11 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, sess
             entry["current_display"] = session.current_song
             entry["queue_queries"] = queue_queries
             entry["queue_displays"] = queue_displays
+            # Salvar posição atual de playback para seek ao restaurar
+            if session.song_start_time > 0:
+                entry["current_seek_sec"] = max(0.0, time.monotonic() - session.song_start_time)
+            else:
+                entry["current_seek_sec"] = 0.0
         entry["saved_at"] = time.time()
         data[str(guild_id)] = entry
         with open(_VOICE_STATE_FILE, "w", encoding="utf-8") as f:
@@ -1514,6 +1521,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         session.loop_query = query
                         session.loop_display = display_name
                     # Timeout no download: max 120s para evitar travar em vídeos enormes
+                    _restore_seek = session.restore_seek_sec
+                    session.restore_seek_sec = 0.0
                     try:
                         source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
                             _YTSource.from_query(query), timeout=120.0
@@ -1543,6 +1552,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if info and info != "sem resultado para a busca":
                         display_name = info
                         session.current_song = display_name
+                    # Aplicar seek de restauração (posição salva antes do restart)
+                    if _restore_seek > 0 and dl_fp and dl_duration > 10:
+                        capped = min(_restore_seek, dl_duration - 5.0)
+                        if capped > 5:
+                            seek_src = _YTSource.from_file(dl_fp, seek_sec=capped)
+                            if seek_src:
+                                source.cleanup()
+                                source = seek_src
+                                session.song_start_time = time.monotonic() - capped
 
                     loop = asyncio.get_running_loop()
                     fut: asyncio.Future = loop.create_future()
@@ -1558,7 +1576,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         except RuntimeError:
                             pass  # loop fechado durante shutdown
 
-                    session.song_start_time = time.monotonic()
+                    if not (_restore_seek > 0 and session.song_start_time > 0):
+                        session.song_start_time = time.monotonic()
                     session.last_activity = time.monotonic()
                     _stats["songs_played"] += 1
                     _save_stats()
@@ -3170,104 +3189,126 @@ def register_voice(bot: commands.Bot) -> None:
         import random as _rng
         from random_songs import RANDOM_SONGS as _QUIZ_SONGS
         bot_channel = ctx.channel
+        consecutive_no_answer = 0
 
-        for rnd in range(1, rounds + 1):
-            if not sess.quiz_active or not vc.is_connected():
-                break
-            sess.quiz_round = rnd
+        try:
+            for rnd in range(1, rounds + 1):
+                if not sess.quiz_active or not vc.is_connected():
+                    break
+                sess.quiz_round = rnd
 
-            # Escolher música
-            song_query = _rng.choice(_QUIZ_SONGS)
-            raw_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", song_query).strip()
+                # Escolher música
+                song_query = _rng.choice(_QUIZ_SONGS)
+                raw_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", song_query).strip()
 
-            # Extrair artista e título da string "Artist Song Title"
-            # Formato no random_songs.py: "Artist Name Song Title"
-            sess.quiz_answer = raw_name.lower()
-            # Separar por palavras — o artista geralmente são as primeiras 1-3 palavras
-            sess.quiz_artist = ""
-            sess.quiz_title = raw_name
+                sess.quiz_answer = raw_name.lower()
+                sess.quiz_artist = ""
+                sess.quiz_title = raw_name
 
-            await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
+                await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
 
-            # Baixar e tocar trecho (from_query já usa _download_semaphore internamente)
-            try:
-                source, title, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
-                    _YTSource.from_query(song_query), timeout=60.0
-                )
-            except (asyncio.TimeoutError, Exception):
-                await bot_channel.send(embed=_embed("⚠️ Não consegui baixar a música, pulando rodada..."))
-                continue
-
-            if source is None:
-                await bot_channel.send(embed=_embed("⚠️ Música não encontrada, pulando..."))
-                if dl_tmpdir:
-                    shutil.rmtree(dl_tmpdir, ignore_errors=True)
-                continue
-
-            # Atualizar título real
-            if title and title != "sem resultado para a busca":
-                sess.quiz_answer = title.lower()
-                sess.quiz_title = title
-
-            # Tocar 20s do meio da música (ou do início se curta)
-            seek_pos = max(0, (dl_duration / 3)) if dl_duration > 30 else 0
-            if seek_pos > 0 and dl_fp:
-                source_seek = _YTSource.from_file(dl_fp, seek_sec=seek_pos)
-                if source_seek:
-                    source.cleanup()
-                    source = source_seek
-
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future = loop.create_future()
-
-            def _after_quiz(err):
+                # Baixar e tocar trecho
                 try:
-                    if not fut.done() and not loop.is_closed():
-                        loop.call_soon_threadsafe(fut.set_result, None)
-                except RuntimeError:
+                    source, title, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
+                        _YTSource.from_query(song_query), timeout=60.0
+                    )
+                except (asyncio.TimeoutError, Exception):
+                    await bot_channel.send(embed=_embed("⚠️ Não consegui baixar a música, pulando rodada..."))
+                    continue
+
+                if source is None:
+                    await bot_channel.send(embed=_embed("⚠️ Música não encontrada, pulando..."))
+                    if dl_tmpdir:
+                        shutil.rmtree(dl_tmpdir, ignore_errors=True)
+                    continue
+
+                # Atualizar título real
+                if title and title != "sem resultado para a busca":
+                    sess.quiz_answer = title.lower()
+                    sess.quiz_title = title
+
+                # Tocar do 1/3 da música (ou do início se curta)
+                seek_pos = max(0, (dl_duration / 3)) if dl_duration > 30 else 0
+                if seek_pos > 0 and dl_fp:
+                    source_seek = _YTSource.from_file(dl_fp, seek_sec=seek_pos)
+                    if source_seek:
+                        source.cleanup()
+                        source = source_seek
+
+                loop = asyncio.get_running_loop()
+                fut: asyncio.Future = loop.create_future()
+
+                def _after_quiz(err):
+                    try:
+                        if not fut.done() and not loop.is_closed():
+                            loop.call_soon_threadsafe(fut.set_result, None)
+                    except RuntimeError:
+                        pass
+
+                try:
+                    vc.play(source, after=_after_quiz)
+                except Exception as e:
+                    log.error("Quiz: erro ao iniciar playback: %s", e)
+                    if dl_tmpdir:
+                        shutil.rmtree(dl_tmpdir, ignore_errors=True)
+                    if not fut.done():
+                        fut.set_result(None)
+                    continue
+
+                # Fase 1: tocar por 15s
+                try:
+                    await asyncio.wait_for(asyncio.shield(fut), timeout=15.0)
+                except asyncio.TimeoutError:
+                    pass
+                if vc.is_playing():
+                    vc.stop()
+                # Aguardar _after_quiz ser chamado (até 1s)
+                try:
+                    await asyncio.wait_for(fut, timeout=1.0)
+                except asyncio.TimeoutError:
                     pass
 
-            vc.play(source, after=_after_quiz)
+                # Fase 2: aguardar resposta por 15s (se ainda não acertaram)
+                answered = False
+                if sess.quiz_answer and sess.quiz_active:
+                    await bot_channel.send(embed=_embed("🤔 Qual é a música? Você tem **15 segundos**!"))
+                    for _ in range(75):  # 75 × 0.2s = 15s
+                        if not sess.quiz_answer or not sess.quiz_active:
+                            answered = True
+                            break
+                        await asyncio.sleep(0.2)
 
-            # Fase 1: tocar por 15s (para antes se alguém acertar)
-            try:
-                await asyncio.wait_for(asyncio.shield(fut), timeout=15.0)
-            except asyncio.TimeoutError:
-                pass
-            if vc.is_playing():
-                vc.stop()
-            # Aguardar _after_quiz ser chamado (até 1s)
-            try:
-                await asyncio.wait_for(fut, timeout=1.0)
-            except asyncio.TimeoutError:
-                pass
+                # Limpar arquivo temp
+                if dl_tmpdir:
+                    shutil.rmtree(dl_tmpdir, ignore_errors=True)
 
-            # Fase 2: aguardar resposta por 15s (se ainda não acertaram)
-            if sess.quiz_answer and sess.quiz_active:
-                await bot_channel.send(embed=_embed("🤔 Qual é a música? Você tem **15 segundos**!"))
-                for _ in range(75):  # 75 × 0.2s = 15s
-                    if not sess.quiz_answer or not sess.quiz_active:
+                # Verificar se quiz foi cancelado
+                if not sess.quiz_active:
+                    break
+
+                # Se ninguém acertou
+                if sess.quiz_answer:
+                    await bot_channel.send(embed=_embed(f"⏰ Tempo esgotado! Era: **{sess.quiz_title}**"))
+                    sess.quiz_answer = ""
+                    consecutive_no_answer += 1
+                    if consecutive_no_answer >= 3:
+                        await bot_channel.send(embed=_embed(
+                            "😴 Ninguém respondeu por 3 rodadas seguidas. Encerrando o quiz!"
+                        ))
                         break
-                    await asyncio.sleep(0.2)
+                else:
+                    consecutive_no_answer = 0
 
-            # Limpar arquivo temp
-            if dl_tmpdir:
-                shutil.rmtree(dl_tmpdir, ignore_errors=True)
+                await asyncio.sleep(3)  # pausa entre rodadas
 
-            # Verificar se alguém acertou (flag setada pelo listener)
-            if not sess.quiz_active:
-                break
+        except Exception as e:
+            log.error("Quiz: erro inesperado: %s", e)
+        finally:
+            # Garantir que quiz_active é sempre limpo
+            sess.quiz_active = False
+            sess.quiz_answer = ""
 
-            # Se ninguém acertou
-            if sess.quiz_answer:  # ainda tem resposta = ninguém acertou
-                await bot_channel.send(embed=_embed(f"⏰ Tempo esgotado! Era: **{sess.quiz_title}**"))
-                sess.quiz_answer = ""
-
-            await asyncio.sleep(3)  # pausa entre rodadas
-
-        # Fim do quiz
-        sess.quiz_active = False
-        sess.quiz_answer = ""
+        # Placar final
         if sess.quiz_scores:
             ranking = sorted(sess.quiz_scores.items(), key=lambda x: x[1], reverse=True)
             lines = ["🏆 **Placar Final:**"]
@@ -3287,7 +3328,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="quiz", aliases=["qz"], help="Quiz musical: t$quiz [rodadas] — adivinhe a música!")
     @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def cmd_quiz(ctx: commands.Context, rounds: int = 5):
+    async def cmd_quiz(ctx: commands.Context, rounds: int = 10):
         if not ctx.guild:
             return
         if not _voice_enabled():
@@ -3726,6 +3767,10 @@ def register_voice(bot: commands.Bot) -> None:
                 current_d = info.get("current_display", "")
                 saved_queries = info.get("queue_queries", [])
                 saved_displays = info.get("queue_displays", [])
+                # Restaurar posição de playback (seek_sec salvo + tempo de restart)
+                raw_seek = info.get("current_seek_sec", 0.0)
+                if raw_seek > 0 and current_q:
+                    session.restore_seek_sec = raw_seek + age
                 # Re-enfileirar a música que estava tocando
                 if current_q:
                     session.queue_display.append(current_d or current_q)
