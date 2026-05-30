@@ -134,6 +134,8 @@ MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuár
 CLIP_DURATION_SEC = 30
 CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
 
+QUEUE_MAX = 25  # máximo de músicas na fila
+
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 3
 
@@ -1825,8 +1827,8 @@ async def _voice_listen_loop(
             if action == "play" and arg:
                 # Verifica limite de fila
                 fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
-                if fila_atual >= 10:
-                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/10).")
+                if fila_atual >= QUEUE_MAX:
+                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).")
                     continue
                 # Suporta múltiplas músicas separadas por vírgula ou " e "
                 parts = re.split(r'\s*,\s*|\s+e\s+', arg)
@@ -1942,7 +1944,7 @@ _HELP_TEXT = (
     "**🎵 Música**\n"
     "`t$e` / `t$enter` — Entra no canal de voz.\n"
     "`t$lv` / `t$leave` — Sai do canal de voz.\n"
-    "`t$p` / `t$play <música ou URL>` — Adiciona à fila (até 10).\n"
+    "`t$p` / `t$play <música ou URL>` — Adiciona à fila (até 25).\n"
     "  Aceita: YouTube, Spotify, Deezer, Apple Music, Amazon Music, YT Music.\n"
     "`t$pa` / `t$pause` — Pausa a reprodução.\n"
     "`t$re` / `t$resume` — Retoma de onde pausou.\n"
@@ -2328,6 +2330,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         # Bot está conectado mas sessão foi perdida → recria sem reconectar
         if vc and vc.is_connected() and not sess:
+            log.info("Sessão perdida mas vc ativo — recriando sessão guild=%s", gid)
             session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
             session.music_task = asyncio.create_task(
                 _play_worker(gid, vc, bot),
@@ -2363,6 +2366,15 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(embed=_embed("⚠️ Não tenho permissão para entrar ou falar neste canal de voz."))
                 return None, None
 
+        # Limpar conexão fantasma antes de conectar
+        existing_vc = guild.voice_client
+        if existing_vc:
+            try:
+                await existing_vc.disconnect(force=True)
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+
         # Conectar
         try:
             await _ensure_opus()
@@ -2381,7 +2393,7 @@ def register_voice(bot: commands.Bot) -> None:
             # Fallback silencioso para VoiceClient normal (sem escuta, mas música funciona)
             log.warning("VoiceRecvClient timeout — usando VoiceClient padrão (música apenas).")
             try:
-                # Limpa qualquer estado parcial de conexão (conectado ou não)
+                # Limpa qualquer estado parcial de conexão
                 existing = guild.voice_client
                 if existing:
                     try:
@@ -2394,10 +2406,10 @@ def register_voice(bot: commands.Bot) -> None:
                     timeout=timeout,
                 )
             except Exception as e:
-                await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
+                await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
                 return None, None
         except Exception as e:
-            await ctx.send(f"⚠️ Erro ao entrar no canal de voz: {e}")
+            await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
             return None, None
 
         # Criar sessão
@@ -2663,7 +2675,7 @@ def register_voice(bot: commands.Bot) -> None:
             fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
             added = 0
             for song in songs:
-                if fila_atual + added >= 10:
+                if fila_atual + added >= QUEUE_MAX:
                     break
                 display = song.get("display", song.get("query", "???"))
                 query = song.get("query", f"ytsearch1:{display}")
@@ -2706,23 +2718,28 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória na fila: t$r / t$random")
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def cmd_random(ctx: commands.Context):
+    async def cmd_random(ctx: commands.Context, *, query: str = ""):
         nonlocal _last_random
         if not _voice_enabled():
             await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
+        # Se passou URL/query, redirecionar para t$p (ex: t$r https://...)
+        if query and query.strip():
+            ctx.message.content = f"t$p {query}"
+            await bot.process_commands(ctx.message)
+            return
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
         import random
         choices = [s for s in _RANDOM_SONGS if s != _last_random] or _RANDOM_SONGS
-        query = random.choice(choices)
-        _last_random = query
-        display = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
+        song = random.choice(choices)
+        _last_random = song
+        display = re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip()
         sess.queue_display.append(display)
-        await sess.music_queue.put(query)
+        await sess.music_queue.put(song)
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila: **{display}**"))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t$p / t$play <nome ou URL>")
@@ -2745,8 +2762,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not sess:
             return
         fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
-        if fila_atual >= 10:
-            await ctx.send(embed=_embed(f"⚠️ A fila já está cheia ({fila_atual}/10). Aguarde terminar alguma música."))
+        if fila_atual >= QUEUE_MAX:
+            await ctx.send(embed=_embed(f"⚠️ A fila já está cheia ({fila_atual}/{QUEUE_MAX}). Aguarde terminar alguma música."))
             return
 
         is_url = bool(re.match(r"^https?://", query))
