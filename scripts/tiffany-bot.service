@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/tiffany-bot
+ExecStartPre=/bin/bash -c '/usr/bin/pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null; sleep 1; rm -f /tmp/tiffany_launcher.lock; exit 0'
 ExecStart=/usr/bin/python3 -u launcher.py
 Restart=on-failure
 RestartSec=10
