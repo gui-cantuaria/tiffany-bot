@@ -2474,11 +2474,14 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
 
     @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t$s / t$skip — votação se 3+ pessoas")
-    async def cmd_pular(ctx: commands.Context):
+    async def cmd_pular(ctx: commands.Context, *, args: str = ""):
         if not _voice_enabled():
             await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
+            return
+        if args.strip():
+            await ctx.send(embed=_embed(f"⚠️ `t$s` é o comando de **pular música**, não de tocar.\nPara tocar, use `t$p {args.strip()[:100]}`"))
             return
         guild = ctx.guild
         vc = guild.voice_client
