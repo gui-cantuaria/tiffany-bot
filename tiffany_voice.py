@@ -1936,49 +1936,6 @@ def _cleanup_stale_tempfiles() -> None:
         pass
 
 
-_HELP_TEXT = (
-    "**— Tiffany · Comandos —**\n\n"
-    "**💬 Chat & IA**\n"
-    "`t$c` / `t$chat <pergunta>` — Pergunta à IA. Aceita imagens.\n"
-    "`t$su` / `t$summary <URL>` — Resume o conteúdo de um link.\n\n"
-    "**🎵 Música**\n"
-    "`t$e` / `t$enter` — Entra no canal de voz.\n"
-    "`t$lv` / `t$leave` — Sai do canal de voz.\n"
-    "`t$p` / `t$play <música ou URL>` — Adiciona à fila (até 25).\n"
-    "  Aceita: YouTube, Spotify, Deezer, Apple Music, Amazon Music, YT Music.\n"
-    "`t$pa` / `t$pause` — Pausa a reprodução.\n"
-    "`t$re` / `t$resume` — Retoma de onde pausou.\n"
-    "`t$s` / `t$skip` — Pula a faixa (vote skip com 3+ pessoas).\n"
-    "`t$l` / `t$loop` — Repete a música atual (liga/desliga).\n"
-    "`t$sh` / `t$shuffle` — Embaralha a fila.\n"
-    "`t$rp` / `t$replay` — Toca a música atual de novo do início.\n"
-    "`t$cl` / `t$clear` — Para tudo e limpa a fila.\n"
-    "`t$r` / `t$random` — Música aleatória na fila.\n"
-    "`t$ff` / `t$seek <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n"
-    "`t$np` / `t$nowplaying` — Música tocando agora.\n"
-    "`t$hi` / `t$history` — Últimas músicas tocadas.\n"
-    "`t$ap` / `t$autoplay` — Liga/desliga autoplay (músicas similares).\n"
-    "`t$ly` / `t$lyrics` — Busca a letra da música atual.\n\n"
-    "**🎶 Quiz Musical**\n"
-    "`t$qz` / `t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
-    "`t$qs` / `t$quizstop` — Para o quiz.\n\n"
-    "**🎬 Clip**\n"
-    "`t$cp` / `t$clip` — Salva os últimos 30s de áudio da call.\n\n"
-    "**📂 Playlists**\n"
-    "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
-    "**🎲 RPG & Dados**\n"
-    "`t$d` / `t$roll` / `t$dice <expressão>` — Rola dados: `d20`, `2d6+3`, `4d6kh3`.\n"
-    "Inline: `[d20+5 ataque]` em qualquer mensagem.\n\n"
-    "**🎙️ Voz (na call)**\n"
-    "«Tiffany, toca [música]» — Adiciona à fila.\n"
-    "«Tiffany, para/pula/loop/sai» — Controle por voz.\n"
-    "«Tiffany, [pergunta]» — Pergunta à IA por voz.\n\n"
-    "**🔧 Info**\n"
-    "`/help` — Esta ajuda (só você vê).\n"
-    "`/np`, `/queue` — Info da sessão.\n"
-    "`/status` — Status do bot."
-)
-
 
 async def _fetch_lyrics(query: str) -> Optional[str]:
     """Busca letra da música via API pública (lrclib.net)."""
@@ -3754,7 +3711,53 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
-        await interaction.response.send_message(embed=_embed(_HELP_TEXT), ephemeral=True)
+        em = discord.Embed(title="✨ Tiffany · Comandos", color=TIFFANY_PINK)
+        if interaction.guild and interaction.guild.me and interaction.guild.me.avatar:
+            em.set_thumbnail(url=interaction.guild.me.avatar.url)
+        em.add_field(name="💬 Chat & IA", value=(
+            "`t$c` / `t$chat` — Pergunta à IA (aceita imagens)\n"
+            "`t$su` / `t$summary` — Resume um link"
+        ), inline=False)
+        em.add_field(name="🎵 Música", value=(
+            "`t$e` / `t$enter` — Entrar na call\n"
+            "`t$lv` / `t$leave` — Sair da call\n"
+            "`t$p` / `t$play` — Tocar música ou URL\n"
+            "`t$pa` / `t$pause` — Pausar\n"
+            "`t$re` / `t$resume` — Retomar\n"
+            "`t$s` / `t$skip` — Pular faixa\n"
+            "`t$l` / `t$loop` — Loop on/off\n"
+            "`t$sh` / `t$shuffle` — Embaralhar fila"
+        ), inline=False)
+        em.add_field(name="🎵 Música (cont.)", value=(
+            "`t$cl` / `t$clear` — Parar e limpar fila\n"
+            "`t$r` / `t$random` — Música aleatória\n"
+            "`t$rp` / `t$replay` — Repetir do início\n"
+            "`t$ff` / `t$seek` — Pular tempo (`+30`, `-15`, `1:30`)\n"
+            "`t$np` / `t$nowplaying` — Tocando agora\n"
+            "`t$hi` / `t$history` — Histórico\n"
+            "`t$ap` / `t$autoplay` — Autoplay\n"
+            "`t$ly` / `t$lyrics` — Letra da música"
+        ), inline=False)
+        em.add_field(name="🎶 Quiz Musical", value=(
+            "`t$qz` / `t$quiz` `[rodadas]` — Adivinhe a música!\n"
+            "`t$qs` / `t$quizstop` — Parar o quiz"
+        ), inline=True)
+        em.add_field(name="🎬 Clip & 📂 Playlists", value=(
+            "`t$cp` / `t$clip` — Salvar últimos 30s de áudio\n"
+            "`t$pl` / `t$playlist` — `save` `load` `list` `del`"
+        ), inline=True)
+        em.add_field(name="🎲 Dados", value=(
+            "`t$d` / `t$roll` — Rolar dados (`d20`, `2d6+3`...)\n"
+            "Inline: `[d20+5 ataque]` em qualquer mensagem"
+        ), inline=False)
+        em.add_field(name="🎙️ Voz na call", value=(
+            "«Tiffany, toca `[música]`» — Adicionar à fila\n"
+            "«Tiffany, para / pula / sai» — Controle por voz\n"
+            "«Tiffany, `[pergunta]`» — Perguntar à IA"
+        ), inline=False)
+        em.add_field(name="🔧 Slash", value="`/help` · `/np` · `/queue` · `/status`", inline=False)
+        em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
+        await interaction.response.send_message(embed=em, ephemeral=True)
 
     @bot.tree.command(name="np", description="Mostra a música tocando agora")
     async def slash_np(interaction: discord.Interaction):
