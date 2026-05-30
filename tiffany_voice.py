@@ -1218,7 +1218,7 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
     return None
 
 
-MAX_SONG_DURATION_SEC = 3600  # 1 hora — rejeita vídeos acima disso
+MAX_SONG_DURATION_SEC = 8 * 60  # 8 minutos — rejeita músicas acima disso
 
 
 def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
