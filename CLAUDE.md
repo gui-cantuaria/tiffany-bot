@@ -37,27 +37,29 @@ systemd (tiffany-bot.service, KillMode=control-group)
 
 **launcher.py** — Spawns `notices.py` and `offers.py` as subprocesses, monitors health every 10s, auto-restarts on crash. Uses `fcntl` lockfile to prevent duplicate instances. Circuit breaker: max 15 total restarts.
 
-**notices.py** — Core bot (~1,700 lines). Handles:
+**notices.py** — Core bot (~1,800 lines). Handles:
 - RSS collection from 15+ feeds every 45 minutes (slots at xx:00 and xx:45)
-- AI analysis via OpenRouter (Llama 3.3 70B for text, Llama 4 Maverick for image validation)
+- AI analysis via OpenRouter (Gemini 2.5 Flash for text and image validation)
 - Discord publishing with embeds, threads, and image attachments
 - Command normalization (`on_message` handler for spaceless commands like `T$Phttps://...`)
 - Imports and registers `tiffany_voice.py` commands
 - Log noise suppression for discord.ext.voice_recv and gateway warnings
 - Embed safety: title truncated to 256, description to 4096, thread name to 100 chars
 - Role mention validation before pinging
+- Image integrity validation: Content-Length check, EOF markers (JPEG FFD9, PNG IEND)
+- Dedup: in-cycle sets (not polluting persistent history) + SimHash + title fingerprint
 
 **tiffany_voice.py** — Voice and music module (~3,500+ lines). Handles:
 - Music playback via yt-dlp download + FFmpeg (download-to-file approach, not streaming)
 - Platform resolution: Spotify, Deezer, Apple Music, Amazon Music, YouTube Music -> YouTube search
-- Voice recognition: discord-ext-voice-recv -> Opus decode -> Groq Whisper / Google STT / Vosk fallback
+- Voice recognition: discord-ext-voice-recv -> Opus decode -> Google STT / Vosk fallback
 - AI chat (`t$c`), URL summarization (`t$su`), TTS responses
 - Session persistence across restarts (`voice_state.json`)
 - Playlist save/load system (`playlists.json`)
-- Music Quiz (`t$quiz`) — plays song snippets, players guess in chat
-- Ambient Sounds (`t$ambient`) — rain, lofi, cafe, forest, fire, ocean, thunder (loop via music worker)
-- Audio Clip (`t$clip`) — saves last 30s of voice channel audio as WAV file
-- Auto-disconnect on 5min idle (no interaction) or empty channel
+- Music Quiz (`t$quiz`) — plays song snippets, players guess in chat; resumes paused music after
+- Ambient Sounds (`t$ambient`) — rain, lofi, cafe, forest, fire, ocean, thunder (loop via music worker, preserves loop state)
+- Audio Clip (`t$clip`) — saves last 30s of voice channel audio as WAV file (stereo 48kHz buffer)
+- Auto-disconnect on 5min idle (no interaction) or empty channel (with guard against duplicate handlers)
 - Bot moved/kicked detection via `on_voice_state_update`
 - Voice command speaker channel membership validation
 - Random music from 1000 international hits (`random_songs.py`)
@@ -68,11 +70,12 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
 - 7 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer
 - 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
-- Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20
+- Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20, requires at least one quality metric
 - Coupon extraction, tag display, store redirect URLs
 - Affiliate link injection via `affiliate_config.py`
 - Posts to channel 1385327938529919006, mentions role 1386386059390357575
 - Role mention validation before pinging
+- First cycle runs immediately on startup (no 30min delay)
 
 ## Key Files
 
@@ -148,33 +151,45 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 6. **Footer:** `Noticia resumida por IA` (+ `Fonte em ingles` for EN sources)
 7. **Thread:** Auto-created: `Chat {Category}: {Title}` (max 100 chars)
 
-### AI Models
-- **Text analysis:** meta-llama/llama-3.3-70b-instruct (via OpenRouter)
-- **Image validation:** meta-llama/llama-4-maverick (vision model, checks image relevance)
+### AI Model
+- **Unified model:** google/gemini-2.5-flash-preview-05-20 (via OpenRouter)
+- Used for: text analysis, image validation (vision), chat (`t$c`), URL summary (`t$su`), voice questions
+- No fallback chain — same model for all attempts (3 retries with backoff)
 
 ### Image Pipeline
 - Extract from RSS `<media:content>`, `<enclosure>`, og:image meta tags
 - Validate: min 400x200px, no 403 responses, AI vision relevance check
-- Download and attach as `discord.File` (never post without image)
+- Download with `r.read()` (full response, not truncated)
+- Integrity: Content-Length vs bytes received, JPEG EOF (FFD9), PNG IEND chunk
+- Timeout: 30s, 3 retries
+- Attach as `discord.File` (never post without image)
+
+### Dedup System
+- URL hash + SimHash (Hamming distance <= 5) + title fingerprint
+- In-cycle: `_cycle_titles` and `_cycle_simhashes` sets (in-memory only, do NOT pollute persistent history)
+- Persistent: `_simhash_idx` and `_title_idx` in `notices_history.json` (pruned once per cycle)
+- Title/simhash only added to persistent history AFTER IA approval (Fase 2)
 
 ## Offers Bot Rules
 
 ### Embed Layout
 - Title: `Fire emoji {product} — {discount}% OFF`
 - Prices: `R$ {original} -> R$ {current} (-{discount}%)`
-- Coupon: `Tag emoji Cupom: **{code}**`
+- Coupon: `🏷️ Cupom: **{code}**`
 - CTA: `Point right emoji **[COMPRAR COM DESCONTO]({url})**` (CAPSLOCK)
-- Tags: Extract `name` from tag dicts (e.g., "Frete Gratis", "Parcelado")
+- Tags: `🔖 {tag names}` (different emoji from coupon)
 - Footer: `Oferta verificada automaticamente`
 
 ### Schedule
 - Hours: 8h-18h SP, 30min cycle, max 5 posts, 3min spacing
+- First cycle runs immediately on bot startup (no delay)
 
 ### Filters
 - Discount: 15-100% (rejects negatives and absurd values > 100%)
 - Image required
 - Stars >= 4.2, sales >= 20
 - Store must be in whitelist
+- Must have at least one quality metric (stars OR sales) — rejects offers with no data
 
 ## Music Technical Details
 
@@ -190,24 +205,27 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 ### Playback Architecture
 - Download audio to temp file via yt-dlp (through WARP SOCKS5 proxy on VPS)
 - Play local file with FFmpeg (no proxy needed)
-- Seek (`t$ff`): reuse downloaded file with FFmpeg `-ss` parameter
+- Seek (`t$ff`): reuse downloaded file with FFmpeg `-ss` parameter, safety timeout on worker wait loop
 - Session persistence: save current_query + queue to `voice_state.json`
 - Queue limit: 10 songs max
 - Playlist extraction: `extract_flat="in_playlist"`, `ignoreerrors: True`
+- Shuffle: zip display+query together before shuffling (keeps them synchronized)
+- Ambient: `_clear_loop` skipped when `ambient_active` (preserves loop state)
 
 ### Voice Recognition Pipeline
 ```
 Discord voice packets -> discord-ext-voice-recv -> Opus decode
 -> PCM buffer (per user, silence-gated, 2MB cap) -> WAV 48kHz mono
--> Groq Whisper (48kHz, primary) / Google STT (16kHz, fallback) / Vosk (16kHz, offline)
+-> Google STT (16kHz, primary) / Vosk (16kHz, offline fallback)
 -> _parse_voice_command() -> speaker channel membership check -> action dispatch
 ```
 
 ### AI Chat (`t$c`)
+- Model: google/gemini-2.5-flash-preview-05-20 (via OpenRouter)
 - AI semaphore: 3 concurrent calls max + global rate limit (15/min)
 - Per-user sliding window: 5 turns in-memory, 3 turns persisted in `chat_memory.json`, 24h TTL
 - Cooldown: 5s per user
-- Supports image attachments (vision model)
+- Supports image attachments (same model handles vision natively)
 - Whitespace-only input rejected
 
 ### Music Quiz (`t$quiz`)
@@ -215,17 +233,19 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - Downloads song via yt-dlp, seeks to 1/3 position, plays 20s snippet
 - Answer detection via `on_message` listener — fuzzy word matching (40% threshold)
 - Per-guild scores, medals for top 3, max 20 rounds
-- Pauses current music, resumes after quiz ends
-- `t$quizstop` / `t$qs` to cancel mid-game
+- Pauses current music, resumes after quiz ends (saves `_quiz_was_playing` flag)
+- `t$quizstop` / `t$qs` to cancel mid-game (shows final scores, clears state)
+- Watchdog skips guilds with active quiz (no idle disconnect during quiz)
 
 ### Ambient Sounds (`t$ambient`)
 - 7 sound types: rain/chuva, lofi, cafe/cafe, forest/floresta, fire/lareira, ocean/mar, thunder/trovao
 - Uses music worker with loop enabled — searches YouTube for long ambient tracks
+- `_clear_loop` is skipped when `ambient_active=True` (loop preserved for ambient items from queue)
 - `t$ambient stop` to stop
 - Sets `session.ambient_active` flag
 
 ### Audio Clip (`t$clip`)
-- Circular PCM buffer (last 30s, 48kHz 16-bit, ~2.88MB max)
+- Circular PCM buffer (last 30s, stereo 48kHz 16-bit, ~5.76MB max)
 - All voice-recv audio from all users stored in `session.clip_buffer`
 - Exports as WAV file sent via `discord.File`
 - Requires voice-recv to be active (bot must be listening)
@@ -233,7 +253,9 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 
 ### Idle & Cleanup
 - Auto-disconnect after 5min idle (no commands or voice interaction)
+- Skips disconnect if quiz is active or 24/7 mode enabled
 - Empty channel watchdog: checks every 60s, disconnects if bot is alone
+- `on_voice_state_update` handler: guard against duplicate 60s sleeps (`_empty_channel_pending`)
 - `_after()` callback protected against `loop.is_closed()`
 - `_notify` truncates content to 4000 chars
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
@@ -285,9 +307,11 @@ sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 - **Help:** Only via `/help` slash command (ephemeral, embed rosa). No `t$h`/`t$help` text command.
 - **File naming:** English (offers.py not ofertas.py)
 - **No database:** All state in JSON files
+- **AI model:** Single unified model (Gemini 2.5 Flash) for all AI tasks — no fallback chains
 - **Rate limiting:** Sequential AI calls, cooldowns between Discord posts
-- **Images:** Always download and attach — never post news without image
+- **Images:** Always download and attach — never post news without image. Validate integrity (Content-Length, EOF markers).
 - **Pings:** Only mention notification role for nota >= 90 (urgent news). Always validate role exists before mentioning.
 - **Embeds:** All music/voice messages use pink embeds (TIFFANY_PINK = 0xFF69B4) via `_embed()` helper
 - **Input validation:** Truncate user inputs (query 500 chars, playlist name 50 chars), strip whitespace, validate before processing
 - **Error handling:** `on_message` wrapped in try/except, `_after()` checks `loop.is_closed()`, `_notify` truncates to 4000 chars
+- **JSON persistence:** `save_metrics()` and `save_queue()` use try/except with .tmp cleanup on failure
