@@ -1981,13 +1981,14 @@ async def on_message(message: discord.Message):
             matched = False
             # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/st/su)
             for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
-                if after_prefix.lower().startswith(cmd) and len(after_prefix) > len(cmd):
-                    char_after = after_prefix[len(cmd)]
-                    if char_after != " ":
-                        # Insere espaço entre comando e argumento
-                        message.content = f"t${cmd} {after_prefix[len(cmd):]}"
-                        matched = True
+                if after_prefix.lower().startswith(cmd):
+                    if len(after_prefix) == len(cmd) or after_prefix[len(cmd)] == " ":
+                        # Comando já formatado corretamente (exato ou com espaço)
                         break
+                    # Insere espaço entre comando e argumento
+                    message.content = f"t${cmd} {after_prefix[len(cmd):]}"
+                    matched = True
+                    break
             # Normaliza prefixo para minúsculo (T$ → t$)
             if not matched and content[:2] != "t$":
                 message.content = f"t${content[2:]}"
