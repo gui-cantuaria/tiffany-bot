@@ -1475,6 +1475,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 await asyncio.sleep(0.25)
                 continue
             _no_session_count = 0
+            # Não tocar músicas durante quiz (quiz usa vc.play() diretamente)
+            if session.quiz_active:
+                await asyncio.sleep(0.5)
+                continue
             from_queue = True
             try:
                 if _replay and session.loop_enabled:
@@ -1773,7 +1777,21 @@ async def _voice_listen_loop(
             if action == "shuffle":
                 import random as _rnd
                 if len(session.queue_display) >= 2:
-                    _rnd.shuffle(session.queue_display)
+                    # Drenar music_queue, embaralhar junto com queue_display (mantém sincronia)
+                    _old_items = []
+                    try:
+                        while True:
+                            _old_items.append(session.music_queue.get_nowait())
+                            session.music_queue.task_done()
+                    except Exception:
+                        pass
+                    _combined = list(zip(session.queue_display, _old_items))
+                    _rnd.shuffle(_combined)
+                    session.queue_display = [d for d, _ in _combined]
+                    _new_q = asyncio.Queue()
+                    for _, q in _combined:
+                        await _new_q.put(q)
+                    session.music_queue = _new_q
                     await _notify(bot, session.text_channel_id, f"🔀 Fila embaralhada ({len(session.queue_display)} músicas).")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Fila com menos de 2 músicas.")
@@ -1850,7 +1868,7 @@ async def _voice_listen_loop(
                     session.queue_display.append(display)
                     await session.music_queue.put(q)
                     added += 1
-                    if len(session.queue_display) + (1 if session.current_song else 0) >= 10:
+                    if len(session.queue_display) + (1 if session.current_song else 0) >= QUEUE_MAX:
                         break
 
                 if added > 1:
@@ -2689,7 +2707,7 @@ def register_voice(bot: commands.Bot) -> None:
             if not tracks:
                 await ctx.send("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública.")
                 return
-            vagas = 10 - fila_atual
+            vagas = QUEUE_MAX - fila_atual
             added = 0
             for track in tracks[:vagas]:
                 sess.queue_display.append(track["display"])
@@ -2790,7 +2808,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(f"🎵 Buscando **{display[:100]}**..."))
         else:
             pos = len(sess.queue_display) + (1 if sess.current_song else 0)
-            await ctx.send(embed=_embed(f"🎵 **#{pos}/10** na fila: **{display[:100]}**"))
+            await ctx.send(embed=_embed(f"🎵 **#{pos}/{QUEUE_MAX}** na fila: **{display[:100]}**"))
 
     @bot.command(name="c", aliases=["chat"], help="Pergunta via chat: t$c / t$chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -3268,10 +3286,11 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Já tem um quiz rolando! Use `t$quizstop` pra parar."))
             return
 
-        # Pausar música atual se tocando
-        sess._quiz_was_playing = vc.is_playing()
-        if sess._quiz_was_playing:
-            vc.pause()
+        # Parar música atual se tocando (vc.pause() deixa is_playing()=True,
+        # impedindo vc.play() no quiz task — usar stop() é o correto)
+        sess._quiz_was_playing = vc.is_playing() or vc.is_paused()
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
 
         rounds = max(1, min(rounds, 20))
         sess.quiz_active = True
@@ -3805,10 +3824,11 @@ def register_voice(bot: commands.Bot) -> None:
             lines.append(f"▶️ **Tocando agora:** {session.current_song[:80]}")
         if session.queue_display:
             lines.append("")
-            for i, name in enumerate(session.queue_display[:10], start=1):
+            _QUEUE_DISPLAY_LIMIT = 20
+            for i, name in enumerate(session.queue_display[:_QUEUE_DISPLAY_LIMIT], start=1):
                 lines.append(f"`{i}.` {name[:80]}")
-            if len(session.queue_display) > 10:
-                lines.append(f"*... e mais {len(session.queue_display) - 10} músicas*")
+            if len(session.queue_display) > _QUEUE_DISPLAY_LIMIT:
+                lines.append(f"*... e mais {len(session.queue_display) - _QUEUE_DISPLAY_LIMIT} músicas*")
         if not lines:
             await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
             return
