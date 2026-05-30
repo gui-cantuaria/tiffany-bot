@@ -3336,22 +3336,31 @@ def register_voice(bot: commands.Bot) -> None:
         if not sess or not sess.quiz_active or not sess.quiz_answer:
             return
         guess = message.content.strip().lower()
-        if len(guess) < 3:
+        if len(guess) < 2:
             return
         answer = sess.quiz_answer
-        # Aceita se o palpite contém parte significativa do título ou artista
-        # Normaliza removendo pontuação
-        clean = re.sub(r"[^\w\s]", "", answer)
+        # Remover ruído de títulos do YouTube: (Official Video), M/V, [HD], etc.
+        answer_clean = re.sub(r"\([^)]*(?:official|audio|video|lyric|mv|hd|hq|visualizer|clip)[^)]*\)", "", answer, flags=re.IGNORECASE)
+        answer_clean = re.sub(r"\[[^\]]*(?:official|audio|video|lyric|mv|hd|hq)[^\]]*\]", "", answer_clean, flags=re.IGNORECASE)
+        answer_clean = re.sub(r"\bM/?V\b", "", answer_clean, flags=re.IGNORECASE)
+        answer_clean = re.sub(r"\s+", " ", answer_clean).strip()
+        # Separar artista e título (padrão "Artista - Título")
+        title_part = answer_clean.split(" - ", 1)[1].strip() if " - " in answer_clean else answer_clean
+        clean_full = re.sub(r"[^\w\s]", "", answer_clean)
+        clean_title = re.sub(r"[^\w\s]", "", title_part)
         clean_guess = re.sub(r"[^\w\s]", "", guess)
-        # Divide a resposta em palavras significativas (>2 chars)
-        answer_words = [w for w in clean.split() if len(w) > 2]
+        full_words = [w for w in clean_full.split() if len(w) > 2]
+        title_words = [w for w in clean_title.split() if len(w) > 2]
         guess_words = [w for w in clean_guess.split() if len(w) > 2]
-        if not answer_words:
+        if not full_words:
             return
-        # Conta quantas palavras da resposta o jogador acertou
-        matched = sum(1 for w in answer_words if any(w in gw or gw in w for gw in guess_words))
-        # Precisa acertar pelo menos 40% das palavras significativas
-        if matched < max(1, len(answer_words) * 0.4):
+        def _match_ratio(target, gws):
+            if not target or not gws:
+                return 0.0
+            return sum(1 for w in target if any(w in gw or gw in w for gw in gws)) / len(target)
+        # Acerta se: ≥50% das palavras do título completo (sem ruído) batem
+        # OU ≥60% das palavras só do título (parte após " - ") batem
+        if _match_ratio(full_words, guess_words) < 0.5 and _match_ratio(title_words, guess_words) < 0.6:
             return
         # Acertou!
         uid = message.author.id
