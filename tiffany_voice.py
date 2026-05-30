@@ -343,7 +343,7 @@ def _check_cooldown(user_id: int) -> bool:
     return True
 
 
-_IDLE_TIMEOUT_SEC = 5 * 60  # 5 minutos sem interação → sair da call
+_IDLE_TIMEOUT_SEC = 10 * 60  # 10 minutos sem interação → sair da call
 
 
 def _touch_activity(guild_id: int) -> None:
@@ -1955,18 +1955,13 @@ _HELP_TEXT = (
     "`t$cl` / `t$clear` — Para tudo e limpa a fila.\n"
     "`t$r` / `t$random` — Música aleatória na fila.\n"
     "`t$ff` / `t$seek <tempo>` — Pula na música: `+30`, `-15`, `1:30`.\n"
-    "`t$q` / `t$queue` — Mostra a fila.\n"
     "`t$np` / `t$nowplaying` — Música tocando agora.\n"
     "`t$hi` / `t$history` — Últimas músicas tocadas.\n"
     "`t$ap` / `t$autoplay` — Liga/desliga autoplay (músicas similares).\n"
-    "`t$247` / `t$nonstop` — Liga/desliga modo 24/7 (não sai por idle).\n"
     "`t$ly` / `t$lyrics` — Busca a letra da música atual.\n\n"
     "**🎶 Quiz Musical**\n"
     "`t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
     "`t$quizstop` / `t$qs` — Para o quiz.\n\n"
-    "**🌧️ Ambient**\n"
-    "`t$ambient` / `t$amb <tipo>` — Sons ambiente: rain, lofi, café, forest, fire, ocean, thunder.\n"
-    "`t$ambient stop` — Para o som ambiente.\n\n"
     "**🎬 Clip**\n"
     "`t$clip` — Salva os últimos 30s de áudio da call.\n\n"
     "**📂 Playlists**\n"
@@ -1979,9 +1974,8 @@ _HELP_TEXT = (
     "«Tiffany, para/pula/loop/sai» — Controle por voz.\n"
     "«Tiffany, [pergunta]» — Pergunta à IA por voz.\n\n"
     "**🔧 Info**\n"
-    "`t$st` / `t$stats` — Estatísticas da sessão.\n"
     "`/help` — Esta ajuda (só você vê).\n"
-    "`/np`, `/queue`, `/stats` — Info da sessão.\n"
+    "`/np`, `/queue` — Info da sessão.\n"
     "`/status` — Status do bot."
 )
 
@@ -2556,30 +2550,6 @@ def register_voice(bot: commands.Bot) -> None:
                     f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
                 ))
 
-    @bot.command(name="q", aliases=["queue"], help="Lista a fila de músicas: t$q / t$queue")
-    async def cmd_queue(ctx: commands.Context):
-        if not ctx.guild:
-            return
-        _touch_activity(ctx.guild.id)
-        session = _sessions.get(ctx.guild.id)
-        vc = ctx.guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
-            return
-        lines = []
-        if session.current_song:
-            lines.append(f"▶️ **Tocando agora:** {session.current_song[:80]}")
-        if session.queue_display:
-            lines.append("")
-            for i, name in enumerate(session.queue_display[:10], start=1):
-                lines.append(f"`{i}.` {name[:80]}")
-            if len(session.queue_display) > 10:
-                lines.append(f"*... e mais {len(session.queue_display) - 10} músicas*")
-        if not lines:
-            await ctx.send(embed=_embed("📭 Fila vazia."))
-            return
-        await ctx.send(embed=_embed("\n".join(lines)))
-
     @bot.command(name="np", aliases=["nowplaying"], help="Música tocando agora: t$np / t$nowplaying")
     async def cmd_now_playing(ctx: commands.Context):
         if not ctx.guild:
@@ -2694,27 +2664,6 @@ def register_voice(bot: commands.Bot) -> None:
 
         else:
             await ctx.send(embed=_embed("⚠️ Ação inválida. Use: `save`, `load`, `list` ou `del`."))
-
-    @bot.command(name="st", aliases=["stats"], help="Estatísticas da sessão (admin): t$st / t$stats")
-    @commands.has_permissions(administrator=True)
-    async def cmd_stats(ctx: commands.Context):
-        if not ctx.guild:
-            return
-        _stats["commands_used"] += 1
-        _touch_activity(ctx.guild.id)
-        users_with_context = len(_user_context)
-        lines = [
-            "**Estatisticas da Tiffany (sessao atual):**",
-            f"🎵 Musicas tocadas: **{_stats['songs_played']}**",
-            f"💬 Perguntas respondidas: **{_stats['questions_answered']}**",
-            f"⌨️ Comandos usados: **{_stats['commands_used']}**",
-            f"🧠 Contextos ativos: **{users_with_context}/{_CONTEXT_MAX_USERS}**",
-        ]
-        session = _sessions.get(ctx.guild.id)
-        if session:
-            fila = len(session.queue_display)
-            lines.append(f"📋 Fila atual: **{fila}/10**")
-        await ctx.send(embed=_embed("\n".join(lines)))
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória na fila: t$r / t$random")
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -3093,22 +3042,6 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed("⏹️ **Autoplay desativado**."))
 
-    @bot.command(name="247", aliases=["nonstop"], help="Modo 24/7 (não sai por idle): t$247 / t$nonstop")
-    async def cmd_247(ctx: commands.Context):
-        if not ctx.guild:
-            return
-        session = _sessions.get(ctx.guild.id)
-        vc = ctx.guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
-            return
-        _touch_activity(ctx.guild.id)
-        session.stay_24_7 = not session.stay_24_7
-        if session.stay_24_7:
-            await ctx.send(embed=_embed("🌙 **Modo 24/7 ativado** — não vou sair por inatividade."))
-        else:
-            await ctx.send(embed=_embed("☀️ **Modo 24/7 desativado** — volto a sair após 5 min sem uso."))
-
     @bot.command(name="ly", aliases=["lyrics"], help="Busca letra da música: t$ly / t$lyrics")
     async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
@@ -3253,21 +3186,6 @@ def register_voice(bot: commands.Bot) -> None:
     # MUSIC QUIZ
     # ============================
 
-    _AMBIENT_SOUNDS: dict[str, str] = {
-        "rain": "ytsearch1:rain sounds for sleeping 10 hours",
-        "chuva": "ytsearch1:rain sounds for sleeping 10 hours",
-        "lofi": "ytsearch1:lofi hip hop radio beats to relax study to",
-        "café": "ytsearch1:coffee shop ambience with jazz music",
-        "cafe": "ytsearch1:coffee shop ambience with jazz music",
-        "forest": "ytsearch1:forest ambience birds chirping nature sounds",
-        "floresta": "ytsearch1:forest ambience birds chirping nature sounds",
-        "fire": "ytsearch1:fireplace crackling sounds 10 hours",
-        "lareira": "ytsearch1:fireplace crackling sounds 10 hours",
-        "ocean": "ytsearch1:ocean waves sounds for sleeping 10 hours",
-        "mar": "ytsearch1:ocean waves sounds for sleeping 10 hours",
-        "thunder": "ytsearch1:thunderstorm sounds for sleeping 10 hours",
-        "trovão": "ytsearch1:thunderstorm sounds for sleeping 10 hours",
-    }
 
     async def _quiz_round_task(ctx: commands.Context, sess: _GuildVoiceSession, vc, rounds: int) -> None:
         """Executa rodadas do quiz musical."""
@@ -3508,67 +3426,6 @@ def register_voice(bot: commands.Bot) -> None:
             embed=_embed(f"🎬 **Clip salvo!** ({duration:.0f}s de áudio)"),
             file=discord.File(wav_buf, filename=f"clip_{ctx.guild.id}_{int(time.time())}.wav"),
         )
-
-    # ============================
-    # AMBIENT SOUNDS
-    # ============================
-
-    @bot.command(name="ambient", aliases=["amb"], help="Sons ambiente: t$ambient <tipo> — rain, lofi, café, forest, fire, ocean, thunder")
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def cmd_ambient(ctx: commands.Context, *, sound_type: str = ""):
-        if not ctx.guild:
-            return
-        if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
-            return
-        sess, vc = await _ensure_connected(ctx)
-        if not sess:
-            return
-        _touch_activity(ctx.guild.id)
-
-        if not sound_type:
-            unique = []
-            seen = set()
-            for k, v in _AMBIENT_SOUNDS.items():
-                if v not in seen:
-                    unique.append(k)
-                    seen.add(v)
-            await ctx.send(embed=_embed(
-                "🌧️ **Sons Ambientes Disponíveis:**\n"
-                + ", ".join(f"`{n}`" for n in unique)
-                + "\n\nUso: `t$ambient rain`\nPara parar: `t$ambient stop`"
-            ))
-            return
-
-        key = sound_type.strip().lower()
-
-        if key in ("stop", "parar", "off"):
-            if vc.is_playing() and sess.ambient_active:
-                vc.stop()
-                sess.ambient_active = False
-                sess.ambient_name = ""
-                await ctx.send(embed=_embed("⏹️ Som ambiente parado."))
-            else:
-                await ctx.send(embed=_embed("⚠️ Nenhum som ambiente tocando."))
-            return
-
-        query = _AMBIENT_SOUNDS.get(key)
-        if not query:
-            await ctx.send(embed=_embed(f"⚠️ Tipo `{key}` não encontrado. Use `t$ambient` pra ver a lista."))
-            return
-
-        # Para música/ambient atual
-        if vc.is_playing() or vc.is_paused():
-            vc.stop()
-
-        sess.ambient_active = True
-        sess.ambient_name = key
-        sess.loop_enabled = True
-        sess.loop_query = query
-        sess.loop_display = f"🌧️ Ambient: {key}"
-        sess.queue_display.append(f"🌧️ Ambient: {key}")
-        await sess.music_queue.put(query)
-        await ctx.send(embed=_embed(f"🌧️ **Som ambiente:** `{key}` — use `t$ambient stop` para parar."))
 
     @bot.listen("on_message")
     async def _antispam_everyone(message: discord.Message) -> None:
@@ -3952,25 +3809,6 @@ def register_voice(bot: commands.Bot) -> None:
         if not lines:
             await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
             return
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
-
-    @bot.tree.command(name="stats", description="Estatísticas da sessão atual da Tiffany")
-    async def slash_stats(interaction: discord.Interaction):
-        if not interaction.guild:
-            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
-            return
-        users_with_context = len(_user_context)
-        lines = [
-            "**Estatísticas da Tiffany (sessão atual):**",
-            f"🎵 Músicas tocadas: **{_stats['songs_played']}**",
-            f"💬 Perguntas respondidas: **{_stats['questions_answered']}**",
-            f"⌨️ Comandos usados: **{_stats['commands_used']}**",
-            f"🧠 Contextos ativos: **{users_with_context}/{_CONTEXT_MAX_USERS}**",
-        ]
-        session = _sessions.get(interaction.guild.id)
-        if session:
-            fila = len(session.queue_display)
-            lines.append(f"📋 Fila atual: **{fila}/10**")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     log.info("Comandos de voz registrados (/help, t$play, t$shuffle, t$roll, ...)")
