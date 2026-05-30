@@ -3692,7 +3692,7 @@ def register_voice(bot: commands.Bot) -> None:
                     text_ch = bot.get_channel(text_channel_id)
                     if text_ch and hasattr(text_ch, "send"):
                         try:
-                            await text_ch.send("🔄 Voltei! Estou pronta.")
+                            await text_ch.send(embed=_embed("🔄 Voltei! Estou pronta."), delete_after=60)
                         except Exception:
                             pass
                     continue
@@ -3716,9 +3716,9 @@ def register_voice(bot: commands.Bot) -> None:
                 if text_ch and hasattr(text_ch, "send"):
                     try:
                         if restored > 0:
-                            await text_ch.send(f"🔄 Voltei! Restaurando **{restored}** música(s) na fila.")
+                            await text_ch.send(embed=_embed(f"🔄 Voltei! Restaurando **{restored}** música(s) na fila."), delete_after=60)
                         else:
-                            await text_ch.send("🔄 Voltei! Estou pronta.")
+                            await text_ch.send(embed=_embed("🔄 Voltei! Estou pronta."), delete_after=60)
                     except discord.HTTPException:
                         pass
             except Exception as e:
