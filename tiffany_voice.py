@@ -485,7 +485,7 @@ async def _summarize_url(url: str, api_key: str) -> str:
         client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct",
+                model="google/gemini-2.5-flash-preview-05-20",
                 messages=[
                     {
                         "role": "system",
@@ -826,53 +826,8 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return wav_48k
 
 
-def _transcribe_whisper_groq(wav: bytes) -> Optional[str]:
-    """STT via Whisper large-v3 na Groq (grátis e rápido)."""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return None
-    try:
-        import urllib.request
-        import uuid
-        boundary = uuid.uuid4().hex
-        body = (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n'
-            f"Content-Type: audio/wav\r\n\r\n"
-        ).encode("utf-8") + wav + (
-            f"\r\n--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="model"\r\n\r\n'
-            f"whisper-large-v3\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="language"\r\n\r\n'
-            f"pt\r\n"
-            f"--{boundary}--\r\n"
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-        text = result.get("text", "").strip()
-        if text:
-            log.info("Whisper/Groq STT: %r", text)
-            return text
-    except Exception as e:
-        log.warning("Whisper/Groq STT erro: %s", e)
-    return None
-
-
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # 1) Whisper via Groq — aceita 48kHz nativo (melhor qualidade)
-    result = _transcribe_whisper_groq(wav)
-    if result:
-        return result
-    # Converter para 16kHz apenas para Google/Vosk (que precisam)
+    # Converter para 16kHz para Google/Vosk
     wav_16k = _wav_48k_to_16k(wav)
     # 2) Google STT (fallback online)
     try:
@@ -2233,10 +2188,10 @@ def register_voice(bot: commands.Bot) -> None:
                 user_content: list = [{"type": "text", "text": question or "O que está nessa imagem?"}]
                 for url in image_urls[:4]:  # máximo 4 imagens por mensagem
                     user_content.append({"type": "image_url", "image_url": {"url": url}})
-                model = "meta-llama/llama-4-maverick"
+                model = "google/gemini-2.5-flash-preview-05-20"
             else:
                 user_content = question
-                model = "meta-llama/llama-3.3-70b-instruct"
+                model = "google/gemini-2.5-flash-preview-05-20"
 
             async with _ai_semaphore:
                 resp = await client.chat.completions.create(

@@ -835,12 +835,12 @@ async def extrair_imagem_completa(entry, feed_url: str) -> Optional[str]:
 
 
 async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
-    """Usa IA de visão (llama-4-maverick) para verificar se a imagem combina com o título."""
+    """Usa IA de visão para verificar se a imagem combina com o título."""
     if not ai_client or not img_url or not titulo:
         return True  # Se não tem IA, assume válida (não bloqueia)
     try:
         resp = await ai_client.chat.completions.create(
-            model="meta-llama/llama-4-maverick",
+            model="google/gemini-2.5-flash-preview-05-20",
             messages=[
                 {
                     "role": "system",
@@ -1206,8 +1206,8 @@ Título Original: {titulo_original}
 Texto da Notícia: {texto_base[:8000]}
 """
 
-    modelo_principal = "openai/gpt-4o-mini"
-    modelo_fallback = "meta-llama/llama-3.3-70b-instruct"
+    modelo_principal = "google/gemini-2.5-flash-preview-05-20"
+    modelo_fallback = "google/gemini-2.5-flash-preview-05-20"
 
     for attempt in range(3):
         modelo = modelo_principal if attempt == 0 else modelo_fallback
