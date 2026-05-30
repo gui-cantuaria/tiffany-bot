@@ -187,24 +187,25 @@ FONTES_INGLES = {
 # =========================
 # CATEGORIAS
 # =========================
+TIFFANY_PINK = 0xFF69B4
 CORES_CATEGORIA = {
-    "Hardware": 0xE03E3E,
-    "Inteligência Artificial": 0x00FFFF,
-    "Games": 0x9146FF,
-    "Cibersegurança": 0x00FF00,
-    "Sistemas Operacionais": 0x00A4EF,
-    "Smartphones": 0xFFA500,
-    "Big Techs": 0x000080,
-    "Ciência & Espaço": 0x808080,
-    "Software & Apps": 0x5865F2,
-    "Cloud & DevOps": 0x3498DB,
-    "Programação & Dev": 0x2ECC71,
-    "Internet & Redes": 0x1ABC9C,
-    "Mídia & Streaming": 0xE91E63,
-    "Curiosidade Tech": 0xF39C12,
-    "Outros": 0x95A5A6,
+    "Hardware": TIFFANY_PINK,
+    "Inteligência Artificial": TIFFANY_PINK,
+    "Games": TIFFANY_PINK,
+    "Cibersegurança": TIFFANY_PINK,
+    "Sistemas Operacionais": TIFFANY_PINK,
+    "Smartphones": TIFFANY_PINK,
+    "Big Techs": TIFFANY_PINK,
+    "Ciência & Espaço": TIFFANY_PINK,
+    "Software & Apps": TIFFANY_PINK,
+    "Cloud & DevOps": TIFFANY_PINK,
+    "Programação & Dev": TIFFANY_PINK,
+    "Internet & Redes": TIFFANY_PINK,
+    "Mídia & Streaming": TIFFANY_PINK,
+    "Curiosidade Tech": TIFFANY_PINK,
+    "Outros": TIFFANY_PINK,
 }
-COR_PADRAO = 0xFFD700
+COR_PADRAO = TIFFANY_PINK
 
 # --- Feed resilience ---
 FEED_COOLDOWN_MIN = 60
@@ -2038,7 +2039,7 @@ async def cmd_status(interaction: discord.Interaction):
 
     em = discord.Embed(
         title="📊 Status — Tiffany Bot",
-        color=0x00FFFF,
+        color=TIFFANY_PINK,
         timestamp=agora,
     )
     em.add_field(

@@ -96,8 +96,9 @@ http_session: Optional[aiohttp.ClientSession] = None
 # =========================
 # CORES E EMOJIS
 # =========================
-COR_OFERTA = 0x2ECC71        # verde para desconto normal
-COR_OFERTA_ALTA = 0xE74C3C   # vermelho para 40%+ OFF
+TIFFANY_PINK = 0xFF69B4
+COR_OFERTA = TIFFANY_PINK
+COR_OFERTA_ALTA = TIFFANY_PINK
 EMOJI_FOGO = "🔥"
 
 CATEGORIAS_EMOJI = {
