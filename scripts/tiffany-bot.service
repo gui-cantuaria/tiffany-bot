@@ -13,8 +13,8 @@ RestartSec=10
 
 # Mata TODOS os processos filhos ao parar (resolve processos órfãos)
 KillMode=control-group
-KillSignal=SIGTERM
-TimeoutStopSec=20
+KillSignal=SIGKILL
+TimeoutStopSec=15
 
 # Variáveis de ambiente
 Environment=PYTHONUNBUFFERED=1

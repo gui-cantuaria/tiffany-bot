@@ -18,11 +18,19 @@ pip3 install -q -r requirements.txt 2>/dev/null || true
 
 echo "[deploy] Parando serviço e processos órfãos..."
 systemctl stop tiffany-bot 2>/dev/null || true
-pkill -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
-pkill -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
-pkill -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
+sleep 1
+# SIGKILL para garantir que nenhum processo sobreviva
+pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
+pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
+pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
 rm -f /tmp/tiffany_launcher.lock
 sleep 2
+# Verificar se realmente morreu
+if pgrep -f "/opt/tiffany-bot/(launcher|notices|offers).py" > /dev/null 2>&1; then
+    echo "[deploy] ⚠️ Processos ainda vivos, forçando kill..."
+    pkill -9 -f "/opt/tiffany-bot/" 2>/dev/null || true
+    sleep 2
+fi
 
 echo "[deploy] Iniciando serviço..."
 systemctl start tiffany-bot
