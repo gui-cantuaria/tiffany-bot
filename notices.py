@@ -1962,7 +1962,7 @@ _CMD_NAMES = (
     "quizstop", "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "enter", "entra", "leave", "loop", "play", "chat", "seek",
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip", "quiz",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs", "qz", "cp",
     "l", "e", "s", "c", "p", "r", "d",
 )
 
@@ -2004,6 +2004,7 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
+            discord_client.tree.copy_global_to(guild=guild)
             await discord_client.tree.sync(guild=guild)
         else:
             await discord_client.tree.sync()

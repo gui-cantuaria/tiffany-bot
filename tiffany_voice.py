@@ -1960,10 +1960,10 @@ _HELP_TEXT = (
     "`t$ap` / `t$autoplay` — Liga/desliga autoplay (músicas similares).\n"
     "`t$ly` / `t$lyrics` — Busca a letra da música atual.\n\n"
     "**🎶 Quiz Musical**\n"
-    "`t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
-    "`t$quizstop` / `t$qs` — Para o quiz.\n\n"
+    "`t$qz` / `t$quiz [rodadas]` — Quiz: ouça e adivinhe a música!\n"
+    "`t$qs` / `t$quizstop` — Para o quiz.\n\n"
     "**🎬 Clip**\n"
-    "`t$clip` — Salva os últimos 30s de áudio da call.\n\n"
+    "`t$cp` / `t$clip` — Salva os últimos 30s de áudio da call.\n\n"
     "**📂 Playlists**\n"
     "`t$pl` / `t$playlist save/load/list/del <nome>`\n\n"
     "**🎲 RPG & Dados**\n"
@@ -3294,7 +3294,7 @@ def register_voice(bot: commands.Bot) -> None:
             vc.resume()
             sess._quiz_was_playing = False
 
-    @bot.command(name="quiz", help="Quiz musical: t$quiz [rodadas] — adivinhe a música!")
+    @bot.command(name="quiz", aliases=["qz"], help="Quiz musical: t$quiz [rodadas] — adivinhe a música!")
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def cmd_quiz(ctx: commands.Context, rounds: int = 5):
         if not ctx.guild:
@@ -3391,7 +3391,7 @@ def register_voice(bot: commands.Bot) -> None:
     # AUDIO CLIP
     # ============================
 
-    @bot.command(name="clip", help="Salva os últimos 30s de áudio da call: t$clip")
+    @bot.command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t$cp / t$clip")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def cmd_clip(ctx: commands.Context):
         if not ctx.guild:
