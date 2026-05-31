@@ -1608,6 +1608,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     # Salvar estado para restaurar após restart
                     if vc.channel:
                         _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
+                    # Garantir que nenhum áudio anterior está tocando antes de iniciar
+                    if vc.is_playing() or vc.is_paused():
+                        vc.stop()
+                        await asyncio.sleep(0.3)
                     await _notify(bot, session.text_channel_id, f"▶️  **Tocando agora:**  {display_name[:100]}")
                     vc.play(source, after=_after)
                     # Watchdog: timeout proporcional à duração (mín 10 min, máx duração + 2 min)
