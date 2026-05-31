@@ -1471,6 +1471,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
     log.info("Music worker started guild=%s", guild_id)
     _no_session_count = 0
     _replay: Optional[tuple[str, str]] = None
+    _empty_ticks = 0  # contagem de ticks sem música (para notificar fila vazia)
     try:
         while vc.is_connected():
             session = _sessions.get(guild_id)
@@ -1484,6 +1485,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
             _no_session_count = 0
             # Não tocar músicas durante quiz (quiz usa vc.play() diretamente)
             if session.quiz_active:
+                _empty_ticks = 0
                 await asyncio.sleep(0.5)
                 continue
             from_queue = True
@@ -1492,11 +1494,17 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     query, display_name = _replay
                     _replay = None
                     from_queue = False
+                    _empty_ticks = 0
                 else:
                     _replay = None
                     query = await asyncio.wait_for(session.music_queue.get(), timeout=0.5)
                     display_name = re.sub(r"^(ytsearch|scsearch)\d*:", "", query).strip()
+                    _empty_ticks = 0
             except asyncio.TimeoutError:
+                _empty_ticks += 1
+                # Notificar fila vazia ~5s após última música (só uma vez por esvaziamento)
+                if _empty_ticks == 10 and session.history and not session.stay_24_7:
+                    await _notify(bot, session.text_channel_id, "📭 Fila encerrada! Adicione músicas com `t$p`.")
                 continue
             # Pegar nome de display da fila (sincronizado com music_queue)
             if from_queue:
