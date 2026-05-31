@@ -1963,7 +1963,7 @@ _CMD_NAMES = (
     "quizstop", "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "enter", "entra", "leave", "loop", "play", "chat", "seek",
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip", "quiz",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs", "qz", "cp",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs", "qz", "cp", "lo",
     "l", "e", "s", "c", "p", "r", "d",
 )
 

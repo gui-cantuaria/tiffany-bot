@@ -2453,7 +2453,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         # mensagem de entrada já enviada por _ensure_connected
 
-    @bot.command(name="leave", aliases=["lv"], help="Sai do canal de voz: t$leave / t$lv")
+    @bot.command(name="leave", aliases=["lv", "l"], help="Sai do canal de voz: t$leave / t$lv / t$l")
     async def cmd_sair(ctx: commands.Context):
         if not _voice_enabled():
             await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
@@ -2875,7 +2875,7 @@ def register_voice(bot: commands.Bot) -> None:
             )
         await ctx.reply(embed=_embed(f"💬 {answer}"))
 
-    @bot.command(name="l", aliases=["loop"], help="Loop da musica atual (liga/desliga): t$l ou t$loop")
+    @bot.command(name="lo", aliases=["loop"], help="Loop da musica atual (liga/desliga): t$lo ou t$loop")
     async def cmd_loop(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -3847,12 +3847,12 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=False)
         em.add_field(name="🎵 Música", value=(
             "`t$e` / `t$enter` — Entrar na call\n"
-            "`t$lv` / `t$leave` — Sair da call\n"
+            "`t$l` / `t$lv` / `t$leave` — Sair da call\n"
             "`t$p` / `t$play` — Tocar música ou URL\n"
             "`t$pa` / `t$pause` — Pausar\n"
             "`t$re` / `t$resume` — Retomar\n"
             "`t$s` / `t$skip` — Pular faixa\n"
-            "`t$l` / `t$loop` — Loop on/off\n"
+            "`t$lo` / `t$loop` — Loop on/off\n"
             "`t$sh` / `t$shuffle` — Embaralhar fila"
         ), inline=False)
         em.add_field(name="🎵 Música (cont.)", value=(
