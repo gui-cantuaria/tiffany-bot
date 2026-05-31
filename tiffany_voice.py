@@ -2952,35 +2952,31 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         import random
-        # Incluir música atual na pool do shuffle
-        all_queries = []
-        all_displays = []
-        if session.current_query:
-            all_queries.append(session.current_query)
-            all_displays.append(session.current_song or session.current_query)
-        # Drenar a asyncio.Queue para lista
+        # Drenar a asyncio.Queue para lista (reutiliza o mesmo objeto para não invalidar awaits pendentes)
+        drained_queries: list[str] = []
         try:
             while True:
-                all_queries.append(session.music_queue.get_nowait())
+                drained_queries.append(session.music_queue.get_nowait())
                 session.music_queue.task_done()
         except Exception:
             pass
-        all_displays += list(session.queue_display)
-        # Garantir listas do mesmo tamanho
-        min_len = min(len(all_queries), len(all_displays))
-        all_queries = all_queries[:min_len]
-        all_displays = all_displays[:min_len]
-        if min_len < 2:
+        # Alinhar drained_queries com queue_display (podem estar levemente desincronizados)
+        n = min(len(drained_queries), len(session.queue_display))
+        all_queries = drained_queries[:n]
+        all_displays = session.queue_display[:n]
+        if len(all_queries) < 2:
+            # Devolve o que foi drenado antes de retornar
+            for q in drained_queries:
+                session.music_queue.put_nowait(q)
             await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
             return
         combined = list(zip(all_displays, all_queries))
         random.shuffle(combined)
         session.queue_display = [d for d, _ in combined]
-        new_queue = asyncio.Queue()
+        # Recolocar na MESMA fila (não cria novo objeto — resolve awaits pendentes do worker sem stale reference)
         for _, q in combined:
-            await new_queue.put(q)
-        session.music_queue = new_queue
-        # Parar música atual para a worker tocar a nova ordem embaralhada
+            session.music_queue.put_nowait(q)
+        # Parar música atual para o worker tocar a nova ordem (música atual NÃO entra no pool — evita duplicate)
         if vc.is_playing() or vc.is_paused():
             vc.stop()
         _touch_activity(ctx.guild.id)
