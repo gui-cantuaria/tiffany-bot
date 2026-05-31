@@ -151,14 +151,8 @@ YDL_OPTS: dict[str, Any] = {
     # Cloudflare WARP proxy — contorna bloqueio de IP do YouTube em VPS
     "proxy": "socks5://127.0.0.1:40000",
 }
-
-# Suporte a cookies do YouTube (para contornar bloqueio de IP em VPS)
-_cookies_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
-if os.path.isfile(_cookies_path):
-    YDL_OPTS["cookiefile"] = _cookies_path
-    log.info("✅ yt-dlp usando cookies de: %s", _cookies_path)
-else:
-    log.warning("⚠️ Arquivo cookies.txt não encontrado em %s. O YouTube pode bloquear a reprodução.", os.path.dirname(os.path.abspath(__file__)))
+# NÃO usar cookiefile — cookies forçam player "tv downgraded" que falha.
+# O plugin bgutil-ytdlp-pot-provider resolve via android vr player API.
 
 FFMPEG_OPTS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
