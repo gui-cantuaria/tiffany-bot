@@ -1536,6 +1536,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
             # Nunca mostrar URLs como display — usar placeholder até yt-dlp resolver o título
             if re.match(r"^https?://", display_name):
                 display_name = "link recebido"
+            source = None
             try:
                 async with session.play_lock:
                     if not vc.is_connected():
@@ -1669,11 +1670,18 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         )
             except Exception:
                 log.exception("Erro no worker de música guild=%s", guild_id)
+                session._failed_songs.append(display_name[:70])
                 session.current_song = ""
                 session.seeking = False
                 if session.current_tmpdir:
                     shutil.rmtree(session.current_tmpdir, ignore_errors=True)
                     session.current_tmpdir = None
+                # Limpar source se ficou pendente
+                try:
+                    if source is not None:
+                        source.cleanup()
+                except Exception:
+                    pass
                 await asyncio.sleep(1)  # Evitar crash-loop rápido
             finally:
                 if from_queue:
@@ -1683,6 +1691,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         pass
     except asyncio.CancelledError:
         raise
+    except Exception:
+        log.exception("Music worker crashed guild=%s", guild_id)
     finally:
         log.info("Music worker stopped guild=%s", guild_id)
 
