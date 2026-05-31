@@ -1021,7 +1021,7 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                                         artist = item.get("subtitle", "")
                                         if title and artist:
                                             q = f"{artist} {title}"
-                                            tracks.append({"query": f"ytsearch1:{q}", "display": q})
+                                            tracks.append({"query": f"ytsearch1:{q}", "display": f"{title} - {artist}"})
                                 except Exception as _je:
                                     log.debug("Spotify __NEXT_DATA__ parse error: %s", _je)
 
@@ -1034,7 +1034,7 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                                     if not title or not artist or len(title) > 200:
                                         continue
                                     q = f"{artist} {title}"
-                                    tracks.append({"query": f"ytsearch1:{q}", "display": q})
+                                    tracks.append({"query": f"ytsearch1:{q}", "display": f"{title} - {artist}"})
 
                             log.info("Spotify playlist: %d tracks extraídas", len(tracks))
         except Exception as e:
@@ -1055,7 +1055,8 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                                 title = track.get("title", "")
                                 if title:
                                     query = f"{artist} {title}".strip()
-                                    tracks.append({"query": f"ytsearch1:{query}", "display": query})
+                                    display = f"{title} - {artist}".strip(" -") if artist else title
+                                    tracks.append({"query": f"ytsearch1:{query}", "display": display})
                             log.info("Deezer playlist: %d tracks extraídas", len(tracks))
         except Exception as e:
             log.warning("Erro ao extrair playlist Deezer: %s", e)
@@ -1250,9 +1251,10 @@ def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
         return None, ""
 
 
-def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[str], float]:
+def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str], str, Optional[str], float]:
     """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
-    Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso."""
+    Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso.
+    display: título de exibição (usado como fallback de busca quando query é URL direta)."""
     if not _YTDLP_AVAILABLE:
         return None, "yt-dlp não disponível", None, 0
 
@@ -1266,10 +1268,22 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
     queries = [query]
     if query.startswith("ytsearch"):
         term = re.sub(r"^ytsearch\d*:", "", query).strip()
+        # Versão simplificada: remove subtítulos comuns para tentar busca mais limpa
+        simplified = re.sub(r'\s*[-–]\s*(Spider-Man|OST|Soundtrack|feat\.|ft\.|prod\.).*$', '', term, flags=re.IGNORECASE).strip()
+        simplified = re.sub(r'\s*\((?:feat\.|ft\.|prod\.|with |Official|Lyric|Audio|Video|Slowed|Reverb|Extended|Remix|Live|Acoustic)[^)]*\)', '', simplified, flags=re.IGNORECASE).strip()
+        simplified = re.sub(r'\s*\[(?:Official|Lyric|Audio|Video|Slowed|Reverb|Extended|Remix|Live|Acoustic)[^\]]*\]', '', simplified, flags=re.IGNORECASE).strip()
+        if simplified and simplified != term and len(simplified) >= 5:
+            queries.insert(1, f"ytsearch1:{simplified}")
         queries.append(f"scsearch1:{term}")
     elif query.startswith("scsearch"):
         term = re.sub(r"^scsearch\d*:", "", query).strip()
         queries.append(f"ytsearch1:{term}")
+    elif re.match(r"^https?://", query) and display and not re.match(r"^https?://", display):
+        # URL direta falhou: tentar busca pelo título de exibição como fallback
+        queries.append(f"ytsearch1:{display}")
+        queries.append(f"scsearch1:{display}")
+
+    _last_error = "sem resultado para a busca"
 
     for q in queries:
         try:
@@ -1286,8 +1300,8 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
                 if duration > MAX_SONG_DURATION_SEC:
                     dur_min = int(duration // 60)
                     log.warning("Rejeitado por duração: %s (%d min)", title, dur_min)
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
-                    return None, f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)", None, 0
+                    _last_error = f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)"
+                    continue  # Tentar próxima query (ex: scsearch ou versão simplificada)
 
             # Fase 2: download real
             dl_opts = {
@@ -1308,7 +1322,7 @@ def _blocking_ytdl_download(query: str) -> tuple[Optional[str], str, Optional[st
             log.error("yt-dlp download falhou em %s: %s", q, e)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
-    return None, "sem resultado para a busca", None, 0
+    return None, _last_error, None, 0
 
 
 
@@ -1438,11 +1452,11 @@ class _YTSource(PCMVolumeTransformer):
             self._tmpdir = None
 
     @classmethod
-    async def from_query(cls, query: str, *, volume: float = 0.35, seek_sec: float = 0) -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
+    async def from_query(cls, query: str, *, volume: float = 0.35, seek_sec: float = 0, display: str = "") -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
         """Retorna (source, title, filepath, tmpdir, duration). Se seek_sec > 0, pula para essa posição."""
         loop = asyncio.get_running_loop()
         async with _download_semaphore:
-            fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query))
+            fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query, display))
         if not fp:
             return None, title, None, None, 0
         options = "-vn"
@@ -1535,7 +1549,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.restore_seek_sec = 0.0
                     try:
                         source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
-                            _YTSource.from_query(query), timeout=120.0
+                            _YTSource.from_query(query, display=display_name), timeout=120.0
                         )
                     except asyncio.TimeoutError:
                         session.current_song = ""
@@ -1558,8 +1572,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_file = dl_fp or ""
                     session.current_tmpdir = dl_tmpdir
                     session.current_duration = dl_duration
-                    # Atualizar display com título real do yt-dlp (evita mostrar URLs)
-                    if info and info != "sem resultado para a busca":
+                    # Atualizar display com título real do yt-dlp (apenas quando display é placeholder de URL)
+                    if info and info != "sem resultado para a busca" and display_name == "link recebido":
                         display_name = info
                         session.current_song = display_name
                     # Aplicar seek de restauração (posição salva antes do restart)
