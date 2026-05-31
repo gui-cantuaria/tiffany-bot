@@ -978,9 +978,11 @@ async def _extract_playlist_tracks(url: str) -> list[dict]:
                             continue  # entrada None = vídeo removido/privado
                         title = entry.get("title") or ""
                         vid_id = entry.get("id") or ""
-                        vid_url = entry.get("webpage_url") or entry.get("url") or ""
-                        if vid_id and (not vid_url or not vid_url.startswith("http")):
+                        # Sempre preferir youtube.com (não music.youtube.com) — funciona melhor com o proxy WARP
+                        if vid_id:
                             vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+                        else:
+                            vid_url = entry.get("webpage_url") or entry.get("url") or ""
                         if not title:
                             continue
                         result.append({"query": vid_url or f"ytsearch1:{title}", "display": title})
