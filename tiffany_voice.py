@@ -1564,6 +1564,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if source is None:
                         session.current_song = ""
                         session._failed_songs.append(display_name[:70])
+                        # Dica: se rejeitou por duração e query parece busca por playlist
+                        if info and "muito longo" in str(info):
+                            _playlist_kw = re.search(r"(playlist|top\s*\d+|mix\s+\d+|melhores|mais tocadas)", display_name, re.IGNORECASE)
+                            if _playlist_kw:
+                                await _notify(bot, session.text_channel_id,
+                                    f"⚠️  `{display_name[:80]}` — {info}\n"
+                                    "💡 **Dica:** parece que você quer uma playlist! Cole o **link** do Spotify ou YouTube.\n"
+                                    "Ex: `t$p https://open.spotify.com/playlist/...`"
+                                )
                         continue
                     # Verificar se ainda está conectado após download (pode ter desconectado durante)
                     if not vc.is_connected():
