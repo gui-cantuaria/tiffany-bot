@@ -2951,28 +2951,40 @@ def register_voice(bot: commands.Bot) -> None:
         if not session or not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if len(session.queue_display) < 2:
-            await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
-            return
         import random
+        # Incluir música atual na pool do shuffle
+        all_queries = []
+        all_displays = []
+        if session.current_query:
+            all_queries.append(session.current_query)
+            all_displays.append(session.current_song or session.current_query)
         # Drenar a asyncio.Queue para lista
-        old_items = []
         try:
             while True:
-                old_items.append(session.music_queue.get_nowait())
+                all_queries.append(session.music_queue.get_nowait())
                 session.music_queue.task_done()
         except Exception:
             pass
-        # Unir displays e queries, embaralhar juntos, separar
-        combined = list(zip(session.queue_display, old_items))
+        all_displays += list(session.queue_display)
+        # Garantir listas do mesmo tamanho
+        min_len = min(len(all_queries), len(all_displays))
+        all_queries = all_queries[:min_len]
+        all_displays = all_displays[:min_len]
+        if min_len < 2:
+            await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+            return
+        combined = list(zip(all_displays, all_queries))
         random.shuffle(combined)
         session.queue_display = [d for d, _ in combined]
         new_queue = asyncio.Queue()
         for _, q in combined:
             await new_queue.put(q)
         session.music_queue = new_queue
+        # Parar música atual para a worker tocar a nova ordem embaralhada
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
         _touch_activity(ctx.guild.id)
-        await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas)"))
+        await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas — tocando em nova ordem)"))
 
     @bot.command(name="rp", aliases=["replay"], help="Repete a música atual: t$rp / t$replay")
     async def cmd_replay(ctx: commands.Context):
