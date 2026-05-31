@@ -1614,7 +1614,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     # Salvar estado para restaurar após restart
                     if vc.channel:
                         _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
-                    await _notify(bot, session.text_channel_id, f"▶️ **Tocando agora:** {display_name[:100]}")
+                    await _notify(bot, session.text_channel_id, f"▶️  **Tocando agora:**  {display_name[:100]}")
                     vc.play(source, after=_after)
                     # Watchdog: timeout proporcional à duração (mín 10 min, máx duração + 2 min)
                     watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
@@ -2607,7 +2607,7 @@ def register_voice(bot: commands.Bot) -> None:
         loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
         autoplay_info = "\n▶️ Autoplay" if session.autoplay else ""
         await ctx.send(embed=_embed(
-            f"▶️ **Tocando agora:** {session.current_song[:100]}\n"
+            f"▶️  **Tocando agora:**  {session.current_song[:100]}\n"
             f"⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}{autoplay_info}"
         ))
 
@@ -3935,7 +3935,7 @@ def register_voice(bot: commands.Bot) -> None:
         fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
         loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
         await interaction.response.send_message(
-            f"▶️ **Tocando agora:** {session.current_song[:100]}\n⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}",
+            f"▶️  **Tocando agora:**  {session.current_song[:100]}\n⏱️  {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}",
             ephemeral=True,
         )
 
@@ -3951,7 +3951,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         lines = []
         if session.current_song:
-            lines.append(f"▶️ **Tocando agora:** {session.current_song[:80]}")
+            lines.append(f"▶️  **Tocando agora:**  {session.current_song[:80]}")
         if session.queue_display:
             lines.append("")
             _QUEUE_DISPLAY_LIMIT = 20
