@@ -2001,15 +2001,10 @@ async def on_message(message: discord.Message):
 @discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
-    # Sync slash commands
+    # Sync slash commands (global — funciona em todos os servidores)
     try:
-        if GUILD_ID:
-            guild = discord.Object(id=GUILD_ID)
-            discord_client.tree.copy_global_to(guild=guild)
-            await discord_client.tree.sync(guild=guild)
-        else:
-            await discord_client.tree.sync()
-        log.info("Slash commands sincronizados.")
+        await discord_client.tree.sync()
+        log.info("Slash commands sincronizados (global).")
     except Exception as e:
         log.warning(f"Erro ao sincronizar slash commands: {e}")
     if not verificar_feeds.is_running():
