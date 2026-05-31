@@ -216,6 +216,8 @@ class _GuildVoiceSession:
     # Clip — buffer circular com os últimos 30s de áudio da call (todos os users mixados)
     clip_buffer: bytearray = field(default_factory=bytearray)
     clip_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Músicas que falharam no download — enviadas como resumo ao final da fila
+    _failed_songs: list = field(default_factory=list)
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -1520,7 +1522,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 _empty_ticks += 1
                 # Notificar fila vazia ~5s após última música (só uma vez por esvaziamento)
                 if _empty_ticks == 10 and session.history and not session.stay_24_7:
-                    await _notify(bot, session.text_channel_id, "📭 Fila encerrada! Adicione músicas com `t$p`.")
+                    failed = session._failed_songs[:]
+                    session._failed_songs.clear()
+                    msg = "📭 Fila encerrada! Adicione músicas com `t$p`."
+                    if failed:
+                        lines = "\n".join(f"• {s}" for s in failed[:20])
+                        if len(failed) > 20:
+                            lines += f"\n• ... e mais {len(failed) - 20}"
+                        msg += f"\n\n❌ **{len(failed)} música(s) não encontrada(s):**\n{lines}"
+                    await _notify(bot, session.text_channel_id, msg)
                 continue
             # Pegar nome de display da fila (sincronizado com music_queue)
             if from_queue:
@@ -1558,11 +1568,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         continue
                     if source is None:
                         session.current_song = ""
-                        await _notify(
-                            bot,
-                            session.text_channel_id,
-                            f"❌ Não consegui achar audio para: `{display_name[:80]}`\n> `{info[:200]}`",
-                        )
+                        session._failed_songs.append(display_name[:70])
                         continue
                     # Verificar se ainda está conectado após download (pode ter desconectado durante)
                     if not vc.is_connected():
