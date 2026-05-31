@@ -3215,7 +3215,8 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.quiz_artist = ""
                 sess.quiz_title = raw_name
 
-                await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
+                # Avisar que está preparando a rodada (download pode demorar)
+                prep_msg = await bot_channel.send(embed=_embed(f"⏳ Preparando rodada {rnd}/{rounds}..."))
 
                 # Baixar e tocar trecho
                 try:
@@ -3223,10 +3224,18 @@ def register_voice(bot: commands.Bot) -> None:
                         _YTSource.from_query(song_query), timeout=60.0
                     )
                 except (asyncio.TimeoutError, Exception):
+                    try:
+                        await prep_msg.delete()
+                    except Exception:
+                        pass
                     await bot_channel.send(embed=_embed("⚠️ Não consegui baixar a música, pulando rodada..."))
                     continue
 
                 if source is None:
+                    try:
+                        await prep_msg.delete()
+                    except Exception:
+                        pass
                     await bot_channel.send(embed=_embed("⚠️ Música não encontrada, pulando..."))
                     if dl_tmpdir:
                         shutil.rmtree(dl_tmpdir, ignore_errors=True)
@@ -3259,11 +3268,22 @@ def register_voice(bot: commands.Bot) -> None:
                     vc.play(source, after=_after_quiz)
                 except Exception as e:
                     log.error("Quiz: erro ao iniciar playback: %s", e)
+                    try:
+                        await prep_msg.delete()
+                    except Exception:
+                        pass
                     if dl_tmpdir:
                         shutil.rmtree(dl_tmpdir, ignore_errors=True)
                     if not fut.done():
                         fut.set_result(None)
                     continue
+
+                # Deletar "preparando" e anunciar rodada só depois do áudio iniciar
+                try:
+                    await prep_msg.delete()
+                except Exception:
+                    pass
+                await bot_channel.send(embed=_embed(f"🎵 **Rodada {rnd}/{rounds}** — Que música é essa? Digita o nome!"))
 
                 # Fase 1: tocar por 15s
                 try:
