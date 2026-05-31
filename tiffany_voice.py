@@ -2977,6 +2977,8 @@ def register_voice(bot: commands.Bot) -> None:
         for _, q in combined:
             session.music_queue.put_nowait(q)
         # Parar música atual para o worker tocar a nova ordem (música atual NÃO entra no pool — evita duplicate)
+        # Limpar loop para o worker não re-tocar a música atual via _replay após vc.stop()
+        _clear_loop(session)
         if vc.is_playing() or vc.is_paused():
             vc.stop()
         _touch_activity(ctx.guild.id)
