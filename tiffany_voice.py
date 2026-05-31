@@ -3916,36 +3916,6 @@ def register_voice(bot: commands.Bot) -> None:
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
 
-    @bot.tree.command(name="np", description="Mostra a música tocando agora")
-    async def slash_np(interaction: discord.Interaction):
-        if not interaction.guild:
-            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
-            return
-        session = _sessions.get(interaction.guild.id)
-        vc = interaction.guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await interaction.response.send_message("⚠️ Não estou em nenhum canal de voz.", ephemeral=True)
-            return
-        if not session.current_song:
-            await interaction.response.send_message("📭 Nada tocando no momento.", ephemeral=True)
-            return
-        elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
-        m, s = divmod(elapsed, 60)
-        dur = session.current_duration
-        dur_str = ""
-        progress_bar = ""
-        if dur > 0:
-            dm, ds = divmod(int(dur), 60)
-            dur_str = f" / {dm:02d}:{ds:02d}"
-            bar_len = 20
-            filled = min(bar_len, int((elapsed / dur) * bar_len))
-            progress_bar = f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
-        fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
-        loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
-        await interaction.response.send_message(
-            f"▶️  **Tocando agora:**  {session.current_song[:100]}\n⏱️  {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}",
-            ephemeral=True,
-        )
 
     @bot.tree.command(name="queue", description="Mostra a fila de músicas")
     async def slash_queue(interaction: discord.Interaction):
