@@ -376,6 +376,41 @@ _GLOBAL_RL_MAX = 15       # máximo de chamadas na janela
 _global_ai_calls: collections.deque = collections.deque()  # timestamps das chamadas recentes
 
 
+async def _ai_interpret_song(query: str) -> Optional[str]:
+    """Usa IA para corrigir/interpretar nome de música escrito errado. Retorna query corrigida ou None."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import openai as _openai
+        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="google/gemini-3.1-flash-lite",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "O usuario digitou o nome de uma musica de forma errada ou confusa. "
+                            "Interprete e responda APENAS com o nome correto da musica e artista, nada mais. "
+                            "Formato: Artista - Nome da Musica. Se nao conseguir identificar, responda apenas: ?"
+                        ),
+                    },
+                    {"role": "user", "content": query},
+                ],
+                max_tokens=30,
+                temperature=0.0,
+                timeout=10.0,
+            )
+        answer = resp.choices[0].message.content.strip()
+        if not answer or answer == "?" or len(answer) < 3:
+            return None
+        return answer
+    except Exception as e:
+        log.debug("IA interpret song falhou: %s", e)
+        return None
+
+
 def _global_rate_limit_ok() -> bool:
     """Retorna True se o uso global está dentro do limite. Registra a chamada."""
     now = time.monotonic()
@@ -3198,6 +3233,17 @@ def register_voice(bot: commands.Bot) -> None:
             display = "link recebido"
         # Checar duração antes de enfileirar (evita baixar vídeos de 10h+)
         dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
+
+        # Fallback IA: se busca por texto não encontrou nada, tentar interpretar com IA
+        original_text_query = re.sub(r"^ytsearch\d*:", "", query).strip() if not is_url else ""
+        if not probe_title and not is_url and original_text_query and _global_rate_limit_ok():
+            corrected = await _ai_interpret_song(original_text_query)
+            if corrected and corrected.lower() != original_text_query.lower():
+                log.info("IA interpretou '%s' -> '%s'", original_text_query, corrected)
+                query = f"ytsearch1:{corrected}"
+                display = corrected
+                dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
+
         if dur and dur > MAX_SONG_DURATION_SEC:
             await ctx.send(
                 embed=_embed(
