@@ -50,7 +50,8 @@ MINUTO_PRE_AQUECIMENTO = 45
 # --- Pipeline ---
 SCAN_POR_FEED = 5
 ENTRADAS_POR_FEED = 3
-MAX_IA_CALLS_POR_CICLO = 8
+MAX_IA_CALLS_POR_CICLO = 5
+MAX_VISION_CALLS_POR_CICLO = 4
 IA_COOLDOWN_SEC = 15
 POST_SPACING_SEC = 120
 MAX_POSTS_POR_CICLO = 1
@@ -1114,6 +1115,7 @@ def _normalizar_resumo_final(texto: str) -> str:
 
 _last_ai_call = 0.0
 _ai_calls_this_cycle = 0
+_vision_calls_this_cycle = 0
 
 async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str) -> Optional[dict]:
     global _last_ai_call
@@ -1490,7 +1492,7 @@ def _deve_rodar_slot(agora: datetime) -> bool:
 
 @tasks.loop(minutes=1)
 async def verificar_feeds():
-    global _ai_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
+    global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     global _simhash_pruned_this_cycle, _title_pruned_this_cycle
     await discord_client.wait_until_ready()
 
@@ -1521,6 +1523,7 @@ async def verificar_feeds():
         return
 
     _ai_calls_this_cycle = 0
+    _vision_calls_this_cycle = 0
     history = load_history()
     metrics = load_metrics()
 
@@ -1732,13 +1735,15 @@ async def verificar_feeds():
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem"})
                 total_sem_imagem += 1
                 continue
-            # Validação IA: verificar se imagem combina com o título
+            # Validação IA: verificar se imagem combina com o título (com budget)
             titulo_cand = cand.get("title", "")
-            if not await validar_imagem_ia(img, titulo_cand):
-                log.info(f"  ✗ Imagem irrelevante (IA): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
-                historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "imagem_irrelevante_ia"})
-                total_img_ia_rejeitada += 1
-                continue
+            if _vision_calls_this_cycle < MAX_VISION_CALLS_POR_CICLO:
+                _vision_calls_this_cycle += 1
+                if not await validar_imagem_ia(img, titulo_cand):
+                    log.info(f"  ✗ Imagem irrelevante (IA): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
+                    historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "imagem_irrelevante_ia"})
+                    total_img_ia_rejeitada += 1
+                    continue
             cand["img"] = img
             candidatos.append(cand)
 

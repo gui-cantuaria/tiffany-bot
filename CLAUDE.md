@@ -21,8 +21,10 @@ python notices.py            # Direct: news + voice/music (tiffany_voice.py is i
 
 Requires `.env` with: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`, `ID_CARGO_PARA_MARCAR`, `GUILD_ID`. See `.env` for all parameters.
 
-Affiliate env vars (all optional — bot works without them):
-`AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`
+Optional env vars:
+- Voice/TTS: `VOICE_ENABLED` (default "1"), `TTS_ENABLED` (default "1"), `FFMPEG_PATH`, `OPUS_LIB_PATH`, `VOICE_CONNECT_TIMEOUT_SEC` (default 25), `DEBUG_STT`
+- Offers: `CANAL_OFERTAS_ID` (default 1385327938529919006), `ID_CARGO_OFERTAS`
+- Affiliate: `AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`
 
 ## Architecture
 
@@ -31,15 +33,16 @@ systemd (tiffany-bot.service, KillMode=control-group)
   └── launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
         ├── notices.py (news bot + voice module)
         │     └── imports tiffany_voice.py
-        │           └── imports random_songs.py (5000 (+ 50 buscas discovery) songs for t$r)
+        │           └── imports random_songs.py (~5050 songs for t$r)
         └── offers.py (deals bot, independent process)
 ```
 
 **launcher.py** — Spawns `notices.py` and `offers.py` as subprocesses, monitors health every 10s, auto-restarts on crash. Uses `fcntl` lockfile to prevent duplicate instances. Circuit breaker: max 15 total restarts.
 
-**notices.py** — Core bot (~1,800 lines). Handles:
-- RSS collection from 15+ feeds every 45 minutes (slots at xx:00 and xx:45)
-- AI analysis via OpenRouter (Gemini 2.5 Flash for text and image validation)
+**notices.py** — Core bot (~2,150 lines). Handles:
+- RSS collection from 31 feeds (8 BR + 23 EN) every 45 minutes (slots at xx:00 and xx:45)
+- AI analysis via OpenRouter (Gemini 3.1 Flash Lite for text and image validation)
+- Budget-limited AI: max 5 text analysis + max 4 vision calls per cycle
 - Discord publishing with embeds, threads, and image attachments
 - Command normalization (`on_message` handler for spaceless commands like `T$Phttps://...`)
 - Imports and registers `tiffany_voice.py` commands
@@ -49,7 +52,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Image integrity validation: Content-Length check, EOF markers (JPEG FFD9, PNG IEND)
 - Dedup: in-cycle sets (not polluting persistent history) + SimHash + title fingerprint
 
-**tiffany_voice.py** — Voice and music module (~3,500+ lines). Handles:
+**tiffany_voice.py** — Voice and music module (~4,100 lines). Handles:
 - Music playback via yt-dlp download + FFmpeg (download-to-file approach, not streaming)
 - Platform resolution: Spotify, Deezer, Apple Music, Amazon Music, YouTube Music -> YouTube search
 - Voice recognition: discord-ext-voice-recv -> Opus decode -> Google STT / Vosk fallback
@@ -60,11 +63,12 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Auto-disconnect on 5min idle (no interaction) or empty channel (with guard against duplicate handlers)
 - Bot moved/kicked detection via `on_voice_state_update`
 - Voice command speaker channel membership validation
-- Random music from 5000 (+ 50 buscas discovery) international hits (`random_songs.py`)
+- Random music from ~5050 international hits (`random_songs.py`)
 - Anti-spam: auto-delete @everyone/@here with sarcastic response
 - Inline dice rolls: `[d20+5 ataque]` detected in any message
+- Queue limit: 25 songs max
 
-**offers.py** — Deals bot (~750 lines). Handles:
+**offers.py** — Deals bot (~940 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
 - 7 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer
 - 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
@@ -79,13 +83,15 @@ systemd (tiffany-bot.service, KillMode=control-group)
 
 | File | Purpose |
 |---|---|
-| `notices.py` | News bot + Discord client + voice module loader |
-| `tiffany_voice.py` | Music, voice commands, AI chat, clip, playlists |
-| `offers.py` | Deals/offers bot (separate process) |
+| `notices.py` | News bot + Discord client + voice module loader (~2,150 lines) |
+| `tiffany_voice.py` | Music, voice commands, AI chat, clip, playlists (~4,100 lines) |
+| `offers.py` | Deals/offers bot (separate process, ~940 lines) |
 | `launcher.py` | Process supervisor with lockfile |
-| `random_songs.py` | 5000 (+ 50 buscas discovery) international songs for t$r |
+| `random_songs.py` | ~5050 international songs for t$r |
 | `affiliate_config.py` | Affiliate link builder per store (env-driven) |
 | `notices_history.json` | Dedup state (URL hashes + SimHash, 7-day cleanup) |
+| `notices_metrics.json` | News cycle metrics (posts, AI calls, etc.) |
+| `notices_queue.json` | Queued news for next cycle |
 | `offers_history.json` | Processed offers (7-day cleanup) |
 | `voice_state.json` | Music session persistence (current song, queue) |
 | `playlists.json` | Saved playlists per guild |
@@ -117,7 +123,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 
 **Slash Commands (ephemeral):**
 - `/help` — Full command list (only you see)
-- `/np`, `/queue`, `/stats` — Session info
+- `/queue` — Current music queue
 - `/status` — Bot status
 
 **Admin:** `t$st`/`t$stats`
@@ -136,6 +142,15 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Slots: xx:00 and xx:45 (45-minute intervals)
 - Pre-heating: 7:45 for RSS collection before 8:00
 
+### AI Budget per Cycle
+- **Text analysis** (`gerar_analise_ia`): max 5 calls (MAX_IA_CALLS_POR_CICLO)
+- **Vision validation** (`validar_imagem_ia`): max 4 calls (MAX_VISION_CALLS_POR_CICLO)
+- After vision budget exhausted, images are accepted without AI validation (integrity checks still apply)
+- Cooldown between AI calls: 15s (IA_COOLDOWN_SEC)
+- Max 1 post per cycle (MAX_POSTS_POR_CICLO), surplus queued for next cycle
+- Max 2 candidates per RSS source (MAX_CANDIDATOS_POR_FONTE)
+- News older than 12h discarded (MAX_IDADE_HORAS)
+
 ### Embed Layout (DO NOT CHANGE without authorization)
 1. **Author:** `Via {Site} . {Category} {Emoji}`
 2. **Title:** Journalistic, non-clickbait. Starts with alert emoji if nota >= 90. Max 256 chars.
@@ -149,17 +164,18 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - **Unified model:** google/gemini-3.1-flash-lite (via OpenRouter)
 - Used for: text analysis, image validation (vision), chat (`t$c`), URL summary (`t$su`), voice questions
 - No fallback chain — same model for all attempts (3 retries with backoff)
+- **Cost control:** Previous model (gemini-3.5-flash) was 6x more expensive and burned ~$5/day. Current model costs ~$0.25/M input, $1.50/M output tokens.
 
 ### Image Pipeline
 - Extract from RSS `<media:content>`, `<enclosure>`, og:image meta tags
-- Validate: min 400x200px, no 403 responses, AI vision relevance check
+- Validate: min 400x200px, no 403 responses, AI vision relevance check (budget-limited)
 - Download with `r.read()` (full response, not truncated)
 - Integrity: Content-Length vs bytes received, JPEG EOF (FFD9), PNG IEND chunk
 - Timeout: 30s, 3 retries
 - Attach as `discord.File` (never post without image)
 
 ### Dedup System
-- URL hash + SimHash (Hamming distance <= 5) + title fingerprint
+- URL hash + SimHash (Hamming distance <= 6) + title fingerprint
 - In-cycle: `_cycle_titles` and `_cycle_simhashes` sets (in-memory only, do NOT pollute persistent history)
 - Persistent: `_simhash_idx` and `_title_idx` in `notices_history.json` (pruned once per cycle)
 - Title/simhash only added to persistent history AFTER IA approval (Fase 2)
@@ -201,9 +217,10 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Play local file with FFmpeg (no proxy needed)
 - Seek (`t$ff`): reuse downloaded file with FFmpeg `-ss` parameter, safety timeout on worker wait loop
 - Session persistence: save current_query + queue to `voice_state.json`
-- Queue limit: 10 songs max
+- Queue limit: 25 songs max
 - Playlist extraction: `extract_flat="in_playlist"`, `ignoreerrors: True`
 - Shuffle: zip display+query together before shuffling (keeps them synchronized)
+
 ### Voice Recognition Pipeline
 ```
 Discord voice packets -> discord-ext-voice-recv -> Opus decode
@@ -237,7 +254,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
 ### Random Music (`t$r`)
-- 5000 (+ 50 buscas discovery) international songs in `random_songs.py` (expand via `scripts/merge_all_song_sources.py`)
+- ~5050 international songs in `random_songs.py` (expand via `scripts/merge_all_song_sources.py`)
 - Categories: Most Streamed, Pop, Rap/Hip-Hop, Rock, EDM, Indie/Alt, 80s-90s, R&B, Latin, K-Pop, Afrobeats, Country, Classic Anthems
 - Avoids repeating last played random song
 
@@ -283,7 +300,8 @@ sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 - **Help:** Only via `/help` slash command (ephemeral, embed rosa). No `t$h`/`t$help` text command.
 - **File naming:** English (offers.py not ofertas.py)
 - **No database:** All state in JSON files
-- **AI model:** Single unified model (Gemini 2.5 Flash) for all AI tasks — no fallback chains
+- **AI model:** Single unified model (Gemini 3.1 Flash Lite) for all AI tasks — no fallback chains
+- **AI cost control:** Budget limits per cycle (5 text + 4 vision). Model history: gemini-2.5-flash-preview (discontinued) -> gemini-3.5-flash (too expensive, $5/day) -> gemini-3.1-flash-lite (current, cheap)
 - **Rate limiting:** Sequential AI calls, cooldowns between Discord posts
 - **Images:** Always download and attach — never post news without image. Validate integrity (Content-Length, EOF markers).
 - **Pings:** Only mention notification role for nota >= 90 (urgent news). Always validate role exists before mentioning.
