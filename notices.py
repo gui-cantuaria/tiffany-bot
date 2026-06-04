@@ -841,7 +841,7 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
         return True  # Se não tem IA, assume válida (não bloqueia)
     try:
         resp = await ai_client.chat.completions.create(
-            model="google/gemini-3.5-flash",
+            model="google/gemini-3.1-flash-lite",
             messages=[
                 {
                     "role": "system",
@@ -1207,8 +1207,8 @@ Título Original: {titulo_original}
 Texto da Notícia: {texto_base[:8000]}
 """
 
-    modelo_principal = "google/gemini-3.5-flash"
-    modelo_fallback = "google/gemini-3.5-flash"
+    modelo_principal = "google/gemini-3.1-flash-lite"
+    modelo_fallback = "google/gemini-3.1-flash-lite"
 
     for attempt in range(3):
         modelo = modelo_principal if attempt == 0 else modelo_fallback
@@ -1960,10 +1960,11 @@ async def verificar_feeds():
 
 
 _CMD_NAMES = (
-    "quizstop", "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "enter", "entra", "leave", "loop", "play", "chat", "seek",
-    "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip", "quiz",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "qs", "qz", "cp", "lo",
+    "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
+    "enter", "entra", "leave", "loop", "play", "chat", "seek", "nonstop", "queue",
+    "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "cp", "lo",
+    "ch", "247", "q",
     "l", "e", "s", "c", "p", "r", "d",
 )
 

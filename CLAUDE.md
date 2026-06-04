@@ -7,7 +7,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 Tiffany Bot is a multi-purpose Discord bot with three modules:
 1. **News Bot** (`notices.py`) — Curates tech news from RSS feeds using AI analysis
 2. **Offers Bot** (`offers.py`) — Posts tech deals scraped from Promobit
-3. **Voice/Music Bot** (`tiffany_voice.py`) — Music player, voice assistant, AI chat, music quiz, ambient sounds, audio clips
+3. **Voice/Music Bot** (`tiffany_voice.py`) — Music player, voice assistant, AI chat, audio clips
 
 Deployed on a Hostinger VPS (Ubuntu 22.04) via systemd service (`tiffany-bot.service`).
 
@@ -31,7 +31,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
   └── launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
         ├── notices.py (news bot + voice module)
         │     └── imports tiffany_voice.py
-        │           └── imports random_songs.py (1000 songs for t$r / t$quiz)
+        │           └── imports random_songs.py (5000 (+ 50 buscas discovery) songs for t$r)
         └── offers.py (deals bot, independent process)
 ```
 
@@ -56,13 +56,11 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - AI chat (`t$c`), URL summarization (`t$su`), TTS responses
 - Session persistence across restarts (`voice_state.json`)
 - Playlist save/load system (`playlists.json`)
-- Music Quiz (`t$quiz`) — plays song snippets, players guess in chat; resumes paused music after
-- Ambient Sounds (`t$ambient`) — rain, lofi, cafe, forest, fire, ocean, thunder (loop via music worker, preserves loop state)
 - Audio Clip (`t$clip`) — saves last 30s of voice channel audio as WAV file (stereo 48kHz buffer)
 - Auto-disconnect on 5min idle (no interaction) or empty channel (with guard against duplicate handlers)
 - Bot moved/kicked detection via `on_voice_state_update`
 - Voice command speaker channel membership validation
-- Random music from 1000 international hits (`random_songs.py`)
+- Random music from 5000 (+ 50 buscas discovery) international hits (`random_songs.py`)
 - Anti-spam: auto-delete @everyone/@here with sarcastic response
 - Inline dice rolls: `[d20+5 ataque]` detected in any message
 
@@ -82,10 +80,10 @@ systemd (tiffany-bot.service, KillMode=control-group)
 | File | Purpose |
 |---|---|
 | `notices.py` | News bot + Discord client + voice module loader |
-| `tiffany_voice.py` | Music, voice commands, AI chat, quiz, ambient, clip, playlists |
+| `tiffany_voice.py` | Music, voice commands, AI chat, clip, playlists |
 | `offers.py` | Deals/offers bot (separate process) |
 | `launcher.py` | Process supervisor with lockfile |
-| `random_songs.py` | 1000 international songs for t$r and t$quiz |
+| `random_songs.py` | 5000 (+ 50 buscas discovery) international songs for t$r |
 | `affiliate_config.py` | Affiliate link builder per store (env-driven) |
 | `notices_history.json` | Dedup state (URL hashes + SimHash, 7-day cleanup) |
 | `offers_history.json` | Processed offers (7-day cleanup) |
@@ -105,10 +103,6 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 **Chat & IA:** `t$c`/`t$chat`, `t$su`/`t$summary`
 
 **Music:** `t$e`/`t$enter`, `t$leave`/`t$lv`, `t$p`/`t$play`, `t$pa`/`t$pause`, `t$re`/`t$resume`, `t$s`/`t$skip`, `t$l`/`t$loop`, `t$sh`/`t$shuffle`, `t$rp`/`t$replay`, `t$cl`/`t$clear`, `t$r`/`t$random`, `t$ff`/`t$seek`, `t$q`/`t$queue`, `t$np`/`t$nowplaying`, `t$hi`/`t$history`, `t$ap`/`t$autoplay`, `t$247`/`t$nonstop`, `t$ly`/`t$lyrics`
-
-**Quiz:** `t$quiz [rodadas]`, `t$quizstop`/`t$qs`
-
-**Ambient:** `t$ambient <tipo>` / `t$amb`, `t$ambient stop`
 
 **Clip:** `t$clip`
 
@@ -152,7 +146,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 7. **Thread:** Auto-created: `Chat {Category}: {Title}` (max 100 chars)
 
 ### AI Model
-- **Unified model:** google/gemini-3.5-flash (via OpenRouter)
+- **Unified model:** google/gemini-3.1-flash-lite (via OpenRouter)
 - Used for: text analysis, image validation (vision), chat (`t$c`), URL summary (`t$su`), voice questions
 - No fallback chain — same model for all attempts (3 retries with backoff)
 
@@ -210,8 +204,6 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Queue limit: 10 songs max
 - Playlist extraction: `extract_flat="in_playlist"`, `ignoreerrors: True`
 - Shuffle: zip display+query together before shuffling (keeps them synchronized)
-- Ambient: `_clear_loop` skipped when `ambient_active` (preserves loop state)
-
 ### Voice Recognition Pipeline
 ```
 Discord voice packets -> discord-ext-voice-recv -> Opus decode
@@ -221,28 +213,12 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 ```
 
 ### AI Chat (`t$c`)
-- Model: google/gemini-3.5-flash (via OpenRouter)
+- Model: google/gemini-3.1-flash-lite (via OpenRouter)
 - AI semaphore: 3 concurrent calls max + global rate limit (15/min)
 - Per-user sliding window: 5 turns in-memory, 3 turns persisted in `chat_memory.json`, 24h TTL
 - Cooldown: 5s per user
 - Supports image attachments (same model handles vision natively)
 - Whitespace-only input rejected
-
-### Music Quiz (`t$quiz`)
-- Uses 1000 songs from `random_songs.py`
-- Downloads song via yt-dlp, seeks to 1/3 position, plays 20s snippet
-- Answer detection via `on_message` listener — fuzzy word matching (40% threshold)
-- Per-guild scores, medals for top 3, max 20 rounds
-- Pauses current music, resumes after quiz ends (saves `_quiz_was_playing` flag)
-- `t$quizstop` / `t$qs` to cancel mid-game (shows final scores, clears state)
-- Watchdog skips guilds with active quiz (no idle disconnect during quiz)
-
-### Ambient Sounds (`t$ambient`)
-- 7 sound types: rain/chuva, lofi, cafe/cafe, forest/floresta, fire/lareira, ocean/mar, thunder/trovao
-- Uses music worker with loop enabled — searches YouTube for long ambient tracks
-- `_clear_loop` is skipped when `ambient_active=True` (loop preserved for ambient items from queue)
-- `t$ambient stop` to stop
-- Sets `session.ambient_active` flag
 
 ### Audio Clip (`t$clip`)
 - Circular PCM buffer (last 30s, stereo 48kHz 16-bit, ~5.76MB max)
@@ -253,7 +229,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 
 ### Idle & Cleanup
 - Auto-disconnect after 5min idle (no commands or voice interaction)
-- Skips disconnect if quiz is active or 24/7 mode enabled
+- Skips disconnect if 24/7 mode enabled
 - Empty channel watchdog: checks every 60s, disconnects if bot is alone
 - `on_voice_state_update` handler: guard against duplicate 60s sleeps (`_empty_channel_pending`)
 - `_after()` callback protected against `loop.is_closed()`
@@ -261,7 +237,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
 ### Random Music (`t$r`)
-- 1000 international songs in `random_songs.py`
+- 5000 (+ 50 buscas discovery) international songs in `random_songs.py` (expand via `scripts/merge_all_song_sources.py`)
 - Categories: Most Streamed, Pop, Rap/Hip-Hop, Rock, EDM, Indie/Alt, 80s-90s, R&B, Latin, K-Pop, Afrobeats, Country, Classic Anthems
 - Avoids repeating last played random song
 
