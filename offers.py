@@ -33,7 +33,7 @@ HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
-SCAN_INTERVAL_MIN = 30
+SCAN_INTERVAL_MIN = 45
 POST_SPACING_SEC = 180  # 3 min entre posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # percentual mínimo
@@ -54,16 +54,23 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/pc-gamer/s/",
 ]
 
+# Whitelist completa (para quando todos os afiliados estiverem ativos)
+# LOJAS_WHITELIST_FULL = {
+#     "kabum", "kabum!",
+#     "terabyte", "terabyteshop",
+#     "magalu", "magazine luiza",
+#     "pichau", "pichau informática",
+#     "amazon", "amazon.com.br",
+#     "mercado livre", "mercadolivre",
+#     "shopinfo",
+#     "shopee",
+#     "aliexpress",
+# }
+
+# Whitelist ativa: apenas lojas com link de afiliado configurado
 LOJAS_WHITELIST = {
-    "kabum", "kabum!",
     "terabyte", "terabyteshop",
-    "magalu", "magazine luiza",
-    "pichau", "pichau informática",
-    "amazon", "amazon.com.br",
-    "mercado livre", "mercadolivre",
     "shopinfo",
-    "shopee",
-    "aliexpress",
 }
 
 # =========================
