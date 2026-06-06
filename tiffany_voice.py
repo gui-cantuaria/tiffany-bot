@@ -173,6 +173,24 @@ def _ffmpeg_available() -> bool:
     return FFMPEG_EXECUTABLE is not None
 
 
+def _lavalink_ready() -> bool:
+    """Retorna True se Lavalink está conectado e pronto."""
+    if not _WAVELINK_AVAILABLE:
+        return False
+    try:
+        nodes = wavelink.Pool.nodes
+        return bool(nodes) and any(n.status == wavelink.NodeStatus.CONNECTED for n in nodes.values())
+    except Exception:
+        return False
+
+
+def _is_wavelink_player(vc) -> bool:
+    """Checa se o voice client atual é um wavelink.Player."""
+    if not _WAVELINK_AVAILABLE:
+        return False
+    return isinstance(vc, wavelink.Player)
+
+
 @dataclass
 class _GuildVoiceSession:
     text_channel_id: int
@@ -2781,38 +2799,52 @@ def register_voice(bot: commands.Bot) -> None:
 
         timeout = _voice_connect_timeout_sec()
         voice_recv_ok = False
-        try:
-            vc = await asyncio.wait_for(
-                _join_voice_recv_client(guild, channel),
-                timeout=timeout,
-            )
-            voice_recv_ok = _VOICE_RECV_AVAILABLE
-        except asyncio.TimeoutError:
-            # Fallback silencioso para VoiceClient normal (sem escuta, mas música funciona)
-            log.warning("VoiceRecvClient timeout — usando VoiceClient padrão (música apenas).")
+        use_lavalink = _lavalink_ready()
+
+        if use_lavalink:
+            # Modo Lavalink: conectar com wavelink.Player (música estável, sem voice_recv)
             try:
-                # Limpa qualquer estado parcial de conexão
-                existing = guild.voice_client
-                if existing:
-                    try:
-                        await existing.disconnect(force=True)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.5)
                 vc = await asyncio.wait_for(
-                    channel.connect(self_deaf=False),
+                    channel.connect(cls=wavelink.Player, self_deaf=True),
                     timeout=timeout,
                 )
+                log.info("Conectado via wavelink.Player guild=%s", gid)
+            except Exception as e:
+                log.warning("wavelink.Player falhou (%s) — tentando fallback yt-dlp", e)
+                use_lavalink = False
+
+        if not use_lavalink:
+            # Modo yt-dlp: conectar com VoiceRecvClient (música + voz/STT)
+            try:
+                vc = await asyncio.wait_for(
+                    _join_voice_recv_client(guild, channel),
+                    timeout=timeout,
+                )
+                voice_recv_ok = _VOICE_RECV_AVAILABLE
+            except asyncio.TimeoutError:
+                log.warning("VoiceRecvClient timeout — usando VoiceClient padrão (música apenas).")
+                try:
+                    existing = guild.voice_client
+                    if existing:
+                        try:
+                            await existing.disconnect(force=True)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.5)
+                    vc = await asyncio.wait_for(
+                        channel.connect(self_deaf=False),
+                        timeout=timeout,
+                    )
+                except Exception as e:
+                    await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
+                    return None, None
             except Exception as e:
                 await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
                 return None, None
-        except Exception as e:
-            await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
-            return None, None
 
         # Criar sessão
         session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
-        if voice_recv_ok:
+        if voice_recv_ok and not use_lavalink:
             sink = _PCMBufferSink(session)
             try:
                 vc.listen(sink)
@@ -2824,23 +2856,31 @@ def register_voice(bot: commands.Bot) -> None:
                 log.warning("Falha ao iniciar escuta: %s", e)
                 session.listen_task = None
         else:
-            log.warning("voice_recv não disponível — escuta de voz desativada, música ativa.")
+            if use_lavalink:
+                log.info("Modo Lavalink — escuta de voz desativada, música via Lavalink.")
+            else:
+                log.warning("voice_recv não disponível — escuta de voz desativada, música ativa.")
             session.listen_task = None
 
-        session.music_task = asyncio.create_task(
-            _play_worker(gid, vc, bot),
-            name=f"tiffany-music-{gid}",
-        )
-        
+        # Music worker: só necessário no modo yt-dlp (Lavalink usa event listeners)
+        if not use_lavalink:
+            session.music_task = asyncio.create_task(
+                _play_worker(gid, vc, bot),
+                name=f"tiffany-music-{gid}",
+            )
+        else:
+            session.music_task = None
+
         # Iniciar worker de perguntas
         session.question_task = asyncio.create_task(
             _question_worker(gid, vc, bot),
             name=f"tiffany-question-{gid}",
         )
-        
+
         _sessions[gid] = session
 
-        log.info("Sessão criada guild=%s voice=%s music=%s", gid, session.listen_task is not None, session.music_task is not None)
+        mode_str = "Lavalink" if use_lavalink else "yt-dlp"
+        log.info("Sessão criada guild=%s mode=%s voice=%s", gid, mode_str, session.listen_task is not None)
         _save_voice_state(gid, channel.id, ctx.channel.id)
         await ctx.send(embed=_embed(f"🎙️ **Tiffany entrou** em **{channel.name}**."))
         return session, vc
@@ -2921,7 +2961,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not session:
             await ctx.send(embed=_embed("⚠️ A sessão de voz não está ativa no momento."))
             return
-        if not vc.is_playing():
+        _is_playing = vc.playing if _is_wavelink_player(vc) else vc.is_playing()
+        if not _is_playing:
             await ctx.send(embed=_embed("⚠️ Não tem faixa tocando agora."))
             return
 
@@ -2930,11 +2971,17 @@ def register_voice(bot: commands.Bot) -> None:
         humans = [m for m in vc.channel.members if not m.bot] if vc.channel else []
         required = 2 if len(humans) >= 3 else 1
 
+        async def _do_skip():
+            if _is_wavelink_player(vc):
+                await vc.skip(force=True)
+            else:
+                vc.stop()
+
         if required == 1:
             session.skip_votes.clear()
             _clear_loop(session)
             prox = session.queue_display[0] if session.queue_display else None
-            vc.stop()
+            await _do_skip()
             if prox:
                 await ctx.send(embed=_embed(f"⏭️ Pulado. Proxima: **{prox[:80]}**"))
             else:
@@ -2946,7 +2993,7 @@ def register_voice(bot: commands.Bot) -> None:
                 session.skip_votes.clear()
                 _clear_loop(session)
                 prox = session.queue_display[0] if session.queue_display else None
-                vc.stop()
+                await _do_skip()
                 if prox:
                     await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Proxima: **{prox[:80]}**"))
                 else:
@@ -2971,7 +3018,11 @@ def register_voice(bot: commands.Bot) -> None:
         if not session.current_song:
             await ctx.send(embed=_embed("📭 Nada tocando no momento."))
             return
-        elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
+        # Lavalink tem posição precisa; yt-dlp usa estimativa monotonic
+        if _is_wavelink_player(vc) and hasattr(vc, 'position'):
+            elapsed = int(vc.position / 1000)
+        else:
+            elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
         m, s = divmod(elapsed, 60)
         dur = session.current_duration
         dur_str = ""
@@ -3097,15 +3148,43 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
             added = 0
-            for song in songs:
-                if fila_atual + added >= QUEUE_MAX:
-                    break
-                display = song.get("display", song.get("query", "???"))
-                query = song.get("query", f"ytsearch1:{display}")
-                sess.queue_display.append(display)
-                sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
-                await sess.music_queue.put(query)
-                added += 1
+
+            if _is_wavelink_player(vc):
+                for song in songs:
+                    if fila_atual + added >= QUEUE_MAX:
+                        break
+                    display = song.get("display", song.get("query", "???"))
+                    query = song.get("query", f"ytsearch1:{display}")
+                    try:
+                        tracks = await wavelink.Playable.search(query)
+                    except Exception:
+                        tracks = []
+                    if not tracks:
+                        continue
+                    track = tracks[0]
+                    track_dur = (track.length or 0) / 1000.0
+                    sess.queue_display.append(track.title or display)
+                    sess.queue_durations.append(track_dur)
+                    if not vc.playing and not vc.queue.count:
+                        await vc.play(track)
+                        sess.current_song = track.title or display
+                        sess.current_duration = track_dur
+                        sess.song_start_time = time.monotonic()
+                        sess.history.append(sess.current_song)
+                    else:
+                        vc.queue.put(track)
+                    added += 1
+            else:
+                for song in songs:
+                    if fila_atual + added >= QUEUE_MAX:
+                        break
+                    display = song.get("display", song.get("query", "???"))
+                    query = song.get("query", f"ytsearch1:{display}")
+                    sess.queue_display.append(display)
+                    sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                    await sess.music_queue.put(query)
+                    added += 1
+
             await ctx.send(embed=_embed(f"▶️ Playlist **{name}**: {added} musica(s) adicionadas a fila."))
 
         elif action == "del":
@@ -3138,9 +3217,32 @@ def register_voice(bot: commands.Bot) -> None:
         song, from_discovery = _pick_random_song(sess, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
         display = re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip()
         tag = " 🆕" if from_discovery else ""
-        sess.queue_display.append(display)
-        sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
-        await sess.music_queue.put(song)
+
+        if _is_wavelink_player(vc):
+            try:
+                tracks = await wavelink.Playable.search(display)
+            except Exception:
+                tracks = []
+            if not tracks:
+                await ctx.send(embed=_embed(f"❌ Não encontrei **{display[:80]}**. Tente `t$r` novamente."))
+                return
+            track = tracks[0]
+            track_dur = (track.length or 0) / 1000.0
+            sess.queue_display.append(track.title or display)
+            sess.queue_durations.append(track_dur)
+            if not vc.playing:
+                await vc.play(track)
+                sess.current_song = track.title or display
+                sess.current_duration = track_dur
+                sess.song_start_time = time.monotonic()
+                sess.history.append(sess.current_song)
+            else:
+                vc.queue.put(track)
+        else:
+            sess.queue_display.append(display)
+            sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+            await sess.music_queue.put(song)
+
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila{tag}: **{display}**"))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t$p / t$play <nome ou URL>")
@@ -3238,6 +3340,96 @@ def register_voice(bot: commands.Bot) -> None:
         # Mostrar nome da música resolvida, ou "link recebido" para YouTube direto
         if is_url and not resolved_from_platform:
             display = "link recebido"
+        # === MODO LAVALINK ===
+        if _is_wavelink_player(vc):
+            player: wavelink.Player = vc
+            # Buscar track via Lavalink
+            search_query = query
+            if not is_url:
+                search_query = re.sub(r"^ytsearch\d*:", "", query).strip()
+            try:
+                tracks = await wavelink.Playable.search(search_query)
+            except Exception as e:
+                log.error("Lavalink search falhou: %s", e)
+                await ctx.send(embed=_embed(f"❌ Erro na busca: {e}"))
+                return
+            if not tracks:
+                # Fallback IA: tentar interpretar com IA
+                if not is_url and search_query and _global_rate_limit_ok():
+                    corrected = await _ai_interpret_song(search_query)
+                    if corrected and corrected.lower() != search_query.lower():
+                        log.info("IA interpretou '%s' -> '%s'", search_query, corrected)
+                        try:
+                            tracks = await wavelink.Playable.search(corrected)
+                        except Exception:
+                            pass
+                        if tracks:
+                            display = corrected
+                if not tracks:
+                    await ctx.send(embed=_embed(f"❌ Nenhum resultado para **{display[:80]}**."))
+                    return
+
+            track = tracks[0]
+            # Checar duração
+            track_dur_sec = (track.length or 0) / 1000.0
+            if track_dur_sec > MAX_SONG_DURATION_SEC:
+                await ctx.send(embed=_embed(
+                    f"⚠️ Muito longo (**{int(track_dur_sec // 60)} min**). Máximo **{MAX_SONG_DURATION_SEC // 60} min** por faixa."
+                ))
+                return
+
+            track_display = track.title or display
+            # Dedup
+            def _normalize_for_dup(s: str) -> str:
+                return re.sub(r'[^\w\s]', '', s).lower().strip()
+            dup_display = _normalize_for_dup(track_display)
+            is_dup = sess.current_song and _normalize_for_dup(sess.current_song) == dup_display
+            if not is_dup:
+                for qd in sess.queue_display:
+                    if _normalize_for_dup(qd) == dup_display:
+                        is_dup = True
+                        break
+            if is_dup:
+                confirm_msg = await ctx.send(
+                    embed=_embed(f"⚠️ **{track_display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
+                )
+                def _check_confirm_lv(m: discord.Message) -> bool:
+                    return (m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+                            and m.content.strip().lower() in ("s", "n", "sim", "nao", "não", "y", "yes", "no"))
+                try:
+                    resp = await bot.wait_for("message", check=_check_confirm_lv, timeout=15.0)
+                    if resp.content.strip().lower() in ("n", "nao", "não", "no"):
+                        await confirm_msg.edit(embed=_embed("👌 Música não adicionada."))
+                        return
+                except asyncio.TimeoutError:
+                    await confirm_msg.edit(embed=_embed("⏰ Tempo esgotado. Música não adicionada."))
+                    return
+
+            sess.queue_display.append(track_display)
+            sess.queue_durations.append(track_dur_sec)
+
+            if not player.playing:
+                await player.play(track)
+                sess.current_song = track_display
+                sess.current_duration = track_dur_sec
+                sess.song_start_time = time.monotonic()
+                sess.history.append(track_display)
+                if len(sess.history) > 50:
+                    sess.history = sess.history[-50:]
+                await ctx.send(embed=_embed(f"🎵 Tocando: **{track_display[:100]}**"))
+            else:
+                player.queue.put(track)
+                req = ctx.author.display_name or str(ctx.author)
+                pos = len(sess.queue_display) + (1 if sess.current_song else 0)
+                eta = _queue_eta_sec(sess)
+                await ctx.send(embed=_embed_music_added(
+                    kind="track", title=track_display, requester=req,
+                    duration_sec=track_dur_sec, position=pos,
+                    queue_total=pos, eta_sec=eta,
+                ))
+            return
+
+        # === MODO YT-DLP (fallback) ===
         # Checar duração antes de enfileirar (evita baixar vídeos de 10h+)
         dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
 
@@ -3268,19 +3460,15 @@ def register_voice(bot: commands.Bot) -> None:
         dup_display = _normalize_for_dup(display)
         is_dup = False
         if dup_display and len(dup_display) > 3:
-            # Checar música atual
             if sess.current_song and _normalize_for_dup(sess.current_song) == dup_display:
                 is_dup = True
-            # Checar query atual (URL ou busca)
             if not is_dup and sess.current_query and sess.current_query == query:
                 is_dup = True
-            # Checar fila
             if not is_dup:
                 for qd in sess.queue_display:
                     if _normalize_for_dup(qd) == dup_display:
                         is_dup = True
                         break
-            # Checar loop ativo
             if not is_dup and sess.loop_enabled and sess.loop_query == query:
                 is_dup = True
 
@@ -3390,10 +3578,16 @@ def register_voice(bot: commands.Bot) -> None:
         if not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if not vc.is_playing():
-            await ctx.send(embed=_embed("⚠️ Não tem música tocando agora."))
-            return
-        vc.pause()
+        if _is_wavelink_player(vc):
+            if not vc.playing:
+                await ctx.send(embed=_embed("⚠️ Não tem música tocando agora."))
+                return
+            await vc.pause(True)
+        else:
+            if not vc.is_playing():
+                await ctx.send(embed=_embed("⚠️ Não tem música tocando agora."))
+                return
+            vc.pause()
         await ctx.send(embed=_embed("⏸️ Pausei a música. Diz `t$re` quando quiser continuar."))
 
     @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t$re / t$resume")
@@ -3404,10 +3598,16 @@ def register_voice(bot: commands.Bot) -> None:
         if not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if not vc.is_paused():
-            await ctx.send(embed=_embed("⚠️ A música não está pausada."))
-            return
-        vc.resume()
+        if _is_wavelink_player(vc):
+            if not vc.paused:
+                await ctx.send(embed=_embed("⚠️ A música não está pausada."))
+                return
+            await vc.pause(False)
+        else:
+            if not vc.is_paused():
+                await ctx.send(embed=_embed("⚠️ A música não está pausada."))
+                return
+            vc.resume()
         await ctx.send(embed=_embed("▶️ Voltando de onde parou!"))
 
     @bot.command(name="cl", aliases=["clear"], help="Limpa a fila de músicas: t$cl / t$clear")
@@ -3420,17 +3620,23 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         # Esvazia a fila interna e o display
-        try:
-            while True:
-                session.music_queue.get_nowait()
-                session.music_queue.task_done()
-        except Exception:
-            pass  # QueueEmpty — fila limpa
+        if _is_wavelink_player(vc):
+            vc.queue.clear()
+        else:
+            try:
+                while True:
+                    session.music_queue.get_nowait()
+                    session.music_queue.task_done()
+            except Exception:
+                pass  # QueueEmpty — fila limpa
         session.queue_display.clear()
         session.queue_durations.clear()
         _clear_loop(session)
+        session.current_song = ""
         # Para a musica atual tambem
-        if vc.is_playing() or vc.is_paused():
+        if _is_wavelink_player(vc):
+            await vc.stop()
+        elif vc.is_playing() or vc.is_paused():
             vc.stop()
         session.current_song = ""
         _clear_voice_state(ctx.guild.id)
@@ -3446,39 +3652,60 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         import random
-        # Drenar a asyncio.Queue para lista (reutiliza o mesmo objeto para não invalidar awaits pendentes)
-        drained_queries: list[str] = []
-        try:
-            while True:
-                drained_queries.append(session.music_queue.get_nowait())
-                session.music_queue.task_done()
-        except Exception:
-            pass
-        # Alinhar drained_queries com queue_display (podem estar levemente desincronizados)
-        n = min(len(drained_queries), len(session.queue_display))
-        all_queries = drained_queries[:n]
-        all_displays = session.queue_display[:n]
-        if len(all_queries) < 2:
-            # Devolve o que foi drenado antes de retornar
-            for q in drained_queries:
+
+        if _is_wavelink_player(vc):
+            # Modo Lavalink: embaralhar fila do wavelink + queue_display
+            if vc.queue.count < 2 and len(session.queue_display) < 2:
+                await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+                return
+            # Drenar fila wavelink
+            wl_tracks = []
+            while not vc.queue.is_empty:
+                wl_tracks.append(vc.queue.get())
+            n = min(len(wl_tracks), len(session.queue_display))
+            all_displays = session.queue_display[:n]
+            all_durs = list(session.queue_durations[:n])
+            while len(all_durs) < n:
+                all_durs.append(_DEFAULT_TRACK_EST_SEC)
+            combined = list(zip(all_displays, wl_tracks[:n], all_durs))
+            random.shuffle(combined)
+            session.queue_display = [d for d, _, _ in combined]
+            session.queue_durations = [du for _, _, du in combined]
+            for _, track, _ in combined:
+                vc.queue.put(track)
+            _clear_loop(session)
+            if vc.playing:
+                await vc.skip(force=True)
+        else:
+            # Modo yt-dlp: drenar asyncio.Queue
+            drained_queries: list[str] = []
+            try:
+                while True:
+                    drained_queries.append(session.music_queue.get_nowait())
+                    session.music_queue.task_done()
+            except Exception:
+                pass
+            n = min(len(drained_queries), len(session.queue_display))
+            all_queries = drained_queries[:n]
+            all_displays = session.queue_display[:n]
+            if len(all_queries) < 2:
+                for q in drained_queries:
+                    session.music_queue.put_nowait(q)
+                await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+                return
+            all_durs = list(session.queue_durations[:n])
+            while len(all_durs) < n:
+                all_durs.append(_DEFAULT_TRACK_EST_SEC)
+            combined = list(zip(all_displays, all_queries, all_durs))
+            random.shuffle(combined)
+            session.queue_display = [d for d, _, _ in combined]
+            session.queue_durations = [du for _, _, du in combined]
+            for _, q, _ in combined:
                 session.music_queue.put_nowait(q)
-            await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
-            return
-        all_durs = list(session.queue_durations[:n])
-        while len(all_durs) < n:
-            all_durs.append(_DEFAULT_TRACK_EST_SEC)
-        combined = list(zip(all_displays, all_queries, all_durs))
-        random.shuffle(combined)
-        session.queue_display = [d for d, _, _ in combined]
-        session.queue_durations = [du for _, _, du in combined]
-        # Recolocar na MESMA fila (não cria novo objeto — resolve awaits pendentes do worker sem stale reference)
-        for _, q, _ in combined:
-            session.music_queue.put_nowait(q)
-        # Parar música atual para o worker tocar a nova ordem (música atual NÃO entra no pool — evita duplicate)
-        # Limpar loop para o worker não re-tocar a música atual via _replay após vc.stop()
-        _clear_loop(session)
-        if vc.is_playing() or vc.is_paused():
-            vc.stop()
+            _clear_loop(session)
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas — tocando em nova ordem)"))
 
@@ -3495,24 +3722,39 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Nada tocando no momento."))
             return
         _touch_activity(ctx.guild.id)
-        # Reenfileira a música atual no início
-        query = session.current_query
-        display = session.current_song or query
-        session.queue_display.insert(0, display)
-        session.queue_durations.insert(0, session.current_duration or _DEFAULT_TRACK_EST_SEC)
-        # Inserir no início da queue (reconstruir)
-        items = [query]
-        try:
-            while True:
-                items.append(session.music_queue.get_nowait())
-                session.music_queue.task_done()
-        except Exception:
-            pass
-        for item in items:
-            await session.music_queue.put(item)
-        # Skip a atual para que ela recomece do zero
-        _clear_loop(session)
-        vc.stop()
+        display = session.current_song or session.current_query
+
+        if _is_wavelink_player(vc):
+            # Modo Lavalink: buscar a track atual novamente e inserir no início da fila
+            if vc.current:
+                # Inserir no início da fila wavelink (drenar, prepend, recolocar)
+                old_tracks = []
+                while not vc.queue.is_empty:
+                    old_tracks.append(vc.queue.get())
+                vc.queue.put(vc.current)
+                for t in old_tracks:
+                    vc.queue.put(t)
+                session.queue_display.insert(0, display)
+                session.queue_durations.insert(0, session.current_duration or _DEFAULT_TRACK_EST_SEC)
+            _clear_loop(session)
+            await vc.skip(force=True)
+        else:
+            # Modo yt-dlp
+            query = session.current_query
+            session.queue_display.insert(0, display)
+            session.queue_durations.insert(0, session.current_duration or _DEFAULT_TRACK_EST_SEC)
+            items = [query]
+            try:
+                while True:
+                    items.append(session.music_queue.get_nowait())
+                    session.music_queue.task_done()
+            except Exception:
+                pass
+            for item in items:
+                await session.music_queue.put(item)
+            _clear_loop(session)
+            vc.stop()
+
         await ctx.send(embed=_embed(f"🔄 Repetindo: **{display[:80]}**"))
 
     @bot.command(name="hi", aliases=["history"], help="Últimas músicas tocadas: t$hi / t$history")
@@ -3598,7 +3840,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not session or not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if not session.current_song or not session.current_file:
+        _has_song = session.current_song and (_is_wavelink_player(vc) or session.current_file)
+        if not _has_song:
             await ctx.send(embed=_embed("⚠️ Nenhuma música tocando."))
             return
         if not time_arg:
@@ -3642,27 +3885,35 @@ def register_voice(bot: commands.Bot) -> None:
             dm, ds = divmod(int(dur), 60)
             await ctx.send(f"⚠️ A música só tem **{dm}:{ds:02d}** de duração. Escolha um tempo menor.")
             return
-        # Recriar source com seek
-        new_source = _YTSource.from_file(session.current_file, seek_sec=target_sec)
-        if not new_source:
-            await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
-            return
-        # Sinalizar seek para o play_worker não avançar
-        session.seeking = True
-        try:
-            vc.stop()
-        except Exception:
-            session.seeking = False
-            await ctx.send(embed=_embed("⚠️ Erro ao fazer seek."))
-            return
-        await asyncio.sleep(0.3)
-        session.song_start_time = time.monotonic() - target_sec
-        try:
-            vc.play(new_source)
-        except Exception:
-            session.seeking = False
-            await ctx.send(embed=_embed("⚠️ Erro ao retomar playback após seek."))
-            return
+        if _is_wavelink_player(vc):
+            # Lavalink: seek nativo
+            try:
+                await vc.seek(int(target_sec * 1000))
+                session.song_start_time = time.monotonic() - target_sec
+            except Exception as e:
+                await ctx.send(embed=_embed(f"⚠️ Erro ao fazer seek: {e}"))
+                return
+        else:
+            # yt-dlp: recriar source com FFmpeg -ss
+            new_source = _YTSource.from_file(session.current_file, seek_sec=target_sec)
+            if not new_source:
+                await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
+                return
+            session.seeking = True
+            try:
+                vc.stop()
+            except Exception:
+                session.seeking = False
+                await ctx.send(embed=_embed("⚠️ Erro ao fazer seek."))
+                return
+            await asyncio.sleep(0.3)
+            session.song_start_time = time.monotonic() - target_sec
+            try:
+                vc.play(new_source)
+            except Exception:
+                session.seeking = False
+                await ctx.send(embed=_embed("⚠️ Erro ao retomar playback após seek."))
+                return
         tm, ts = divmod(int(target_sec), 60)
         dur_str = ""
         if dur > 0:
@@ -4193,7 +4444,62 @@ def register_voice(bot: commands.Bot) -> None:
             session = _sessions.get(player.guild.id)
             if not session:
                 return
-            # TODO (Fase 2): implementar lógica de loop, autoplay, next track
-            log.debug("Lavalink track acabou: %s (reason=%s)", payload.track.title, payload.reason)
+            track = payload.track
+            log.debug("Lavalink track acabou: %s (reason=%s)", track.title, payload.reason)
+
+            # Loop: repetir a mesma track
+            if session.loop_enabled and track:
+                try:
+                    await player.play(track)
+                    return
+                except Exception as e:
+                    log.warning("Loop replay falhou: %s", e)
+
+            # Pop display/duration da fila (sincronia com queue_display)
+            if session.queue_display:
+                session.queue_display.pop(0)
+            if session.queue_durations:
+                session.queue_durations.pop(0)
+
+            # Próxima track na fila do Lavalink
+            if not player.queue.is_empty:
+                next_track = player.queue.get()
+                session.current_song = next_track.title or "Desconhecido"
+                session.current_duration = (next_track.length or 0) / 1000.0
+                session.song_start_time = time.monotonic()
+                session.history.append(session.current_song)
+                if len(session.history) > 50:
+                    session.history = session.history[-50:]
+                try:
+                    await player.play(next_track)
+                except Exception as e:
+                    log.error("Erro ao tocar próxima track: %s", e)
+                    session.current_song = ""
+                return
+
+            # Fila vazia
+            session.current_song = ""
+            session.current_duration = 0
+            session._queue_empty_since = time.monotonic()
+
+            # Autoplay: buscar música similar
+            if session.autoplay and track:
+                try:
+                    results = await wavelink.Playable.search(f"ytsearch1:{track.title} mix")
+                    if results:
+                        next_t = results[0]
+                        session.current_song = next_t.title or "Autoplay"
+                        session.current_duration = (next_t.length or 0) / 1000.0
+                        session.song_start_time = time.monotonic()
+                        await player.play(next_t)
+                        await _notify(bot, session.text_channel_id,
+                                       f"🔄 Autoplay: **{next_t.title[:80]}**")
+                        return
+                except Exception as e:
+                    log.debug("Autoplay falhou: %s", e)
+
+            if not session.stay_24_7:
+                await _notify(bot, session.text_channel_id,
+                               "📭 Fila encerrada! Adicione músicas com `t$p`.")
 
     log.info("Comandos de voz registrados (/help, t$play, t$shuffle, t$roll, ...)")

@@ -65,6 +65,7 @@ NOTA_URGENTE = 90
 SIMHASH_TTL_HORAS = 120
 SIMHASH_HAMMING_MAX = 6
 TITLE_IDX_TTL_HORAS = 72
+TOPIC_IDX_TTL_HORAS = 48
 MAX_IDADE_HORAS = 12
 
 HISTORY_FILE = "notices_history.json"
@@ -396,8 +397,10 @@ def save_history(h: dict) -> None:
         novo["_simhash_idx"] = _simhash_prune(h["_simhash_idx"])
     if "_title_idx" in h:
         novo["_title_idx"] = _title_idx_prune(h["_title_idx"])
+    if "_topic_idx" in h:
+        novo["_topic_idx"] = _topic_idx_prune(h["_topic_idx"])
     for k, v in h.items():
-        if k in ("_simhash_idx", "_title_idx"):
+        if k in ("_simhash_idx", "_title_idx", "_topic_idx"):
             continue
         if isinstance(v, dict) and "ts" in v:
             if v["ts"] > cutoff:
@@ -540,6 +543,92 @@ def _title_fingerprint(titulo: str) -> str:
     """Hash curto do título normalizado para dedup cross-site."""
     norm = _normalizar_titulo(titulo)
     return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+
+# =========================
+# DEDUP POR TEMA/ASSUNTO
+# =========================
+# Palavras genéricas demais para serem entidades-chave (além das stopwords)
+_TOPIC_NOISE = {
+    "novo", "nova", "novos", "novas", "lança", "lançar", "lançou", "lançamento",
+    "anuncia", "anunciar", "anunciou", "revela", "revelar", "revelou", "alerta",
+    "alertar", "alertou", "propõe", "propor", "modelo", "modelos", "sistema",
+    "sistemas", "empresa", "empresas", "tecnologia", "agora", "pode", "vai",
+    "será", "primeiro", "primeira", "global", "mundo", "mercado", "setor",
+    "mais", "como", "sobre", "não", "muito", "também", "após", "até",
+    "ainda", "já", "ser", "ter", "deve", "diz", "faz", "usa", "usar",
+    "usar", "afirma", "diz", "says", "new", "launches", "announces",
+    "reveals", "report", "could", "may", "now", "first", "big", "just",
+    "get", "gets", "got", "make", "makes", "made", "says", "said",
+    "plan", "plans", "feature", "update", "latest", "according",
+}
+
+def _extract_topic_keys(titulo: str) -> frozenset[str]:
+    """Extrai palavras-chave temáticas do título (entidades, nomes próprios, termos técnicos).
+    Retorna set de 2-4 palavras mais significativas para representar o assunto."""
+    norm = (titulo or "").lower().strip()
+    norm = _PUNCT_RE.sub(" ", norm)
+    all_noise = _STOPWORDS | _TOPIC_NOISE
+    palavras = [p for p in norm.split() if p not in all_noise and len(p) > 2]
+    # Priorizar: palavras capitalizadas no original (nomes próprios)
+    original_words = (titulo or "").split()
+    capitalized = set()
+    for w in original_words:
+        wl = _PUNCT_RE.sub("", w).lower()
+        if w and w[0].isupper() and len(wl) > 2 and wl not in all_noise:
+            capitalized.add(wl)
+    # Combinar: nomes próprios primeiro, depois outras palavras significativas
+    ordered = [p for p in palavras if p in capitalized]
+    ordered += [p for p in palavras if p not in capitalized]
+    # Pegar as 3 palavras mais significativas
+    keys = ordered[:3]
+    if len(keys) < 2:
+        return frozenset()  # Muito genérico, não dá pra deduplicar por tema
+    return frozenset(keys)
+
+def _topic_fingerprint(titulo: str) -> str:
+    """Gera fingerprint do tema/assunto baseado em palavras-chave."""
+    keys = _extract_topic_keys(titulo)
+    if not keys:
+        return ""
+    # Ordenar para consistência
+    return "|".join(sorted(keys))
+
+# Topic index no histórico
+def _get_topic_index(h: dict) -> dict[str, int]:
+    idx = h.get("_topic_idx")
+    return idx if isinstance(idx, dict) else {}
+
+def _topic_idx_prune(idx: dict[str, int]) -> dict[str, int]:
+    cutoff = int(time.time()) - (TOPIC_IDX_TTL_HORAS * 3600)
+    return {k: ts for k, ts in idx.items() if ts >= cutoff}
+
+_topic_pruned_this_cycle = False
+
+def _ensure_topic_pruned(h: dict) -> dict[str, int]:
+    global _topic_pruned_this_cycle
+    idx = _get_topic_index(h)
+    if not _topic_pruned_this_cycle:
+        idx = _topic_idx_prune(idx)
+        h["_topic_idx"] = idx
+        _topic_pruned_this_cycle = True
+    return idx
+
+def topic_is_dup(h: dict, titulo: str) -> bool:
+    """Verifica se o tema/assunto do título já foi coberto recentemente."""
+    fp = _topic_fingerprint(titulo)
+    if not fp:
+        return False
+    idx = _ensure_topic_pruned(h)
+    return fp in idx
+
+def topic_add(h: dict, titulo: str) -> None:
+    """Registra o tema como coberto."""
+    fp = _topic_fingerprint(titulo)
+    if not fp:
+        return
+    idx = _ensure_topic_pruned(h)
+    idx[fp] = int(time.time())
+    h["_topic_idx"] = idx
 
 # SimHash index no histórico
 def _get_simhash_index(h: dict) -> dict[str, int]:
@@ -1507,6 +1596,7 @@ async def verificar_feeds():
     # Resetar flags de prune para este ciclo
     _simhash_pruned_this_cycle = False
     _title_pruned_this_cycle = False
+    _topic_pruned_this_cycle = False
 
     if not http_session or http_session.closed:
         connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
@@ -1615,6 +1705,7 @@ async def verificar_feeds():
     # Sets de dedup in-cycle (não poluem o histórico persistente)
     _cycle_titles: set[str] = set()
     _cycle_simhashes: set[int] = set()
+    _cycle_topics: set[str] = set()
 
     for nome_site, feed in resultados_feeds:
         if not feed or not feed.entries:
@@ -1663,6 +1754,14 @@ async def verificar_feeds():
                 total_dedup += 1
                 continue
 
+            # Dedup por TEMA/ASSUNTO (mesma notícia de fontes diferentes com títulos distintos)
+            _topic_fp = _topic_fingerprint(title)
+            if _topic_fp and (topic_is_dup(history, title) or _topic_fp in _cycle_topics):
+                historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_topico"})
+                total_dedup += 1
+                log.info(f"  ✗ Tema repetido: [{nome_site}] {title[:60]}")
+                continue
+
             # PRÉ-FILTRO POR KEYWORDS (custo zero — antes da IA)
             if not prefiltro_keywords(title, texto_raw):
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "prefiltro_keywords"})
@@ -1706,6 +1805,8 @@ async def verificar_feeds():
             # Dedup cross-site no mesmo ciclo: usar set em memória (não polui o histórico persistente)
             _cycle_titles.add(_title_fingerprint(title))
             _cycle_simhashes.add(sh)
+            if _topic_fp:
+                _cycle_topics.add(_topic_fp)
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
 
@@ -1854,6 +1955,9 @@ async def verificar_feeds():
         # Registrar título original E traduzido no índice
         title_add(history, cand["title"])
         title_add(history, res.get("titulo", ""))
+        # Registrar tema/assunto (suprime mesma pauta de outras fontes nas próximas horas)
+        topic_add(history, cand["title"])
+        topic_add(history, res.get("titulo", ""))
 
         # TRAVA: sem imagem = não aprovar jamais
         if not cand.get("img"):
