@@ -1,0 +1,43 @@
+services:
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: tiffany-lavalink
+    restart: unless-stopped
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml
+      - lavalink-logs:/opt/Lavalink/logs
+    networks:
+      - tiffany-net
+    expose:
+      - "2333"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2333/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    container_name: tiffany-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - LAVALINK_HOST=lavalink
+      - LAVALINK_PORT=2333
+      - LAVALINK_PASSWORD=tiffany_lavalink_2026
+    volumes:
+      - ./data:/app/data
+      - bot-logs:/app/logs
+    networks:
+      - tiffany-net
+    depends_on:
+      lavalink:
+        condition: service_healthy
+
+volumes:
+  lavalink-logs:
+  bot-logs:
+
+networks:
+  tiffany-net:
+    driver: bridge

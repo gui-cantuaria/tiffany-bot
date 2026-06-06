@@ -1501,7 +1501,7 @@ async def verificar_feeds():
         return
 
     if not _janela_ativa_ou_pre_aquecimento(agora):
-        log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:45 + 08h-18h).")
+        log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:00 + 08h-18h).")
         return
 
     # Resetar flags de prune para este ciclo

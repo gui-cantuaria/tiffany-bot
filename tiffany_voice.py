@@ -60,6 +60,13 @@ except Exception:
     yt_dlp = None  # type: ignore
     _YTDLP_AVAILABLE = False
 
+try:
+    import wavelink
+    _WAVELINK_AVAILABLE = True
+except Exception:
+    wavelink = None  # type: ignore
+    _WAVELINK_AVAILABLE = False
+
 log = logging.getLogger("tiffany-bot.voice")
 
 # audioop foi removido no Python 3.13 — usa fallback puro se necessário
@@ -1483,7 +1490,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
 _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t$ ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
-    + "\n- /help, /np, /queue, /status (slash)\n"
+    + "\n- /help, /queue, /status (slash)\n"
     "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/sai», «Tiffany, [pergunta]»\n"
     "Se o usuário perguntar como usar o bot, cite o comando exato (ex: t$p para tocar)."
 )
@@ -3969,6 +3976,22 @@ def register_voice(bot: commands.Bot) -> None:
     async def _rejoin_on_ready() -> None:
         """Reconecta automaticamente aos canais de voz apos restart."""
         await asyncio.sleep(4)  # aguarda guilds carregarem completamente
+
+        # Conectar ao Lavalink (se disponível)
+        if _WAVELINK_AVAILABLE:
+            lava_host = os.getenv("LAVALINK_HOST", "localhost")
+            lava_port = int(os.getenv("LAVALINK_PORT", "2333"))
+            lava_pass = os.getenv("LAVALINK_PASSWORD", "tiffany_lavalink_2026")
+            try:
+                node = wavelink.Node(
+                    uri=f"http://{lava_host}:{lava_port}",
+                    password=lava_pass,
+                )
+                await wavelink.Pool.connect(nodes=[node], client=bot, cache_capacity=100)
+                log.info("Lavalink conectado: %s:%d", lava_host, lava_port)
+            except Exception as e:
+                log.warning("Lavalink indisponível (%s) — usando yt-dlp como fallback.", e)
+
         asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
         state = _load_voice_state()
         if not state:
@@ -4109,7 +4132,7 @@ def register_voice(bot: commands.Bot) -> None:
             "«Tiffany, para / pula / sai» — Controle por voz\n"
             "«Tiffany, `[pergunta]`» — Perguntar à IA"
         ), inline=False)
-        em.add_field(name="🔧 Slash", value="`/help` · `/np` · `/queue` · `/status`", inline=False)
+        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/status`", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
 
@@ -4138,5 +4161,39 @@ def register_voice(bot: commands.Bot) -> None:
             await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
             return
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    # ============================
+    # WAVELINK EVENT LISTENERS
+    # ============================
+
+    if _WAVELINK_AVAILABLE:
+        @bot.listen("on_wavelink_node_ready")
+        async def _on_node_ready(payload: wavelink.NodeReadyEventPayload) -> None:
+            log.info("Lavalink node pronto: %s (resumed=%s)", payload.node.identifier, payload.resumed)
+
+        @bot.listen("on_wavelink_track_start")
+        async def _on_track_start(payload: wavelink.TrackStartEventPayload) -> None:
+            player = payload.player
+            if not player or not player.guild:
+                return
+            session = _sessions.get(player.guild.id)
+            if not session:
+                return
+            track = payload.track
+            session.current_song = track.title or "Desconhecido"
+            session.current_duration = (track.length or 0) / 1000.0
+            session.song_start_time = time.monotonic()
+            log.info("Lavalink tocando: %s (%.0fs)", track.title, session.current_duration)
+
+        @bot.listen("on_wavelink_track_end")
+        async def _on_track_end(payload: wavelink.TrackEndEventPayload) -> None:
+            player = payload.player
+            if not player or not player.guild:
+                return
+            session = _sessions.get(player.guild.id)
+            if not session:
+                return
+            # TODO (Fase 2): implementar lógica de loop, autoplay, next track
+            log.debug("Lavalink track acabou: %s (reason=%s)", payload.track.title, payload.reason)
 
     log.info("Comandos de voz registrados (/help, t$play, t$shuffle, t$roll, ...)")
