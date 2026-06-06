@@ -72,6 +72,7 @@ LOJAS_WHITELIST = {
     "terabyte", "terabyteshop",
     "shopinfo",
     "amazon", "amazon.com.br",
+    "mercado livre", "mercadolivre",
 }
 
 # =========================
