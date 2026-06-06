@@ -71,6 +71,7 @@ CATEGORIAS_PROMOBIT = [
 LOJAS_WHITELIST = {
     "terabyte", "terabyteshop",
     "shopinfo",
+    "amazon", "amazon.com.br",
 }
 
 # =========================
