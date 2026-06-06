@@ -21,6 +21,8 @@ SHOPINFO_ID = os.getenv("SHOPINFO_AFFILIATE_ID", "")
 SHOPINFO_PARAM = os.getenv("SHOPINFO_PARAM_NAME", "ref")
 ALIEXPRESS_ID = os.getenv("ALIEXPRESS_AFFILIATE_ID", "")
 SHOPEE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "")
+LOMADEE_SOURCE_ID = os.getenv("LOMADEE_SOURCE_ID", "")
+LOMADEE_APP_TOKEN = os.getenv("LOMADEE_APP_TOKEN", "")
 
 # Awin advertiser IDs (fixos por loja)
 AWIN_ADVERTISER_KABUM = 23202
@@ -47,6 +49,18 @@ def _awin_deeplink(url: str, advertiser_id: int) -> str:
         f"?awinmid={advertiser_id}"
         f"&awinaffid={AWIN_PUBLISHER_ID}"
         f"&ued={quote(url, safe='')}"
+    )
+
+
+def _lomadee_deeplink(url: str) -> str:
+    """Gera deeplink da Lomadee: redireciona via Lomadee com comissao."""
+    if not LOMADEE_SOURCE_ID:
+        return url
+    from urllib.parse import quote
+    return (
+        f"https://redir.lomadee.com/v2/deeplink"
+        f"?sourceId={LOMADEE_SOURCE_ID}"
+        f"&url={quote(url, safe='')}"
     )
 
 
@@ -84,8 +98,10 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if ("magazineluiza" in domain or "magalu" in domain) and MAGALU_SLUG:
         return _magalu_url(real_url)
 
-    # --- Terabyte (via Awin ou param direto) ---
+    # --- Terabyte (Lomadee > Awin > param direto) ---
     if "terabyte" in domain:
+        if LOMADEE_SOURCE_ID:
+            return _lomadee_deeplink(real_url)
         if AWIN_PUBLISHER_ID:
             return _awin_deeplink(real_url, AWIN_ADVERTISER_TERABYTE)
         if TERABYTE_ID:
@@ -95,9 +111,12 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if "pichau" in domain and AWIN_PUBLISHER_ID:
         return _awin_deeplink(real_url, AWIN_ADVERTISER_PICHAU)
 
-    # --- ShopInfo ---
-    if "shopinfo" in domain and SHOPINFO_ID:
-        return _add_param(real_url, SHOPINFO_PARAM, SHOPINFO_ID)
+    # --- ShopInfo (Lomadee > param direto) ---
+    if "shopinfo" in domain:
+        if LOMADEE_SOURCE_ID:
+            return _lomadee_deeplink(real_url)
+        if SHOPINFO_ID:
+            return _add_param(real_url, SHOPINFO_PARAM, SHOPINFO_ID)
 
     # --- AliExpress (param simples como fallback) ---
     if "aliexpress" in domain and ALIEXPRESS_ID:
@@ -117,7 +136,7 @@ def has_any_affiliate() -> bool:
     return bool(
         AMAZON_TAG or MERCADOLIVRE_ID or AWIN_PUBLISHER_ID
         or MAGALU_SLUG or TERABYTE_ID or SHOPINFO_ID or ALIEXPRESS_ID
-        or SHOPEE_ID
+        or SHOPEE_ID or LOMADEE_SOURCE_ID
     )
 
 
@@ -140,4 +159,6 @@ def active_programs() -> List[str]:
         progs.append(f"AliExpress ({ALIEXPRESS_ID})")
     if SHOPEE_ID:
         progs.append(f"Shopee ({SHOPEE_ID})")
+    if LOMADEE_SOURCE_ID:
+        progs.append(f"Lomadee/Terabyte ({LOMADEE_SOURCE_ID})")
     return progs
