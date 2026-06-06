@@ -45,13 +45,13 @@ ID_CARGO_PARA_MARCAR = int(os.getenv("ID_CARGO_PARA_MARCAR", "0"))
 HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
-MINUTO_PRE_AQUECIMENTO = 45
+MINUTO_PRE_AQUECIMENTO = 0
 
 # --- Pipeline ---
 SCAN_POR_FEED = 5
 ENTRADAS_POR_FEED = 3
-MAX_IA_CALLS_POR_CICLO = 5
-MAX_VISION_CALLS_POR_CICLO = 4
+MAX_IA_CALLS_POR_CICLO = 3
+MAX_VISION_CALLS_POR_CICLO = 2
 IA_COOLDOWN_SEC = 15
 POST_SPACING_SEC = 120
 MAX_POSTS_POR_CICLO = 1
@@ -1479,9 +1479,9 @@ def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
 
 
 def _deve_rodar_slot(agora: datetime) -> bool:
-    """Roda somente em slots fixos (xx:00 e xx:45) e apenas uma vez por slot."""
+    """Roda somente em slots fixos (xx:00) e apenas uma vez por slot."""
     global _last_run_slot
-    if agora.minute not in (0, 45):
+    if agora.minute != 0:
         return False
     slot = (agora.year * 10000 + agora.month * 100 + agora.day, agora.hour, agora.minute)
     if _last_run_slot == slot:
