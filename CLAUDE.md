@@ -23,7 +23,7 @@ Requires `.env` with: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`
 
 Optional env vars:
 - Voice/TTS: `VOICE_ENABLED` (default "1"), `TTS_ENABLED` (default "1"), `FFMPEG_PATH`, `OPUS_LIB_PATH`, `VOICE_CONNECT_TIMEOUT_SEC` (default 25), `DEBUG_STT`
-- Offers: `CANAL_OFERTAS_ID` (default 1385327938529919006), `ID_CARGO_OFERTAS`
+- Offers: `CANAL_OFERTAS_ID` (default 1512902840908124281), `ID_CARGO_OFERTAS`
 - Affiliate: `AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`
 
 ## Architecture
@@ -75,7 +75,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20, requires at least one quality metric
 - Coupon extraction, tag display, store redirect URLs
 - Affiliate link injection via `affiliate_config.py`
-- Posts to channel 1385327938529919006, mentions role 1386386059390357575
+- Posts to channel 1512902840908124281, mentions role 1386386059390357575
 - Role mention validation before pinging
 - First cycle runs immediately on startup (no 30min delay)
 

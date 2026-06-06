@@ -24,7 +24,7 @@ import affiliate_config
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1385327938529919006"))
+CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1512902840908124281"))
 ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
