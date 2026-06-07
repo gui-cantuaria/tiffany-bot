@@ -488,6 +488,25 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     tags = server_offer.get("offerTags") or []
     deal["tags"] = tags
 
+    # Parcelamento (best effort — chaves variam no Promobit; só exibe se vier).
+    inst_n = (server_offer.get("offerInstallmentAmount")
+              or server_offer.get("offerInstallment")
+              or server_offer.get("offerInstallments")
+              or server_offer.get("offerInstallmentQuantity"))
+    inst_v = (server_offer.get("offerInstallmentPrice")
+              or server_offer.get("offerInstallmentValue"))
+    try:
+        if inst_n and inst_v:
+            n = int(float(inst_n))
+            v = float(inst_v)
+            if n >= 2 and v > 0:
+                v_str = f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                sem_juros = server_offer.get("offerInstallmentInterestFree") \
+                    or server_offer.get("offerInterestFree")
+                deal["installments"] = f"{n}x de {v_str}{' sem juros' if sem_juros else ''}"
+    except (ValueError, TypeError):
+        pass
+
     return deal
 
 
@@ -628,34 +647,43 @@ def _format_price_line(deal: dict) -> str:
 
 
 def _format_description(deal: dict) -> str:
-    """Monta a descrição do embed."""
+    """Monta a descrição do embed — enxuta e fácil de bater o olho.
+
+    O nome do produto NÃO é repetido aqui: já aparece no título do embed.
+    Mostramos só o essencial: preço, economia e (quando existir) cupom,
+    parcelamento, validade, avaliação e tags.
+    """
     lines = []
 
-    # Linha de preço
+    # 1) Preço em destaque
     lines.append(_format_price_line(deal))
-    lines.append("")
 
-    # Specs do título (o título do Promobit geralmente contém as specs)
-    lines.append(f"📦 {deal['title']}")
-    lines.append("")
+    # 2) Economia em R$ — impacto imediato pro usuário
+    if deal.get("original_price") and deal.get("price"):
+        economia = deal["original_price"] - deal["price"]
+        if economia > 0:
+            eco = f"R$ {economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            lines.append(f"💰 Você economiza {eco}")
 
-    # Cupom
+    # 3) Detalhes — só o que existe, num bloco separado por linha em branco
+    detalhes = []
     if deal.get("coupon"):
-        lines.append(f"🏷️ Cupom: **{deal['coupon']}**")
-
-    # Expiração
+        # Formato de código = toque-pra-copiar no celular
+        detalhes.append(f"🏷️ Cupom: `{deal['coupon']}`")
+    if deal.get("installments"):
+        detalhes.append(f"💳 {deal['installments']}")
     if deal.get("expiration"):
-        lines.append(f"⏰ Expira: {deal['expiration']}")
-
-    # Estrelas e vendas (só exibe se tiver dados reais)
+        detalhes.append(f"⏰ Expira: {deal['expiration']}")
     if deal.get("stars") and deal.get("sales_count"):
-        lines.append(f"⭐ {deal['stars']}/5 ({deal['sales_count']} avaliações)")
-
-    # Tags (ex: Frete Grátis)
+        detalhes.append(f"⭐ {deal['stars']}/5 ({deal['sales_count']} avaliações)")
     tags = deal.get("tags") or []
     if tags:
         tags_str = " • ".join(t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:3])
-        lines.append(f"🔖 {tags_str}")
+        detalhes.append(f"🔖 {tags_str}")
+
+    if detalhes:
+        lines.append("")
+        lines.extend(detalhes)
 
     return "\n".join(lines)
 
