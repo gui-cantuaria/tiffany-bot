@@ -789,9 +789,28 @@ async def _run_deals_cycle_inner() -> None:
 
     log.info(f"Após dedup: {len(candidates)} candidatas")
 
+    # Triagem barata (sem rede) ANTES de enriquecer: descarta lojas já conhecidas
+    # que estão fora da whitelist, para não gastar o orçamento de enriquecimento com
+    # ofertas que seriam rejeitadas de qualquer jeito. Mantém lojas da whitelist e as
+    # de loja ainda desconhecida (que só é revelada no enriquecimento).
+    pre_candidates = []
+    descartadas_loja = 0
+    for deal in candidates:
+        store = deal.get("store") or ""
+        if store and not _store_allowed(store):
+            descartadas_loja += 1
+            continue
+        pre_candidates.append(deal)
+    # Prioriza quem já tem loja da whitelist confirmada (garante vaga dentro do limite)
+    pre_candidates.sort(key=lambda d: 0 if (d.get("store") and _store_allowed(d.get("store", ""))) else 1)
+    log.info(
+        f"Triagem de loja: {len(pre_candidates)} a enriquecer "
+        f"({descartadas_loja} descartadas por whitelist antes de enriquecer)"
+    )
+
     # Enriquecer cada oferta (buscar detalhes)
     enriched = []
-    for deal in candidates[:20]:  # Limitar para não abusar
+    for deal in pre_candidates[:20]:  # Limitar para não abusar
         try:
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
