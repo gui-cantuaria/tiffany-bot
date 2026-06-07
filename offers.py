@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, quote_plus
 
 import io
 import aiohttp
@@ -516,7 +516,73 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
+    # Link DIRETO da loja: o Promobit às vezes expõe a URL do produto (aliasUrl).
+    # Quando existir, resolvemos para a loja final (para mandar o usuário direto à
+    # loja com a comissão dele). Ofertas de cupom não têm — aí cai na busca por nome.
+    alias = server_offer.get("aliasUrl")
+    if isinstance(alias, str) and alias.startswith("http"):
+        await _resolve_product_url(session, deal, alias)
+
     return deal
+
+
+# Domínios de loja reconhecidos (para validar se um link aponta para a loja real)
+_STORE_DOMAINS = (
+    "mercadolivre.com", "mercadolibre.com", "amazon.com", "terabyteshop.com",
+    "shopinfo.com", "kabum.com", "pichau.com", "magazineluiza.com",
+    "magazinevoce.com", "aliexpress.com", "shopee.com",
+)
+
+
+def _is_store_domain(url: str) -> bool:
+    try:
+        dom = urlparse(url).netloc.lower()
+    except Exception:
+        return False
+    return any(sd in dom for sd in _STORE_DOMAINS)
+
+
+async def _resolve_product_url(session: aiohttp.ClientSession, deal: dict, alias: str) -> None:
+    """Resolve a URL de produto do Promobit (aliasUrl) para a loja final.
+    Se já for um link de loja, usa direto; se for redirect (promoby.me/promobit),
+    segue até a loja. Resultado vai em deal['product_url']."""
+    if _is_store_domain(alias):
+        deal["product_url"] = alias
+        return
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        }
+        async with session.get(
+            alias, headers=headers, allow_redirects=True,
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            final = str(resp.url)
+            if _is_store_domain(final):
+                deal["product_url"] = final
+    except Exception as e:
+        log.debug(f"Falha ao resolver product_url de {alias[:60]}: {e}")
+
+
+def _store_search_url(store: str, title: str) -> Optional[str]:
+    """Monta a URL de BUSCA na loja pelo nome do produto (fallback quando não há
+    link direto). Só para lojas com formato de busca conhecido."""
+    norm = (store or "").lower().strip()
+    q = (title or "").strip()
+    if not q:
+        return None
+    if "mercado" in norm:
+        slug = re.sub(r"[^\w\s-]", "", q.lower())
+        slug = re.sub(r"\s+", "-", slug.strip())
+        return f"https://lista.mercadolivre.com.br/{slug}" if slug else None
+    if "amazon" in norm:
+        return f"https://www.amazon.com.br/s?k={quote_plus(q)}"
+    if "terabyte" in norm:
+        return f"https://www.terabyteshop.com.br/busca?str={quote_plus(q)}"
+    if "shopinfo" in norm:
+        return f"https://www.shopinfo.com.br/busca?q={quote_plus(q)}"
+    return None
 
 
 async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) -> dict:
@@ -717,10 +783,23 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         return None
 
 
+def _store_destination(deal: dict) -> Optional[str]:
+    """Melhor destino DIRETO na loja (sem afiliado ainda):
+    1) link de produto resolvido do Promobit; 2) busca na loja pelo nome."""
+    if deal.get("product_url"):
+        return deal["product_url"]
+    return _store_search_url(deal.get("store", ""), deal.get("title", ""))
+
+
 def _buy_url(deal: dict) -> str:
-    """URL final de compra (com afiliado), unificada para título, botão e footer."""
-    raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
-    return affiliate_config.build_affiliate_url(deal.get("store", ""), raw_url)
+    """URL final de compra com a comissão do usuário, indo DIRETO à loja quando dá.
+    Ordem: link do produto / busca na loja (com afiliado) → fallback página Promobit."""
+    store = deal.get("store", "")
+    dest = _store_destination(deal)
+    if dest and dest.startswith("http"):
+        return affiliate_config.build_affiliate_url(store, dest)
+    # Fallback: página da oferta no Promobit (sempre válida)
+    return deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
 
 
 def _cor_embed(deal: dict) -> int:
@@ -766,8 +845,10 @@ def _build_embed(deal: dict) -> discord.Embed:
 
     desc = _format_description(deal)
     # URL unificada para título e botão (evita inconsistência)
-    raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
     buy_url = _buy_url(deal)
+    # Afiliado aplicado? = build_affiliate_url alterou o destino direto da loja.
+    dest = _store_destination(deal)
+    afiliado_aplicado = bool(dest) and buy_url != dest
 
     # CTA em DESTAQUE dentro do corpo: heading clicável (grande e em negrito).
     # Reforça o botão (que o Discord só renderiza em cinza) com alta visibilidade.
@@ -810,7 +891,7 @@ def _build_embed(deal: dict) -> discord.Embed:
         )
 
     # Footer sutil (indica afiliado quando aplicavel)
-    if buy_url != raw_url:
+    if afiliado_aplicado:
         embed.set_footer(text="Oferta verificada automaticamente | Link de afiliado")
     else:
         embed.set_footer(text="Oferta verificada automaticamente")
