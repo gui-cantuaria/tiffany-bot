@@ -36,7 +36,7 @@ HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
-SCAN_INTERVAL_MIN = 45
+SCAN_INTERVAL_MIN = 30  # ciclo de ofertas a cada 30 min
 POST_SPACING_SEC = 180  # 3 min entre posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # percentual mínimo

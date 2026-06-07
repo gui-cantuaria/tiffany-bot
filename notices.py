@@ -46,6 +46,7 @@ HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
+INTERVALO_NOTICIAS_MIN = 45  # intervalo entre ciclos de notícias (minutos)
 
 # --- Pipeline ---
 SCAN_POR_FEED = 5
@@ -1558,7 +1559,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 # Estado global para /status
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
-_last_run_slot: Optional[Tuple[int, int, int]] = None
+_last_run_ts: Optional[float] = None  # epoch do último ciclo executado
 
 def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
     """Permite coleta no horário comercial e no pré-aquecimento antes das 8h."""
@@ -1568,14 +1569,14 @@ def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
 
 
 def _deve_rodar_slot(agora: datetime) -> bool:
-    """Roda em slots fixos de 30 min (xx:00 e xx:30) e apenas uma vez por slot."""
-    global _last_run_slot
-    if agora.minute not in (0, 30):
+    """Roda a cada INTERVALO_NOTICIAS_MIN minutos (controle por tempo decorrido).
+    Só consome o intervalo quando já estamos na janela ativa (a checagem de janela
+    acontece ANTES desta), para o primeiro ciclo do dia disparar assim que abrir."""
+    global _last_run_ts
+    now = agora.timestamp()
+    if _last_run_ts is not None and (now - _last_run_ts) < INTERVALO_NOTICIAS_MIN * 60:
         return False
-    slot = (agora.year * 10000 + agora.month * 100 + agora.day, agora.hour, agora.minute)
-    if _last_run_slot == slot:
-        return False
-    _last_run_slot = slot
+    _last_run_ts = now
     return True
 
 
@@ -1586,11 +1587,12 @@ async def verificar_feeds():
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
-    if not _deve_rodar_slot(agora):
+    # Janela primeiro: fora dela não consumimos o intervalo (mantém o primeiro
+    # ciclo do dia disparando assim que a janela abre).
+    if not _janela_ativa_ou_pre_aquecimento(agora):
         return
 
-    if not _janela_ativa_ou_pre_aquecimento(agora):
-        log.info(f"Standby: {agora.strftime('%H:%M')} fora da janela de coleta (pré 07:00 + 08h-18h).")
+    if not _deve_rodar_slot(agora):
         return
 
     # Resetar flags de prune para este ciclo
