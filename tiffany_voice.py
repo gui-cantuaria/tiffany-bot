@@ -1376,7 +1376,18 @@ def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str
                 if not info:
                     continue
                 duration = float(info.get("duration") or 0)
-                title = info.get("title") or info.get("id") or "audio"
+                raw_title = info.get("title") or info.get("id") or "audio"
+                # Formatar como "Música - Artista" usando metadados do yt-dlp
+                track_name = info.get("track") or ""
+                artist_name = info.get("artist") or info.get("creator") or info.get("uploader") or ""
+                # Limpar "- Topic" de canais auto-gerados do YouTube Music
+                artist_name = re.sub(r"\s*-\s*Topic$", "", artist_name, flags=re.IGNORECASE).strip()
+                if track_name and artist_name:
+                    title = f"{track_name} - {artist_name}"
+                elif " - " in raw_title or " – " in raw_title:
+                    title = raw_title
+                else:
+                    title = _format_track_display(raw_title)
                 if duration > MAX_SONG_DURATION_SEC:
                     dur_min = int(duration // 60)
                     log.warning("Rejeitado por duração: %s (%d min)", title, dur_min)
@@ -1605,6 +1616,33 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
     if "soundcloud" in q or q.startswith("scsearch"):
         return "SoundCloud"
     return "YouTube"
+
+
+def _format_track_display(title: str) -> str:
+    """Formata título do YouTube para 'Artista - Música'.
+    Se já tem separador (-, –, |, :) mantém. Senão, tenta extrair do título."""
+    if not title:
+        return title
+    # Limpar sufixos comuns do YouTube
+    clean = re.sub(
+        r"\s*[\(\[](official\s*(music\s*)?video|lyric(s)?\s*video|audio|video\s*oficial"
+        r"|clipe\s*oficial|lyrics?|visualizer|hd|hq|4k|remaster(ed)?|live|ft\.?\s*[^\]\)]*"
+        r"|feat\.?\s*[^\]\)]*|prod\.?\s*[^\]\)]*)[\)\]]",
+        "", title, flags=re.IGNORECASE,
+    ).strip()
+    # Remover "Topic" de canais auto-gerados do YouTube Music
+    clean = re.sub(r"\s*-\s*Topic$", "", clean, flags=re.IGNORECASE).strip()
+    # Se já tem separador, retornar limpo
+    if re.search(r"\s+[-–—|]\s+", clean):
+        return clean
+    # Se tem " : " como separador
+    if " : " in clean:
+        return clean.replace(" : ", " - ", 1)
+    # Tentar detectar padrão "NomeArtista NomeMúsica" sem separador
+    # Heurística: se começa com palavras capitalizadas seguidas de mais palavras capitalizadas
+    # Ex: "Bon Iver Skinny Love" -> difícil de separar automaticamente sem metadata
+    # Deixar como está se não conseguir separar
+    return clean
 
 
 def _queue_eta_sec(session: "_GuildVoiceSession") -> float:
