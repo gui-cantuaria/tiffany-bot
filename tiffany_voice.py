@@ -416,9 +416,13 @@ async def _ai_interpret_song(query: str) -> Optional[str]:
                     {
                         "role": "system",
                         "content": (
-                            "O usuario digitou o nome de uma musica de forma errada ou confusa. "
-                            "Interprete e responda APENAS com o nome correto da musica e artista, nada mais. "
-                            "Formato: Artista - Nome da Musica. Se nao conseguir identificar, responda apenas: ?"
+                            "O usuario quer buscar uma musica. Pode ter escrito errado, abreviado, ou misturado palavras-chave. "
+                            "Interprete e responda APENAS com o nome correto para buscar no YouTube, nada mais. "
+                            "Formato: Nome da Musica - Artista. "
+                            "Exemplos: 'anny frieren blue' -> 'Bye-Bye-Bye - Yorushika Frieren', "
+                            "'eminem lose' -> 'Lose Yourself - Eminem', "
+                            "'op naruto blue' -> 'Blue Bird - Ikimono-gakari'. "
+                            "Se nao conseguir identificar, responda apenas: ?"
                         ),
                     },
                     {"role": "user", "content": query},
@@ -3368,7 +3372,17 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send("❌ Não consegui resolver esse link. Tenta com o nome da música.")
                 return
         elif not is_url:
-            query = f"ytsearch1:{query}"
+            # IA interpreta query ambígua antes de buscar no YouTube
+            if _global_rate_limit_ok():
+                interpreted = await _ai_interpret_song(query)
+                if interpreted and interpreted.lower() != query.lower():
+                    log.info("IA pré-interpretou '%s' -> '%s'", query, interpreted)
+                    display = interpreted
+                    query = f"ytsearch1:{interpreted}"
+                else:
+                    query = f"ytsearch1:{query}"
+            else:
+                query = f"ytsearch1:{query}"
         # Suprimir embeds da mensagem do usuário para não poluir o chat
         if is_url:
             try:
