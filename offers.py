@@ -116,17 +116,12 @@ http_session: Optional[aiohttp.ClientSession] = None
 TIFFANY_PINK = 0xFF69B4
 COR_OFERTA = TIFFANY_PINK          # cor padrão (loja sem cor de marca definida)
 COR_OFERTA_ALTA = TIFFANY_PINK     # mantido por compatibilidade
-COR_ULTRA = 0xFF4500               # ultra oferta (>= DESCONTO_ULTRA_OFERTA): laranja-fogo
-
-# Cor da barra lateral do embed por loja (branding). A chave casa por "startswith"
-# no nome normalizado da loja, então "amazon" cobre "amazon.com.br".
-STORE_COLORS = {
-    "amazon": 0xFF9900,         # laranja Amazon
-    "mercado livre": 0xFFE600,  # amarelo Mercado Livre
-    "mercadolivre": 0xFFE600,
-    "terabyte": 0xE3000F,       # vermelho Terabyte
-    "shopinfo": 0x1565C0,       # azul ShopInfo
-}
+# Cor da barra do embed pela faixa de desconto — sinaliza o quão boa é a oferta.
+# Quanto maior o desconto, mais "quente" a cor.
+COR_DESCONTO_ULTRA = 0xFF4500   # >= DESCONTO_ULTRA_OFERTA (padrão 40%): vermelho-fogo
+COR_DESCONTO_OTIMA = 0xFF8C00   # 30-39%: laranja
+COR_DESCONTO_BOA = 0xFFD700     # 20-29%: dourado
+# < 20% cai em COR_OFERTA (rosa Tiffany)
 EMOJI_FOGO = "🔥"
 
 CATEGORIAS_EMOJI = {
@@ -726,15 +721,15 @@ def _buy_url(deal: dict) -> str:
 
 
 def _cor_embed(deal: dict) -> int:
-    """Cor da barra do embed: ultra oferta tem destaque próprio; caso contrário
-    usa a cor de marca da loja; senão, rosa padrão da Tiffany."""
+    """Cor da barra do embed pela faixa de desconto: quanto maior o desconto,
+    mais 'quente' a cor — sinaliza de relance o quão boa é a oferta."""
     disc = deal.get("discount_pct") or 0
     if disc >= DESCONTO_ULTRA_OFERTA:
-        return COR_ULTRA  # o destaque de ultra oferta vence o branding da loja
-    norm = _normalize_store(deal.get("store", ""))
-    for chave, cor in STORE_COLORS.items():
-        if norm.startswith(chave) or chave in norm:
-            return cor
+        return COR_DESCONTO_ULTRA
+    if disc >= 30:
+        return COR_DESCONTO_OTIMA
+    if disc >= 20:
+        return COR_DESCONTO_BOA
     return COR_OFERTA
 
 
