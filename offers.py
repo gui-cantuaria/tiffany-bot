@@ -114,8 +114,19 @@ http_session: Optional[aiohttp.ClientSession] = None
 # CORES E EMOJIS
 # =========================
 TIFFANY_PINK = 0xFF69B4
-COR_OFERTA = TIFFANY_PINK
-COR_OFERTA_ALTA = TIFFANY_PINK
+COR_OFERTA = TIFFANY_PINK          # cor padrão (loja sem cor de marca definida)
+COR_OFERTA_ALTA = TIFFANY_PINK     # mantido por compatibilidade
+COR_ULTRA = 0xFF4500               # ultra oferta (>= DESCONTO_ULTRA_OFERTA): laranja-fogo
+
+# Cor da barra lateral do embed por loja (branding). A chave casa por "startswith"
+# no nome normalizado da loja, então "amazon" cobre "amazon.com.br".
+STORE_COLORS = {
+    "amazon": 0xFF9900,         # laranja Amazon
+    "mercado livre": 0xFFE600,  # amarelo Mercado Livre
+    "mercadolivre": 0xFFE600,
+    "terabyte": 0xE3000F,       # vermelho Terabyte
+    "shopinfo": 0x1565C0,       # azul ShopInfo
+}
 EMOJI_FOGO = "🔥"
 
 CATEGORIAS_EMOJI = {
@@ -708,10 +719,45 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         return None
 
 
+def _buy_url(deal: dict) -> str:
+    """URL final de compra (com afiliado), unificada para título, botão e footer."""
+    raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
+    return affiliate_config.build_affiliate_url(deal.get("store", ""), raw_url)
+
+
+def _cor_embed(deal: dict) -> int:
+    """Cor da barra do embed: ultra oferta tem destaque próprio; caso contrário
+    usa a cor de marca da loja; senão, rosa padrão da Tiffany."""
+    disc = deal.get("discount_pct") or 0
+    if disc >= DESCONTO_ULTRA_OFERTA:
+        return COR_ULTRA  # o destaque de ultra oferta vence o branding da loja
+    norm = _normalize_store(deal.get("store", ""))
+    for chave, cor in STORE_COLORS.items():
+        if norm.startswith(chave) or chave in norm:
+            return cor
+    return COR_OFERTA
+
+
+def _build_view(deal: dict) -> Optional[discord.ui.View]:
+    """Botão de compra real do Discord (link). Retorna None se não houver URL válida
+    — nesse caso o embed cai no campo de texto de fallback."""
+    buy_url = _buy_url(deal)
+    if not buy_url.startswith("http"):
+        return None
+    view = discord.ui.View(timeout=None)  # link buttons não disparam interação
+    view.add_item(discord.ui.Button(
+        label="COMPRAR COM DESCONTO",
+        emoji="🛒",
+        style=discord.ButtonStyle.link,
+        url=buy_url,
+    ))
+    return view
+
+
 def _build_embed(deal: dict) -> discord.Embed:
     """Constrói o embed da oferta."""
     discount = deal.get("discount_pct", 0)
-    cor = COR_OFERTA_ALTA if discount >= 40 else COR_OFERTA
+    cor = _cor_embed(deal)
 
     # Título: emoji + produto resumido + desconto
     title = f"{EMOJI_FOGO} {deal['title'][:200]} — {discount:.0f}% OFF"
@@ -719,13 +765,13 @@ def _build_embed(deal: dict) -> discord.Embed:
     desc = _format_description(deal)
     if len(desc) > 4096:
         desc = desc[:4093] + "..."
-    # URL unificada para título e CTA (evita inconsistência)
+    # URL unificada para título e botão (evita inconsistência)
     raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
-    buy_url = affiliate_config.build_affiliate_url(deal.get("store", ""), raw_url)
+    buy_url = _buy_url(deal)
 
     embed = discord.Embed(
         title=title[:256],
-        url=buy_url,
+        url=buy_url if buy_url.startswith("http") else None,
         description=desc,
         color=cor,
     )
@@ -745,11 +791,14 @@ def _build_embed(deal: dict) -> discord.Embed:
 
     # Imagem — definida no momento de postar (_build_embed não seta aqui
     # para evitar set_image duplo se o download falhar)
-    embed.add_field(
-        name="",
-        value=f"👉 **[COMPRAR COM DESCONTO]({buy_url})**",
-        inline=False,
-    )
+    # CTA: normalmente vira um BOTÃO real (ver _build_view, anexado no envio).
+    # Só usamos campo de texto como fallback quando não há URL utilizável.
+    if not buy_url.startswith("http"):
+        embed.add_field(
+            name="",
+            value="👉 **Confira a oferta na loja**",
+            inline=False,
+        )
 
     # Footer sutil (indica afiliado quando aplicavel)
     if buy_url != raw_url:
@@ -918,7 +967,12 @@ async def _run_deals_cycle_inner() -> None:
             # Legado: marca em toda oferta, se configurado via ID_CARGO_OFERTAS
             elif ID_CARGO_OFERTAS and guild and guild.get_role(ID_CARGO_OFERTAS):
                 content = f"<@&{ID_CARGO_OFERTAS}>"
-            msg = await channel.send(content=content, embed=embed, file=file)
+
+            view = _build_view(deal)
+            if view is not None:
+                msg = await channel.send(content=content, embed=embed, file=file, view=view)
+            else:
+                msg = await channel.send(content=content, embed=embed, file=file)
 
             # Marcar como postado DEPOIS de enviar com sucesso
             _mark_posted(history, deal["url"], deal["title"])
