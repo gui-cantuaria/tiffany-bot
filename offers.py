@@ -39,6 +39,9 @@ MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # percentual mínimo
 NOTA_MINIMA_ESTRELAS = 4.2
 VENDAS_MINIMAS = 20
+# Promobit raramente fornece estrelas/vendas. Para não travar em 0 ofertas, aceita
+# oferta de loja confiável (whitelist) SEM métrica desde que o desconto seja bom.
+DESCONTO_SEM_METRICA = 20  # percentual mínimo quando não há estrelas nem vendas
 
 HISTORY_FILE = "offers_history.json"
 
@@ -590,9 +593,12 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if sales is not None and sales < VENDAS_MINIMAS:
         return False, f"vendas {sales} < {VENDAS_MINIMAS}"
 
-    # Sem dados de qualidade: precisa de pelo menos estrelas OU vendas para aprovar
+    # Sem dados de qualidade (Promobit não trouxe estrelas nem vendas): como a loja
+    # já passou pela whitelist (é confiável), aceita desde que o desconto seja bom.
     if stars is None and sales is None:
-        return False, "sem dados de qualidade (stars e sales ausentes)"
+        if disc >= DESCONTO_SEM_METRICA:
+            return True, "ok (sem métrica, desconto alto)"
+        return False, f"sem métrica e desconto {disc}% < {DESCONTO_SEM_METRICA}%"
 
     return True, "ok"
 
