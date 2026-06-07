@@ -2090,7 +2090,7 @@ async def on_message(message: discord.Message):
         if lower.startswith("t$"):
             after_prefix = content[2:]
             matched = False
-            # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/st/su)
+            # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/su)
             for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
                 if after_prefix.lower().startswith(cmd):
                     if len(after_prefix) == len(cmd) or after_prefix[len(cmd)] == " ":
@@ -2140,87 +2140,85 @@ async def on_close():
 # =========================
 # SLASH COMMAND: /status
 # =========================
-@discord_client.tree.command(name="status", description="Exibe o status atual do bot Tiffany")
-@discord.app_commands.default_permissions(administrator=True)
+@discord_client.tree.command(name="status", description="Mostra se a Tiffany está funcionando normalmente")
 async def cmd_status(interaction: discord.Interaction):
+    """Status simples e amigável: diz se está tudo normal ou com instabilidades.
+    Liberado para todos os usuários. Admins veem detalhes técnicos extras."""
     agora = datetime.now(FUSO_HORARIO_BR)
-    metrics = load_metrics()
-    queue = load_queue()
+    em_horario = HORA_INICIO <= agora.hour < HORA_FIM
 
-    # Feeds em cooldown
+    # Saúde da conexão com o Discord (latência do gateway, em ms)
+    lat = discord_client.latency  # segundos; pode ser nan logo após o boot
+    lat_ms = int(lat * 1000) if (lat == lat and lat not in (float("inf"), float("-inf"))) else None
+
+    # Fontes de notícia temporariamente indisponíveis
     feeds_cooldown = [nome for nome in FONTES_RSS if _feed_em_cooldown(nome)]
+    frac_cooldown = len(feeds_cooldown) / (len(FONTES_RSS) or 1)
 
-    em = discord.Embed(
-        title="📊 Status — Tiffany Bot",
-        color=TIFFANY_PINK,
-        timestamp=agora,
-    )
+    conexao_ruim = (lat_ms is None) or (lat_ms > 1000)
+    conexao_lenta = (lat_ms is not None) and (400 < lat_ms <= 1000)
+    fontes_criticas = em_horario and frac_cooldown >= 0.5
+    fontes_lentas = em_horario and len(feeds_cooldown) > 0
+
+    if conexao_ruim or fontes_criticas:
+        nivel, titulo, cor = "🔴", "Com instabilidades", 0xED4245
+        msg = "Estou com alguns problemas agora. Costuma ser temporário — tenta de novo em alguns minutos. 🙏"
+    elif conexao_lenta or fontes_lentas:
+        nivel, titulo, cor = "🟡", "Pequenas instabilidades", 0xFEE75C
+        msg = "Tô funcionando, mas com uma leve lentidão no momento."
+    else:
+        nivel, titulo, cor = "🟢", "Funcionando normalmente", 0x57F287
+        msg = "Tá tudo certo por aqui! 💖"
+
+    em = discord.Embed(title=f"{nivel} Tiffany — {titulo}", description=msg, color=cor, timestamp=agora)
+
+    if lat_ms is None:
+        conexao_txt = "conectando..."
+    elif lat_ms <= 200:
+        conexao_txt = f"ótima ({lat_ms} ms)"
+    elif lat_ms <= 400:
+        conexao_txt = f"boa ({lat_ms} ms)"
+    elif lat_ms <= 1000:
+        conexao_txt = f"lenta ({lat_ms} ms)"
+    else:
+        conexao_txt = f"instável ({lat_ms} ms)"
+
+    em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
+    em.add_field(name="🎵 Música & comandos", value="Disponíveis", inline=True)
     em.add_field(
-        name="⏰ Horário (SP)",
-        value=agora.strftime("%H:%M:%S"),
+        name="📰 Notícias",
+        value="Ativas (8h–18h)" if em_horario else "Em standby (fora do horário)",
         inline=True,
-    )
-    em.add_field(
-        name="🔄 Último ciclo",
-        value=_last_cycle_time,
-        inline=True,
-    )
-    em.add_field(
-        name="📡 Modo",
-        value="Ativo" if HORA_INICIO <= agora.hour < HORA_FIM else "Standby",
-        inline=True,
-    )
-    em.add_field(
-        name="📨 Posts hoje",
-        value=str(metrics.get("posts_hoje", 0)),
-        inline=True,
-    )
-    em.add_field(
-        name="🤖 IA calls hoje",
-        value=str(metrics.get("ia_calls_hoje", 0)),
-        inline=True,
-    )
-    em.add_field(
-        name="✅ Aprovadas / ❌ Rejeitadas",
-        value=f"{metrics.get('ia_aprovadas_hoje', 0)} / {metrics.get('ia_rejeitadas_hoje', 0)}",
-        inline=True,
-    )
-    em.add_field(
-        name="📋 Fila",
-        value=f"{len(queue)} notícias aguardando",
-        inline=True,
-    )
-    em.add_field(
-        name="📰 Feeds em cooldown",
-        value=", ".join(feeds_cooldown) if feeds_cooldown else "Nenhum",
-        inline=False,
     )
 
-    if _last_cycle_stats:
-        stats = _last_cycle_stats
+    # Detalhes técnicos só para admins (não polui a visão do usuário comum)
+    is_admin = bool(
+        interaction.guild
+        and isinstance(interaction.user, discord.Member)
+        and interaction.user.guild_permissions.administrator
+    )
+    if is_admin:
+        metrics = load_metrics()
+        queue = load_queue()
         em.add_field(
-            name="📈 Último ciclo",
+            name="🔧 Admin · hoje",
             value=(
-                f"Examinados: {stats.get('examinados', '?')} · "
-                f"Para IA: {stats.get('candidatos_ia', '?')} · "
-                f"Aprovados: {stats.get('aprovados', '?')} · "
-                f"Postados: {stats.get('posts', '?')}"
+                f"Posts: {metrics.get('posts_hoje', 0)} · "
+                f"IA: {metrics.get('ia_calls_hoje', 0)} · "
+                f"✅ {metrics.get('ia_aprovadas_hoje', 0)} / ❌ {metrics.get('ia_rejeitadas_hoje', 0)}"
             ),
             inline=False,
         )
+        em.add_field(
+            name="🔧 Admin · operação",
+            value=(
+                f"Fila: {len(queue)} · Último ciclo: {_last_cycle_time}\n"
+                f"Feeds em cooldown: {', '.join(feeds_cooldown) if feeds_cooldown else 'Nenhum'}"
+            )[:1024],
+            inline=False,
+        )
 
-    em.add_field(
-        name="📊 Totais",
-        value=(
-            f"Posts: {metrics.get('posts_total', 0)} · "
-            f"IA calls: {metrics.get('ia_calls_total', 0)} · "
-            f"Aprovadas: {metrics.get('ia_aprovadas_total', 0)} · "
-            f"Rejeitadas: {metrics.get('ia_rejeitadas_total', 0)}"
-        ),
-        inline=False,
-    )
-
-    em.set_footer(text="Tiffany Bot v18")
+    em.set_footer(text="Tiffany 💖")
     await interaction.response.send_message(embed=em, ephemeral=True)
 
 

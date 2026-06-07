@@ -1335,6 +1335,64 @@ def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
         return None, ""
 
 
+def _blocking_ytdl_search(term: str, n: int = 4) -> list[dict]:
+    """Busca rápida (flat) no YouTube. Retorna até n candidatos:
+    {title, duration, id, url, uploader}. Usado para confirmar a música certa."""
+    if not _YTDLP_AVAILABLE:
+        return []
+    opts = {
+        **YDL_OPTS,
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "noplaylist": True,
+    }
+    out: list[dict] = []
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"ytsearch{n}:{term}", download=False)
+        for e in (info or {}).get("entries") or []:
+            if not e:
+                continue
+            out.append({
+                "title": e.get("title") or "",
+                "duration": float(e.get("duration") or 0),
+                "id": e.get("id") or "",
+                "url": e.get("url") or e.get("webpage_url") or "",
+                "uploader": e.get("uploader") or e.get("channel") or "",
+            })
+    except Exception as ex:
+        log.debug("ytdl search falhou: %s", ex)
+    return out
+
+
+# Palavras de "ruído" comuns em títulos do YouTube — ignoradas ao medir similaridade
+_SONG_NOISE_WORDS = {
+    "official", "video", "videoclip", "audio", "lyrics", "lyric", "hd", "hq", "4k", "mv",
+    "music", "clipe", "oficial", "visualizer", "remaster", "remastered", "ft", "feat",
+    "prod", "live", "color", "coded", "traducao", "tradução", "legendado", "sub", "the",
+}
+
+
+def _song_tokens(s: str) -> list[str]:
+    s = re.sub(r"[^\w\s]", " ", (s or "").lower())
+    return [t for t in s.split() if len(t) >= 2 and t not in _SONG_NOISE_WORDS]
+
+
+def _match_score(query: str, title: str) -> float:
+    """0..1 — quão bem o título do YouTube corresponde à busca do usuário.
+    Combina cobertura de tokens (70%) com similaridade de sequência (30%)."""
+    import difflib
+    q = _song_tokens(query)
+    if not q:
+        return 0.0
+    t_tokens = _song_tokens(title)
+    t_set = set(t_tokens)
+    coverage = sum(1 for w in q if w in t_set) / len(q)
+    ratio = difflib.SequenceMatcher(None, " ".join(q), " ".join(t_tokens)).ratio()
+    return round(0.7 * coverage + 0.3 * ratio, 3)
+
+
 def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str], str, Optional[str], float]:
     """Baixa áudio para arquivo temporário via yt-dlp (com proxy WARP).
     Retorna (filepath, title, tmpdir, duration_sec) — o tmpdir deve ser removido após uso.
@@ -2751,6 +2809,26 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             log.exception("Question worker encerrou com erro")
 
+    def _revive_workers(gid: int, vc, session) -> None:
+        """Reinicia os workers de música/perguntas se morreram — garante que a fila
+        nunca congele mesmo quando o usuário usa comandos de controle (t$s, t$q...)
+        e não apenas t$p. No modo Lavalink não há worker (usa event listeners)."""
+        try:
+            if not vc or not vc.is_connected() or _is_wavelink_player(vc):
+                return
+            if session.music_task is None or session.music_task.done():
+                log.warning("Music worker morto — revivendo via comando guild=%s", gid)
+                session.music_task = asyncio.create_task(
+                    _play_worker(gid, vc, bot), name=f"tiffany-music-{gid}"
+                )
+            if session.question_task is None or session.question_task.done():
+                log.warning("Question worker morto — revivendo via comando guild=%s", gid)
+                session.question_task = asyncio.create_task(
+                    _question_worker(gid, vc, bot), name=f"tiffany-question-{gid}"
+                )
+        except Exception:
+            log.debug("Falha ao reviver workers guild=%s", gid, exc_info=True)
+
     async def _ensure_connected(ctx: commands.Context, specific_channel: Optional[discord.VoiceChannel] = None) -> tuple:
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
             await ctx.send(embed=_embed("⚠️ Esse comando só funciona em um servidor."))
@@ -3003,6 +3081,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not session:
             await ctx.send(embed=_embed("⚠️ A sessão de voz não está ativa no momento."))
             return
+        # Garante que o worker está vivo antes de pular (senão a fila não avança)
+        _revive_workers(guild.id, vc, session)
         _is_playing = vc.playing if _is_wavelink_player(vc) else vc.is_playing()
         if not _is_playing:
             await ctx.send(embed=_embed("⚠️ Não tem faixa tocando agora."))
@@ -3311,6 +3391,11 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(f"⚠️ A fila já está cheia ({fila_atual}/{QUEUE_MAX}). Aguarde terminar alguma música."))
             return
 
+        # Feedback imediato: a busca/resolução pode levar alguns segundos.
+        # Todas as respostas finais editam ESTE mesmo balão (status) → nunca fica mudo.
+        _ack_name = re.sub(r"^https?://\S*", "link", query)[:80]
+        status = await ctx.send(embed=_embed(f"🔎 Procurando **{_ack_name}**..."))
+
         is_url = bool(re.match(r"^https?://", query))
 
         # Normalizar URLs de plataformas (Spotify /intl-XX/, YouTube Music, tracking params)
@@ -3323,11 +3408,11 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-            await ctx.send(embed=_embed("📋 Extraindo músicas da playlist..."))
+            await status.edit(embed=_embed("📋 Extraindo músicas da playlist..."))
             pl_data = await _extract_playlist_tracks(query)
             tracks = pl_data.get("tracks") or []
             if not tracks:
-                await ctx.send("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública.")
+                await status.edit(embed=_embed("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública."))
                 return
             vagas = QUEUE_MAX - fila_atual
             added = 0
@@ -3351,7 +3436,7 @@ def register_voice(bot: commands.Bot) -> None:
             )
             if skipped > 0:
                 em.description = (em.description or "") + f"\n\n⚠️ {skipped} faixa(s) ignorada(s) — fila cheia."
-            await ctx.send(embed=em)
+            await status.edit(embed=em)
             return
 
         # Limpar parâmetros de Radio/Mix do YouTube (list=RD...) para tocar só o vídeo
@@ -3369,7 +3454,7 @@ def register_voice(bot: commands.Bot) -> None:
                 query = resolved
                 resolved_from_platform = True
             else:
-                await ctx.send("❌ Não consegui resolver esse link. Tenta com o nome da música.")
+                await status.edit(embed=_embed("❌ Não consegui resolver esse link. Tenta com o nome da música."))
                 return
         elif not is_url:
             # IA interpreta query ambígua antes de buscar no YouTube
@@ -3403,7 +3488,7 @@ def register_voice(bot: commands.Bot) -> None:
                 tracks = await wavelink.Playable.search(search_query)
             except Exception as e:
                 log.error("Lavalink search falhou: %s", e)
-                await ctx.send(embed=_embed(f"❌ Erro na busca: {e}"))
+                await status.edit(embed=_embed(f"❌ Erro na busca: {e}"))
                 return
             if not tracks:
                 # Fallback IA: tentar interpretar com IA
@@ -3418,14 +3503,14 @@ def register_voice(bot: commands.Bot) -> None:
                         if tracks:
                             display = corrected
                 if not tracks:
-                    await ctx.send(embed=_embed(f"❌ Nenhum resultado para **{display[:80]}**."))
+                    await status.edit(embed=_embed(f"❌ Nenhum resultado para **{display[:80]}**."))
                     return
 
             track = tracks[0]
             # Checar duração
             track_dur_sec = (track.length or 0) / 1000.0
             if track_dur_sec > MAX_SONG_DURATION_SEC:
-                await ctx.send(embed=_embed(
+                await status.edit(embed=_embed(
                     f"⚠️ Muito longo (**{int(track_dur_sec // 60)} min**). Máximo **{MAX_SONG_DURATION_SEC // 60} min** por faixa."
                 ))
                 return
@@ -3442,9 +3527,10 @@ def register_voice(bot: commands.Bot) -> None:
                         is_dup = True
                         break
             if is_dup:
-                confirm_msg = await ctx.send(
+                await status.edit(
                     embed=_embed(f"⚠️ **{track_display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
                 )
+                confirm_msg = status
                 def _check_confirm_lv(m: discord.Message) -> bool:
                     return (m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
                             and m.content.strip().lower() in ("s", "n", "sim", "nao", "não", "y", "yes", "no"))
@@ -3468,13 +3554,13 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.history.append(track_display)
                 if len(sess.history) > 50:
                     sess.history = sess.history[-50:]
-                await ctx.send(embed=_embed(f"🎵 Tocando: **{track_display[:100]}**"))
+                await status.edit(embed=_embed(f"🎵 Tocando: **{track_display[:100]}**"))
             else:
                 player.queue.put(track)
                 req = ctx.author.display_name or str(ctx.author)
                 pos = len(sess.queue_display) + (1 if sess.current_song else 0)
                 eta = _queue_eta_sec(sess)
-                await ctx.send(embed=_embed_music_added(
+                await status.edit(embed=_embed_music_added(
                     kind="track", title=track_display, requester=req,
                     duration_sec=track_dur_sec, position=pos,
                     queue_total=pos, eta_sec=eta,
@@ -3483,20 +3569,99 @@ def register_voice(bot: commands.Bot) -> None:
 
         # === MODO YT-DLP (fallback) ===
         # Checar duração antes de enfileirar (evita baixar vídeos de 10h+)
-        dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
+        # Timeout de nível asyncio: se o yt-dlp travar, não pendura o comando.
+        async def _probe(q: str) -> tuple[Optional[float], str]:
+            try:
+                return await asyncio.wait_for(asyncio.to_thread(_blocking_ytdl_probe, q), timeout=25.0)
+            except asyncio.TimeoutError:
+                log.warning("Probe yt-dlp excedeu 25s: %s", q[:80])
+                return None, ""
 
-        # Fallback IA: se busca por texto não encontrou nada, tentar interpretar com IA
-        original_text_query = re.sub(r"^ytsearch\d*:", "", query).strip() if not is_url else ""
-        if not probe_title and not is_url and original_text_query and _global_rate_limit_ok():
-            corrected = await _ai_interpret_song(original_text_query)
-            if corrected and corrected.lower() != original_text_query.lower():
-                log.info("IA interpretou '%s' -> '%s'", original_text_query, corrected)
-                query = f"ytsearch1:{corrected}"
-                display = corrected
-                dur, probe_title = await asyncio.to_thread(_blocking_ytdl_probe, query)
+        async def _search(term: str, n: int = 4) -> list[dict]:
+            try:
+                return await asyncio.wait_for(asyncio.to_thread(_blocking_ytdl_search, term, n), timeout=25.0)
+            except asyncio.TimeoutError:
+                log.warning("Search yt-dlp excedeu 25s: %s", term[:80])
+                return []
+
+        dur: Optional[float] = None
+        probe_title = ""
+        is_text_search = (not is_url) and query.startswith("ytsearch")
+
+        if is_text_search:
+            # Busca por NOME: pegar vários candidatos e confirmar se não tiver certeza.
+            search_term = re.sub(r"^ytsearch\d*:", "", query).strip()
+            candidates = await _search(search_term, 4)
+            # Fallback IA: se não achou nada, reinterpretar a busca
+            if not candidates and search_term and _global_rate_limit_ok():
+                corrected = await _ai_interpret_song(search_term)
+                if corrected and corrected.lower() != search_term.lower():
+                    log.info("IA interpretou '%s' -> '%s'", search_term, corrected)
+                    search_term = corrected
+                    display = corrected
+                    candidates = await _search(search_term, 4)
+            if not candidates:
+                await status.edit(embed=_embed(
+                    f"❌ Nenhum resultado para **{search_term[:80]}**. Tenta com o artista junto, ou cole o link."
+                ))
+                return
+
+            scored = sorted(candidates, key=lambda c: _match_score(search_term, c["title"]), reverse=True)
+            best = scored[0]
+            best_score = _match_score(search_term, best["title"])
+            second_score = _match_score(search_term, scored[1]["title"]) if len(scored) > 1 else 0.0
+            # Confiante só se o melhor for forte E claramente acima do 2º (sem ambiguidade)
+            confident = best_score >= 0.75 and (len(scored) == 1 or (best_score - second_score) >= 0.15)
+
+            if not confident:
+                linhas = []
+                for i, c in enumerate(scored[:3], start=1):
+                    up = f" · {c['uploader'][:30]}" if c.get("uploader") else ""
+                    linhas.append(f"**{i}.** {c['title'][:80]}{up}  `[{_fmt_dur(c['duration'])}]`")
+                await status.edit(embed=_embed(
+                    f"🤔 Não tenho 100% de certeza de qual você quer (busca: **{search_term[:60]}**).\n\n"
+                    + "\n".join(linhas)
+                    + "\n\nResponda **`y`** (confirma a **1**), **`2`**/**`3`** pra escolher outra, ou **`n`** pra cancelar."
+                ))
+
+                def _check_pick(m: discord.Message) -> bool:
+                    return (
+                        m.author.id == ctx.author.id
+                        and m.channel.id == ctx.channel.id
+                        and m.content.strip().lower() in (
+                            "y", "yes", "s", "sim", "1", "2", "3", "n", "no", "nao", "não"
+                        )
+                    )
+
+                try:
+                    resp = await bot.wait_for("message", check=_check_pick, timeout=20.0)
+                except asyncio.TimeoutError:
+                    await status.edit(embed=_embed("⏰ Tempo esgotado. Nada foi adicionado."))
+                    return
+                pick = resp.content.strip().lower()
+                if pick in ("n", "no", "nao", "não"):
+                    await status.edit(embed=_embed("👌 Cancelado. Manda o nome com o artista, ou cole o link da música."))
+                    return
+                idx = {"2": 1, "3": 2}.get(pick, 0)
+                if idx >= len(scored):
+                    idx = 0
+                best = scored[idx]
+                await status.edit(embed=_embed(f"🔎 Pegando **{best['title'][:80]}**..."))
+
+            # Tocar exatamente o vídeo escolhido (determinístico, não re-buscar)
+            probe_title = best["title"]
+            dur = best["duration"] or None
+            display = best["title"]
+            if best.get("id"):
+                query = f"https://www.youtube.com/watch?v={best['id']}"
+            elif best.get("url"):
+                query = best["url"]
+        else:
+            # URL direta ou link de plataforma já resolvido: probe simples
+            dur, probe_title = await _probe(query)
 
         if dur and dur > MAX_SONG_DURATION_SEC:
-            await ctx.send(
+            await status.edit(
                 embed=_embed(
                     f"⚠️ Muito longo (**{int(dur // 60)} min**). Máximo **{MAX_SONG_DURATION_SEC // 60} min** por faixa."
                 )
@@ -3525,9 +3690,10 @@ def register_voice(bot: commands.Bot) -> None:
                 is_dup = True
 
         if is_dup:
-            confirm_msg = await ctx.send(
+            await status.edit(
                 embed=_embed(f"⚠️ **{display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
             )
+            confirm_msg = status
             def _check_confirm(m: discord.Message) -> bool:
                 return (
                     m.author.id == ctx.author.id
@@ -3550,7 +3716,7 @@ def register_voice(bot: commands.Bot) -> None:
         req = ctx.author.display_name or str(ctx.author)
         pos = len(sess.queue_display) + (1 if sess.current_song else 0)
         eta = _queue_eta_sec(sess)
-        await ctx.send(
+        await status.edit(
             embed=_embed_music_added(
                 kind="track",
                 title=display,
@@ -4080,7 +4246,7 @@ def register_voice(bot: commands.Bot) -> None:
         except discord.HTTPException:
             pass
 
-    # Erros de permissao em comandos admin (ex: t$st sem ser admin)
+    # Tratamento central de erros de comando (cooldown, permissão, comando inexistente, etc.)
     @bot.listen("on_command_error")
     async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CommandOnCooldown):

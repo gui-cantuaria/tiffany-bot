@@ -36,7 +36,7 @@ if sys.platform != "win32":
 # --- LISTA DE BOTS ---
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
-    # {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},  # Pausado até configurar afiliados
+    {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},  # Afiliados configurados: Amazon, ML, Terabyte/ShopInfo
 ]
 
 LOG_DIR = "logs"

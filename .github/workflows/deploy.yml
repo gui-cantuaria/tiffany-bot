@@ -6,7 +6,16 @@ on:
     paths:
       - '*.py'
       - 'scripts/**'
+      - 'requirements.txt'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
+
+# Evita dois deploys rodando ao mesmo tempo (um mataria os processos do outro).
+# cancel-in-progress: false => o deploy em andamento SEMPRE termina o ciclo
+# stop->start completo; o novo push espera a vez (não derruba o bot no meio).
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -22,4 +31,9 @@ jobs:
 
       - name: Deploy via SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} "bash /opt/tiffany-bot/scripts/deploy.sh"
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            root@${{ secrets.VPS_HOST }} "bash /opt/tiffany-bot/scripts/deploy.sh"

@@ -68,6 +68,8 @@ CATEGORIAS_PROMOBIT = [
 # }
 
 # Whitelist ativa: apenas lojas com link de afiliado configurado
+# Lojas com afiliado ativo: Terabyte/ShopInfo (Lomadee), Amazon, Mercado Livre
+# Adicionar KaBuM e AliExpress quando Awin aprovar
 LOJAS_WHITELIST = {
     "terabyte", "terabyteshop",
     "shopinfo",

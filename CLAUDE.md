@@ -124,11 +124,9 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 **Slash Commands (ephemeral):**
 - `/help` — Full command list (only you see)
 - `/queue` — Current music queue
-- `/status` — Bot status
+- `/status` — Bot status (admin-only: `default_permissions(administrator=True)`)
 
-**Admin:** `t$st`/`t$stats`
-
-**Important:** Always add new commands to `_HELP_TEXT` in `tiffany_voice.py` AND to `_CMD_NAMES` in `notices.py` (for spaceless command detection).
+**Important:** Always add new commands to `_COMMAND_REGISTRY` + `_HELP_TEXT`/`/help` in `tiffany_voice.py` AND to `_CMD_NAMES` in `notices.py` (for spaceless command detection).
 
 ## News Bot Rules
 
