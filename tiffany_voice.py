@@ -135,7 +135,8 @@ def _voice_connect_timeout_sec() -> float:
         return 25.0
 
 
-MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.15)  # ~28kb — aceitar frases curtas como "Tiffany, para"
+MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.5)  # mínimo 0.5s — ignora cliques/ruído curto (~0.1s)
+STT_MIN_DURATION_SEC = 0.5
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
@@ -718,7 +719,31 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     return "none", None
 
 
+def _normalize_pcm_stereo(pcm: bytes) -> bytes:
+    """Amplifica áudio baixo do Discord — microfone distante costuma falhar no Google STT."""
+    if len(pcm) < 4:
+        return pcm
+    try:
+        import struct
+        n = len(pcm) // 2
+        samples = struct.unpack(f"<{n}h", pcm)
+        peak = max((abs(s) for s in samples), default=0)
+        if peak < 500:
+            return pcm
+        if peak < 3000:
+            gain = min(12000 / peak, 6.0)
+        elif peak < 8000:
+            gain = min(16000 / peak, 3.0)
+        else:
+            return pcm
+        boosted = tuple(max(-32768, min(32767, int(s * gain))) for s in samples)
+        return struct.pack(f"<{n}h", *boosted)
+    except Exception:
+        return pcm
+
+
 def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
+    pcm_stereo = _normalize_pcm_stereo(pcm_stereo)
     mono = _tomono(pcm_stereo)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -894,10 +919,59 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return wav_48k
 
 
+def _transcribe_with_gemini(wav_16k: bytes) -> Optional[str]:
+    """Fallback STT via Gemini (OpenRouter) — mais tolerante que Google gratuito."""
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key or os.getenv("STT_GEMINI_FALLBACK", "1").strip() != "1":
+        return None
+    if len(wav_16k) < 1000:
+        return None
+    try:
+        import base64
+        import openai
+
+        b64 = base64.standard_b64encode(wav_16k).decode("ascii")
+        client = openai.OpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        resp = client.chat.completions.create(
+            model="google/gemini-3.1-flash-lite",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Transcreva o áudio em português do Brasil. "
+                            "Responda SOMENTE com as palavras ditas, sem aspas nem explicação. "
+                            "Se não houver fala inteligível, responda vazio."
+                        ),
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {"data": b64, "format": "wav"},
+                    },
+                ],
+            }],
+            max_tokens=120,
+            temperature=0,
+            timeout=20.0,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        text = re.sub(r"^[\"']|[\"']$", "", text).strip()
+        if text and text.lower() not in ("", "vazio", "n/a", "...", "silêncio", "silencio", "[silêncio]"):
+            log.info("Gemini STT: %r", text)
+            return text
+    except Exception as e:
+        log.warning("Gemini STT falhou: %s", e)
+    return None
+
+
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # Converter para 16kHz para Google/Vosk
+    # Converter para 16kHz para Google/Vosk/Gemini
     wav_16k = _wav_48k_to_16k(wav)
-    # 2) Google STT (fallback online)
+    # 1) Google STT (rápido e gratuito)
     try:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
@@ -918,11 +992,12 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         log.warning("Pacote SpeechRecognition não instalado.")
     except Exception as e:
         log.warning("Erro no Google STT: %s", e)
-    # 3) Vosk (fallback offline)
+    # 2) Vosk (fallback offline)
     result = _transcribe_with_vosk(wav_16k)
     if result is not None:
         return result
-    return None
+    # 3) Gemini via OpenRouter (último recurso — mais preciso em áudio baixo/ruidoso)
+    return _transcribe_with_gemini(wav_16k)
 
 
 _MUSIC_PLATFORM_OEMBED = {
@@ -2211,7 +2286,11 @@ async def _voice_listen_loop(
                 continue
             log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
-            log.info("Enviando %d bytes de áudio para STT...", len(wav))
+            dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
+            if dur < STT_MIN_DURATION_SEC:
+                log.debug("Áudio muito curto (~%.1fs) — ignorando", dur)
+                continue
+            log.info("Enviando %d bytes (~%.1fs) para STT...", len(wav), dur)
             # Debug: salvar último WAV para análise (apenas se DEBUG_STT=1)
             if os.getenv("DEBUG_STT"):
                 try:
