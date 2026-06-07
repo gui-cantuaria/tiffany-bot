@@ -809,14 +809,24 @@ async def _run_deals_cycle_inner() -> None:
 
     # Aplicar filtros
     approved = []
+    rejeicoes: dict[str, int] = {}
     for deal in enriched:
         passed, reason = _passes_filters(deal)
         if passed:
             approved.append(deal)
         else:
+            # Agrupa motivos trocando números por "N" (ex: "estrelas 3.8 < 4.2" → "estrelas N < N")
+            bucket = re.sub(r"\d+([.,]\d+)?", "N", reason)
+            rejeicoes[bucket] = rejeicoes.get(bucket, 0) + 1
             log.debug(f"  Rejeitada: {deal['title'][:50]} — {reason}")
 
     log.info(f"Após filtros: {len(approved)} aprovadas")
+    # Diagnóstico: resumo dos motivos de rejeição (visível mesmo com LOG_LEVEL=INFO)
+    if rejeicoes:
+        resumo = " · ".join(
+            f"{n}× {motivo}" for motivo, n in sorted(rejeicoes.items(), key=lambda x: -x[1])
+        )
+        log.info(f"Motivos de rejeição ({sum(rejeicoes.values())}): {resumo}")
 
     # Ordenar por desconto (maior primeiro)
     approved.sort(key=lambda d: d.get("discount_pct", 0), reverse=True)
