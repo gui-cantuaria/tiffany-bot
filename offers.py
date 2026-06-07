@@ -738,13 +738,17 @@ def _cor_embed(deal: dict) -> int:
 
 def _build_view(deal: dict) -> Optional[discord.ui.View]:
     """Botão de compra real do Discord (link). Retorna None se não houver URL válida
-    — nesse caso o embed cai no campo de texto de fallback."""
+    — nesse caso o embed cai no campo de texto de fallback.
+    Obs.: o Discord renderiza botões de link sempre em cinza (não dá para colorir);
+    o destaque vem do texto (desconto) + da CTA em destaque no corpo do embed."""
     buy_url = _buy_url(deal)
     if not buy_url.startswith("http"):
         return None
+    disc = deal.get("discount_pct") or 0
+    label = f"COMPRAR COM {disc:.0f}% OFF" if disc else "COMPRAR COM DESCONTO"
     view = discord.ui.View(timeout=None)  # link buttons não disparam interação
     view.add_item(discord.ui.Button(
-        label="COMPRAR COM DESCONTO",
+        label=label[:80],
         emoji="🛒",
         style=discord.ButtonStyle.link,
         url=buy_url,
@@ -761,11 +765,18 @@ def _build_embed(deal: dict) -> discord.Embed:
     title = f"{EMOJI_FOGO} {deal['title'][:200]} — {discount:.0f}% OFF"
 
     desc = _format_description(deal)
-    if len(desc) > 4096:
-        desc = desc[:4093] + "..."
     # URL unificada para título e botão (evita inconsistência)
     raw_url = deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
     buy_url = _buy_url(deal)
+
+    # CTA em DESTAQUE dentro do corpo: heading clicável (grande e em negrito).
+    # Reforça o botão (que o Discord só renderiza em cinza) com alta visibilidade.
+    if buy_url.startswith("http"):
+        cta_txt = f"COMPRAR COM {discount:.0f}% OFF" if discount else "COMPRAR COM DESCONTO"
+        desc += f"\n\n## 🛒 [{cta_txt}]({buy_url})"
+
+    if len(desc) > 4096:
+        desc = desc[:4093] + "..."
 
     embed = discord.Embed(
         title=title[:256],
