@@ -3548,22 +3548,19 @@ def register_voice(bot: commands.Bot) -> None:
         sess.queue_durations.append(track_dur)
         await sess.music_queue.put(query)
         req = ctx.author.display_name or str(ctx.author)
-        if not sess.current_song and len(sess.queue_display) == 1:
-            await ctx.send(embed=_embed(f"🎵 Buscando **{display[:100]}**..."))
-        else:
-            pos = len(sess.queue_display) + (1 if sess.current_song else 0)
-            eta = _queue_eta_sec(sess)
-            await ctx.send(
-                embed=_embed_music_added(
-                    kind="track",
-                    title=display,
-                    requester=req,
-                    duration_sec=track_dur,
-                    position=pos,
-                    queue_total=len(sess.queue_display) + (1 if sess.current_song else 0),
-                    eta_sec=eta,
-                )
+        pos = len(sess.queue_display) + (1 if sess.current_song else 0)
+        eta = _queue_eta_sec(sess)
+        await ctx.send(
+            embed=_embed_music_added(
+                kind="track",
+                title=display,
+                requester=req,
+                duration_sec=track_dur,
+                position=pos,
+                queue_total=len(sess.queue_display) + (1 if sess.current_song else 0),
+                eta_sec=eta,
             )
+        )
 
     @bot.command(name="c", aliases=["chat", "ch"], help="Pergunta à IA: t$c / t$chat / t$ch <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
