@@ -470,10 +470,13 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         elif photo.startswith("http"):
             deal["image"] = photo
 
-    # Link para a loja (redirect do Promobit)
+    # Link de compra: página canônica da oferta no Promobit (sempre 200).
+    # O antigo /redirect/oferta/{slug}/ foi descontinuado (dava 404) e o botão
+    # real "Ir à loja" é gerado via JS — inacessível pelo servidor. Mandar para
+    # a página da oferta garante link válido (usuário vê cupom + botão da loja).
     offer_slug = server_offer.get("offerSlug", "")
     if offer_slug:
-        deal["store_url"] = f"{PROMOBIT_BASE}/redirect/oferta/{offer_slug}/"
+        deal["store_url"] = f"{PROMOBIT_BASE}/oferta/{offer_slug}/"
 
     # Avaliação do produto na comunidade Promobit
     review_rate = server_offer.get("reviewRate")
