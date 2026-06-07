@@ -25,7 +25,10 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1512902840908124281"))
-ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))
+ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))  # legado: marca em TODA oferta (0 = desligado)
+# Cargo marcado SÓ nas "ultra ofertas" (desconto alto). Default = cargo de ofertas do servidor.
+ID_CARGO_ULTRA = int(os.getenv("ID_CARGO_OFERTAS_ULTRA", "1386386059390357575"))
+DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "40"))  # % mínimo para ser "ultra oferta"
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
 HORA_INICIO = 8
@@ -879,10 +882,14 @@ async def _run_deals_cycle_inner() -> None:
 
         try:
             content = None
-            if ID_CARGO_OFERTAS:
-                guild = getattr(channel, "guild", None)
-                if guild and guild.get_role(ID_CARGO_OFERTAS):
-                    content = f"<@&{ID_CARGO_OFERTAS}>"
+            guild = getattr(channel, "guild", None)
+            disc = deal.get("discount_pct") or 0
+            # Ultra oferta (desconto alto): marca o cargo com destaque
+            if disc >= DESCONTO_ULTRA_OFERTA and ID_CARGO_ULTRA and guild and guild.get_role(ID_CARGO_ULTRA):
+                content = f"🔥 **ULTRA OFERTA — {int(disc)}% OFF!** <@&{ID_CARGO_ULTRA}>"
+            # Legado: marca em toda oferta, se configurado via ID_CARGO_OFERTAS
+            elif ID_CARGO_OFERTAS and guild and guild.get_role(ID_CARGO_OFERTAS):
+                content = f"<@&{ID_CARGO_OFERTAS}>"
             msg = await channel.send(content=content, embed=embed, file=file)
 
             # Marcar como postado DEPOIS de enviar com sucesso
