@@ -1081,22 +1081,22 @@ def _normalize_news_title(title: str) -> str:
     for lower_name, correct_name in proper_names.items():
         t = re.sub(rf"\b{re.escape(lower_name)}\b", correct_name, t, flags=re.IGNORECASE)
     
-    # Garante pelo menos 8 palavras (se o original tiver)
+    # Garante pelo menos 6 palavras (se o original tiver)
     words = t.split()
-    min_words = 8
-    if len(words) < min_words and len(t) <= 150:
+    min_words = 6
+    if len(words) < min_words and len(t) <= 130:
         # Título curto, manter original se não for muito longo
         pass
     else:
-        # Limita tamanho para ~2 linhas (150 caracteres) preservando palavras
-        max_len = 150
+        # Limita tamanho para no máx ~3 linhas (130 caracteres) preservando palavras
+        max_len = 130
         if len(t) > max_len:
             cut = t[:max_len]
             # Corta no último espaço para não quebrar palavra
             last_space = cut.rfind(" ")
-            if last_space >= 80:  # pelo menos 80 chars para caber 8 palavras
+            if last_space >= 55:  # pelo menos 55 chars para caber 6 palavras
                 cut = cut[:last_space]
-            # Se após corte ficou com menos de 8 palavras, tenta recuperar
+            # Se após corte ficou com menos de 6 palavras, tenta recuperar
             if len(words) >= min_words and len(cut.split()) < min_words:
                 # Recua até o 8º espaço
                 space_count = 0
@@ -1223,14 +1223,15 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
     prompt = f"""Analise a notícia abaixo e responda APENAS com JSON válido, sem markdown.
 
 REGRAS RÍGIDAS PARA O TÍTULO (NÃO NEGOCIÁVEL):
-- O CAMPO "titulo" DEVE TER ENTRE 8 E 15 PALAVRAS OBRIGATORIAMENTE.
-- TÍTULO CURTO = REJEIÇÃO AUTOMÁTICA. Mínimo: 8 palavras. Máximo: 15.
-- Se o título original tiver menos de 8 palavras, EXPENDA-O adicionando contexto jornalístico.
+- O CAMPO "titulo" DEVE TER ENTRE 6 E 11 PALAVRAS OBRIGATORIAMENTE.
+- CURTO E DIRETO: jamais pode ocupar mais de 3 linhas na tela.
+- TÍTULO MUITO CURTO (< 6) = REJEIÇÃO. Mínimo: 6 palavras. Máximo: 11.
+- Se o título original tiver menos de 6 palavras, EXPENDA-O adicionando contexto jornalístico.
 - Exemplos:
-  ✗ "Meta processada" (2 palavras - REJETADO)
-  ✗ "OpenAI lança GPT-5" (4 palavras - REJETADO)
-  ✓ "Meta enfrenta processo milionário por uso indevido de livros no treinamento de IA" (11 palavras - ACEITO)
-  ✓ "Nova versão do ChatGPT reduz alucinações em aplicações médicas e jurídicas" (10 palavras - ACEITO)
+  ✗ "Meta processada" (2 palavras - REJEITADO)
+  ✗ "OpenAI lança GPT-5" (4 palavras - REJEITADO)
+  ✓ "Meta enfrenta processo milionário por uso indevido de livros" (9 palavras - ACEITO)
+  ✓ "ChatGPT reduz alucinações em aplicações médicas e jurídicas" (8 palavras - ACEITO)
 
 RESPONDA EM UM DOS DOIS FORMATOS:
 1. SE REJEITAR: {{"pular": true, "reason": "motivo curto"}}
@@ -1255,22 +1256,23 @@ Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operaci
 - <75: IRRELEVANTE — marque pular=true.
 
 ═══ TÍTULO ═══
-- OBRIGATÓRIO: EXATAMENTE ENTRE 8 E 15 PALAVRAS. NUNCA MENOS QUE 8.
+- OBRIGATÓRIO: EXATAMENTE ENTRE 6 E 11 PALAVRAS. NUNCA MENOS QUE 6.
+- CURTO E DIRETO: jamais pode ocupar mais de 3 linhas na tela. Prefira sempre a forma mais enxuta que ainda explique o fato.
 - Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
 - Em PT-BR. Jargões tech comuns podem ser mantidos em inglês: "phishing", "ransomware", "zero-day", "malware", "exploit", "hacker", "Windows", "iPhone", "ChatGPT", "Google", "Android", "API", "Linux", "Wi-Fi", "Bluetooth", etc.
 - MAS o título deve ser CLARO e LEGÍVEL para qualquer entusiasta de tech. Proibido:
   ✗ Aportuguesar verbos ingleses: "hijacka", "bypassa", "patcha" — use equivalentes: "sequestra", "burla", "corrige".
   ✗ Acumular jargões sem contexto: "Kit de phishing Tycoon2FA hijacka contas via device-code phishing" — incompreensível.
   ✗ Nomes de ferramentas/malwares obscuros no título: mova para o resumo. Ex: "Tycoon2FA" → resumo.
-  ✓ BOM: "Novo golpe de phishing rouba contas do Microsoft 365 usando código de verificação"
+  ✓ BOM: "Novo golpe de phishing rouba contas do Microsoft 365"
   ✓ BOM: "Falha zero-day no Chrome permite execução de código remoto"
-  ✓ BOM: "Ransomware ataca hospitais nos EUA e paralisa sistemas por dias"
+  ✓ BOM: "Ransomware ataca hospitais nos EUA e paralisa sistemas"
 - Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
-- Entre 80 e 150 caracteres. Conta as palavras ANTES de enviar.
-- EXEMPLOS DE TÍTULOS BONS:
-  ✓ "Meta enfrenta processo milionário por uso indevido de livros no treinamento de IA"
-  ✓ "Nova versão do ChatGPT reduz erros em aplicações médicas e jurídicas"
-  ✓ "Novo golpe de phishing rouba contas do Microsoft 365 usando código de verificação"
+- Entre 50 e 110 caracteres. Conta as palavras ANTES de enviar.
+- EXEMPLOS DE TÍTULOS BONS (curtos):
+  ✓ "Meta enfrenta processo milionário por uso indevido de livros"
+  ✓ "ChatGPT reduz erros em aplicações médicas e jurídicas"
+  ✓ "Novo golpe de phishing rouba contas do Microsoft 365"
   ✗ "Meta processada" (RUIM: apenas 2 palavras)
   ✗ "Kit de phishing Tycoon2FA hijacka contas via device-code" (RUIM: verbos aportuguesados + jargões obscuros acumulados)
 
@@ -1967,24 +1969,24 @@ async def verificar_feeds():
             log.info(f"  ✗ Sem imagem (Fase 2): [{cand['nome_site']}] {cand['title'][:60]}")
             continue
         
-        # TRAVA: título deve ter pelo menos 8 palavras (contagem real)
+        # TRAVA: título deve ter pelo menos 5 palavras reais (contagem real)
         titulo_final = res.get("titulo", "").strip()
         # Remove emojis e pontuação para contar palavras reais
         titulo_limpo = re.sub(r'[^\w\s]', ' ', titulo_final)
         palavras_titulo = [p for p in titulo_limpo.split() if len(p) > 2]  # palavras com mais de 2 letras
-        if len(palavras_titulo) < 8:
+        if len(palavras_titulo) < 5:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_curto_{len(palavras_titulo)}palavras"})
             log.info(f"  ✗ Título muito curto ({len(palavras_titulo)} palavras): {titulo_final[:60]}")
             continue
         
-        # TRAVA: título muito vago (menos de 60 caracteres após normalização)
-        if len(titulo_final) < 60:
+        # TRAVA: título muito vago (menos de 40 caracteres após normalização)
+        if len(titulo_final) < 40:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "titulo_vago_curto"})
             log.info(f"  ✗ Título muito vago/curto: {titulo_final[:60]}")
             continue
         
         # TRAVA EXTRA: Rejeitar títulos que são apenas 2-3 palavras mesmo após processamento
-        if len(titulo_final.split()) < 8:
+        if len(titulo_final.split()) < 6:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_palavras_insuf_{len(titulo_final.split())}"})
             log.info(f"  ✗ Título com poucas palavras: {titulo_final[:60]}")
             continue

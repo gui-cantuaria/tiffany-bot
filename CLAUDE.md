@@ -151,7 +151,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 
 ### Embed Layout (DO NOT CHANGE without authorization)
 1. **Author:** `Via {Site} . {Category} {Emoji}`
-2. **Title:** Journalistic, non-clickbait. Starts with alert emoji if nota >= 90. Max 256 chars.
+2. **Title:** Journalistic, non-clickbait. 6-11 words, concise (never more than 3 lines on screen). Starts with alert emoji if nota >= 90. Max 256 chars.
 3. **Description:** Single dense paragraph (4-6 sentences), formal Portuguese. Max 4096 chars.
 4. **CTA Field:** `Click here to read full article` link
 5. **Image:** Downloaded and attached as `discord.File` (not URL embed)
