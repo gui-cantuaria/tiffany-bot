@@ -128,6 +128,11 @@ FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
+
+def _voice_auto_rejoin() -> bool:
+    """Reconectar call após restart/deploy. Desligado por padrão — evita bot entrando sozinho."""
+    return os.getenv("VOICE_AUTO_REJOIN", "0").strip() == "1"
+
 def _voice_connect_timeout_sec() -> float:
     try:
         return max(5.0, min(float(os.getenv("VOICE_CONNECT_TIMEOUT_SEC", "25")), 120.0))
@@ -155,7 +160,7 @@ _QUEUE_EMPTY_LEAVE_SEC = 180  # sair da call 3 min após a fila acabar (sem t$24
 _DEFAULT_TRACK_EST_SEC = 210  # estimativa por faixa quando duração desconhecida
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
-MIN_QUESTION_WORDS = 3
+MIN_QUESTION_WORDS = 2
 
 YDL_OPTS: dict[str, Any] = {
     "format": "bestaudio/best",
@@ -229,6 +234,7 @@ class _GuildVoiceSession:
     question_queue: asyncio.Queue[tuple[int, str]] = field(default_factory=asyncio.Queue)
     question_task: Optional[asyncio.Task] = None
     tts_enabled: bool = _TTS_ENABLED
+    last_stt_hint_ts: float = 0.0  # rate-limit de dica no chat quando STT não acha wake word
     song_start_time: float = 0.0          # monotonic timestamp — para t$np
     skip_votes: set = field(default_factory=set)  # user_ids que votaram skip
     loop_enabled: bool = False
@@ -669,13 +675,41 @@ def _normalize_transcript(t: str) -> str:
     return re.sub(r"\s+", " ", t.lower().strip())
 
 
+_WAKE_ALIASES = (
+    "tiffany", "tifani", "tiffani", "tifany", "tifiri", "tifine", "tifini",
+    "chiffany", "tifi", "tiffanie", "tyfani", "tiffanny", "tifanny",
+)
+
+
+def _normalize_wake_word(t: str) -> str:
+    """STT costuma errar 'Tiffany' (tifani, tifiri...) — normaliza para parse."""
+    import difflib
+    words = t.split()
+    out: list[str] = []
+    replaced = False
+    for w in words:
+        if not replaced:
+            wl = re.sub(r"[^a-zà-ú]", "", w.lower())
+            if wl in _WAKE_ALIASES or difflib.SequenceMatcher(None, wl, "tiffany").ratio() >= 0.68:
+                out.append("tiffany")
+                replaced = True
+                continue
+        out.append(w)
+    return " ".join(out)
+
+
+def _has_wake_word(t: str) -> bool:
+    t = _normalize_wake_word(_normalize_transcript(t))
+    return "tiffany" in t.split() or "tiffany" in t
+
+
 def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
-    t = _normalize_transcript(text)
-    if "tiffany" not in t and "tifani" not in t:
+    t = _normalize_wake_word(_normalize_transcript(text))
+    if "tiffany" not in t:
         return "none", None
 
     # Vírgula opcional após "Tiffany" — STT nem sempre transcreve pontuação.
-    _w = r"(?:tiffany|tifani)\s*,?\s*"
+    _w = r"tiffany\s*,?\s*"
 
     # Comandos de controle
     if re.search(
@@ -2463,10 +2497,27 @@ async def _voice_listen_loop(
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "none":
+                heard_wake = _has_wake_word(text)
                 log.info(
-                    "STT ouviu %r mas sem 'Tiffany' — fale: «Tiffany, <pergunta ou toca música>»",
-                    text[:80],
+                    "STT ouviu %r — wake=%s, sem comando válido (música pausada?)",
+                    text[:80], heard_wake,
                 )
+                # Dica no chat (max 1x a cada 90s)
+                if session:
+                    now_hint = time.monotonic()
+                    if now_hint - session.last_stt_hint_ts >= 90:
+                        session.last_stt_hint_ts = now_hint
+                        if heard_wake:
+                            msg = (
+                                "🎤 Te ouvi! Complete o comando: "
+                                "**Tiffany, qual é a capital do Brasil?** ou **Tiffany, toca [música]**."
+                            )
+                        else:
+                            msg = (
+                                f"🎤 Ouvi «{text[:45]}» — comece com **Tiffany,** "
+                                "sua pergunta (música **pausada**, sem YouTube na call)."
+                            )
+                        await _notify(bot, session.text_channel_id, msg)
                 continue
             # Verificar se o speaker está no mesmo canal que o bot
             if vc.channel and speaker_uid:
@@ -4720,6 +4771,11 @@ def register_voice(bot: commands.Bot) -> None:
         asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
         state = _load_voice_state()
         if not state:
+            return
+        if not _voice_auto_rejoin():
+            log.info(
+                "VOICE_AUTO_REJOIN=0 — não reconecta call após restart (use t$e para entrar)."
+            )
             return
         for gid_str, info in state.items():
             try:
