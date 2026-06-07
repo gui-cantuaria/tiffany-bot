@@ -58,6 +58,7 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/processador/s/",
     "/promocoes/placa-mae/s/",
     "/promocoes/pc-gamer/s/",
+    "/promocoes/roteador-e-repetidor/s/",  # rede: adaptadores, roteadores e repetidores
 ]
 
 # Whitelist completa (para quando todos os afiliados estiverem ativos)
@@ -132,6 +133,7 @@ CATEGORIAS_EMOJI = {
     "Processador": "⚡",
     "Placa-mãe": "🔧",
     "PC Gamer": "🎮",
+    "Adaptadores e rede": "📡",
 }
 
 # Mapeia slugs de URL para nomes corretos de categoria
@@ -143,7 +145,25 @@ _SLUG_TO_CATEGORY = {
     "processador": "Processador",
     "placa-mae": "Placa-mãe",
     "pc-gamer": "PC Gamer",
+    "roteador-e-repetidor": "Adaptadores e rede",
 }
+
+# Categoria de rede (adaptadores/roteadores): o Promobit não tem categoria só de
+# "adaptador de rede", então usamos "roteador-e-repetidor" (que agrupa esses itens)
+# e aplicamos filtros PRÓPRIOS, mais rígidos que os gerais (pedido do usuário):
+# nota 4.5+, 100+ vendas e 40%+ de desconto. Sem exceção de "sem métrica": se o
+# Promobit não trouxer estrelas/vendas, o item de rede NÃO é postado.
+CAT_REDE_NOME = "Adaptadores e rede"
+REDE_NOTA_MINIMA = 4.5
+REDE_VENDAS_MINIMAS = 100
+REDE_DESCONTO_MINIMO = 40
+# Palavras que identificam um adaptador de rede mesmo em outra categoria
+# (ex.: um adaptador USB Wi-Fi listado em hardware-perifericos).
+REDE_KEYWORDS = (
+    "adaptador de rede", "adaptador wireless", "adaptador wi-fi", "adaptador wifi",
+    "adaptador usb wi", "adaptador usb wireless", "placa de rede", "receptor wifi",
+    "receptor wi-fi", "antena wifi", "antena wi-fi", "nano usb wireless",
+)
 
 # =========================
 # HISTÓRICO / DEDUP
@@ -665,6 +685,14 @@ def _store_allowed(store: str) -> bool:
     return False
 
 
+def _is_rede(deal: dict) -> bool:
+    """True se a oferta é de rede/adaptador (categoria de rede ou título indica adaptador)."""
+    if (deal.get("category") or "") == CAT_REDE_NOME:
+        return True
+    title = (deal.get("title") or "").lower()
+    return any(k in title for k in REDE_KEYWORDS)
+
+
 def _passes_filters(deal: dict) -> tuple[bool, str]:
     """Verifica se a oferta passa nos filtros. Retorna (passed, reason)."""
     # Deve ter imagem
@@ -680,10 +708,21 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if not _store_allowed(deal.get("store", "")):
         return False, f"loja '{deal.get('store')}' não está na whitelist"
 
-    # Verificação de estrelas/vendas (cascata A→B→C)
     stars = deal.get("stars")
     sales = deal.get("sales_count")
 
+    # Rede/adaptadores: filtros próprios e mais rígidos. Exige métricas reais
+    # (4.5+ estrelas E 100+ vendas) e 50%+ de desconto — sem fallback "sem métrica".
+    if _is_rede(deal):
+        if disc < REDE_DESCONTO_MINIMO:
+            return False, f"[rede] desconto {disc}% < {REDE_DESCONTO_MINIMO}%"
+        if stars is None or stars < REDE_NOTA_MINIMA:
+            return False, f"[rede] estrelas {stars} < {REDE_NOTA_MINIMA}"
+        if sales is None or sales < REDE_VENDAS_MINIMAS:
+            return False, f"[rede] vendas {sales} < {REDE_VENDAS_MINIMAS}"
+        return True, "ok (rede)"
+
+    # Verificação de estrelas/vendas (cascata A→B→C)
     if stars is not None and stars < NOTA_MINIMA_ESTRELAS:
         return False, f"estrelas {stars} < {NOTA_MINIMA_ESTRELAS}"
 

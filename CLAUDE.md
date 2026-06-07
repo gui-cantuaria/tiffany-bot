@@ -70,7 +70,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 
 **offers.py** — Deals bot (~940 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
-- 7 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer
+- 8 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer, roteador-e-repetidor (rede/adaptadores)
 - 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
 - Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20, requires at least one quality metric
 - Coupon extraction, tag display, store redirect URLs
@@ -198,6 +198,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Stars >= 4.2, sales >= 20
 - Store must be in whitelist
 - Must have at least one quality metric (stars OR sales) — rejects offers with no data
+- **Rede/adaptadores** (`_is_rede`: categoria `roteador-e-repetidor` ou título com palavra-chave de adaptador): filtros próprios e mais rígidos — stars >= 4.5 AND sales >= 100 AND discount >= 40%, sem fallback "sem métrica" (exige dados reais do Promobit)
 
 ## Music Technical Details
 
