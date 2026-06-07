@@ -95,6 +95,7 @@ log.addHandler(_file_handler)
 logging.getLogger("discord.ext.voice_recv.gateway").setLevel(logging.WARNING)
 logging.getLogger("discord.gateway").setLevel(logging.WARNING)
 logging.getLogger("discord.voice_state").setLevel(logging.WARNING)
+logging.getLogger("wavelink").setLevel(logging.WARNING)
 
 # =========================
 # DISCORD + IA CLIENT

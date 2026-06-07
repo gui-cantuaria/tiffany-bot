@@ -173,9 +173,16 @@ def _ffmpeg_available() -> bool:
     return FFMPEG_EXECUTABLE is not None
 
 
+def _lavalink_enabled() -> bool:
+    """Lavalink só deve estar ativo quando há servidor rodando (ex.: docker-compose).
+    Na VPS com systemd, deixar desligado (padrão) evita spam de reconexão e prioriza
+    VoiceRecvClient — necessário para escuta de voz estilo Alexa."""
+    return os.getenv("LAVALINK_ENABLED", "0").strip() == "1"
+
+
 def _lavalink_ready() -> bool:
     """Retorna True se Lavalink está conectado e pronto."""
-    if not _WAVELINK_AVAILABLE:
+    if not _lavalink_enabled() or not _WAVELINK_AVAILABLE:
         return False
     try:
         nodes = wavelink.Pool.nodes
@@ -658,48 +665,47 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     if "tiffany" not in t and "tifani" not in t:
         return "none", None
 
+    # Vírgula opcional após "Tiffany" — STT nem sempre transcreve pontuação.
+    _w = r"(?:tiffany|tifani)\s*,?\s*"
+
     # Comandos de controle
     if re.search(
-        r"tiffany\s*,\s*(para|parar|stop|pause|pausa)\b|"
-        r"tifani\s*,\s*(para|parar|stop|pause|pausa)\b",
+        rf"{_w}(para|parar|stop|pause|pausa)\b",
         t,
+        re.IGNORECASE,
     ):
         return "stop", None
 
-    if re.search(r"tiffany\s*,\s*(sai|saia|leave|sair)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(sai|saia|leave|sair)\b", t, re.IGNORECASE):
         return "leave", None
 
-    if re.search(r"tiffany\s*,\s*(pula|próxim[ao]|next|skip)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(pula|próxim[ao]|next|skip)\b", t, re.IGNORECASE):
         return "skip", None
 
-    if re.search(r"tiffany\s*,\s*(loop|repete|repetir)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(loop|repete|repetir)\b", t, re.IGNORECASE):
         return "loop", None
 
-    if re.search(r"tiffany\s*,\s*(embaralha|shuffle|mistura)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(embaralha|shuffle|mistura)\b", t, re.IGNORECASE):
         return "shuffle", None
 
-    if re.search(r"tiffany\s*,\s*(replay|de novo|denovo|repete essa)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(replay|de novo|denovo|repete essa)\b", t, re.IGNORECASE):
         return "replay", None
 
-    if re.search(r"tiffany\s*,\s*(volume|abaixa|aumenta)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(volume|abaixa|aumenta)\b", t, re.IGNORECASE):
         return "none", None  # volume é por usuário no Discord, ignorar
 
     # Detectar pergunta após "tiffany"
-    if re.search(r"tiffany\s*,", t):
-        # Remove o "tiffany," e captura o resto como pergunta
-        m = re.search(r"tiffany\s*,\s*(.+)", t, re.IGNORECASE)
-        if m:
-            question = m.group(1).strip()
-            # Se tem palavras suficientes, é pergunta; senão é comando de música
-            words = question.split()
-            if len(words) >= MIN_QUESTION_WORDS:
-                # Verifica se NÃO é comando de música
-                if not re.match(r"^(toca|reproduz|play|coloca)\b", question, re.IGNORECASE):
-                    return "question", question[:300]
+    m = re.search(rf"{_w}(.+)", t, re.IGNORECASE)
+    if m:
+        question = m.group(1).strip()
+        words = question.split()
+        if len(words) >= MIN_QUESTION_WORDS:
+            if not re.match(r"^(toca|reproduz|play|coloca)\b", question, re.IGNORECASE):
+                return "question", question[:300]
 
     # Comando de música
     m = re.search(
-        r"(?:tiffany|tifani)\s*,\s*(?:toca|reproduz|play|coloca)\s+(.+)",
+        rf"{_w}(?:toca|reproduz|play|coloca)\s+(.+)",
         t,
         re.IGNORECASE,
     )
@@ -896,7 +902,9 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
         r.dynamic_energy_threshold = True
+        r.energy_threshold = 250
         with sr.AudioFile(io.BytesIO(wav_16k)) as source:
+            r.adjust_for_ambient_noise(source, duration=0.2)
             audio = r.record(source)
         try:
             text = r.recognize_google(audio, language="pt-BR")
@@ -2213,7 +2221,12 @@ async def _voice_listen_loop(
                     pass
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
             if not text:
-                log.debug("STT não reconheceu áudio (pode ser ruído ou sotaque)")
+                dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
+                log.info(
+                    "STT não reconheceu (~%.1fs capturados) — pause a música, fale perto do mic "
+                    "e termine com 1s de silêncio",
+                    dur,
+                )
                 _stt_fail_count += 1
                 # Não spammar no chat — só logar silenciosamente
                 continue
@@ -4454,8 +4467,8 @@ def register_voice(bot: commands.Bot) -> None:
         """Reconecta automaticamente aos canais de voz apos restart."""
         await asyncio.sleep(4)  # aguarda guilds carregarem completamente
 
-        # Conectar ao Lavalink (se disponível)
-        if _WAVELINK_AVAILABLE:
+        # Conectar ao Lavalink só se explicitamente habilitado (LAVALINK_ENABLED=1).
+        if _lavalink_enabled() and _WAVELINK_AVAILABLE:
             lava_host = os.getenv("LAVALINK_HOST", "localhost")
             lava_port = int(os.getenv("LAVALINK_PORT", "2333"))
             lava_pass = os.getenv("LAVALINK_PASSWORD", "tiffany_lavalink_2026")
@@ -4468,6 +4481,10 @@ def register_voice(bot: commands.Bot) -> None:
                 log.info("Lavalink conectado: %s:%d", lava_host, lava_port)
             except Exception as e:
                 log.warning("Lavalink indisponível (%s) — usando yt-dlp como fallback.", e)
+        elif _WAVELINK_AVAILABLE:
+            log.info(
+                "Lavalink desabilitado (LAVALINK_ENABLED=0) — modo yt-dlp + escuta de voz (Alexa)."
+            )
 
         asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
         state = _load_voice_state()
