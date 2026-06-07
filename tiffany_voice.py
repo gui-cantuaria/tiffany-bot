@@ -140,8 +140,10 @@ STT_MIN_DURATION_SEC = 1.0
 STT_OPENROUTER_MIN_SEC = 1.5  # Whisper rejeita WAV corrompido/curto com HTTP 400
 # Frases típicas de bleed de YouTube/vídeo na call — não são comandos do usuário
 _STT_BLEED_PHRASES = (
-    "inscreva no canal", "se inscreva", "ative o sininho", "ative as notificações",
+    "inscreva no canal", "se inscreva", "se inscrever no canal", "inscrever no canal",
+    "ative o sininho", "ative as notificações", "ativar as notificações",
     "like e se inscreva", "deixe seu like", "não se esqueça de se inscrever",
+    "até a próxima",
 )
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
