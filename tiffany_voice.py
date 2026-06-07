@@ -919,8 +919,8 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return wav_48k
 
 
-def _transcribe_with_gemini(wav_16k: bytes) -> Optional[str]:
-    """Fallback STT via Gemini (OpenRouter) — mais tolerante que Google gratuito."""
+def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
+    """Fallback STT via OpenRouter /audio/transcriptions (Whisper) — mais preciso que Google gratuito."""
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key or os.getenv("STT_GEMINI_FALLBACK", "1").strip() != "1":
         return None
@@ -928,43 +928,34 @@ def _transcribe_with_gemini(wav_16k: bytes) -> Optional[str]:
         return None
     try:
         import base64
-        import openai
+        import urllib.request
 
         b64 = base64.standard_b64encode(wav_16k).decode("ascii")
-        client = openai.OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
+        model = os.getenv("STT_OPENROUTER_MODEL", "openai/whisper-large-v3")
+        payload = json.dumps({
+            "model": model,
+            "input_audio": {"data": b64, "format": "wav"},
+            "language": "pt",
+            "temperature": 0,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/audio/transcriptions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
         )
-        resp = client.chat.completions.create(
-            model="google/gemini-3.1-flash-lite",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Transcreva o áudio em português do Brasil. "
-                            "Responda SOMENTE com as palavras ditas, sem aspas nem explicação. "
-                            "Se não houver fala inteligível, responda vazio."
-                        ),
-                    },
-                    {
-                        "type": "input_audio",
-                        "input_audio": {"data": b64, "format": "wav"},
-                    },
-                ],
-            }],
-            max_tokens=120,
-            temperature=0,
-            timeout=20.0,
-        )
-        text = (resp.choices[0].message.content or "").strip()
-        text = re.sub(r"^[\"']|[\"']$", "", text).strip()
-        if text and text.lower() not in ("", "vazio", "n/a", "...", "silêncio", "silencio", "[silêncio]"):
-            log.info("Gemini STT: %r", text)
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        text = (data.get("text") or "").strip()
+        if text:
+            log.info("OpenRouter STT (%s): %r", model, text)
             return text
+        log.info("OpenRouter STT (%s): resposta vazia", model)
     except Exception as e:
-        log.warning("Gemini STT falhou: %s", e)
+        log.warning("OpenRouter STT falhou: %s", e)
     return None
 
 
@@ -996,8 +987,9 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
     result = _transcribe_with_vosk(wav_16k)
     if result is not None:
         return result
-    # 3) Gemini via OpenRouter (último recurso — mais preciso em áudio baixo/ruidoso)
-    return _transcribe_with_gemini(wav_16k)
+    # 3) Whisper via OpenRouter (último recurso — mais preciso em áudio baixo/ruidoso)
+    log.info("Google/Vosk falharam — tentando OpenRouter Whisper STT...")
+    return _transcribe_with_openrouter(wav_16k)
 
 
 _MUSIC_PLATFORM_OEMBED = {
@@ -1609,7 +1601,7 @@ class _PCMBufferSink(_AudioSinkBase):
         pass
 
 
-_SILENCE_SEC = 0.8  # espera este silêncio após última fala antes de transcrever
+_SILENCE_SEC = 1.0  # espera este silêncio após última fala antes de transcrever
 
 
 def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
