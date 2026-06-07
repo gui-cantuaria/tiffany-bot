@@ -135,8 +135,9 @@ def _voice_connect_timeout_sec() -> float:
         return 25.0
 
 
-MIN_PCM_BYTES = int(48000 * 2 * 2 * 0.5)  # mínimo 0.5s — ignora cliques/ruído curto (~0.1s)
-STT_MIN_DURATION_SEC = 0.5
+MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.0)  # mínimo 1s — ignora cliques/ruído curto
+STT_MIN_DURATION_SEC = 1.0
+STT_OPENROUTER_MIN_BYTES = 24_000  # ~0.75s em WAV 16kHz mono — abaixo disso Whisper retorna 400
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
@@ -919,43 +920,77 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return wav_48k
 
 
+def _openrouter_stt_request(api_key: str, model: str, wav_16k: bytes) -> Optional[str]:
+    """Uma chamada ao endpoint /audio/transcriptions do OpenRouter."""
+    import base64
+    import urllib.error
+    import urllib.request
+
+    b64 = base64.standard_b64encode(wav_16k).decode("ascii")
+    payload = json.dumps({
+        "model": model,
+        "input_audio": {"data": b64, "format": "wav"},
+        "language": "pt",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/audio/transcriptions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/gui-cantuaria/tiffany-bot",
+            "X-Title": "Tiffany Bot",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {e.code}: {body}") from e
+    text = (data.get("text") or "").strip()
+    return text or None
+
+
 def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
     """Fallback STT via OpenRouter /audio/transcriptions (Whisper) — mais preciso que Google gratuito."""
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key or os.getenv("STT_GEMINI_FALLBACK", "1").strip() != "1":
         return None
-    if len(wav_16k) < 1000:
-        return None
-    try:
-        import base64
-        import urllib.request
-
-        b64 = base64.standard_b64encode(wav_16k).decode("ascii")
-        model = os.getenv("STT_OPENROUTER_MODEL", "openai/whisper-large-v3")
-        payload = json.dumps({
-            "model": model,
-            "input_audio": {"data": b64, "format": "wav"},
-            "language": "pt",
-            "temperature": 0,
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/audio/transcriptions",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+    if len(wav_16k) < STT_OPENROUTER_MIN_BYTES:
+        log.debug(
+            "OpenRouter STT ignorado — áudio curto demais (%d bytes, mín %d)",
+            len(wav_16k), STT_OPENROUTER_MIN_BYTES,
         )
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        text = (data.get("text") or "").strip()
-        if text:
-            log.info("OpenRouter STT (%s): %r", model, text)
-            return text
-        log.info("OpenRouter STT (%s): resposta vazia", model)
-    except Exception as e:
-        log.warning("OpenRouter STT falhou: %s", e)
+        return None
+    if not wav_16k.startswith(b"RIFF"):
+        log.warning("OpenRouter STT ignorado — WAV 16k inválido (sem header RIFF)")
+        return None
+
+    primary = os.getenv("STT_OPENROUTER_MODEL", "openai/whisper-large-v3")
+    fallbacks = [primary]
+    if primary != "openai/whisper-1":
+        fallbacks.append("openai/whisper-1")
+
+    last_err = None
+    for model in fallbacks:
+        try:
+            text = _openrouter_stt_request(api_key, model, wav_16k)
+            if text:
+                log.info("OpenRouter STT (%s): %r", model, text)
+                return text
+            log.info("OpenRouter STT (%s): resposta vazia", model)
+            return None
+        except Exception as e:
+            last_err = e
+            log.warning("OpenRouter STT (%s) falhou: %s", model, e)
+    if last_err:
+        log.warning("OpenRouter STT esgotou modelos: %s", last_err)
     return None
 
 
@@ -2305,8 +2340,10 @@ async def _voice_listen_loop(
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "none":
-                # Só logar, não spammar no chat com falas que não são comandos
-                log.debug("STT ignorado (sem comando): %r", text[:80])
+                log.info(
+                    "STT ouviu %r mas sem 'Tiffany' — fale: «Tiffany, <pergunta ou toca música>»",
+                    text[:80],
+                )
                 continue
             # Verificar se o speaker está no mesmo canal que o bot
             if vc.channel and speaker_uid:
