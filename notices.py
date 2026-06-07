@@ -1568,9 +1568,9 @@ def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
 
 
 def _deve_rodar_slot(agora: datetime) -> bool:
-    """Roda somente em slots fixos (xx:00) e apenas uma vez por slot."""
+    """Roda em slots fixos de 30 min (xx:00 e xx:30) e apenas uma vez por slot."""
     global _last_run_slot
-    if agora.minute != 0:
+    if agora.minute not in (0, 30):
         return False
     slot = (agora.year * 10000 + agora.month * 100 + agora.day, agora.hour, agora.minute)
     if _last_run_slot == slot:

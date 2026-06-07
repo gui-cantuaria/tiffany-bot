@@ -40,7 +40,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 **launcher.py** — Spawns `notices.py` and `offers.py` as subprocesses, monitors health every 10s, auto-restarts on crash. Uses `fcntl` lockfile to prevent duplicate instances. Circuit breaker: max 15 total restarts.
 
 **notices.py** — Core bot (~2,150 lines). Handles:
-- RSS collection from 31 feeds (8 BR + 23 EN) every 60 minutes (slots at xx:00)
+- RSS collection from 31 feeds (8 BR + 23 EN) every 30 minutes (slots at xx:00 and xx:30)
 - AI analysis via OpenRouter (Gemini 3.1 Flash Lite for text and image validation)
 - Budget-limited AI: max 3 text analysis + max 2 vision calls per cycle
 - Discord publishing with embeds, threads, and image attachments
@@ -137,7 +137,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 
 ### Schedule
 - Hours: 8h-18h Sao Paulo time (America/Sao_Paulo, UTC-3)
-- Slots: xx:00 (60-minute intervals, 11 cycles/day)
+- Slots: xx:00 and xx:30 (30-minute intervals, ~20 cycles/day)
 - Pre-heating: 7:00 for RSS collection before 8:00
 
 ### AI Budget per Cycle
@@ -299,7 +299,7 @@ sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 - **File naming:** English (offers.py not ofertas.py)
 - **No database:** All state in JSON files
 - **AI model:** Single unified model (Gemini 3.1 Flash Lite) for all AI tasks — no fallback chains
-- **AI cost control:** Budget limits per cycle (3 text + 2 vision), 11 cycles/day (hourly). Model history: gemini-2.5-flash-preview (discontinued) -> gemini-3.5-flash (too expensive, $5/day) -> gemini-3.1-flash-lite (current, cheap)
+- **AI cost control:** Budget limits per cycle (3 text + 2 vision), ~20 cycles/day (every 30 min). Model history: gemini-2.5-flash-preview (discontinued) -> gemini-3.5-flash (too expensive, $5/day) -> gemini-3.1-flash-lite (current, cheap)
 - **Rate limiting:** Sequential AI calls, cooldowns between Discord posts
 - **Images:** Always download and attach — never post news without image. Validate integrity (Content-Length, EOF markers).
 - **Pings:** Only mention notification role for nota >= 90 (urgent news). Always validate role exists before mentioning.
