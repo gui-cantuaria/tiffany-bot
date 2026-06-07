@@ -1885,6 +1885,13 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 await asyncio.sleep(0.25)
                 continue
             _no_session_count = 0
+            # Guarda contra workers duplicados: se este não é mais o worker
+            # registrado na sessão (ex.: reconexão/reentrada criou outro), encerra.
+            # Sem isso, dois workers dividem a mesma fila — um toca e o outro
+            # anuncia "Fila encerrada" indevidamente.
+            if session.music_task is not None and session.music_task is not asyncio.current_task():
+                log.info("Music worker duplicado detectado — encerrando o antigo guild=%s", guild_id)
+                break
             from_queue = True
             try:
                 if _replay and session.loop_enabled:
@@ -1901,8 +1908,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 _empty_ticks += 1
                 if _empty_ticks == 1:
                     session._queue_empty_since = time.monotonic()
-                # Notificar fila vazia ~5s após última música (só uma vez por esvaziamento)
-                if _empty_ticks == 10 and session.history and not session.stay_24_7:
+                # Notificar fila vazia ~5s após última música (só uma vez por esvaziamento).
+                # Nunca anunciar enquanto há áudio tocando/pausado (evita mensagem indevida).
+                if (
+                    _empty_ticks == 10 and session.history and not session.stay_24_7
+                    and not vc.is_playing() and not vc.is_paused()
+                ):
                     failed = session._failed_songs[:]
                     session._failed_songs.clear()
                     msg = "📭 Fila encerrada! Adicione músicas com `t$p`."
