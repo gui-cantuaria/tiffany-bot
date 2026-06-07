@@ -901,9 +901,43 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
         return None
 
 
+def _fix_wav_header_sizes(wav: bytes) -> bytes:
+    """FFmpeg via pipe costuma gravar chunk 'data' com tamanho 0 — corrige antes do STT."""
+    if len(wav) < 44 or not wav.startswith(b"RIFF"):
+        return wav
+    try:
+        import struct
+        buf = bytearray(wav)
+        offset = 12
+        while offset + 8 <= len(buf):
+            chunk_id = bytes(buf[offset:offset + 4])
+            chunk_size = struct.unpack_from("<I", buf, offset + 4)[0]
+            if chunk_id == b"data":
+                data_start = offset + 8
+                actual = len(buf) - data_start
+                struct.pack_into("<I", buf, offset + 4, actual)
+                struct.pack_into("<I", buf, 4, len(buf) - 8)
+                return bytes(buf)
+            offset += 8 + chunk_size + (chunk_size % 2)
+    except Exception:
+        pass
+    return wav
+
+
 def _wav_sample_rate(wav: bytes) -> int:
     if len(wav) < 28 or not wav.startswith(b"RIFF"):
         return 0
+    try:
+        import struct
+        offset = 12
+        while offset + 8 <= len(wav):
+            chunk_id = wav[offset:offset + 4]
+            chunk_size = struct.unpack_from("<I", wav, offset + 4)[0]
+            if chunk_id == b"fmt " and chunk_size >= 16:
+                return struct.unpack_from("<I", wav, offset + 12)[0]
+            offset += 8 + chunk_size + (chunk_size % 2)
+    except Exception:
+        pass
     try:
         import struct
         return struct.unpack_from("<I", wav, 24)[0]
@@ -912,20 +946,37 @@ def _wav_sample_rate(wav: bytes) -> int:
 
 
 def _wav_duration_sec(wav: bytes) -> float:
-    """Duração real do WAV a partir do header (evita mandar áudio inválido pro Whisper)."""
+    """Duração real do WAV (lê chunk 'data' — não assume offset fixo 44)."""
     if len(wav) < 44 or not wav.startswith(b"RIFF"):
         return 0.0
+    wav = _fix_wav_header_sizes(wav)
     try:
         import struct
-        channels = struct.unpack_from("<H", wav, 22)[0]
-        sample_rate = struct.unpack_from("<I", wav, 24)[0]
-        bits = struct.unpack_from("<H", wav, 34)[0]
-        data_size = struct.unpack_from("<I", wav, 40)[0]
-        if sample_rate and channels and bits:
+        sample_rate = 0
+        channels = 1
+        bits = 16
+        data_size = 0
+        offset = 12
+        while offset + 8 <= len(wav):
+            chunk_id = wav[offset:offset + 4]
+            chunk_size = struct.unpack_from("<I", wav, offset + 4)[0]
+            if chunk_id == b"fmt " and chunk_size >= 16:
+                channels = struct.unpack_from("<H", wav, offset + 10)[0]
+                sample_rate = struct.unpack_from("<I", wav, offset + 12)[0]
+                bits = struct.unpack_from("<H", wav, offset + 22)[0]
+            elif chunk_id == b"data":
+                data_start = offset + 8
+                data_size = min(chunk_size, len(wav) - data_start)
+                if data_size <= 0:
+                    data_size = len(wav) - data_start
+                break
+            offset += 8 + chunk_size + (chunk_size % 2)
+        if sample_rate and channels and bits and data_size > 0:
             return data_size / (sample_rate * channels * (bits // 8))
     except Exception:
         pass
-    return max(0.0, (len(wav) - 44) / 32000.0)
+    sr = _wav_sample_rate(wav) or 16000
+    return max(0.0, (len(wav) - 44) / (sr * 2))
 
 
 def _is_stt_bleed(text: str) -> bool:
@@ -934,30 +985,38 @@ def _is_stt_bleed(text: str) -> bool:
     return any(p in t for p in _STT_BLEED_PHRASES)
 
 
+def _pcm16_to_wav(pcm: bytes, *, sample_rate: int, channels: int = 1) -> bytes:
+    """Monta WAV válido a partir de PCM bruto (evita header quebrado do FFmpeg pipe)."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm)
+    return buf.getvalue()
+
+
 def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
     """Converte WAV 48kHz mono para WAV 16kHz mono via FFmpeg (melhor para STT)."""
     import subprocess
     exe = FFMPEG_EXECUTABLE or "ffmpeg"
     proc = None
     try:
+        # PCM raw no pipe — WAV via pipe do FFmpeg deixa chunk 'data' com tamanho 0
         proc = subprocess.Popen(
-            [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1"],
+            [exe, "-i", "pipe:0", "-ar", "16000", "-ac", "1", "-f", "s16le", "pipe:1"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
-        wav_16k, _ = proc.communicate(wav_48k, timeout=30)
-        if (
-            wav_16k
-            and wav_16k.startswith(b"RIFF")
-            and _wav_sample_rate(wav_16k) == 16000
-            and _wav_duration_sec(wav_16k) >= 0.3
-        ):
+        pcm_16k, _ = proc.communicate(wav_48k, timeout=30)
+        if not pcm_16k:
+            log.warning("FFmpeg retornou PCM vazio na conversão WAV→16k")
+            return b""
+        wav_16k = _pcm16_to_wav(pcm_16k, sample_rate=16000)
+        dur = _wav_duration_sec(wav_16k)
+        if dur >= 0.3:
             return wav_16k
-        log.warning(
-            "Conversão WAV→16k inválida (sr=%s, dur=%.2fs) — STT pode falhar",
-            _wav_sample_rate(wav_16k or b""),
-            _wav_duration_sec(wav_16k or b""),
-        )
-        return wav_16k if wav_16k else b""
+        log.warning("Conversão WAV→16k inválida (dur=%.2fs, pcm=%d bytes)", dur, len(pcm_16k))
+        return b""
     except subprocess.TimeoutExpired:
         if proc:
             proc.kill()
