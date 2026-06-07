@@ -137,7 +137,12 @@ def _voice_connect_timeout_sec() -> float:
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.0)  # mínimo 1s — ignora cliques/ruído curto
 STT_MIN_DURATION_SEC = 1.0
-STT_OPENROUTER_MIN_BYTES = 24_000  # ~0.75s em WAV 16kHz mono — abaixo disso Whisper retorna 400
+STT_OPENROUTER_MIN_SEC = 1.5  # Whisper rejeita WAV corrompido/curto com HTTP 400
+# Frases típicas de bleed de YouTube/vídeo na call — não são comandos do usuário
+_STT_BLEED_PHRASES = (
+    "inscreva no canal", "se inscreva", "ative o sininho", "ative as notificações",
+    "like e se inscreva", "deixe seu like", "não se esqueça de se inscrever",
+)
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
@@ -896,6 +901,39 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
         return None
 
 
+def _wav_sample_rate(wav: bytes) -> int:
+    if len(wav) < 28 or not wav.startswith(b"RIFF"):
+        return 0
+    try:
+        import struct
+        return struct.unpack_from("<I", wav, 24)[0]
+    except Exception:
+        return 0
+
+
+def _wav_duration_sec(wav: bytes) -> float:
+    """Duração real do WAV a partir do header (evita mandar áudio inválido pro Whisper)."""
+    if len(wav) < 44 or not wav.startswith(b"RIFF"):
+        return 0.0
+    try:
+        import struct
+        channels = struct.unpack_from("<H", wav, 22)[0]
+        sample_rate = struct.unpack_from("<I", wav, 24)[0]
+        bits = struct.unpack_from("<H", wav, 34)[0]
+        data_size = struct.unpack_from("<I", wav, 40)[0]
+        if sample_rate and channels and bits:
+            return data_size / (sample_rate * channels * (bits // 8))
+    except Exception:
+        pass
+    return max(0.0, (len(wav) - 44) / 32000.0)
+
+
+def _is_stt_bleed(text: str) -> bool:
+    """Detecta transcrição provável de vídeo/YouTube na call (não é comando ao bot)."""
+    t = (text or "").lower()
+    return any(p in t for p in _STT_BLEED_PHRASES)
+
+
 def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
     """Converte WAV 48kHz mono para WAV 16kHz mono via FFmpeg (melhor para STT)."""
     import subprocess
@@ -907,17 +945,31 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
         wav_16k, _ = proc.communicate(wav_48k, timeout=30)
-        return wav_16k if wav_16k else wav_48k
+        if (
+            wav_16k
+            and wav_16k.startswith(b"RIFF")
+            and _wav_sample_rate(wav_16k) == 16000
+            and _wav_duration_sec(wav_16k) >= 0.3
+        ):
+            return wav_16k
+        log.warning(
+            "Conversão WAV→16k inválida (sr=%s, dur=%.2fs) — STT pode falhar",
+            _wav_sample_rate(wav_16k or b""),
+            _wav_duration_sec(wav_16k or b""),
+        )
+        return wav_16k if wav_16k else b""
     except subprocess.TimeoutExpired:
         if proc:
             proc.kill()
             proc.wait()
-        return wav_48k
-    except Exception:
+        log.warning("FFmpeg timeout ao converter WAV→16k")
+        return b""
+    except Exception as e:
         if proc:
             proc.kill()
             proc.wait()
-        return wav_48k
+        log.warning("FFmpeg erro ao converter WAV→16k: %s", e)
+        return b""
 
 
 def _openrouter_stt_request(api_key: str, model: str, wav_16k: bytes) -> Optional[str]:
@@ -962,14 +1014,15 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key or os.getenv("STT_GEMINI_FALLBACK", "1").strip() != "1":
         return None
-    if len(wav_16k) < STT_OPENROUTER_MIN_BYTES:
-        log.debug(
-            "OpenRouter STT ignorado — áudio curto demais (%d bytes, mín %d)",
-            len(wav_16k), STT_OPENROUTER_MIN_BYTES,
-        )
+    if not wav_16k.startswith(b"RIFF") or _wav_sample_rate(wav_16k) != 16000:
+        log.warning("OpenRouter STT ignorado — WAV 16k inválido (sr=%s)", _wav_sample_rate(wav_16k))
         return None
-    if not wav_16k.startswith(b"RIFF"):
-        log.warning("OpenRouter STT ignorado — WAV 16k inválido (sem header RIFF)")
+    dur = _wav_duration_sec(wav_16k)
+    if dur < STT_OPENROUTER_MIN_SEC:
+        log.debug(
+            "OpenRouter STT ignorado — áudio curto demais (%.2fs, mín %.1fs)",
+            dur, STT_OPENROUTER_MIN_SEC,
+        )
         return None
 
     primary = os.getenv("STT_OPENROUTER_MODEL", "openai/whisper-large-v3")
@@ -995,8 +1048,11 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
 
 
 def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # Converter para 16kHz para Google/Vosk/Gemini
+    # Converter para 16kHz para Google/Vosk/OpenRouter
     wav_16k = _wav_48k_to_16k(wav)
+    if not wav_16k or not wav_16k.startswith(b"RIFF"):
+        log.warning("STT abortado — conversão WAV→16k falhou")
+        return None
     # 1) Google STT (rápido e gratuito)
     try:
         sr = importlib.import_module("speech_recognition")
@@ -2326,6 +2382,12 @@ async def _voice_listen_loop(
                 except Exception:
                     pass
             text = await asyncio.to_thread(_transcribe_wav_bytes, wav)
+            if text and _is_stt_bleed(text):
+                log.info(
+                    "STT ignorado — áudio de vídeo/YouTube na call (%r). Pause a música/vídeos.",
+                    text[:80],
+                )
+                continue
             if not text:
                 dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
                 log.info(
