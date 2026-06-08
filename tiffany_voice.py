@@ -803,6 +803,29 @@ def _normalize_pcm_stereo(pcm: bytes) -> bytes:
         return pcm
 
 
+def _extract_voiced_pcm(pcm: bytes, *, frame_ms: int = 20, threshold: int = 250) -> bytes:
+    """Mantém só frames com energia — silêncio do Opus patch dilui STT e causa UnknownValueError."""
+    if len(pcm) < 8:
+        return pcm
+    frame_bytes = max(int(48000 * 2 * 2 * frame_ms / 1000), 3840)
+    voiced: list[bytes] = []
+    import struct
+    for i in range(0, len(pcm), frame_bytes):
+        frame = pcm[i : i + frame_bytes]
+        if len(frame) < 4:
+            continue
+        n = len(frame) // 2
+        samples = struct.unpack(f"<{n}h", frame)
+        peak = max((abs(s) for s in samples), default=0)
+        if peak >= threshold:
+            voiced.append(frame)
+    result = b"".join(voiced)
+    min_voiced = int(48000 * 2 * 2 * 0.4)  # ao menos 0.4s de fala detectada
+    if len(result) >= min_voiced:
+        return result
+    return pcm
+
+
 def _pcm_stereo_to_wav(pcm_stereo: bytes) -> bytes:
     pcm_stereo = _normalize_pcm_stereo(pcm_stereo)
     mono = _tomono(pcm_stereo)
@@ -1097,10 +1120,6 @@ def _openrouter_stt_request(api_key: str, model: str, wav_16k: bytes) -> Optiona
         "model": model,
         "input_audio": {"data": b64, "format": "wav"},
         "language": "pt",
-        "prompt": (
-            "Tiffany, assistente virtual. Comandos de voz em português: "
-            "Tiffany qual é, Tiffany toca música, Tiffany para, Tiffany pula."
-        ),
     }).encode("utf-8")
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/audio/transcriptions",
@@ -1156,7 +1175,6 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
                 log.info("OpenRouter STT (%s): %r", model, text)
                 return text
             log.info("OpenRouter STT (%s): resposta vazia", model)
-            return None
         except Exception as e:
             last_err = e
             log.warning("OpenRouter STT (%s) falhou: %s", model, e)
@@ -1165,14 +1183,81 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
     return None
 
 
+def _transcribe_with_openrouter_chat(wav: bytes) -> Optional[str]:
+    """Fallback STT via chat/completions + input_audio (Gemini entende voz melhor que Google STT)."""
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return None
+    import base64
+    import urllib.error
+    import urllib.request
+
+    model = os.getenv("STT_CHAT_MODEL", "google/gemini-3.1-flash-lite")
+    b64 = base64.standard_b64encode(wav).decode("ascii")
+    payload = json.dumps({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Transcreva o áudio em português brasileiro. "
+                        "Responda SOMENTE com as palavras ditas, sem comentários."
+                    ),
+                },
+                {
+                    "type": "input_audio",
+                    "input_audio": {"data": b64, "format": "wav"},
+                },
+            ],
+        }],
+        "max_tokens": 250,
+        "temperature": 0,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/gui-cantuaria/tiffany-bot",
+            "X-Title": "Tiffany Bot",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        text = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            or ""
+        ).strip()
+        if text:
+            log.info("OpenRouter chat STT (%s): %r", model, text[:120])
+            return text
+        log.info("OpenRouter chat STT (%s): resposta vazia", model)
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            pass
+        log.warning("OpenRouter chat STT (%s) HTTP %s: %s", model, e.code, body)
+    except Exception as e:
+        log.warning("OpenRouter chat STT (%s) falhou: %s", model, e)
+    return None
+
+
 def _try_google_stt(wav_16k: bytes) -> Optional[str]:
     try:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
-        r.dynamic_energy_threshold = True
-        r.energy_threshold = 250
+        r.dynamic_energy_threshold = False
+        r.energy_threshold = 300
         with sr.AudioFile(io.BytesIO(wav_16k)) as source:
-            r.adjust_for_ambient_noise(source, duration=0.2)
             audio = r.record(source)
         try:
             text = r.recognize_google(audio, language="pt-BR")
@@ -1217,12 +1302,16 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
 
     candidates: list[tuple[str, str]] = []
 
-    # 1) Whisper primeiro — Google costuma alucinar frases curtas ("E aí") e bloqueava o fallback
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if api_key and os.getenv("STT_GEMINI_FALLBACK", "1").strip() == "1":
         whisper = _transcribe_with_openrouter(wav_16k)
         if whisper:
             candidates.append(("whisper", whisper))
+        # Gemini via chat quando Whisper falha ou não acha wake word
+        if not whisper or not _has_wake_word(whisper):
+            gemini = _transcribe_with_openrouter_chat(wav)
+            if gemini:
+                candidates.append(("gemini", gemini))
 
     google = _try_google_stt(wav_16k)
     if google:
@@ -2551,7 +2640,10 @@ async def _voice_listen_loop(
                     peak, rms,
                 )
                 continue
-            wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
+            pcm_voiced = await asyncio.to_thread(_extract_voiced_pcm, pcm)
+            voiced_ratio = len(pcm_voiced) / max(len(pcm), 1)
+            log.info("Fala detectada: %.0f%% do buffer (~%.1fs)", voiced_ratio * 100, len(pcm_voiced) / (48000 * 2 * 2))
+            wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm_voiced)
             dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
             if dur < STT_MIN_DURATION_SEC:
                 log.debug("Áudio muito curto (~%.1fs) — ignorando", dur)
@@ -2573,10 +2665,10 @@ async def _voice_listen_loop(
                 continue
             if not text:
                 dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
-                log.info(
-                    "STT não reconheceu (~%.1fs capturados) — pause a música, fale perto do mic "
-                    "e termine com 1s de silêncio",
-                    dur,
+                log.warning(
+                    "STT não reconheceu (~%.1fs, peak=%d, fala=%.0f%%) — "
+                    "fale 'Tiffany, qual é a capital do Brasil?' e fique 2s em silêncio",
+                    dur, peak, voiced_ratio * 100,
                 )
                 _stt_fail_count += 1
                 # Não spammar no chat — só logar silenciosamente
