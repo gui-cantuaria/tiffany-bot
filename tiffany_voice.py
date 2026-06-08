@@ -142,14 +142,18 @@ def _voice_connect_timeout_sec() -> float:
 
 MIN_PCM_BYTES = int(48000 * 2 * 2 * 1.0)  # mínimo 1s — ignora cliques/ruído curto
 STT_MIN_DURATION_SEC = 1.0
-STT_OPENROUTER_MIN_SEC = 1.5  # Whisper rejeita WAV corrompido/curto com HTTP 400
+STT_OPENROUTER_MIN_SEC = 1.0  # Whisper — alinhado ao mínimo de captura (~1s)
 # Frases típicas de bleed de YouTube/vídeo na call — não são comandos do usuário
 _STT_BLEED_PHRASES = (
     "inscreva no canal", "se inscreva", "se inscrever no canal", "inscrever no canal",
     "ative o sininho", "ative as notificações", "ativar as notificações",
     "like e se inscreva", "deixe seu like", "não se esqueça de se inscrever",
-    "até a próxima",
+    "até a próxima", "antes de ver", "o que é que você quer", "você quer que eu",
+    "legendas pela comunidade", "amara.org",
 )
+# Janela de captura por usuário — evita acumular minutos de YouTube na call
+STT_CAPTURE_MAX_BYTES = int(48000 * 2 * 2 * 10)  # 10s rolling por falante
+STT_TAIL_SEC = 6  # se sobrar áudio longo, manda só os últimos N segundos pro STT
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
@@ -678,6 +682,7 @@ def _normalize_transcript(t: str) -> str:
 _WAKE_ALIASES = (
     "tiffany", "tifani", "tiffani", "tifany", "tifiri", "tifine", "tifini",
     "chiffany", "tifi", "tiffanie", "tyfani", "tiffanny", "tifanny",
+    "tufane", "tufani", "tefani", "tefany", "tifane", "tyfany",
 )
 
 
@@ -686,15 +691,12 @@ def _normalize_wake_word(t: str) -> str:
     import difflib
     words = t.split()
     out: list[str] = []
-    replaced = False
     for w in words:
-        if not replaced:
-            wl = re.sub(r"[^a-zà-ú]", "", w.lower())
-            if wl in _WAKE_ALIASES or difflib.SequenceMatcher(None, wl, "tiffany").ratio() >= 0.68:
-                out.append("tiffany")
-                replaced = True
-                continue
-        out.append(w)
+        wl = re.sub(r"[^a-zà-ú]", "", w.lower())
+        if wl in _WAKE_ALIASES or difflib.SequenceMatcher(None, wl, "tiffany").ratio() >= 0.65:
+            out.append("tiffany")
+        else:
+            out.append(w)
     return " ".join(out)
 
 
@@ -740,7 +742,9 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     # Detectar pergunta após "tiffany"
     m = re.search(rf"{_w}(.+)", t, re.IGNORECASE)
     if m:
-        question = m.group(1).strip()
+        question = m.group(1).strip(" ?!.…")
+        if not question:
+            return "wake_only", None
         words = question.split()
         if len(words) >= MIN_QUESTION_WORDS:
             if not re.match(r"^(toca|reproduz|play|coloca)\b", question, re.IGNORECASE):
@@ -761,8 +765,23 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     return "none", None
 
 
+def _pcm_peak_rms(pcm: bytes) -> tuple[int, float]:
+    """Peak e RMS do PCM stereo 16-bit — diagnóstico de áudio mudo na call."""
+    if len(pcm) < 4:
+        return 0, 0.0
+    try:
+        import struct
+        n = len(pcm) // 2
+        samples = struct.unpack(f"<{n}h", pcm[: n * 2])
+        peak = max((abs(s) for s in samples), default=0)
+        rms = (sum(s * s for s in samples) / max(n, 1)) ** 0.5
+        return peak, rms
+    except Exception:
+        return 0, 0.0
+
+
 def _normalize_pcm_stereo(pcm: bytes) -> bytes:
-    """Amplifica áudio baixo do Discord — microfone distante costuma falhar no Google STT."""
+    """Amplifica áudio baixo do Discord — microfone distante costuma falhar no STT."""
     if len(pcm) < 4:
         return pcm
     try:
@@ -770,10 +789,10 @@ def _normalize_pcm_stereo(pcm: bytes) -> bytes:
         n = len(pcm) // 2
         samples = struct.unpack(f"<{n}h", pcm)
         peak = max((abs(s) for s in samples), default=0)
-        if peak < 500:
+        if peak < 80:
             return pcm
         if peak < 3000:
-            gain = min(12000 / peak, 6.0)
+            gain = min(12000 / peak, 10.0)
         elif peak < 8000:
             gain = min(16000 / peak, 3.0)
         else:
@@ -1078,6 +1097,10 @@ def _openrouter_stt_request(api_key: str, model: str, wav_16k: bytes) -> Optiona
         "model": model,
         "input_audio": {"data": b64, "format": "wav"},
         "language": "pt",
+        "prompt": (
+            "Tiffany, assistente virtual. Comandos de voz em português: "
+            "Tiffany qual é, Tiffany toca música, Tiffany para, Tiffany pula."
+        ),
     }).encode("utf-8")
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/audio/transcriptions",
@@ -1142,13 +1165,7 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
     return None
 
 
-def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
-    # Converter para 16kHz para Google/Vosk/OpenRouter
-    wav_16k = _wav_48k_to_16k(wav)
-    if not wav_16k or not wav_16k.startswith(b"RIFF"):
-        log.warning("STT abortado — conversão WAV→16k falhou")
-        return None
-    # 1) Google STT (rápido e gratuito)
+def _try_google_stt(wav_16k: bytes) -> Optional[str]:
     try:
         sr = importlib.import_module("speech_recognition")
         r = sr.Recognizer()
@@ -1169,13 +1186,53 @@ def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
         log.warning("Pacote SpeechRecognition não instalado.")
     except Exception as e:
         log.warning("Erro no Google STT: %s", e)
-    # 2) Vosk (fallback offline)
-    result = _transcribe_with_vosk(wav_16k)
-    if result is not None:
-        return result
-    # 3) Whisper via OpenRouter (último recurso — mais preciso em áudio baixo/ruidoso)
-    log.info("Google/Vosk falharam — tentando OpenRouter Whisper STT...")
-    return _transcribe_with_openrouter(wav_16k)
+    return None
+
+
+def _pick_best_stt_transcript(candidates: list[tuple[str, str]]) -> Optional[str]:
+    """Escolhe a melhor transcrição; prioriza quem contém wake word 'Tiffany'."""
+    if not candidates:
+        return None
+    valid = [(eng, txt) for eng, txt in candidates if txt and not _is_stt_bleed(txt)]
+    if not valid:
+        return candidates[0][1] if candidates[0][1] else None
+    with_wake = [(eng, txt) for eng, txt in valid if _has_wake_word(txt)]
+    if with_wake:
+        with_wake.sort(key=lambda kv: len(kv[1]), reverse=True)
+        eng, txt = with_wake[0]
+        log.info("STT escolhido: %s (%r) — contém wake word", eng, txt[:80])
+        return txt
+    valid.sort(key=lambda kv: len(kv[1]), reverse=True)
+    eng, txt = valid[0]
+    log.info("STT escolhido: %s (%r) — sem wake word", eng, txt[:80])
+    return txt
+
+
+def _transcribe_wav_bytes(wav: bytes) -> Optional[str]:
+    # Converter para 16kHz para Google/Vosk/OpenRouter
+    wav_16k = _wav_48k_to_16k(wav)
+    if not wav_16k or not wav_16k.startswith(b"RIFF"):
+        log.warning("STT abortado — conversão WAV→16k falhou")
+        return None
+
+    candidates: list[tuple[str, str]] = []
+
+    # 1) Whisper primeiro — Google costuma alucinar frases curtas ("E aí") e bloqueava o fallback
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if api_key and os.getenv("STT_GEMINI_FALLBACK", "1").strip() == "1":
+        whisper = _transcribe_with_openrouter(wav_16k)
+        if whisper:
+            candidates.append(("whisper", whisper))
+
+    google = _try_google_stt(wav_16k)
+    if google:
+        candidates.append(("google", google))
+
+    vosk = _transcribe_with_vosk(wav_16k)
+    if vosk:
+        candidates.append(("vosk", vosk))
+
+    return _pick_best_stt_transcript(candidates)
 
 
 _MUSIC_PLATFORM_OEMBED = {
@@ -1771,8 +1828,10 @@ class _PCMBufferSink(_AudioSinkBase):
             with self._session.buf_lock:
                 buf = self._session.pcm_buffers.setdefault(uid, bytearray())
                 buf.extend(pcm)
-                # Cap: descarta início se ultrapassar MAX_PCM_BYTES (evita memory leak)
-                if len(buf) > MAX_PCM_BYTES:
+                # Rolling window curto para STT — prioriza comando recente, não YouTube acumulado
+                if len(buf) > STT_CAPTURE_MAX_BYTES:
+                    del buf[: len(buf) - STT_CAPTURE_MAX_BYTES]
+                elif len(buf) > MAX_PCM_BYTES:
                     del buf[: len(buf) - MAX_PCM_BYTES]
                 self._session.last_audio_ts[uid] = time.monotonic()
             # Clip buffer — grava áudio de todos os users (circular, últimos 30s)
@@ -1790,6 +1849,14 @@ class _PCMBufferSink(_AudioSinkBase):
 _SILENCE_SEC = 1.0  # espera este silêncio após última fala antes de transcrever
 
 
+def _trim_pcm_for_stt(pcm: bytes) -> bytes:
+    """Mantém só o trecho final (comando recente), descarta minutos de vídeo/ruído acumulado."""
+    tail_bytes = int(48000 * 2 * 2 * STT_TAIL_SEC)
+    if len(pcm) > tail_bytes:
+        return pcm[-tail_bytes:]
+    return pcm
+
+
 def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
     """Retorna (PCM, uid) do usuário que parou de falar há pelo menos _SILENCE_SEC segundos.
     Retorna (b"", 0) se não há áudio pronto."""
@@ -1803,8 +1870,10 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
         ]
         if not ready:
             return b"", 0
-        uid, buf = max(ready, key=lambda kv: len(kv[1]))
-        raw = bytes(buf)
+        # Preferir a fala MAIS CURTA pronta (comando de voz ~1-6s), não quem fala mais tempo
+        # (ex.: YouTube aberto na call acumula buffer enorme e ganhava com max()).
+        uid, buf = min(ready, key=lambda kv: len(kv[1]))
+        raw = _trim_pcm_for_stt(bytes(buf))
         del session.pcm_buffers[uid]
         session.last_audio_ts.pop(uid, None)
     return raw, uid
@@ -2462,7 +2531,26 @@ async def _voice_listen_loop(
             pcm, speaker_uid = _drain_ready_user_pcm(session)
             if not pcm:
                 continue
-            log.info("🎤 Áudio captado (%d bytes) — transcrevendo...", len(pcm))
+            speaker_name = "?"
+            if speaker_uid and vc.channel:
+                m = discord.utils.get(vc.channel.members, id=speaker_uid)
+                if m:
+                    speaker_name = m.display_name
+            peak, rms = _pcm_peak_rms(pcm)
+            log.info(
+                "🎤 Áudio captado de %s (%d bytes, ~%.1fs, peak=%d) — transcrevendo...",
+                speaker_name,
+                len(pcm),
+                len(pcm) / (48000 * 2 * 2),
+                peak,
+            )
+            if peak < 200:
+                log.warning(
+                    "Áudio quase mudo na call (peak=%d, rms=%.0f) — "
+                    "Discord não está recebendo seu microfone direito",
+                    peak, rms,
+                )
+                continue
             wav = await asyncio.to_thread(_pcm_stereo_to_wav, pcm)
             dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
             if dur < STT_MIN_DURATION_SEC:
@@ -2496,28 +2584,35 @@ async def _voice_listen_loop(
             _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
+            if action == "wake_only":
+                now_hint = time.monotonic()
+                if now_hint - session.last_stt_hint_ts >= 30:
+                    session.last_stt_hint_ts = now_hint
+                    await _notify(
+                        bot,
+                        session.text_channel_id,
+                        "🎤 **Sim, estou ouvindo!** Diga sua pergunta completa: "
+                        "**Tiffany, qual é a capital do Brasil?**",
+                    )
+                continue
+
             if action == "none":
                 heard_wake = _has_wake_word(text)
                 log.info(
-                    "STT ouviu %r — wake=%s, sem comando válido (música pausada?)",
-                    text[:80], heard_wake,
+                    "STT ouviu %r (falante=%s) — wake=%s, sem comando válido",
+                    text[:80], speaker_name, heard_wake,
                 )
-                # Dica no chat (max 1x a cada 90s)
-                if session:
+                # Só avisa no chat se detectou "Tiffany" mas comando incompleto (evita spam de YouTube)
+                if session and heard_wake:
                     now_hint = time.monotonic()
                     if now_hint - session.last_stt_hint_ts >= 90:
                         session.last_stt_hint_ts = now_hint
-                        if heard_wake:
-                            msg = (
-                                "🎤 Te ouvi! Complete o comando: "
-                                "**Tiffany, qual é a capital do Brasil?** ou **Tiffany, toca [música]**."
-                            )
-                        else:
-                            msg = (
-                                f"🎤 Ouvi «{text[:45]}» — comece com **Tiffany,** "
-                                "sua pergunta (música **pausada**, sem YouTube na call)."
-                            )
-                        await _notify(bot, session.text_channel_id, msg)
+                        await _notify(
+                            bot,
+                            session.text_channel_id,
+                            "🎤 Te ouvi! Complete: **Tiffany, qual é a capital do Brasil?** "
+                            "ou **Tiffany, toca [música]** (música pausada).",
+                        )
                 continue
             # Verificar se o speaker está no mesmo canal que o bot
             if vc.channel and speaker_uid:
