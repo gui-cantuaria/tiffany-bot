@@ -28,7 +28,7 @@ CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1512902840908124281"))
 ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))  # legado: marca em TODA oferta (0 = desligado)
 # Cargo marcado SÓ nas "ultra ofertas" (desconto alto). Default = cargo de ofertas do servidor.
 ID_CARGO_ULTRA = int(os.getenv("ID_CARGO_OFERTAS_ULTRA", "1386386059390357575"))
-DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "40"))  # % mínimo para ser "ultra oferta"
+DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "60"))  # % mínimo para ser "ultra oferta"
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
 HORA_INICIO = 8
@@ -40,11 +40,11 @@ SCAN_INTERVAL_MIN = 30  # ciclo de ofertas a cada 30 min
 POST_SPACING_SEC = 180  # 3 min entre posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # percentual mínimo
-NOTA_MINIMA_ESTRELAS = 4.2
-VENDAS_MINIMAS = 20
+NOTA_MINIMA_ESTRELAS = 4.3
+VENDAS_MINIMAS = 50
 # Promobit raramente fornece estrelas/vendas. Para não travar em 0 ofertas, aceita
 # oferta de loja confiável (whitelist) SEM métrica desde que o desconto seja bom.
-DESCONTO_SEM_METRICA = 20  # percentual mínimo quando não há estrelas nem vendas
+DESCONTO_SEM_METRICA = 25  # percentual mínimo quando não há estrelas nem vendas
 
 HISTORY_FILE = "offers_history.json"
 
@@ -885,9 +885,6 @@ def _build_embed(deal: dict) -> discord.Embed:
     desc = _format_description(deal)
     # URL unificada para título e botão (evita inconsistência)
     buy_url = _buy_url(deal)
-    # Afiliado aplicado? = build_affiliate_url alterou o destino direto da loja.
-    dest = _store_destination(deal)
-    afiliado_aplicado = bool(dest) and buy_url != dest
 
     # CTA em DESTAQUE dentro do corpo: heading clicável (grande e em negrito).
     # Reforça o botão (que o Discord só renderiza em cinza) com alta visibilidade.
@@ -929,11 +926,8 @@ def _build_embed(deal: dict) -> discord.Embed:
             inline=False,
         )
 
-    # Footer sutil (indica afiliado quando aplicavel)
-    if afiliado_aplicado:
-        embed.set_footer(text="Oferta verificada automaticamente | Link de afiliado")
-    else:
-        embed.set_footer(text="Oferta verificada automaticamente")
+    # Footer sutil — preço pode mudar a qualquer momento
+    embed.set_footer(text="⚡ Preço sujeito a alterações")
 
     return embed
 
