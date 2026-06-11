@@ -151,6 +151,9 @@ FONTES_RSS = {
     "G1 Tecnologia": "https://g1.globo.com/dynamo/tecnologia/rss2.xml",
     "Giz Brasil": "https://gizmodo.uol.com.br/feed/",
     "Convergência Digital": "https://convergenciadigital.com.br/feed/",
+    "TecMundo": "https://www.tecmundo.com.br/rss",
+    "MacMagazine": "https://macmagazine.com.br/feed/",
+    "Meio Bit": "https://meiobit.com/feed/",
     # EN — Geral
     "The Verge": "https://www.theverge.com/rss/index.xml",
     "TechCrunch": "https://techcrunch.com/feed/",

@@ -59,6 +59,13 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/placa-mae/s/",
     "/promocoes/pc-gamer/s/",
     "/promocoes/roteador-e-repetidor/s/",  # rede: adaptadores, roteadores e repetidores
+    "/promocoes/teclado/s/",               # periféricos: teclados
+    "/promocoes/mouse/s/",                 # periféricos: mouses
+    "/promocoes/headset/s/",               # periféricos: headsets
+    "/promocoes/webcam/s/",                # periféricos: webcams
+    "/promocoes/ssd/s/",                   # armazenamento: SSDs
+    "/promocoes/memoria-ram/s/",           # memória RAM
+    "/promocoes/mesa-digitalizadora/s/",   # periféricos: mesas digitalizadoras (editores)
 ]
 
 # Whitelist completa (para quando todos os afiliados estiverem ativos)
@@ -134,6 +141,13 @@ CATEGORIAS_EMOJI = {
     "Placa-mãe": "🔧",
     "PC Gamer": "🎮",
     "Adaptadores e rede": "📡",
+    "Teclado": "⌨️",
+    "Mouse": "🖱️",
+    "Headset": "🎧",
+    "Webcam": "📷",
+    "SSD": "💾",
+    "Memória RAM": "🧩",
+    "Mesa digitalizadora": "🎨",
 }
 
 # Mapeia slugs de URL para nomes corretos de categoria
@@ -146,6 +160,13 @@ _SLUG_TO_CATEGORY = {
     "placa-mae": "Placa-mãe",
     "pc-gamer": "PC Gamer",
     "roteador-e-repetidor": "Adaptadores e rede",
+    "teclado": "Teclado",
+    "mouse": "Mouse",
+    "headset": "Headset",
+    "webcam": "Webcam",
+    "ssd": "SSD",
+    "memoria-ram": "Memória RAM",
+    "mesa-digitalizadora": "Mesa digitalizadora",
 }
 
 # Categoria de rede (adaptadores/roteadores): o Promobit não tem categoria só de
@@ -460,13 +481,16 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Desconto
-    disc = server_offer.get("offerDiscontPercentage")
+    # Desconto — SEMPRE recalcular a partir dos preços reais (original vs atual)
+    # para garantir precisão. O campo offerDiscontPercentage do Promobit pode estar
+    # desatualizado ou incorreto, então só é usado como último fallback.
     try:
-        if disc:
-            deal["discount_pct"] = float(disc)
-        elif deal.get("original_price") and deal.get("price") and deal["original_price"] > deal["price"]:
+        if deal.get("original_price") and deal.get("price") and deal["original_price"] > deal["price"]:
             deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
+        else:
+            disc = server_offer.get("offerDiscontPercentage")
+            if disc:
+                deal["discount_pct"] = float(disc)
     except (ValueError, TypeError):
         pass
 
@@ -1143,14 +1167,7 @@ async def deals_loop():
 @deals_loop.before_loop
 async def _before_deals_loop():
     await bot.wait_until_ready()
-    log.info("Bot de ofertas pronto. Executando primeiro ciclo imediatamente.")
-    # Executar primeiro ciclo imediatamente (sem esperar o intervalo de 30min)
-    agora = datetime.now(FUSO_HORARIO_BR)
-    if HORA_INICIO <= agora.hour < HORA_FIM:
-        try:
-            await _run_deals_cycle()
-        except Exception as e:
-            log.exception(f"Erro no primeiro ciclo de ofertas: {e}")
+    log.info("Bot de ofertas pronto. Primeiro ciclo será executado imediatamente pelo loop.")
 
 
 # =========================

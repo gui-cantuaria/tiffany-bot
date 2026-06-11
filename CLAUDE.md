@@ -70,7 +70,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 
 **offers.py** — Deals bot (~940 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
-- 8 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer, roteador-e-repetidor (rede/adaptadores)
+- 15 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer, roteador-e-repetidor (rede/adaptadores), teclado, mouse, headset, webcam, ssd, memoria-ram, mesa-digitalizadora
 - 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
 - Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20, requires at least one quality metric
 - Coupon extraction, tag display, store redirect URLs
