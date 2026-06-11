@@ -2424,9 +2424,9 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_file = dl_fp or ""
                     session.current_tmpdir = dl_tmpdir
                     session.current_duration = dl_duration
-                    # Atualizar display com título real do yt-dlp (apenas quando display é placeholder de URL)
-                    if info and info != "sem resultado para a busca" and display_name == "link recebido":
-                        display_name = info
+                    # Atualizar display com título real do yt-dlp (formata melhor que a query crua)
+                    if info and info != "sem resultado para a busca":
+                        display_name = _format_track_display(info)
                         session.current_song = display_name
                     # Aplicar seek de restauração (posição salva antes do restart)
                     if _restore_seek > 0 and dl_fp and dl_duration > 10:
@@ -3830,7 +3830,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not sess:
             return
         song, from_discovery = _pick_random_song(sess, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
-        display = re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip()
+        display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
         tag = " 🆕" if from_discovery else ""
 
         if _is_wavelink_player(vc):
