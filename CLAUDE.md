@@ -23,8 +23,11 @@ Requires `.env` with: `DISCORD_TOKEN`, `OPENROUTER_API_KEY`, `CANAL_NOTICIAS_ID`
 
 Optional env vars:
 - Voice/TTS: `VOICE_ENABLED` (default "1"), `TTS_ENABLED` (default "1"), `FFMPEG_PATH`, `OPUS_LIB_PATH`, `VOICE_CONNECT_TIMEOUT_SEC` (default 25), `DEBUG_STT`
-- Offers: `CANAL_OFERTAS_ID` (default 1512902840908124281), `ID_CARGO_OFERTAS`
-- Affiliate: `AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`
+- Voice reconnect: `VOICE_AUTO_REJOIN` (default "0" — bot NOT rejoins after restart, avoids entering alone)
+- STT: `STT_GEMINI_FALLBACK` (default "1" — enables Whisper+Gemini fallback chain), `STT_OPENROUTER_MODEL` (default `openai/whisper-large-v3`), `STT_CHAT_MODEL` (default `google/gemini-3.1-flash-lite`)
+- Offers: `CANAL_OFERTAS_ID` (default 1512902840908124281), `ID_CARGO_OFERTAS` (legado, 0=off), `ID_CARGO_OFERTAS_ULTRA` (default 1386386059390357575), `DESCONTO_ULTRA_OFERTA` (default 60%)
+- Lavalink: `LAVALINK_ENABLED` (default "0"), `LAVALINK_HOST` (default localhost), `LAVALINK_PORT` (default 2333), `LAVALINK_PASSWORD` (default tiffany_lavalink_2026)
+- Affiliate: `AMAZON_AFFILIATE_TAG`, `MERCADOLIVRE_AFFILIATE_ID`, `AWIN_PUBLISHER_ID`, `MAGALU_LOJA_SLUG`, `TERABYTE_AFFILIATE_ID`, `SHOPINFO_AFFILIATE_ID`, `SHOPINFO_PARAM_NAME`, `ALIEXPRESS_AFFILIATE_ID`, `SHOPEE_AFFILIATE_ID`, `LOMADEE_SOURCE_ID`, `LOMADEE_APP_TOKEN`
 
 ## Architecture
 
@@ -68,14 +71,17 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Inline dice rolls: `[d20+5 ataque]` detected in any message
 - Queue limit: 25 songs max
 
-**offers.py** — Deals bot (~940 lines). Handles:
+**offers.py** — Deals bot (~960 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
 - 15 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer, roteador-e-repetidor (rede/adaptadores), teclado, mouse, headset, webcam, ssd, memoria-ram, mesa-digitalizadora
-- 9 store whitelist: KaBuM, Terabyte, Magalu, Pichau, Amazon, Mercado Livre, ShopInfo, Shopee, AliExpress
-- Filters: 15-100% discount range, image required, stars >= 4.2, sales >= 20, requires at least one quality metric
+- **Active store whitelist** (affiliate configured): Terabyte/TerabyteShop, ShopInfo, Amazon, Mercado Livre, Shopee
+- Full whitelist (when all affiliates active): + KaBuM, Magalu, Pichau, AliExpress (commented out)
+- Filters: 15-100% discount, image required, stars >= 4.3, sales >= 50, at least one quality metric
+- `DESCONTO_SEM_METRICA = 25%` — accepts offers without stars/sales data if discount >= 25%
 - Coupon extraction, tag display, store redirect URLs
 - Affiliate link injection via `affiliate_config.py`
-- Posts to channel 1512902840908124281, mentions role 1386386059390357575
+- Posts to channel 1512902840908124281, mentions role via `ID_CARGO_OFERTAS_ULTRA`
+- **Role mention cap: first 3 offers per day only** (counter resets at midnight BR)
 - Role mention validation before pinging
 - First cycle runs immediately on startup (no 30min delay)
 
@@ -133,12 +139,12 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 ### Score Thresholds
 - General: >= 80 (NOTA_MIN_APROVACAO)
 - Games: >= 85 (NOTA_MIN_GAMES)
-- Urgent (role ping): >= 90 (NOTA_URGENTE)
+- Urgent (role ping): >= 90 (NOTA_URGENTE) — **max 3 pings per day** (`_daily_mention_news` counter, resets at midnight BR)
 
 ### Schedule
-- Hours: 8h-18h Sao Paulo time (America/Sao_Paulo, UTC-3)
-- Interval: every 45 minutes (elapsed-time based, ~13 cycles/day)
-- Pre-heating: 7:00 for RSS collection before 8:00
+- Hours: 8h-18h Sao Paulo time (UTC-3, `FUSO_HORARIO_BR`)
+- Interval: every 45 minutes (elapsed-time based, `INTERVALO_NOTICIAS_MIN=45`)
+- Pre-heating: entire 7h hour (`MINUTO_PRE_AQUECIMENTO=0`) — RSS collected before 8h window opens
 
 ### AI Budget per Cycle
 - **Text analysis** (`gerar_analise_ia`): max 3 calls (MAX_IA_CALLS_POR_CICLO)
@@ -181,24 +187,46 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 ## Offers Bot Rules
 
 ### Embed Layout
-- Title: `Fire emoji {product} — {discount}% OFF`
-- Prices: `R$ {original} -> R$ {current} (-{discount}%)`
-- Coupon: `🏷️ Cupom: **{code}**`
-- CTA: `Point right emoji **[COMPRAR COM DESCONTO]({url})**` (CAPSLOCK)
-- Tags: `🔖 {tag names}` (different emoji from coupon)
-- Footer: `Oferta verificada automaticamente`
+- Author: `Via {store} • Oferta {cat_emoji}` (category emoji from `CATEGORIAS_EMOJI`)
+- Title: `🔥 {product} — {discount}% OFF`
+- Description line 1: `~~R$ original~~ → **R$ current** (-X%)`
+- Description line 2: `Você economiza R$ X` (no emoji)
+- Details block (when available): `🏷️ Cupom: \`code\``, `💳 installments`, `⏰ Expira: date`, `⭐ N/5 (N avaliações)`, tags (plain text, no emoji)
+- CTA in description: `## [COMPRAR COM X% OFF](url)` (heading link, no emoji)
+- Button: `🛒 COMPRAR COM X% OFF` (Discord link button, always gray)
+- Footer: `Preço sujeito a alterações`
+- Role mention content (first 3/day): `<@&cargo_id>`
+- Thread: `🛒 {store}: {title[:70]}`
 
 ### Schedule
-- Hours: 8h-18h SP, 30min cycle, max 5 posts, 3min spacing
+- Hours: 8h-18h SP, 30min cycle (`SCAN_INTERVAL_MIN=30`), max 5 posts per cycle, 3min spacing
 - First cycle runs immediately on bot startup (no delay)
 
 ### Filters
 - Discount: 15-100% (rejects negatives and absurd values > 100%)
 - Image required
-- Stars >= 4.2, sales >= 20
-- Store must be in whitelist
-- Must have at least one quality metric (stars OR sales) — rejects offers with no data
+- **Stars >= 4.3, sales >= 50**
+- Store must be in active whitelist (Terabyte, ShopInfo, Amazon, Mercado Livre, Shopee)
+- Must have at least one quality metric (stars OR sales) — or discount >= 25% if no data at all (`DESCONTO_SEM_METRICA`)
 - **Rede/adaptadores** (`_is_rede`: categoria `roteador-e-repetidor` ou título com palavra-chave de adaptador): filtros próprios e mais rígidos — stars >= 4.5 AND sales >= 100 AND discount >= 40%, sem fallback "sem métrica" (exige dados reais do Promobit)
+
+### Role Mentions (Offers)
+- **Cap: first 3 offers per day** get `<@&ID_CARGO_OFERTAS_ULTRA>` mention
+- Daily counter: `_mention_count_ofertas` / `_mention_date_ofertas` (in-memory, resets at midnight BR)
+- Cargo ID: `ID_CARGO_OFERTAS_ULTRA` env var (default 1386386059390357575)
+- Old ultra-offer logic (ping only on disc >= 60%) replaced by daily cap
+
+### Affiliate Links (affiliate_config.py)
+| Store | Method | Env var |
+|---|---|---|
+| Amazon | `?tag=` param | `AMAZON_AFFILIATE_TAG` |
+| Mercado Livre | `?matt_word=` param | `MERCADOLIVRE_AFFILIATE_ID` |
+| KaBuM | Awin deeplink | `AWIN_PUBLISHER_ID` |
+| Terabyte | Lomadee deeplink > Awin > param | `LOMADEE_SOURCE_ID` / `AWIN_PUBLISHER_ID` |
+| Pichau | Awin deeplink | `AWIN_PUBLISHER_ID` |
+| ShopInfo | Lomadee deeplink > param | `LOMADEE_SOURCE_ID` / `SHOPINFO_AFFILIATE_ID` |
+| Shopee | `s.shopee.com.br/an_redir?origin_link=...&affiliate_id=` | `SHOPEE_AFFILIATE_ID` |
+| AliExpress | `?aff_fcid=` param | `ALIEXPRESS_AFFILIATE_ID` |
 
 ## Music Technical Details
 
@@ -223,10 +251,23 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 ### Voice Recognition Pipeline
 ```
 Discord voice packets -> discord-ext-voice-recv -> Opus decode
--> PCM buffer (per user, silence-gated, 2MB cap) -> WAV 48kHz mono
--> Google STT (16kHz, primary) / Vosk (16kHz, offline fallback)
+-> PCM buffer (per user, silence-gated, min 1s / max 10s rolling)
+-> normalize_audio() -> vad_filter() (drops silence frames)
+-> WAV 48kHz -> FFmpeg -> WAV 16kHz
+-> _transcribe_wav_bytes() -> _pick_best_stt_transcript()
 -> _parse_voice_command() -> speaker channel membership check -> action dispatch
 ```
+
+**STT priority chain** (all run, best transcript selected):
+1. **Whisper via OpenRouter** (`openai/whisper-large-v3`, env `STT_OPENROUTER_MODEL`) — primary
+2. **Gemini chat STT** (`google/gemini-3.1-flash-lite`, env `STT_CHAT_MODEL`) — runs if Whisper fails or no wake word detected
+3. **Google STT** (`speech_recognition.recognize_google`, free, pt-BR)
+4. **Vosk** (offline, `vosk-model-small-pt-0.3/`)
+
+`_pick_best_stt_transcript()`: prefers transcripts containing wake word "Tiffany" (fuzzy-normalized), then longest.
+`_is_stt_bleed()`: filters YouTube/video "subscribe" phrases that leak via mic.
+`STT_TAIL_SEC=6`: if audio > 6s, sends only last 6s to STT.
+Enabled by `STT_GEMINI_FALLBACK=1` (default). Disable with `STT_GEMINI_FALLBACK=0` for Google+Vosk only.
 
 ### AI Chat (`t$c`)
 - Model: google/gemini-3.1-flash-lite (via OpenRouter)
@@ -256,6 +297,13 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - ~5050 international songs in `random_songs.py` (expand via `scripts/merge_all_song_sources.py`)
 - Categories: Most Streamed, Pop, Rap/Hip-Hop, Rock, EDM, Indie/Alt, 80s-90s, R&B, Latin, K-Pop, Afrobeats, Country, Classic Anthems
 - Avoids repeating last played random song
+
+### Lavalink / wavelink
+- Code fully integrated (`wavelink>=3.4.0`, `import wavelink` with graceful fallback if not installed)
+- **Disabled by default** (`LAVALINK_ENABLED=0`) — VPS uses yt-dlp mode to keep `VoiceRecvClient` (voice listening)
+- When enabled: connects to `LAVALINK_HOST:LAVALINK_PORT` with `LAVALINK_PASSWORD` on `on_ready`
+- Docker infra ready: `Dockerfile`, `docker-compose.yml`, `lavalink/application.yml` (password: `tiffany_lavalink_2026`)
+- `VOICE_AUTO_REJOIN=0` (default) — bot does NOT auto-rejoin voice after restart to avoid entering channels alone
 
 ### Known Issues
 - Opus decoder may throw `OpusError: corrupted stream` — monkey-patched to return silence frames, filtered in sink
@@ -303,7 +351,8 @@ sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 - **AI cost control:** Budget limits per cycle (3 text + 2 vision), ~13 cycles/day (every 45 min). Model history: gemini-2.5-flash-preview (discontinued) -> gemini-3.5-flash (too expensive, $5/day) -> gemini-3.1-flash-lite (current, cheap)
 - **Rate limiting:** Sequential AI calls, cooldowns between Discord posts
 - **Images:** Always download and attach — never post news without image. Validate integrity (Content-Length, EOF markers).
-- **Pings:** Only mention notification role for nota >= 90 (urgent news). Always validate role exists before mentioning.
+- **Pings (news):** Mention role only if nota >= 90 AND daily cap not reached (max 3/day). Always validate role exists.
+- **Pings (offers):** Mention role for first 3 offers of the day only. No ultra-offer distinction anymore.
 - **Embeds:** All music/voice messages use pink embeds (TIFFANY_PINK = 0xFF69B4) via `_embed()` helper
 - **Input validation:** Truncate user inputs (query 500 chars, playlist name 50 chars), strip whitespace, validate before processing
 - **Error handling:** `on_message` wrapped in try/except, `_after()` checks `loop.is_closed()`, `_notify` truncates to 4000 chars

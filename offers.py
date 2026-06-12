@@ -89,6 +89,7 @@ LOJAS_WHITELIST = {
     "shopinfo",
     "amazon", "amazon.com.br",
     "mercado livre", "mercadolivre",
+    "shopee",
 }
 
 # =========================
@@ -117,6 +118,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="t$", intents=intents)
 http_session: Optional[aiohttp.ClientSession] = None
+# Contador diário de menções ao cargo (máx 3 por dia)
+_mention_count_ofertas: int = 0
+_mention_date_ofertas: str = ""
 
 # =========================
 # CORES E EMOJIS
@@ -801,7 +805,7 @@ def _format_description(deal: dict) -> str:
         economia = deal["original_price"] - deal["price"]
         if economia > 0:
             eco = f"R$ {economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            lines.append(f"💰 Você economiza {eco}")
+            lines.append(f"Você economiza {eco}")
 
     # 3) Detalhes — só o que existe, num bloco separado por linha em branco
     detalhes = []
@@ -817,7 +821,7 @@ def _format_description(deal: dict) -> str:
     tags = deal.get("tags") or []
     if tags:
         tags_str = " • ".join(t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:3])
-        detalhes.append(f"🔖 {tags_str}")
+        detalhes.append(tags_str)
 
     if detalhes:
         lines.append("")
@@ -914,7 +918,7 @@ def _build_embed(deal: dict) -> discord.Embed:
     # Reforça o botão (que o Discord só renderiza em cinza) com alta visibilidade.
     if buy_url.startswith("http"):
         cta_txt = f"COMPRAR COM {discount:.0f}% OFF" if discount else "COMPRAR COM DESCONTO"
-        desc += f"\n\n## 🛒 [{cta_txt}]({buy_url})"
+        desc += f"\n\n## [{cta_txt}]({buy_url})"
 
     if len(desc) > 4096:
         desc = desc[:4093] + "..."
@@ -951,7 +955,7 @@ def _build_embed(deal: dict) -> discord.Embed:
         )
 
     # Footer sutil — preço pode mudar a qualquer momento
-    embed.set_footer(text="⚡ Preço sujeito a alterações")
+    embed.set_footer(text="Preço sujeito a alterações")
 
     return embed
 
@@ -1105,15 +1109,18 @@ async def _run_deals_cycle_inner() -> None:
                 embed.set_image(url=deal["image"])
 
         try:
+            global _mention_count_ofertas, _mention_date_ofertas
             content = None
             guild = getattr(channel, "guild", None)
-            disc = deal.get("discount_pct") or 0
-            # Ultra oferta (desconto alto): marca o cargo com destaque
-            if disc >= DESCONTO_ULTRA_OFERTA and ID_CARGO_ULTRA and guild and guild.get_role(ID_CARGO_ULTRA):
-                content = f"🔥 **ULTRA OFERTA — {int(disc)}% OFF!** <@&{ID_CARGO_ULTRA}>"
-            # Legado: marca em toda oferta, se configurado via ID_CARGO_OFERTAS
-            elif ID_CARGO_OFERTAS and guild and guild.get_role(ID_CARGO_OFERTAS):
-                content = f"<@&{ID_CARGO_OFERTAS}>"
+            # Menciona o cargo apenas nas 3 primeiras ofertas do dia
+            hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+            if hoje_br != _mention_date_ofertas:
+                _mention_date_ofertas = hoje_br
+                _mention_count_ofertas = 0
+            cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
+            if cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
+                content = f"<@&{cargo_id}>"
+                _mention_count_ofertas += 1
 
             view = _build_view(deal)
             if view is not None:

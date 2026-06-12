@@ -1528,10 +1528,15 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         texto_rodape += " • Fonte em inglês"
     embed.set_footer(text=texto_rodape)
 
+    global _daily_mention_news, _daily_mention_news_date
+    # Menciona cargo só para notícias urgentes (nota >= 90) e máx 3 por dia
+    hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+    if hoje_br != _daily_mention_news_date:
+        _daily_mention_news_date = hoje_br
+        _daily_mention_news = 0
     try:
-        # Só menciona o cargo se ele existe e a nota é urgente
         mention = None
-        if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR:
+        if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR and _daily_mention_news < 3:
             guild = getattr(channel, "guild", None)
             if guild and guild.get_role(ID_CARGO_PARA_MARCAR):
                 mention = f"<@&{ID_CARGO_PARA_MARCAR}>"
@@ -1553,6 +1558,8 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 
         historico_set(history, noticia["link_norm"], noticia["dedupe"], "posted")
         metric_inc(metrics, "posts_hoje")
+        if mention:
+            _daily_mention_news += 1
         log.info(f"  📨 Postado: {noticia['titulo'][:60]}")
         return True
     except Exception as e:
@@ -1566,6 +1573,9 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
 _last_run_ts: Optional[float] = None  # epoch do último ciclo executado
+# Contador diário de menções ao cargo de notícias (máx 3 por dia)
+_daily_mention_news: int = 0
+_daily_mention_news_date: str = ""
 
 def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
     """Permite coleta no horário comercial e no pré-aquecimento antes das 8h."""
