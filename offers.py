@@ -8,6 +8,7 @@ import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
 import hashlib
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urljoin, urlparse, quote_plus
@@ -121,6 +122,9 @@ http_session: Optional[aiohttp.ClientSession] = None
 # Contador diário de menções ao cargo (máx 3 por dia)
 _mention_count_ofertas: int = 0
 _mention_date_ofertas: str = ""
+# Dedup intraday: evita o mesmo produto aparecer várias vezes no dia com preços diferentes
+_posted_title_keys: set = set()
+_posted_title_keys_date: str = ""
 
 # =========================
 # CORES E EMOJIS
@@ -247,6 +251,38 @@ def _clean_history(history: dict) -> None:
     if to_remove:
         log.info(f"Limpeza: {len(to_remove)} ofertas antigas removidas do histórico.")
         _save_history(history)
+
+
+# Palavras genéricas de categoria que não identificam o produto específico
+_TITLE_GENERIC = frozenset({
+    "notebook", "teclado", "mouse", "headset", "monitor", "processador",
+    "memoria", "placa", "ssd", "webcam", "laptop", "desktop", "gamer",
+    "gaming", "mecanico", "sem", "fio", "com", "para", "rgb", "led",
+    "preto", "branco", "prata", "cinza", "compacto", "gamer",
+})
+
+
+def _title_key(title: str) -> str:
+    """Gera chave de produto para dedup intraday.
+    Remove palavras genéricas de categoria, mantém marca + modelo.
+    Ex: 'Samsung Galaxy Book4 i5 512GB...' → 'samsung galaxy book4'"""
+    t = unicodedata.normalize("NFD", title.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = re.sub(r"[^\w\s]", " ", t)
+    words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
+    return " ".join(words[:3])
+
+
+def _is_valid_coupon(code: str) -> bool:
+    """Retorna True se o texto parece um código de cupom real.
+    Cupons reais: alfanumérico, sem espaços, 3-25 caracteres.
+    Rejeita textos descritivos como '200 off abaixo do preço'."""
+    if not code:
+        return False
+    code = code.strip()
+    if len(code) < 3 or len(code) > 25:
+        return False
+    return bool(re.match(r'^[A-Za-z0-9\-_]+$', code))
 
 
 # =========================
@@ -507,7 +543,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
             coupon = coupon[0] if coupon else ""
             if isinstance(coupon, dict):
                 coupon = coupon.get("code") or coupon.get("name") or ""
-        if isinstance(coupon, str) and coupon.strip():
+        if isinstance(coupon, str) and _is_valid_coupon(coupon):
             deal["coupon"] = coupon.strip()
 
     # Imagem (melhor resolução)
@@ -789,39 +825,59 @@ def _format_price_line(deal: dict) -> str:
 
 
 def _format_description(deal: dict) -> str:
-    """Monta a descrição do embed — enxuta e fácil de bater o olho.
-
-    O nome do produto NÃO é repetido aqui: já aparece no título do embed.
-    Mostramos só o essencial: preço, economia e (quando existir) cupom,
-    parcelamento, validade, avaliação e tags.
-    """
+    """Monta a descrição do embed focada no que o comprador precisa saber."""
     lines = []
 
     # 1) Preço em destaque
     lines.append(_format_price_line(deal))
 
-    # 2) Economia em R$ — impacto imediato pro usuário
+    # 2) Economia — valor em negrito reforça o benefício
     if deal.get("original_price") and deal.get("price"):
         economia = deal["original_price"] - deal["price"]
         if economia > 0:
             eco = f"R$ {economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            lines.append(f"Você economiza {eco}")
+            lines.append(f"Economize **{eco}** nessa compra")
 
-    # 3) Detalhes — só o que existe, num bloco separado por linha em branco
+    # 3) Tudo que o comprador precisa antes de clicar
     detalhes = []
+
+    # Cupom (só códigos reais, não textos descritivos)
     if deal.get("coupon"):
-        # Formato de código = toque-pra-copiar no celular
         detalhes.append(f"🏷️ Cupom: `{deal['coupon']}`")
+
+    # Parcelamento — verbo + condição deixa mais claro
     if deal.get("installments"):
-        detalhes.append(f"💳 {deal['installments']}")
+        detalhes.append(f"💳 Parcele em {deal['installments']}")
+
+    # Validade da oferta
     if deal.get("expiration"):
-        detalhes.append(f"⏰ Expira: {deal['expiration']}")
-    if deal.get("stars") and deal.get("sales_count"):
-        detalhes.append(f"⭐ {deal['stars']}/5 ({deal['sales_count']} avaliações)")
+        detalhes.append(f"⏰ Oferta válida até {deal['expiration']}")
+
+    # Tags: destaca Frete Grátis (decisivo pro comprador), descarta "Parcelado"
+    # (já mostrado acima se disponível), exibe o resto como contexto
     tags = deal.get("tags") or []
-    if tags:
-        tags_str = " • ".join(t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:3])
-        detalhes.append(tags_str)
+    tag_names = [
+        (t.get("name", "") if isinstance(t, dict) else str(t)).strip()
+        for t in tags
+    ]
+    tag_names = [n for n in tag_names if n]
+    has_frete_gratis = any("frete" in n.lower() and "grát" in n.lower() for n in tag_names)
+    if has_frete_gratis:
+        detalhes.append("✅ Frete grátis")
+    # Demais tags relevantes (exceto "Parcelado" já tratado e "Frete Grátis" já tratado)
+    outros = [n for n in tag_names if "frete" not in n.lower() and "parcelado" not in n.lower()]
+    if outros:
+        detalhes.append(" • ".join(outros[:2]))
+
+    # Avaliação — mostra nota + número de pessoas, linguagem natural
+    stars = deal.get("stars")
+    sales = deal.get("sales_count")
+    if stars and sales:
+        stars_fmt = f"{stars:.1f}".replace(".", ",")
+        detalhes.append(f"⭐ {stars_fmt} de 5 · {sales} compradores avaliaram")
+    elif stars:
+        stars_fmt = f"{stars:.1f}".replace(".", ",")
+        detalhes.append(f"⭐ Nota {stars_fmt} de 5")
 
     if detalhes:
         lines.append("")
@@ -1017,10 +1073,21 @@ async def _run_deals_cycle_inner() -> None:
 
     log.info(f"Total bruto: {len(all_deals)} ofertas coletadas")
 
-    # Dedup e filtro
+    # Resetar dedup intraday se virou o dia
+    global _posted_title_keys, _posted_title_keys_date
+    hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+    if hoje_br != _posted_title_keys_date:
+        _posted_title_keys = set()
+        _posted_title_keys_date = hoje_br
+
+    # Dedup por URL (histórico 7 dias) + intraday por produto (mesmo produto, preço diferente)
     candidates = []
     for deal in all_deals:
         if _is_duplicate(history, deal["url"]):
+            continue
+        key = _title_key(deal["title"])
+        if key and key in _posted_title_keys:
+            log.debug(f"  Dedup intraday (produto similar já postado): {deal['title'][:60]}")
             continue
         candidates.append(deal)
 
@@ -1130,6 +1197,7 @@ async def _run_deals_cycle_inner() -> None:
 
             # Marcar como postado DEPOIS de enviar com sucesso
             _mark_posted(history, deal["url"], deal["title"])
+            _posted_title_keys.add(_title_key(deal["title"]))
 
             try:
                 thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:70]}"[:100]
