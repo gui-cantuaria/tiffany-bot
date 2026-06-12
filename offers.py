@@ -614,26 +614,42 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
 
 
 _TITLE_SPECS_POR_CATEGORIA = {
-    "Memória RAM":        "marca, tipo (DDR4/DDR5), capacidade (ex: 16GB), frequência (ex: 3200MHz), latência (ex: CL16), kit (ex: 2x8GB)",
-    "SSD":                "marca, capacidade (ex: 512GB), interface (SATA / NVMe M.2 / PCIe Gen4), velocidade leitura/escrita se disponível",
-    "Processador":        "marca, modelo completo (ex: Ryzen 5 5600X), socket (AM4/AM5/LGA1700), núcleos/threads se disponível, frequência boost",
-    "Placa-mãe":          "marca, modelo, socket compatível, chipset (ex: B550/Z790), form factor (ATX/mATX/ITX)",
-    "Monitor":            "marca, modelo, tamanho (ex: 27''), resolução (FHD/QHD/4K), tipo de painel (IPS/VA/TN), taxa de atualização (ex: 144Hz), tempo de resposta (ex: 1ms), curvado ou plano",
-    "Teclado":            "marca, modelo, tipo (mecânico/membrana/silicioso), layout (60%/TKL/ABNT2/US), switch se mecânico (ex: Switch Azul/Red), conectividade (USB/Bluetooth/sem fio), RGB",
-    "Mouse":              "marca, modelo, DPI máximo, conectividade (USB/sem fio/Bluetooth), número de botões programáveis se relevante",
-    "Headset":            "marca, modelo, conectividade (USB/P2 3.5mm/sem fio/Bluetooth), tipo (over-ear/in-ear), drivers (ex: 50mm), microfone removível ou integrado",
-    "Webcam":             "marca, modelo, resolução (ex: 1080p/4K), FPS (ex: 30fps/60fps), autofoco, compatibilidade (USB plug-and-play)",
-    "Notebook":           "marca, modelo, CPU (ex: Core i5-13ª gen / Ryzen 7), RAM, armazenamento (ex: 512GB SSD NVMe), tamanho de tela + tipo de painel (ex: 15.6'' IPS FHD), sistema operacional, GPU discreta se houver",
-    "PC Gamer":           "CPU, GPU (ex: RTX 4060), RAM, armazenamento, sistema operacional",
-    "Mesa digitalizadora":"marca, modelo, tamanho ativo (ex: A5/A4), níveis de pressão da caneta (ex: 8192), compatibilidade (Windows/Mac/Android)",
-    "Adaptadores e rede": "marca, modelo, padrão Wi-Fi (ex: Wi-Fi 6/AX3000), bandas (dual-band/tri-band), velocidade (ex: 3000Mbps), tipo (roteador/repetidor/adaptador USB)",
+    "Memória RAM":
+        "marca + linha (ex: Kingston Fury Beast) | tipo (DDR4/DDR5) • capacidade total (ex: 16GB) • kit (ex: 2x8GB) • frequência (ex: 3200MHz) • latência (ex: CL16) • form factor (DIMM/SO-DIMM)",
+    "SSD":
+        "marca + modelo | capacidade (ex: 512GB) • interface (SATA / M.2 NVMe / PCIe Gen4) • velocidade leitura (ex: 3500MB/s) • velocidade escrita se disponível",
+    "Processador":
+        "marca + modelo completo (ex: Ryzen 5 5600X) | socket (AM4/AM5/LGA1700) • núcleos/threads (ex: 6C/12T) • freq. base/boost (ex: 3.7/4.6GHz) • TDP se disponível",
+    "Placa-mãe":
+        "marca + modelo | socket (ex: AM5/LGA1700) • chipset (ex: B650/Z790) • form factor (ATX/mATX/ITX) • slots RAM • M.2 slots se disponível",
+    "Monitor":
+        "marca + modelo | tamanho (ex: 27'') • resolução (ex: Full HD 1920×1080 / QHD / 4K) • painel (IPS/VA/TN) • taxa (ex: 144Hz) • resposta (ex: 1ms) • curvado/plano • portas (ex: HDMI+DP) • sync (FreeSync/G-Sync) se disponível",
+    "Teclado":
+        "marca + modelo | tipo (Mecânico/Membrana/Silicioso) • layout (60%/TKL/100%/ABNT2/US) • switch (ex: Switch Red/Azul/Brown) se mecânico • conectividade (USB/Sem fio/Bluetooth) • retroiluminação (RGB/Branco/Sem)",
+    "Mouse":
+        "marca + modelo | DPI máximo (ex: 25600 DPI) • sensor (óptico/laser) • conectividade (USB/Sem fio/Bluetooth) • botões programáveis • peso se disponível",
+    "Headset":
+        "marca + modelo | conectividade (USB/P2 3.5mm/Sem fio/Bluetooth) • tipo (Over-ear/On-ear/In-ear) • drivers (ex: 50mm) • microfone (removível/integrado/sem) • impedância se disponível",
+    "Webcam":
+        "marca + modelo | resolução (ex: 1080p/4K) • FPS (ex: 30fps/60fps) • autofoco (sim/não) • campo visual (ex: 90°) • conexão (USB-A/USB-C)",
+    "Notebook":
+        "marca + modelo | CPU (ex: Core i5-1335U / Ryzen 7 5825U) • RAM (ex: 16GB DDR5) • armazenamento (ex: 512GB SSD NVMe) • tela (ex: 15.6'' IPS FHD 144Hz) • GPU (ex: RTX 4060 / integrada) • SO (Win 11/Linux) • peso se disponível",
+    "PC Gamer":
+        "CPU (ex: Ryzen 5 5600) • GPU (ex: RTX 4060) • RAM (ex: 16GB DDR4) • armazenamento (ex: 512GB NVMe) • SO (Win 11/Linux)",
+    "Mesa digitalizadora":
+        "marca + modelo | área ativa (ex: A5 152×95mm) • pressão da caneta (ex: 8192 níveis) • resolução (LPI) • conectividade (USB/Bluetooth) • compatibilidade (Windows/Mac/Android)",
+    "Adaptadores e rede":
+        "marca + modelo | tipo (Roteador/Repetidor/Adaptador USB) • padrão (ex: Wi-Fi 6 AX3000) • bandas (Dual-band/Tri-band) • velocidade (ex: 2400+600Mbps) • portas (ex: 4x Gigabit)",
 }
 
-_TITLE_SPECS_PADRAO = "marca, modelo, specs técnicas mais relevantes para quem vai comprar"
+_TITLE_SPECS_PADRAO = (
+    "marca + modelo | specs técnicas principais separadas por • "
+    "(capacidade, velocidade, conectividade, dimensões — o que for relevante)"
+)
 
 
 async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: str) -> str:
-    """Reescreve o título do produto de forma descritiva para o comprador.
+    """Reescreve o título com specs técnicas no formato 'Marca Modelo | spec • spec • spec'.
     Só aciona para títulos longos (>70 chars). Custo: ~80 tokens/chamada."""
     if len(title) <= 70:
         return title
@@ -645,11 +661,18 @@ async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: 
     prompt = (
         f"Produto: {title}\n"
         f"Categoria: {category}\n\n"
-        "Reescreva como título de oferta em português (máximo 90 caracteres).\n"
-        "Formato: Marca Modelo — spec1 / spec2 / spec3\n"
-        f"Para esta categoria, inclua obrigatoriamente: {specs_guia}.\n"
-        "Use apenas specs presentes no título original. Linguagem direta, sem códigos internos de modelo.\n"
-        "Responda APENAS com o título, sem aspas nem explicações."
+        "Reescreva como título técnico de oferta em português (máximo 120 caracteres).\n"
+        "Formato obrigatório: Marca Modelo seguido das specs separadas APENAS por espaço.\n"
+        "Exemplo monitor: Samsung Odyssey G5 27 QHD 2560x1440 165Hz 1ms VA HDMI DisplayPort FreeSync\n"
+        "Exemplo RAM: Kingston Fury Beast DDR4 16GB 2x8GB 3200MHz CL16 DIMM\n"
+        "Exemplo notebook: ASUS Vivobook S14 Core Ultra 7 16GB DDR5 512GB NVMe 14 IPS FHD Linux\n"
+        f"Specs a incluir para esta categoria: {specs_guia}\n"
+        "Regras:\n"
+        "- Use APENAS specs presentes no título original\n"
+        "- Sem pontos, vírgulas, barras, traços ou qualquer símbolo separador — apenas espaços\n"
+        "- Sem descrições, adjetivos ou frases (ex: sem 'ideal para', 'excelente', 'perfeito')\n"
+        "- Mantenha unidades técnicas coladas ao valor (ex: 512GB 3200MHz 144Hz 1ms)\n"
+        "- Responda APENAS com o título, sem aspas nem explicações"
     )
     try:
         async with session.post(
