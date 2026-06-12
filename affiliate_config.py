@@ -122,10 +122,10 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if "aliexpress" in domain and ALIEXPRESS_ID:
         return _add_param(real_url, "aff_fcid", ALIEXPRESS_ID)
 
-    # --- Shopee (redirect com affiliate_id) ---
+    # --- Shopee (redirect com aff_id) ---
     if "shopee" in domain and SHOPEE_ID:
         from urllib.parse import quote
-        return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&affiliate_id={SHOPEE_ID}"
+        return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&aff_id={SHOPEE_ID}"
 
     # Sem afiliado configurado para essa loja
     return real_url
