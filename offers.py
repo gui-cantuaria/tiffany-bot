@@ -607,7 +607,51 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     if isinstance(alias, str) and alias.startswith("http"):
         await _resolve_product_url(session, deal, alias)
 
+    # Título limpo orientado ao comprador — remove dump de specs técnicas
+    deal["title"] = await _ai_clean_title(session, deal["title"], deal.get("category", ""))
+
     return deal
+
+
+async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: str) -> str:
+    """Reescreve o título do produto de forma descritiva para o comprador.
+    Só aciona para títulos longos (>70 chars). Custo: ~80 tokens/chamada."""
+    if len(title) <= 70:
+        return title
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return title
+    prompt = (
+        f"Produto: {title}\n"
+        f"Categoria: {category}\n\n"
+        "Reescreva como título de oferta em português (máximo 90 caracteres).\n"
+        "Formato: Marca Modelo — spec1 / spec2 / spec3\n"
+        "Inclua as specs que mais importam ao comprador: CPU, RAM, armazenamento, "
+        "tamanho de tela, sistema operacional, Hz, tipo de painel, ou o equivalente "
+        "para a categoria. Linguagem direta, sem siglas desnecessárias.\n"
+        "Responda APENAS com o título, sem aspas nem explicações."
+    )
+    try:
+        async with session.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "google/gemini-3.1-flash-lite",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 60,
+                "temperature": 0.1,
+            },
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                cleaned = data["choices"][0]["message"]["content"].strip().strip('"').strip("'")
+                if 10 <= len(cleaned) <= 120:
+                    log.debug(f"Título AI: {title[:50]}... → {cleaned}")
+                    return cleaned
+    except Exception as e:
+        log.debug(f"AI title cleanup falhou ({e}), mantendo original")
+    return title
 
 
 # Domínios de loja reconhecidos (para validar se um link aponta para a loja real)
