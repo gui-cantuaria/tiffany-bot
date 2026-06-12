@@ -613,6 +613,25 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     return deal
 
 
+_TITLE_SPECS_POR_CATEGORIA = {
+    "Memória RAM":        "marca, tipo (DDR4/DDR5), capacidade (ex: 16GB), frequência (ex: 3200MHz), latência (ex: CL16), kit (ex: 2x8GB)",
+    "SSD":                "marca, capacidade (ex: 512GB), interface (SATA / NVMe M.2 / PCIe Gen4), velocidade leitura/escrita se disponível",
+    "Processador":        "marca, modelo completo (ex: Ryzen 5 5600X), socket (AM4/AM5/LGA1700), núcleos/threads se disponível, frequência boost",
+    "Placa-mãe":          "marca, modelo, socket compatível, chipset (ex: B550/Z790), form factor (ATX/mATX/ITX)",
+    "Monitor":            "marca, modelo, tamanho (ex: 27''), resolução (FHD/QHD/4K), tipo de painel (IPS/VA/TN), taxa de atualização (ex: 144Hz), tempo de resposta (ex: 1ms), curvado ou plano",
+    "Teclado":            "marca, modelo, tipo (mecânico/membrana/silicioso), layout (60%/TKL/ABNT2/US), switch se mecânico (ex: Switch Azul/Red), conectividade (USB/Bluetooth/sem fio), RGB",
+    "Mouse":              "marca, modelo, DPI máximo, conectividade (USB/sem fio/Bluetooth), número de botões programáveis se relevante",
+    "Headset":            "marca, modelo, conectividade (USB/P2 3.5mm/sem fio/Bluetooth), tipo (over-ear/in-ear), drivers (ex: 50mm), microfone removível ou integrado",
+    "Webcam":             "marca, modelo, resolução (ex: 1080p/4K), FPS (ex: 30fps/60fps), autofoco, compatibilidade (USB plug-and-play)",
+    "Notebook":           "marca, modelo, CPU (ex: Core i5-13ª gen / Ryzen 7), RAM, armazenamento (ex: 512GB SSD NVMe), tamanho de tela + tipo de painel (ex: 15.6'' IPS FHD), sistema operacional, GPU discreta se houver",
+    "PC Gamer":           "CPU, GPU (ex: RTX 4060), RAM, armazenamento, sistema operacional",
+    "Mesa digitalizadora":"marca, modelo, tamanho ativo (ex: A5/A4), níveis de pressão da caneta (ex: 8192), compatibilidade (Windows/Mac/Android)",
+    "Adaptadores e rede": "marca, modelo, padrão Wi-Fi (ex: Wi-Fi 6/AX3000), bandas (dual-band/tri-band), velocidade (ex: 3000Mbps), tipo (roteador/repetidor/adaptador USB)",
+}
+
+_TITLE_SPECS_PADRAO = "marca, modelo, specs técnicas mais relevantes para quem vai comprar"
+
+
 async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: str) -> str:
     """Reescreve o título do produto de forma descritiva para o comprador.
     Só aciona para títulos longos (>70 chars). Custo: ~80 tokens/chamada."""
@@ -621,14 +640,15 @@ async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: 
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         return title
+
+    specs_guia = _TITLE_SPECS_POR_CATEGORIA.get(category, _TITLE_SPECS_PADRAO)
     prompt = (
         f"Produto: {title}\n"
         f"Categoria: {category}\n\n"
         "Reescreva como título de oferta em português (máximo 90 caracteres).\n"
         "Formato: Marca Modelo — spec1 / spec2 / spec3\n"
-        "Inclua as specs que mais importam ao comprador: CPU, RAM, armazenamento, "
-        "tamanho de tela, sistema operacional, Hz, tipo de painel, ou o equivalente "
-        "para a categoria. Linguagem direta, sem siglas desnecessárias.\n"
+        f"Para esta categoria, inclua obrigatoriamente: {specs_guia}.\n"
+        "Use apenas specs presentes no título original. Linguagem direta, sem códigos internos de modelo.\n"
         "Responda APENAS com o título, sem aspas nem explicações."
     )
     try:
