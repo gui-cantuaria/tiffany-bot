@@ -147,12 +147,9 @@ FONTES_RSS = {
     "TudoCelular": "https://www.tudocelular.com/rss/",
     "Tecnoblog": "https://tecnoblog.net/feed/",
     "Canaltech": "https://canaltech.com.br/rss/",
-    "TechTudo": "https://rss.techtudo.com.br/rss2.xml",
     "Olhar Digital": "https://olhardigital.com.br/rss/",
     "G1 Tecnologia": "https://g1.globo.com/dynamo/tecnologia/rss2.xml",
-    "Giz Brasil": "https://gizmodo.uol.com.br/feed/",
     "Convergência Digital": "https://convergenciadigital.com.br/feed/",
-    "TecMundo": "https://www.tecmundo.com.br/rss",
     "MacMagazine": "https://macmagazine.com.br/feed/",
     "Meio Bit": "https://meiobit.com/feed/",
     # EN — Geral
@@ -166,7 +163,6 @@ FONTES_RSS = {
     "ZDNet": "https://www.zdnet.com/news/rss.xml",
     "The Register": "https://www.theregister.com/headlines.atom",
     "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
-    "Axios Tech": "https://api.axios.com/feed/technology",
     "IEEE Spectrum": "https://spectrum.ieee.org/rss",
     # EN — Segurança
     "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
