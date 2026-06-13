@@ -692,6 +692,8 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
 _TITLE_SPECS_POR_CATEGORIA = {
     "Memória RAM":
         "marca + linha (ex: Kingston Fury Beast) | tipo (DDR4/DDR5) • capacidade total (ex: 16GB) • kit (ex: 2x8GB) • frequência (ex: 3200MHz) • latência (ex: CL16) • form factor (DIMM/SO-DIMM)",
+    "Placa de Vídeo":
+        "marca + linha + modelo completo (ex: NVIDIA GeForce RTX 4070 Super / AMD Radeon RX 7800 XT) | VRAM (ex: 12GB GDDR6X) • clock boost (ex: 2505MHz) • TDP (ex: 200W) • tamanho (ex: Dual/Triple fan) • versão OC se houver",
     "SSD":
         "marca + modelo | capacidade (ex: 512GB) • interface (SATA / M.2 NVMe / PCIe Gen4) • velocidade leitura (ex: 3500MB/s) • velocidade escrita se disponível",
     "Processador":
@@ -1123,6 +1125,72 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         return None
 
 
+PRICE_MONITORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_monitors.json")
+
+
+def _load_price_monitors() -> list:
+    try:
+        with open(PRICE_MONITORS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _monitor_matches(keyword: str, title: str) -> bool:
+    """True se todas as palavras do alerta estão no título (case-insensitive)."""
+    kw_words = keyword.lower().split()
+    title_l = title.lower()
+    return all(w in title_l for w in kw_words)
+
+
+async def _notify_price_alerts(deal: dict, msg) -> None:
+    """Envia DM para usuários que têm alerta de preço matching com esta oferta."""
+    monitors = _load_price_monitors()
+    if not monitors:
+        return
+    title = deal.get("title", "")
+    disc = deal.get("discount_pct", 0)
+    store = deal.get("store", "")
+    buy_url = _buy_url(deal)
+    notified: set[int] = set()
+
+    for m in monitors:
+        user_id = m.get("user_id")
+        keyword = m.get("keyword", "")
+        if not user_id or not keyword:
+            continue
+        if user_id in notified:
+            continue
+        if not _monitor_matches(keyword, title):
+            continue
+        try:
+            user = await bot.fetch_user(user_id)
+            if not user:
+                continue
+            price_str = ""
+            if deal.get("price"):
+                price_str = f"R$ {deal['price']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            desc = f"🔔 **Alerta:** `{keyword}`\n\n**{title[:120]}**\n"
+            if price_str:
+                desc += f"💰 {price_str}"
+                if disc:
+                    desc += f" (-{disc:.0f}%)"
+                desc += "\n"
+            if store:
+                desc += f"🏪 {store}\n"
+            if buy_url:
+                desc += f"\n[Ver oferta]({buy_url})"
+            elif msg.jump_url:
+                desc += f"\n[Ver no Discord]({msg.jump_url})"
+            em = discord.Embed(description=desc, color=0xFF4500)
+            em.set_footer(text="Use t$alerta list para gerenciar seus alertas")
+            await user.send(embed=em)
+            notified.add(user_id)
+            log.info(f"  🔔 DM de alerta enviada para user {user_id} (keyword: {keyword})")
+        except Exception as e:
+            log.debug(f"  Falha ao enviar DM de alerta para {user_id}: {e}")
+
+
 def _store_destination(deal: dict) -> Optional[str]:
     """Melhor destino DIRETO na loja (sem afiliado ainda):
     1) link de produto resolvido do Promobit; 2) busca na loja pelo nome."""
@@ -1421,6 +1489,9 @@ async def _run_deals_cycle_inner() -> None:
             # Marcar como postado DEPOIS de enviar com sucesso
             _mark_posted(history, deal["url"], deal["title"])
             _posted_title_keys.add(_title_key(deal["title"]))
+
+            # Notificar usuários com alerta de preço matching
+            await _notify_price_alerts(deal, msg)
 
             try:
                 thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:70]}"[:100]

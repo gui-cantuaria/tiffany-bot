@@ -426,6 +426,10 @@ _GLOBAL_RL_WINDOW = 60    # janela em segundos
 _GLOBAL_RL_MAX = 15       # máximo de chamadas na janela
 _global_ai_calls: collections.deque = collections.deque()  # timestamps das chamadas recentes
 
+# --- Rate limit por servidor: 5 chamadas/min por servidor (independente do global) ---
+_SERVER_RL_MAX = 5
+_server_ai_calls: dict[int, collections.deque] = {}
+
 
 async def _ai_interpret_song(query: str) -> Optional[str]:
     """Usa IA para corrigir/interpretar nome de música escrito errado. Retorna query corrigida ou None."""
@@ -469,12 +473,25 @@ async def _ai_interpret_song(query: str) -> Optional[str]:
 def _global_rate_limit_ok() -> bool:
     """Retorna True se o uso global está dentro do limite. Registra a chamada."""
     now = time.monotonic()
-    # Limpar chamadas fora da janela
     while _global_ai_calls and (now - _global_ai_calls[0]) > _GLOBAL_RL_WINDOW:
         _global_ai_calls.popleft()
     if len(_global_ai_calls) >= _GLOBAL_RL_MAX:
         return False
     _global_ai_calls.append(now)
+    return True
+
+
+def _server_rate_limit_ok(guild_id: int) -> bool:
+    """Retorna True se o servidor está dentro do limite por servidor (5/min). Registra a chamada."""
+    now = time.monotonic()
+    if guild_id not in _server_ai_calls:
+        _server_ai_calls[guild_id] = collections.deque()
+    calls = _server_ai_calls[guild_id]
+    while calls and (now - calls[0]) > _GLOBAL_RL_WINDOW:
+        calls.popleft()
+    if len(calls) >= _SERVER_RL_MAX:
+        return False
+    calls.append(now)
     return True
 
 # Estatísticas persistentes em JSON
@@ -502,6 +519,23 @@ def _save_stats() -> None:
         pass
 
 _stats: dict[str, int] = _load_stats()
+
+# Monitores de preço (t$alerta) — compartilhado com offers.py via arquivo
+PRICE_MONITORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_monitors.json")
+
+def _load_monitors() -> list:
+    try:
+        with open(PRICE_MONITORS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_monitors(monitors: list) -> None:
+    try:
+        with open(PRICE_MONITORS_FILE, "w", encoding="utf-8") as f:
+            json.dump(monitors, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 # Playlists salvas em JSON por servidor
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
@@ -1994,6 +2028,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("su", ["summary"], "t$su / t$summary <URL>"),
     ("d", ["roll", "dice"], "t$d / t$roll <expressão> — ou [d20+5] inline"),
     ("cp", ["clip"], "t$cp / t$clip — últimos 30s de áudio"),
+    ("alerta", ["alert", "monitor"], "t$alerta <produto> — alerta de preço via DM"),
     ("247", ["nonstop"], "t$247 / t$nonstop — não sair da call por inatividade"),
 ]
 
@@ -4232,6 +4267,10 @@ def register_voice(bot: commands.Bot) -> None:
         if not _check_cooldown(ctx.author.id):
             await ctx.send(embed=_embed("⏳ Aguarde alguns segundos antes de perguntar novamente."), delete_after=5)
             return
+        # Rate limit por servidor: 5/min — evita que um servidor esgote o limite global
+        if not _server_rate_limit_ok(ctx.guild.id):
+            await ctx.send(embed=_embed("⏳ Muitas perguntas neste servidor! Aguarde um momento."), delete_after=8)
+            return
         # Rate limit global: protege créditos quando muita gente pergunta ao mesmo tempo
         if not _global_rate_limit_ok():
             await ctx.send(embed=_embed("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos e tenta de novo."), delete_after=8)
@@ -4521,6 +4560,61 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
         await ctx.send(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
 
+    @bot.command(name="alerta", aliases=["alert", "monitor"], help="Alerta de preço: t$alerta <produto> | t$alerta list | t$alerta remove <id>")
+    async def cmd_alerta(ctx: commands.Context, *, args: str = ""):
+        if not ctx.guild:
+            return
+        _stats["commands_used"] += 1
+        args = args.strip()
+
+        monitors = _load_monitors()
+        user_id = ctx.author.id
+
+        # Listar alertas do usuário
+        if args.lower() in ("list", "lista", "listar", ""):
+            user_mons = [m for m in monitors if m["user_id"] == user_id]
+            if not user_mons:
+                await ctx.send(embed=_embed("📭 Você não tem alertas de preço ativos.\nUse `t$alerta <produto>` para criar um."), delete_after=30)
+                return
+            lines = [f"`{i+1}.` {m['keyword']}" for i, m in enumerate(user_mons)]
+            await ctx.send(embed=_embed("🔔 **Seus alertas de preço:**\n" + "\n".join(lines) + "\n\nUse `t$alerta remove <número>` para remover."), delete_after=60)
+            return
+
+        # Remover alerta
+        if args.lower().startswith("remove ") or args.lower().startswith("remover "):
+            idx_str = args.split(" ", 1)[1].strip()
+            user_mons = [m for m in monitors if m["user_id"] == user_id]
+            try:
+                idx = int(idx_str) - 1
+                if idx < 0 or idx >= len(user_mons):
+                    raise ValueError
+            except ValueError:
+                await ctx.send(embed=_embed(f"⚠️ Número inválido. Use `t$alerta list` para ver seus alertas."), delete_after=10)
+                return
+            to_remove = user_mons[idx]
+            monitors = [m for m in monitors if m is not to_remove]
+            _save_monitors(monitors)
+            await ctx.send(embed=_embed(f"🗑️ Alerta **{to_remove['keyword']}** removido."), delete_after=15)
+            return
+
+        # Adicionar alerta
+        if len(args) < 3:
+            await ctx.send(embed=_embed("⚠️ Uso: `t$alerta <produto>` — ex: `t$alerta RTX 5060`"), delete_after=10)
+            return
+        user_mons = [m for m in monitors if m["user_id"] == user_id]
+        if len(user_mons) >= 10:
+            await ctx.send(embed=_embed("⚠️ Limite de 10 alertas por usuário. Remove algum com `t$alerta remove <número>`."), delete_after=15)
+            return
+        monitors.append({
+            "id": int(time.monotonic() * 1000) % 10**9,
+            "user_id": user_id,
+            "guild_id": ctx.guild.id,
+            "keyword": args[:100],
+            "added_at": datetime.now().isoformat(),
+        })
+        _save_monitors(monitors)
+        await ctx.send(embed=_embed(f"🔔 Alerta criado! Você receberá uma DM quando encontrarmos uma oferta de **{args[:80]}**."), delete_after=30)
+
     @bot.command(name="d", aliases=["roll", "dice"], help="Rola dados: t$d / t$roll <expressão>")
     async def cmd_roll(ctx: commands.Context, *, expression: str = ""):
         if not ctx.guild:
@@ -4638,6 +4732,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if not _check_cooldown(ctx.author.id):
             await ctx.send(embed=_embed("⏳ Aguarde alguns segundos antes de usar novamente."), delete_after=5)
+            return
+        if not _server_rate_limit_ok(ctx.guild.id):
+            await ctx.send(embed=_embed("⏳ Muitas requisições neste servidor! Aguarde um momento."), delete_after=8)
             return
         if not _global_rate_limit_ok():
             await ctx.send(embed=_embed("🧠 Muitas requisições ao mesmo tempo! Espera uns segundos."), delete_after=8)
@@ -5095,12 +5192,17 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$d` / `t$roll` — `d20`, `2d6+3`, `2d20kh1`, `5d10>=7`, `2d6!`, `4dF+2`\n"
             "Inline: `[1d20+5]` ou `[Ataque] 2d6+3` em qualquer mensagem"
         ), inline=False)
+        em.add_field(name="🔔 Alertas de Preço", value=(
+            "`t$alerta <produto>` — cria alerta (recebe DM quando sair oferta)\n"
+            "`t$alerta list` — seus alertas ativos\n"
+            "`t$alerta remove <número>` — remove alerta"
+        ), inline=False)
         em.add_field(name="🎙️ Voz na call", value=(
             "«Tiffany, toca `[música]`» — Adicionar à fila\n"
             "«Tiffany, para / pula / sai» — Controle por voz\n"
             "«Tiffany, `[pergunta]`» — Perguntar à IA"
         ), inline=False)
-        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/status`", inline=False)
+        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/status` · `/stats`", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
 
@@ -5129,6 +5231,50 @@ def register_voice(bot: commands.Bot) -> None:
             await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
             return
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @bot.tree.command(name="stats", description="Estatísticas da Tiffany")
+    async def slash_stats(interaction: discord.Interaction):
+        import time as _time
+
+        # Estatísticas de voz/música (globais)
+        songs = _stats.get("songs_played", 0)
+        questions = _stats.get("questions_answered", 0)
+        cmds = _stats.get("commands_used", 0)
+
+        # Alertas de preço ativos (total e deste servidor)
+        all_monitors = _load_monitors()
+        guild_monitors = len([m for m in all_monitors if m.get("guild_id") == (interaction.guild_id or 0)])
+
+        # Ofertas postadas hoje (lê offers_history.json)
+        offers_hoje = 0
+        try:
+            _base = os.path.dirname(os.path.abspath(__file__))
+            with open(os.path.join(_base, "offers_history.json"), "r", encoding="utf-8") as f:
+                oh = json.load(f)
+            cutoff = _time.time() - 86400
+            offers_hoje = sum(1 for v in oh.get("deals", {}).values() if v.get("ts", 0) >= cutoff)
+        except Exception:
+            pass
+
+        # Notícias postadas hoje (lê notices_metrics.json)
+        noticias_hoje = 0
+        try:
+            with open(os.path.join(_base, "notices_metrics.json"), "r", encoding="utf-8") as f:
+                nm = json.load(f)
+            hoje_br = datetime.now().strftime("%Y-%m-%d")
+            if nm.get("_date") == hoje_br:
+                noticias_hoje = nm.get("posts_hoje", 0)
+        except Exception:
+            pass
+
+        em = discord.Embed(title="📊 Tiffany · Estatísticas", color=TIFFANY_PINK)
+        em.add_field(name="🎵 Músicas tocadas", value=f"{songs:,}", inline=True)
+        em.add_field(name="💬 Perguntas respondidas", value=f"{questions:,}", inline=True)
+        em.add_field(name="⌨️ Comandos usados", value=f"{cmds:,}", inline=True)
+        em.add_field(name="📰 Notícias hoje", value=str(noticias_hoje), inline=True)
+        em.add_field(name="🛒 Ofertas hoje", value=str(offers_hoje), inline=True)
+        em.add_field(name="🔔 Alertas de preço", value=f"{guild_monitors} neste servidor", inline=True)
+        await interaction.response.send_message(embed=em, ephemeral=True)
 
     # ============================
     # WAVELINK EVENT LISTENERS
