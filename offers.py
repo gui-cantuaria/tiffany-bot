@@ -105,7 +105,7 @@ LOJAS_WHITELIST = {
     "amazon", "amazon.com.br",
     "mercado livre", "mercadolivre",
     "shopee",
-    "aliexpress",
+    # "aliexpress",  # pendente: KYC + API do Portals não configurados
 }
 
 # =========================
