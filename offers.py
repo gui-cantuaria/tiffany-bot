@@ -14,6 +14,7 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse, quote_plus
 
 import io
+import math
 import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -557,6 +558,12 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     if not server_offer:
         return deal
 
+    # Status — rejeitar ofertas encerradas/expiradas antes de qualquer processamento
+    status = (server_offer.get("offerStatus") or server_offer.get("status") or "").lower()
+    if status in ("expired", "expirada", "encerrada", "inactive", "unavailable", "sold_out"):
+        deal["expired"] = True
+        return deal
+
     # Loja
     if server_offer.get("storeName"):
         deal["store"] = server_offer["storeName"]
@@ -587,6 +594,19 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
             disc = server_offer.get("offerDiscontPercentage")
             if disc:
                 deal["discount_pct"] = float(disc)
+    except (ValueError, TypeError):
+        pass
+
+    # Menor preço histórico (30 dias) — Promobit expõe em alguns produtos
+    lowest_raw = (server_offer.get("offerLowestPrice")
+                  or server_offer.get("lowestPrice")
+                  or server_offer.get("offerMinPrice")
+                  or server_offer.get("minPrice"))
+    try:
+        if lowest_raw:
+            lp = float(lowest_raw)
+            if lp > 0:
+                deal["lowest_price_30d"] = lp
     except (ValueError, TypeError):
         pass
 
@@ -908,6 +928,10 @@ def _is_rede(deal: dict) -> bool:
 
 def _passes_filters(deal: dict) -> tuple[bool, str]:
     """Verifica se a oferta passa nos filtros. Retorna (passed, reason)."""
+    # Oferta encerrada/expirada no Promobit
+    if deal.get("expired"):
+        return False, "oferta expirada/encerrada"
+
     # Deve ter imagem
     if not deal.get("image"):
         return False, "sem imagem"
@@ -956,6 +980,37 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
 
 
 # =========================
+# SCORE E ORDENAÇÃO
+# =========================
+
+def _deal_score(deal: dict) -> float:
+    """Score composto: desconto × qualidade × log(popularidade).
+    Usado para rankear dentro da mesma prioridade de categoria."""
+    disc = deal.get("discount_pct") or 0
+    stars = deal.get("stars") or 4.0      # neutro se sem dados
+    sales = deal.get("sales_count") or 10  # baixo se sem dados
+    return disc * stars * math.log10(max(sales, 10))
+
+
+def _interleave_by_store(deals: list) -> list:
+    """Reordena para nunca postar duas seguidas da mesma loja."""
+    result = []
+    remaining = list(deals)
+    last_store = None
+    while remaining:
+        for i, d in enumerate(remaining):
+            if _normalize_store(d.get("store", "")) != last_store:
+                result.append(remaining.pop(i))
+                last_store = _normalize_store(result[-1].get("store", ""))
+                break
+        else:
+            # Todas restantes são da mesma loja — postar assim mesmo
+            result.append(remaining.pop(0))
+            last_store = _normalize_store(result[-1].get("store", ""))
+    return result
+
+
+# =========================
 # FORMATAÇÃO EMBED
 # =========================
 
@@ -990,7 +1045,17 @@ def _format_description(deal: dict) -> str:
             eco = f"R$ {economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             lines.append(f"Economize **{eco}** nessa compra")
 
-    # 3) Tudo que o comprador precisa antes de clicar
+    # 3) Variação de preço histórico (30 dias)
+    lowest = deal.get("lowest_price_30d")
+    current = deal.get("price")
+    if lowest and current:
+        lowest_fmt = f"R$ {lowest:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        if current <= lowest * 1.02:  # dentro de 2% do mínimo = menor preço histórico
+            lines.append(f"🏆 **Menor preço em 30 dias!**")
+        elif current > lowest * 1.1:  # mais de 10% acima do mínimo = já esteve mais barato
+            lines.append(f"📉 Já esteve mais barato: {lowest_fmt}")
+
+    # 4) Tudo que o comprador precisa antes de clicar
     detalhes = []
 
     # Cupom (só códigos reais, não textos descritivos)
@@ -1302,13 +1367,15 @@ async def _run_deals_cycle_inner() -> None:
         )
         log.info(f"Motivos de rejeição ({sum(rejeicoes.values())}): {resumo}")
 
-    # Ordenar: prioridade de categoria (peças > periféricos > outros) e depois desconto
+    # Ordenar: prioridade de categoria (peças > periféricos > outros) e depois score composto
     approved.sort(
         key=lambda d: (
             _CATEGORY_PRIORITY.get(d.get("category", ""), 99),
-            -d.get("discount_pct", 0),
+            -_deal_score(d),
         )
     )
+    # Variar lojas: evitar back-to-back da mesma loja
+    approved = _interleave_by_store(approved)
 
     # Postar
     channel = bot.get_channel(CANAL_OFERTAS_ID)
