@@ -147,6 +147,7 @@ FONTES_RSS = {
     "TudoCelular": "https://www.tudocelular.com/rss/",
     "Tecnoblog": "https://tecnoblog.net/feed/",
     "Canaltech": "https://canaltech.com.br/rss/",
+    "TechTudo": "https://rss.techtudo.com.br/rss2.xml",
     "Olhar Digital": "https://olhardigital.com.br/rss/",
     "G1 Tecnologia": "https://g1.globo.com/dynamo/tecnologia/rss2.xml",
     "Giz Brasil": "https://gizmodo.uol.com.br/feed/",
