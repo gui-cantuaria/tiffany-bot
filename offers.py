@@ -104,6 +104,7 @@ LOJAS_WHITELIST = {
     "amazon", "amazon.com.br",
     "mercado livre", "mercadolivre",
     "shopee",
+    "aliexpress",
 }
 
 # =========================
@@ -810,6 +811,8 @@ def _store_search_url(store: str, title: str) -> Optional[str]:
         return f"https://www.shopinfo.com.br/busca?q={quote_plus(q)}"
     if "shopee" in norm:
         return f"https://shopee.com.br/search?keyword={quote_plus(q)}"
+    if "aliexpress" in norm:
+        return f"https://pt.aliexpress.com/wholesale?SearchText={quote_plus(q)}"
     return None
 
 
