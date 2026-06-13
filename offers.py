@@ -41,8 +41,9 @@ SCAN_INTERVAL_MIN = 30  # ciclo de ofertas a cada 30 min
 POST_SPACING_SEC = 180  # 3 min entre posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # percentual mínimo
-NOTA_MINIMA_ESTRELAS = 4.3
-VENDAS_MINIMAS = 50
+NOTA_MINIMA_ESTRELAS = 4.4
+VENDAS_MINIMAS = 30
+AVALIACOES_MINIMAS = 5  # mínimo de avaliações de usuários (mesmo campo que sales_count)
 # Promobit raramente fornece estrelas/vendas. Para não travar em 0 ofertas, aceita
 # oferta de loja confiável (whitelist) SEM métrica desde que o desconto seja bom.
 DESCONTO_SEM_METRICA = 25  # percentual mínimo quando não há estrelas nem vendas
@@ -52,21 +53,33 @@ HISTORY_FILE = "offers_history.json"
 # --- Promobit ---
 PROMOBIT_BASE = "https://www.promobit.com.br"
 CATEGORIAS_PROMOBIT = [
+    # === Peças de PC (prioridade máxima) ===
+    "/promocoes/processador/s/",
+    "/promocoes/placa-de-video/s/",
+    "/promocoes/memoria-ram/s/",
+    "/promocoes/placa-mae/s/",
+    "/promocoes/ssd/s/",
+    "/promocoes/gabinete/s/",
+    "/promocoes/pasta-termica/s/",
+    # === Periféricos ===
+    "/promocoes/monitor/s/",
+    "/promocoes/teclado/s/",
+    "/promocoes/mouse/s/",
+    "/promocoes/headset/s/",
+    "/promocoes/mousepad/s/",
+    "/promocoes/webcam/s/",
+    "/promocoes/mesa-digitalizadora/s/",
+    "/promocoes/braco-articulado-para-monitor/s/",
+    # === Hardware geral ===
     "/promocoes/hardware-perifericos/s/",
+    "/promocoes/pc-gamer/s/",
+    "/promocoes/roteador-e-repetidor/s/",
+    # === Outros ===
     "/promocoes/notebooks/s/",
     "/promocoes/notebook-gamer/s/",
-    "/promocoes/monitor/s/",
-    "/promocoes/processador/s/",
-    "/promocoes/placa-mae/s/",
-    "/promocoes/pc-gamer/s/",
-    "/promocoes/roteador-e-repetidor/s/",  # rede: adaptadores, roteadores e repetidores
-    "/promocoes/teclado/s/",               # periféricos: teclados
-    "/promocoes/mouse/s/",                 # periféricos: mouses
-    "/promocoes/headset/s/",               # periféricos: headsets
-    "/promocoes/webcam/s/",                # periféricos: webcams
-    "/promocoes/ssd/s/",                   # armazenamento: SSDs
-    "/promocoes/memoria-ram/s/",           # memória RAM
-    "/promocoes/mesa-digitalizadora/s/",   # periféricos: mesas digitalizadoras (editores)
+    "/promocoes/televisao/s/",
+    "/promocoes/tablet/s/",
+    "/promocoes/celular/s/",
 ]
 
 # Whitelist completa (para quando todos os afiliados estiverem ativos)
@@ -86,8 +99,8 @@ CATEGORIAS_PROMOBIT = [
 # Lojas com afiliado ativo: Terabyte/ShopInfo (Lomadee), Amazon, Mercado Livre
 # Adicionar KaBuM e AliExpress quando Awin aprovar
 LOJAS_WHITELIST = {
-    "terabyte", "terabyteshop",
-    "shopinfo",
+    "terabyte", "terabyteshop", "terabyte shop",
+    "shopinfo", "shopinfo.com.br",
     "amazon", "amazon.com.br",
     "mercado livre", "mercadolivre",
     "shopee",
@@ -146,6 +159,7 @@ CATEGORIAS_EMOJI = {
     "Notebook": "💻",
     "Monitor": "🖥️",
     "Processador": "⚡",
+    "Placa de Vídeo": "🎮",
     "Placa-mãe": "🔧",
     "PC Gamer": "🎮",
     "Adaptadores e rede": "📡",
@@ -156,16 +170,24 @@ CATEGORIAS_EMOJI = {
     "SSD": "💾",
     "Memória RAM": "🧩",
     "Mesa digitalizadora": "🎨",
+    "Gabinete": "🗄️",
+    "Mousepad": "🖱️",
+    "Pasta Térmica": "🔧",
+    "Tablet": "📱",
+    "Celular": "📱",
+    "TV": "📺",
+    "Suporte e Acessórios": "🖥️",
 }
 
 # Mapeia slugs de URL para nomes corretos de categoria
 _SLUG_TO_CATEGORY = {
     "hardware-perifericos": "Hardware e periféricos",
     "notebooks": "Notebook",
-    "notebook-gamer": "PC Gamer",
+    "notebook-gamer": "Notebook",
     "monitor": "Monitor",
     "processador": "Processador",
     "placa-mae": "Placa-mãe",
+    "placa-de-video": "Placa de Vídeo",
     "pc-gamer": "PC Gamer",
     "roteador-e-repetidor": "Adaptadores e rede",
     "teclado": "Teclado",
@@ -175,6 +197,39 @@ _SLUG_TO_CATEGORY = {
     "ssd": "SSD",
     "memoria-ram": "Memória RAM",
     "mesa-digitalizadora": "Mesa digitalizadora",
+    "gabinete": "Gabinete",
+    "mousepad": "Mousepad",
+    "pasta-termica": "Pasta Térmica",
+    "tablet": "Tablet",
+    "celular": "Celular",
+    "televisao": "TV",
+    "braco-articulado-para-monitor": "Suporte e Acessórios",
+}
+
+# Prioridade de categoria para ordenação (menor = mais prioritário)
+_CATEGORY_PRIORITY = {
+    "Processador": 1,
+    "Placa de Vídeo": 1,
+    "Memória RAM": 1,
+    "Placa-mãe": 1,
+    "SSD": 1,
+    "Gabinete": 1,
+    "Pasta Térmica": 1,
+    "Monitor": 2,
+    "Teclado": 2,
+    "Mouse": 2,
+    "Headset": 2,
+    "Mousepad": 2,
+    "Webcam": 2,
+    "Mesa digitalizadora": 2,
+    "Suporte e Acessórios": 2,
+    "Hardware e periféricos": 2,
+    "PC Gamer": 3,
+    "Notebook": 3,
+    "TV": 4,
+    "Tablet": 4,
+    "Celular": 4,
+    "Adaptadores e rede": 5,
 }
 
 # Categoria de rede (adaptadores/roteadores): o Promobit não tem categoria só de
@@ -737,8 +792,8 @@ async def _resolve_product_url(session: aiohttp.ClientSession, deal: dict, alias
 
 
 def _store_search_url(store: str, title: str) -> Optional[str]:
-    """Monta a URL de BUSCA na loja pelo nome do produto (fallback quando não há
-    link direto). Só para lojas com formato de busca conhecido."""
+    """Monta URL de busca direta na loja (fallback quando não há link de produto).
+    Garante que o usuário vai DIRETO à loja, nunca ao Promobit."""
     norm = (store or "").lower().strip()
     q = (title or "").strip()
     if not q:
@@ -753,6 +808,8 @@ def _store_search_url(store: str, title: str) -> Optional[str]:
         return f"https://www.terabyteshop.com.br/busca?str={quote_plus(q)}"
     if "shopinfo" in norm:
         return f"https://www.shopinfo.com.br/busca?q={quote_plus(q)}"
+    if "shopee" in norm:
+        return f"https://shopee.com.br/search?keyword={quote_plus(q)}"
     return None
 
 
@@ -880,6 +937,9 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if sales is not None and sales < VENDAS_MINIMAS:
         return False, f"vendas {sales} < {VENDAS_MINIMAS}"
 
+    if sales is not None and sales < AVALIACOES_MINIMAS:
+        return False, f"avaliações {sales} < {AVALIACOES_MINIMAS}"
+
     # Sem dados de qualidade (Promobit não trouxe estrelas nem vendas): como a loja
     # já passou pela whitelist (é confiável), aceita desde que o desconto seja bom.
     if stars is None and sales is None:
@@ -1002,14 +1062,13 @@ def _store_destination(deal: dict) -> Optional[str]:
 
 
 def _buy_url(deal: dict) -> str:
-    """URL final de compra com a comissão do usuário, indo DIRETO à loja quando dá.
-    Ordem: link do produto / busca na loja (com afiliado) → fallback página Promobit."""
+    """URL final de compra com afiliado, sempre apontando DIRETO para a loja.
+    Ordem: produto direto → busca na loja → sem link (nunca cai no Promobit)."""
     store = deal.get("store", "")
     dest = _store_destination(deal)
     if dest and dest.startswith("http"):
         return affiliate_config.build_affiliate_url(store, dest)
-    # Fallback: página da oferta no Promobit (sempre válida)
-    return deal.get("real_store_url") or deal.get("store_url") or deal.get("url", "")
+    return ""
 
 
 def _cor_embed(deal: dict) -> int:
@@ -1238,8 +1297,13 @@ async def _run_deals_cycle_inner() -> None:
         )
         log.info(f"Motivos de rejeição ({sum(rejeicoes.values())}): {resumo}")
 
-    # Ordenar por desconto (maior primeiro)
-    approved.sort(key=lambda d: d.get("discount_pct", 0), reverse=True)
+    # Ordenar: prioridade de categoria (peças > periféricos > outros) e depois desconto
+    approved.sort(
+        key=lambda d: (
+            _CATEGORY_PRIORITY.get(d.get("category", ""), 99),
+            -d.get("discount_pct", 0),
+        )
+    )
 
     # Postar
     channel = bot.get_channel(CANAL_OFERTAS_ID)
