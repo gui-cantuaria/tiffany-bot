@@ -696,6 +696,8 @@ _TITLE_SPECS_POR_CATEGORIA = {
         "marca + modelo | área ativa (ex: A5 152×95mm) • pressão da caneta (ex: 8192 níveis) • resolução (LPI) • conectividade (USB/Bluetooth) • compatibilidade (Windows/Mac/Android)",
     "Adaptadores e rede":
         "marca + modelo | tipo (Roteador/Repetidor/Adaptador USB) • padrão (ex: Wi-Fi 6 AX3000) • bandas (Dual-band/Tri-band) • velocidade (ex: 2400+600Mbps) • portas (ex: 4x Gigabit)",
+    "Gabinete":
+        "marca + modelo | tipo de torre (Full Tower/Mid Tower/Mini Tower/Mini ITX) • form factor suportado (ATX/mATX/ITX) • janela lateral (vidro temperado/acrílico/sem janela) • gerenciamento de cabos (sim/não) • cor",
 }
 
 _TITLE_SPECS_PADRAO = (
@@ -1112,8 +1114,8 @@ def _build_embed(deal: dict) -> discord.Embed:
     discount = deal.get("discount_pct", 0)
     cor = _cor_embed(deal)
 
-    # Título: emoji + produto resumido + desconto
-    title = f"{EMOJI_FOGO} {deal['title'][:200]} — {discount:.0f}% OFF"
+    # Título: emoji + nome completo do produto (desconto já aparece na descrição)
+    title = f"{EMOJI_FOGO} {deal['title'][:200]}"
 
     desc = _format_description(deal)
     # URL unificada para título e botão (evita inconsistência)
