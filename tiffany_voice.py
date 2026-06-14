@@ -724,29 +724,46 @@ def _normalize_transcript(t: str) -> str:
     return re.sub(r"\s+", " ", t.lower().strip())
 
 
-_WAKE_ALIASES = (
-    "tiffany", "tifani", "tiffani", "tifany", "tifiri", "tifine", "tifini",
-    "chiffany", "tifi", "tiffanie", "tyfani", "tiffanny", "tifanny",
-    "tufane", "tufani", "tefani", "tefany", "tifane", "tyfany",
-    # Sotaques / erros comuns de STT brasileiro
-    "tiphany", "tiphani", "tifeny", "tiffeny", "tifenny",
-    "difany", "difani", "difeny",              # d em vez de t (sotaque)
-    "chifany", "chifani", "chifeny",           # ch (carioca/mineiro)
-    "tchifany", "tchifani",                    # tch (carioca)
-    "tifanei", "tifanni", "tifanhy", "tiffanhy",
-    "tiffanee", "tiffane", "tiffaniy",
-    "teafany", "teafani", "tifny", "tifni",
+# Regex fonético: captura QUALQUER pronúncia de "Tiffany" por estrutura de consoantes.
+# Início (T/D/CH/TCH/TH/SH) + vogal? + meio (F/FF/PH/V) + vogal? + final (N/NH + vogal?)
+_WAKE_PHONETIC_RE = re.compile(
+    r"^(?:tch|ch|sh|th|t|d)"     # consoante inicial
+    r"[aeiouáéíóúãõâêîôûy]*"     # vogal de transição (i, e, u, y...)
+    r"(?:ff|ph|f|v)"             # consoante do meio
+    r"[aeiouáéíóúãõâêîôûy]*"     # vogal de transição (a, e, i...)
+    r"(?:nh|nn|n)"               # consoante final
+    r"[aeiouáéíóúãõâêîôûy]*$",   # vogal final (i, y, e, ei, ee...)
+    re.IGNORECASE,
 )
+# Aliases curtos/irregulares que o regex não cobre (ex: "tifi" sem N final)
+_WAKE_ALIASES_EXTRA = {"tifi", "tifiri"}
+# Palavras reais do português que casam com o regex fonético por acidente
+_WAKE_FALSE_POSITIVES = {
+    "define", "defina", "definir", "divina", "divino", "divine",
+    "delfine", "delfina", "devane", "tufano",
+}
+
+
+def _is_wake_word(word: str) -> bool:
+    """Verifica se uma palavra soa como 'Tiffany' — matching fonético."""
+    wl = re.sub(r"[^a-záéíóúãõâêîôûy]", "", word.lower())
+    if len(wl) < 4:
+        return False
+    if wl == "tiffany":
+        return True
+    if wl in _WAKE_FALSE_POSITIVES:
+        return False
+    if wl in _WAKE_ALIASES_EXTRA:
+        return True
+    return bool(_WAKE_PHONETIC_RE.match(wl))
 
 
 def _normalize_wake_word(t: str) -> str:
-    """STT costuma errar 'Tiffany' (tifani, tifiri...) — normaliza para parse."""
-    import difflib
+    """STT costuma errar 'Tiffany' (tifani, difeny...) — normaliza para parse."""
     words = t.split()
     out: list[str] = []
     for w in words:
-        wl = re.sub(r"[^a-zà-ú]", "", w.lower())
-        if wl in _WAKE_ALIASES or difflib.SequenceMatcher(None, wl, "tiffany").ratio() >= 0.65:
+        if _is_wake_word(w):
             out.append("tiffany")
         else:
             out.append(w)
