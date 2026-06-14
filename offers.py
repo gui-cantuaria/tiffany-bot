@@ -559,7 +559,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         return deal
 
     # Status — rejeitar ofertas encerradas/expiradas antes de qualquer processamento
-    status = (server_offer.get("offerStatus") or server_offer.get("status") or "").lower()
+    status = str(server_offer.get("offerStatus") or server_offer.get("status") or "").lower()
     if status in ("expired", "expirada", "encerrada", "inactive", "unavailable", "sold_out"):
         deal["expired"] = True
         return deal
