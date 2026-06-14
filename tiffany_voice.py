@@ -156,6 +156,10 @@ _STT_BLEED_PHRASES = (
 STT_CAPTURE_MAX_BYTES = int(48000 * 2 * 2 * 10)  # 10s rolling por falante
 STT_TAIL_SEC = 6  # se sobrar áudio longo, manda só os últimos N segundos pro STT
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuário falar sem parar
+# Peak mínimo para considerar voz direta no mic durante playback (eco da música é mais baixo)
+VOICE_OVER_MUSIC_PEAK = 3000
+# Tempo de espera após detectar voz alta durante playback (capturar comando completo)
+VOICE_OVER_MUSIC_WAIT_SEC = 2.0
 # Clip: 30s de áudio stereo 48kHz 16-bit = ~5.76MB
 CLIP_DURATION_SEC = 30
 CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
@@ -260,6 +264,8 @@ class _GuildVoiceSession:
     _failed_songs: list = field(default_factory=list)
     # Flag para cancelar download em andamento (set por t$cl)
     _cancel_download: bool = False
+    # Flag: música foi pausada para escutar comando — question worker deve resumir após resposta
+    _resume_after_question: bool = False
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -2737,17 +2743,40 @@ async def _voice_listen_loop(
                 else:
                     _empty_since = None
 
-            # Echo cancellation: ignorar áudio captado quando o bot está tocando música
-            if vc.is_playing():
-                # Descartar buffers acumulados durante playback (eco do bot)
-                with session.buf_lock:
-                    for uid in list(session.pcm_buffers.keys()):
-                        session.pcm_buffers[uid] = bytearray()
-                continue
+            # --- Escuta durante playback (estilo Alexa) ---
+            # Se música está tocando, detecta voz alta (direta no mic) para wake word.
+            # Eco da música tem peak baixo; voz direta no mic tem peak alto (>3000).
+            _playing_now = vc.is_playing()
+            _paused_for_listen = False
+
+            if _playing_now:
+                # Verificar se alguém falou alto o suficiente para ser voz real (não eco)
+                pcm_peek, _ = _drain_ready_user_pcm(session)
+                if not pcm_peek:
+                    # Limpar buffers de eco acumulado (áudio baixo = eco da música)
+                    with session.buf_lock:
+                        for uid in list(session.pcm_buffers.keys()):
+                            if len(session.pcm_buffers[uid]) < MIN_PCM_BYTES:
+                                session.pcm_buffers[uid] = bytearray()
+                    continue
+                peek_peak, _ = _pcm_peak_rms(pcm_peek)
+                if peek_peak < VOICE_OVER_MUSIC_PEAK:
+                    # Eco da música — descartar
+                    log.debug("Áudio durante playback descartado (peak=%d < %d)", peek_peak, VOICE_OVER_MUSIC_PEAK)
+                    continue
+                # Voz alta detectada! Pausar música e capturar comando completo
+                log.info("🎤 Voz detectada durante playback (peak=%d) — pausando música para escutar...", peek_peak)
+                vc.pause()
+                _paused_for_listen = True
+                # Esperar o comando completo (2s de captura sem música)
+                await asyncio.sleep(VOICE_OVER_MUSIC_WAIT_SEC)
 
             # Processa áudio assim que o usuário faz pausa de ≥0.8s
             pcm, speaker_uid = _drain_ready_user_pcm(session)
             if not pcm:
+                # Se pausou para escutar mas não captou nada, resumir música
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             speaker_name = "?"
             if speaker_uid and vc.channel:
@@ -2768,6 +2797,8 @@ async def _voice_listen_loop(
                     "Discord não está recebendo seu microfone direito",
                     peak, rms,
                 )
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             pcm_voiced = await asyncio.to_thread(_extract_voiced_pcm, pcm)
             voiced_ratio = len(pcm_voiced) / max(len(pcm), 1)
@@ -2776,6 +2807,8 @@ async def _voice_listen_loop(
             dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
             if dur < STT_MIN_DURATION_SEC:
                 log.debug("Áudio muito curto (~%.1fs) — ignorando", dur)
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             log.info("Enviando %d bytes (~%.1fs) para STT...", len(wav), dur)
             # Debug: salvar último WAV para análise (apenas se DEBUG_STT=1)
@@ -2791,15 +2824,18 @@ async def _voice_listen_loop(
                     "STT ignorado — áudio de vídeo/YouTube na call (%r). Pause a música/vídeos.",
                     text[:80],
                 )
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             if not text:
                 dur = (len(wav) - 44) / (48000 * 2) if len(wav) > 44 else 0.0
                 log.warning(
-                    "STT não reconheceu (~%.1fs, peak=%d, fala=%.0f%%) — "
-                    "fale 'Tiffany, qual é a capital do Brasil?' e fique 2s em silêncio",
+                    "STT não reconheceu (~%.1fs, peak=%d, fala=%.0f%%)",
                     dur, peak, voiced_ratio * 100,
                 )
                 _stt_fail_count += 1
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
@@ -2814,6 +2850,8 @@ async def _voice_listen_loop(
                         "🎤 **Sim, estou ouvindo!** Diga sua pergunta completa: "
                         "**Tiffany, qual é a capital do Brasil?**",
                     )
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "none":
@@ -2831,14 +2869,18 @@ async def _voice_listen_loop(
                             bot,
                             session.text_channel_id,
                             "🎤 Te ouvi! Complete: **Tiffany, qual é a capital do Brasil?** "
-                            "ou **Tiffany, toca [música]** (música pausada).",
+                            "ou **Tiffany, toca [música]**.",
                         )
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
             # Verificar se o speaker está no mesmo canal que o bot
             if vc.channel and speaker_uid:
                 speaker_in_channel = any(m.id == speaker_uid for m in vc.channel.members if not m.bot)
                 if not speaker_in_channel:
                     log.debug("STT ignorado: speaker %s não está no canal do bot", speaker_uid)
+                    if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                        vc.resume()
                     continue
             
             if action == "stop":
@@ -2881,8 +2923,10 @@ async def _voice_listen_loop(
                     _clear_loop(session)
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, "🔁 Loop desativado.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
-            
+
             if action == "shuffle":
                 import random as _rnd
                 if len(session.queue_display) >= 2:
@@ -2905,6 +2949,8 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, f"🔀 Fila embaralhada ({len(session.queue_display)} músicas).")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Fila com menos de 2 músicas.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "replay":
@@ -2992,6 +3038,8 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, f"🎵 **{session.current_song[:80]}**{dur}{elapsed}")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando agora.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "queue_show":
@@ -3002,6 +3050,8 @@ async def _voice_listen_loop(
                     if len(session.queue_display) > 10:
                         lines.append(f"... e mais {len(session.queue_display) - 10}")
                     await _notify(bot, session.text_channel_id, "📋 **Fila:**\n" + "\n".join(lines))
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action in ("seek_fwd", "seek_back") and arg:
@@ -3028,6 +3078,8 @@ async def _voice_listen_loop(
                         await _notify(bot, session.text_channel_id, f"{direction} Pulando para {_fmt_dur(target)}")
                 except Exception as e:
                     log.debug("Seek via voz falhou: %s", e)
+                    if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                        vc.resume()
                 continue
 
             if action == "random":
@@ -3043,6 +3095,8 @@ async def _voice_listen_loop(
                 await session.music_queue.put(song)
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, f"🎲 Música aleatória na fila{tag}: **{display}**")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "autoplay":
@@ -3052,6 +3106,8 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, "▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares.")
                 else:
                     await _notify(bot, session.text_channel_id, "⏹️ **Autoplay desativado**.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "nonstop":
@@ -3063,12 +3119,18 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, "🔒 **Modo 24/7 ativado** — não saio por inatividade.")
                 else:
                     await _notify(bot, session.text_channel_id, "🔓 **Modo 24/7 desativado** — volto a sair após inatividade.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 continue
 
             if action == "question" and arg:
                 if not _check_cooldown(speaker_uid):
+                    if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                        vc.resume()
                     await _notify(bot, session.text_channel_id, "⏳ Aguarde alguns segundos antes de perguntar novamente.")
                     continue
+                if _paused_for_listen:
+                    session._resume_after_question = True
                 await session.question_queue.put((speaker_uid, arg))
                 await _notify(bot, session.text_channel_id, f"💬 «{arg[:80]}» — processando...")
                 continue
@@ -3109,6 +3171,8 @@ async def _voice_listen_loop(
                     await _notify(bot, session.text_channel_id, f"🎵 **{added} músicas** adicionadas à fila.")
                 elif added == 1:
                     await _notify(bot, session.text_channel_id, f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.")
+                if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                    vc.resume()
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -3541,6 +3605,8 @@ def register_voice(bot: commands.Bot) -> None:
 
                 # Pausar música durante processamento (comportamento Alexa)
                 _was_playing = vc.is_playing()
+                _should_resume = _was_playing or session._resume_after_question
+                session._resume_after_question = False
                 if _was_playing:
                     vc.pause()
                     await asyncio.sleep(0.2)
@@ -3551,8 +3617,8 @@ def register_voice(bot: commands.Bot) -> None:
                     answer = "Desculpa, tive um problema ao processar sua pergunta. Tenta de novo!"
                 finally:
                     session.question_queue.task_done()
-                # Retomar música se foi pausada e TTS não retomou
-                if _was_playing and vc.is_connected() and vc.is_paused():
+                # Retomar música se foi pausada (pelo worker ou pelo listen loop)
+                if _should_resume and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 ch = bot.get_channel(session.text_channel_id)
                 if ch:
