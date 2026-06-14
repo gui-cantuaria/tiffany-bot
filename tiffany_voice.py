@@ -722,6 +722,14 @@ _WAKE_ALIASES = (
     "tiffany", "tifani", "tiffani", "tifany", "tifiri", "tifine", "tifini",
     "chiffany", "tifi", "tiffanie", "tyfani", "tiffanny", "tifanny",
     "tufane", "tufani", "tefani", "tefany", "tifane", "tyfany",
+    # Sotaques / erros comuns de STT brasileiro
+    "tiphany", "tiphani", "tifeny", "tiffeny", "tifenny",
+    "difany", "difani", "difeny",              # d em vez de t (sotaque)
+    "chifany", "chifani", "chifeny",           # ch (carioca/mineiro)
+    "tchifany", "tchifani",                    # tch (carioca)
+    "tifanei", "tifanni", "tifanhy", "tiffanhy",
+    "tiffanee", "tiffane", "tiffaniy",
+    "teafany", "teafani", "tifny", "tifni",
 )
 
 
@@ -754,7 +762,7 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
 
     # Comandos de controle
     if re.search(
-        rf"{_w}(para|parar|stop|pause|pausa)\b",
+        rf"{_w}(para|parar|stop)\b",
         t,
         re.IGNORECASE,
     ):
@@ -766,20 +774,20 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     if re.search(rf"{_w}(pula|próxim[ao]|next|skip)\b", t, re.IGNORECASE):
         return "skip", None
 
+    if re.search(rf"{_w}(replay|de novo|denovo|repete essa)\b", t, re.IGNORECASE):
+        return "replay", None
+
     if re.search(rf"{_w}(loop|repete|repetir)\b", t, re.IGNORECASE):
         return "loop", None
 
     if re.search(rf"{_w}(embaralha|shuffle|mistura)\b", t, re.IGNORECASE):
         return "shuffle", None
 
-    if re.search(rf"{_w}(replay|de novo|denovo|repete essa)\b", t, re.IGNORECASE):
-        return "replay", None
-
     if re.search(rf"{_w}(volume|abaixa|aumenta)\b", t, re.IGNORECASE):
         return "none", None  # volume é por usuário no Discord, ignorar
 
     # Pausa (sem limpar fila, diferente de "para")
-    if re.search(rf"{_w}(pausa|pausar)\b", t, re.IGNORECASE):
+    if re.search(rf"{_w}(pausa|pausar|pause)\b", t, re.IGNORECASE):
         return "pause", None
 
     # Retomar música
@@ -789,6 +797,18 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
     # Limpar fila
     if re.search(rf"{_w}(limpa|limpar)\b", t, re.IGNORECASE):
         return "clear", None
+
+    # Música aleatória
+    if re.search(rf"{_w}(aleat[oó]ria|random|sorteia|qualquer\s+m[uú]sica)\b", t, re.IGNORECASE):
+        return "random", None
+
+    # Autoplay
+    if re.search(rf"{_w}(autoplay|auto\s*play)\b", t, re.IGNORECASE):
+        return "autoplay", None
+
+    # Modo 24/7
+    if re.search(rf"{_w}(24.?7|vinte\s*e\s*quatro|nonstop|non\s*stop|fica\s+a[ií]|n[aã]o\s+sai[ar]?)\b", t, re.IGNORECASE):
+        return "nonstop", None
 
     # Tocando agora
     if re.search(rf"{_w}(que\s+m[uú]sica|o\s+que\s+est[aá]\s+tocando|tocando\s+agora|nome\s+da\s+m[uú]sica|que\s+t[oó]ca)\b", t, re.IGNORECASE):
@@ -805,8 +825,8 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
         _secs = _n * 60 if re.search(r"minuto", t[_m_ff.start():], re.IGNORECASE) else _n
         return "seek_fwd", str(_secs)
 
-    # Seek back: "Tiffany, volta 30 segundos"
-    _m_bk = re.search(rf"{_w}(?:rebobina?r?)\s+(\d+)", t, re.IGNORECASE)
+    # Seek back: "Tiffany, volta 30 segundos" / "Tiffany, rebobina 30"
+    _m_bk = re.search(rf"{_w}(?:rebobina?r?|volta|voltar|retrocede?r?)\s+(\d+)", t, re.IGNORECASE)
     if _m_bk:
         _n = int(_m_bk.group(1))
         _secs = _n * 60 if re.search(r"minuto", t[_m_bk.start():], re.IGNORECASE) else _n
@@ -928,7 +948,7 @@ def _text_to_speech(text: str) -> Optional[bytes]:
         import asyncio as _aio
 
         async def _gen():
-            communicate = edge_tts.Communicate(clean, voice="pt-BR-FranciscaNeural", rate="+10%")
+            communicate = edge_tts.Communicate(clean, voice="pt-BR-ThalitaNeural", rate="+5%", pitch="+8Hz")
             buf = io.BytesIO()
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
@@ -2069,7 +2089,7 @@ _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t$ ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
     + "\n- /help, /queue, /status (slash)\n"
-    "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/pausa/continua/limpa/sai», «Tiffany, o que está tocando», «Tiffany, avança 30 segundos», «Tiffany, [pergunta]» (a música pausa enquanto responde)\n"
+    "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/pausa/continua/limpa/sai», «Tiffany, aleatória/autoplay/24-7», «Tiffany, o que está tocando», «Tiffany, avança/volta 30 segundos», «Tiffany, [pergunta]» (a música pausa enquanto responde)\n"
     "Se o usuário perguntar como usar o bot, cite o comando exato (ex: t$p para tocar)."
 )
 
@@ -2628,6 +2648,41 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
         log.info("Music worker stopped guild=%s", guild_id)
 
 
+async def _tts_speak_quick(vc, text: str) -> None:
+    """Fala um texto curto via TTS no canal de voz (para confirmações de comando)."""
+    if not _TTS_ENABLED:
+        return
+    try:
+        tts_bytes = await asyncio.to_thread(_text_to_speech, text)
+        if not tts_bytes:
+            return
+        pcm = await asyncio.to_thread(_tts_bytes_to_pcm, tts_bytes)
+        if not pcm or not vc.is_connected():
+            return
+        _was = vc.is_playing()
+        if _was:
+            vc.pause()
+            await asyncio.sleep(0.1)
+        _loop = asyncio.get_running_loop()
+        _fut: asyncio.Future = _loop.create_future()
+        def _after_tts(err):
+            try:
+                if not _fut.done() and not _loop.is_closed():
+                    _loop.call_soon_threadsafe(_fut.set_result, None)
+            except RuntimeError:
+                pass
+        vc.play(discord.PCMAudio(io.BytesIO(pcm)), after=_after_tts)
+        try:
+            await asyncio.wait_for(_fut, timeout=10.0)
+        except asyncio.TimeoutError:
+            if vc.is_playing():
+                vc.stop()
+        if _was and vc.is_connected() and vc.is_paused():
+            vc.resume()
+    except Exception as e:
+        log.debug("_tts_speak_quick falhou: %s", e)
+
+
 async def _voice_listen_loop(
     guild_id: int,
     vc: voice_recv.VoiceRecvClient,
@@ -2745,16 +2800,6 @@ async def _voice_listen_loop(
                     dur, peak, voiced_ratio * 100,
                 )
                 _stt_fail_count += 1
-                # Após 5 falhas consecutivas, avisar no chat (com cooldown)
-                if _stt_fail_count == 5:
-                    now_hint = time.monotonic()
-                    if now_hint - session.last_stt_hint_ts >= 120:
-                        session.last_stt_hint_ts = now_hint
-                        await _notify(
-                            bot, session.text_channel_id,
-                            "🎤 Estou com dificuldade de te ouvir. Fale mais perto do mic: "
-                            "**Tiffany, qual é a capital do Brasil?** e fique 2s em silêncio.",
-                        )
                 continue
             _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
@@ -2807,13 +2852,15 @@ async def _voice_listen_loop(
                 except Exception:
                     pass  # QueueEmpty — fila limpa
                 session.queue_display.clear()
-                await _notify(bot, session.text_channel_id, "⏹️ Música parada (comando de voz).")
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                await _notify(bot, session.text_channel_id, "⏹️ Parei a música.")
                 continue
 
             if action == "skip":
                 _clear_loop(session)
                 vc.stop()
-                await _notify(bot, session.text_channel_id, "⏭️ Faixa pulada (comando de voz).")
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                await _notify(bot, session.text_channel_id, "⏭️ Pulei a faixa.")
                 continue
 
             if action == "loop":
@@ -2824,6 +2871,7 @@ async def _voice_listen_loop(
                 if session.loop_enabled:
                     session.loop_query = session.current_query
                     session.loop_display = session.current_song or session.current_query
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(
                         bot,
                         session.text_channel_id,
@@ -2831,6 +2879,7 @@ async def _voice_listen_loop(
                     )
                 else:
                     _clear_loop(session)
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, "🔁 Loop desativado.")
                 continue
             
@@ -2852,6 +2901,7 @@ async def _voice_listen_loop(
                     for _, q in _combined:
                         await _new_q.put(q)
                     session.music_queue = _new_q
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, f"🔀 Fila embaralhada ({len(session.queue_display)} músicas).")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Fila com menos de 2 músicas.")
@@ -2873,6 +2923,7 @@ async def _voice_listen_loop(
                         await session.music_queue.put(item)
                     _clear_loop(session)
                     vc.stop()
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, f"🔄 Repetindo: **{d[:80]}**")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
@@ -2880,6 +2931,8 @@ async def _voice_listen_loop(
 
             if action == "leave":
                 # Sair do canal
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                await asyncio.sleep(1.5)  # esperar TTS terminar antes de desconectar
                 text_ch_id = session.text_channel_id if session else None
                 sess = _sessions.pop(guild_id, None)
                 if sess:
@@ -2897,6 +2950,7 @@ async def _voice_listen_loop(
             if action == "pause":
                 if vc.is_playing():
                     vc.pause()
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, "⏸️ Pausei a música.")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando.")
@@ -2905,6 +2959,7 @@ async def _voice_listen_loop(
             if action == "resume":
                 if vc.is_paused():
                     vc.resume()
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, "▶️ Continuando a música.")
                 else:
                     await _notify(bot, session.text_channel_id, "⚠️ Música não está pausada.")
@@ -2926,6 +2981,7 @@ async def _voice_listen_loop(
                 if vc.is_playing() or vc.is_paused():
                     vc.stop()
                 _clear_voice_state(guild_id)
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, "🗑️ Fila limpa.")
                 continue
 
@@ -2968,9 +3024,45 @@ async def _voice_listen_loop(
                         session.song_start_time = time.monotonic() - target
                         vc.play(new_src)
                         direction = "⏩" if action == "seek_fwd" else "⏪"
+                        asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                         await _notify(bot, session.text_channel_id, f"{direction} Pulando para {_fmt_dur(target)}")
                 except Exception as e:
                     log.debug("Seek via voz falhou: %s", e)
+                continue
+
+            if action == "random":
+                fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
+                if fila_atual >= QUEUE_MAX:
+                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).")
+                    continue
+                song, from_discovery = _pick_random_song(session, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
+                display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
+                tag = " 🆕" if from_discovery else ""
+                session.queue_display.append(display)
+                session.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                await session.music_queue.put(song)
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                await _notify(bot, session.text_channel_id, f"🎲 Música aleatória na fila{tag}: **{display}**")
+                continue
+
+            if action == "autoplay":
+                session.autoplay = not session.autoplay
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                if session.autoplay:
+                    await _notify(bot, session.text_channel_id, "▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares.")
+                else:
+                    await _notify(bot, session.text_channel_id, "⏹️ **Autoplay desativado**.")
+                continue
+
+            if action == "nonstop":
+                session.stay_24_7 = not session.stay_24_7
+                session._queue_empty_since = 0.0
+                _touch_activity(guild_id)
+                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                if session.stay_24_7:
+                    await _notify(bot, session.text_channel_id, "🔒 **Modo 24/7 ativado** — não saio por inatividade.")
+                else:
+                    await _notify(bot, session.text_channel_id, "🔓 **Modo 24/7 desativado** — volto a sair após inatividade.")
                 continue
 
             if action == "question" and arg:
@@ -3011,6 +3103,8 @@ async def _voice_listen_loop(
                     if len(session.queue_display) + (1 if session.current_song else 0) >= QUEUE_MAX:
                         break
 
+                if added > 0:
+                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 if added > 1:
                     await _notify(bot, session.text_channel_id, f"🎵 **{added} músicas** adicionadas à fila.")
                 elif added == 1:
@@ -5343,6 +5437,7 @@ def register_voice(bot: commands.Bot) -> None:
             "«Tiffany, toca `[música]`» — Adicionar à fila\n"
             "«Tiffany, para / pula / pausa / continua / sai» — Controle\n"
             "«Tiffany, limpa / shuffle / loop / replay» — Fila\n"
+            "«Tiffany, aleatória / autoplay / 24/7» — Modos\n"
             "«Tiffany, o que está tocando / mostra a fila» — Info\n"
             "«Tiffany, avança/volta `[N]` segundos» — Seek\n"
             "«Tiffany, `[pergunta]`» — IA pausa a música e responde"
