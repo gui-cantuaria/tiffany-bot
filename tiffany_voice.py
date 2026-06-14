@@ -724,46 +724,54 @@ def _normalize_transcript(t: str) -> str:
     return re.sub(r"\s+", " ", t.lower().strip())
 
 
-# Regex fonético: captura QUALQUER pronúncia de "Tiffany" por estrutura de consoantes.
-# Início (T/D/CH/TCH/TH/SH) + vogal? + meio (F/FF/PH/V) + vogal? + final (N/NH + vogal?)
-_WAKE_PHONETIC_RE = re.compile(
-    r"^(?:tch|ch|sh|th|t|d)"     # consoante inicial
-    r"[aeiouáéíóúãõâêîôûy]*"     # vogal de transição (i, e, u, y...)
-    r"(?:ff|ph|f|v)"             # consoante do meio
-    r"[aeiouáéíóúãõâêîôûy]*"     # vogal de transição (a, e, i...)
-    r"(?:nh|nn|n)"               # consoante final
-    r"[aeiouáéíóúãõâêîôûy]*$",   # vogal final (i, y, e, ei, ee...)
-    re.IGNORECASE,
-)
-# Aliases curtos/irregulares que o regex não cobre (ex: "tifi" sem N final)
-_WAKE_ALIASES_EXTRA = {"tifi", "tifiri"}
-# Palavras reais do português que casam com o regex fonético por acidente
-_WAKE_FALSE_POSITIVES = {
-    "define", "defina", "definir", "divina", "divino", "divine",
-    "delfine", "delfina", "devane", "tufano",
-}
-
-
-def _is_wake_word(word: str) -> bool:
-    """Verifica se uma palavra soa como 'Tiffany' — matching fonético."""
-    wl = re.sub(r"[^a-záéíóúãõâêîôûy]", "", word.lower())
-    if len(wl) < 4:
-        return False
-    if wl == "tiffany":
-        return True
-    if wl in _WAKE_FALSE_POSITIVES:
-        return False
-    if wl in _WAKE_ALIASES_EXTRA:
-        return True
-    return bool(_WAKE_PHONETIC_RE.match(wl))
+# Variações reais de como STT transcreve "Tiffany" em PT-BR e EN.
+# Organizado por tipo de erro — só formas que alguém realmente falaria.
+_WAKE_ALIASES = frozenset({
+    # --- Forma correta ---
+    "tiffany",
+    # --- PT-BR: 1 F (STT comum) ---
+    "tifany", "tifani", "tifane", "tifaní", "tifanei",
+    # --- PT-BR: 2 F ---
+    "tiffani", "tiffane", "tiffanei", "tiffanee", "tiffanny", "tifanny",
+    "tiffaniy", "tiffanie",
+    # --- PT-BR: E em vez de A (sotaque nordestino / STT) ---
+    "tifeny", "tifeni", "tiffeny", "tiffeni",
+    # --- PT-BR: I no meio (STT engole vogal) ---
+    "tifini", "tifine", "tiffini",
+    # --- PT-BR: U no início (sotaque / STT) ---
+    "tufany", "tufani", "tufane",
+    # --- PT-BR: E no início ---
+    "tefany", "tefani", "tefane",
+    # --- PT-BR: Y no início ---
+    "tyfany", "tyfani",
+    # --- PT-BR: PH em vez de FF (STT inglês) ---
+    "tiphany", "tiphani", "tiphane",
+    # --- PT-BR: sotaque carioca (CH / TCH no início) ---
+    "chifany", "chifani", "chiffany", "chiffani",
+    "tchifany", "tchifani",
+    # --- PT-BR: sotaque (D no início) ---
+    "difany", "difani", "difane",
+    # --- PT-BR: NH / NN no final ---
+    "tifanhy", "tiffanhy", "tifanni", "tiffanni",
+    # --- PT-BR: vogal engolida ---
+    "tifny", "tifni",
+    # --- PT-BR: formas curtas (STT corta) ---
+    "tifi", "tifiri",
+    # --- EN: variações inglesas comuns ---
+    "tiffney", "tifney", "tiffney", "tiffnee",
+    "tiffiny", "tifiny",
+    "tiffeny", "tifeny",
+})
 
 
 def _normalize_wake_word(t: str) -> str:
-    """STT costuma errar 'Tiffany' (tifani, difeny...) — normaliza para parse."""
+    """STT costuma errar 'Tiffany' (tifani, chifany...) — normaliza para parse."""
+    import difflib
     words = t.split()
     out: list[str] = []
     for w in words:
-        if _is_wake_word(w):
+        wl = re.sub(r"[^a-zà-ú]", "", w.lower())
+        if wl in _WAKE_ALIASES or (len(wl) >= 5 and difflib.SequenceMatcher(None, wl, "tiffany").ratio() >= 0.75):
             out.append("tiffany")
         else:
             out.append(w)
