@@ -162,6 +162,7 @@ CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch �
 
 QUEUE_MAX = 30  # máximo de músicas na fila
 _QUEUE_EMPTY_LEAVE_SEC = 180  # sair da call 3 min após a fila acabar (sem t$247)
+_EMPTY_CHANNEL_LEAVE_SEC = 120  # sair da call 2 min após canal ficar vazio
 _DEFAULT_TRACK_EST_SEC = 210  # estimativa por faixa quando duração desconhecida
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
@@ -257,6 +258,8 @@ class _GuildVoiceSession:
     clip_lock: threading.Lock = field(default_factory=threading.Lock)
     # Músicas que falharam no download — enviadas como resumo ao final da fila
     _failed_songs: list = field(default_factory=list)
+    # Flag para cancelar download em andamento (set por t$cl)
+    _cancel_download: bool = False
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -658,6 +661,7 @@ def _save_voice_state(guild_id: int, channel_id: int, text_channel_id: int, sess
             entry["current_display"] = session.current_song
             entry["queue_queries"] = queue_queries
             entry["queue_displays"] = queue_displays
+            entry["history"] = list(session.history)[-20:]
             # Salvar posição atual de playback para seek ao restaurar
             if session.song_start_time > 0:
                 entry["current_seek_sec"] = max(0.0, time.monotonic() - session.song_start_time)
@@ -773,6 +777,40 @@ def _parse_voice_command(text: str) -> tuple[str, Optional[str]]:
 
     if re.search(rf"{_w}(volume|abaixa|aumenta)\b", t, re.IGNORECASE):
         return "none", None  # volume é por usuário no Discord, ignorar
+
+    # Pausa (sem limpar fila, diferente de "para")
+    if re.search(rf"{_w}(pausa|pausar)\b", t, re.IGNORECASE):
+        return "pause", None
+
+    # Retomar música
+    if re.search(rf"{_w}(continua|continuar|retoma|retomar|resume|despausa)\b", t, re.IGNORECASE):
+        return "resume", None
+
+    # Limpar fila
+    if re.search(rf"{_w}(limpa|limpar)\b", t, re.IGNORECASE):
+        return "clear", None
+
+    # Tocando agora
+    if re.search(rf"{_w}(que\s+m[uú]sica|o\s+que\s+est[aá]\s+tocando|tocando\s+agora|nome\s+da\s+m[uú]sica|que\s+t[oó]ca)\b", t, re.IGNORECASE):
+        return "nowplaying", None
+
+    # Ver fila
+    if re.search(rf"{_w}(mostra\s+a?\s*fila|ver\s+a?\s*fila|quantas?\s+m[uú]sicas?)\b", t, re.IGNORECASE):
+        return "queue_show", None
+
+    # Seek forward: "Tiffany, avança 30 segundos"
+    _m_ff = re.search(rf"{_w}(?:avan[cç]a?r?|adiantar?)\s+(\d+)", t, re.IGNORECASE)
+    if _m_ff:
+        _n = int(_m_ff.group(1))
+        _secs = _n * 60 if re.search(r"minuto", t[_m_ff.start():], re.IGNORECASE) else _n
+        return "seek_fwd", str(_secs)
+
+    # Seek back: "Tiffany, volta 30 segundos"
+    _m_bk = re.search(rf"{_w}(?:rebobina?r?)\s+(\d+)", t, re.IGNORECASE)
+    if _m_bk:
+        _n = int(_m_bk.group(1))
+        _secs = _n * 60 if re.search(r"minuto", t[_m_bk.start():], re.IGNORECASE) else _n
+        return "seek_back", str(_secs)
 
     # Detectar pergunta após "tiffany"
     m = re.search(rf"{_w}(.+)", t, re.IGNORECASE)
@@ -1606,16 +1644,16 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
 
     import aiohttp as _aiohttp
 
-    # --- Spotify: embed JSON scraping (mais confiável) + oEmbed fallback ---
-    if "spotify.com" in platform or "spotify:" in platform:
-        # Método 1: scraping do JSON embutido na página embed (tem artista + título sempre)
-        try:
-            track_path = re.search(r"/(track|album|episode)/([a-zA-Z0-9]+)", url)
-            if track_path:
-                embed_url = f"https://open.spotify.com/embed/{track_path.group(1)}/{track_path.group(2)}"
-                async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(embed_url, timeout=_aiohttp.ClientTimeout(total=5),
-                                        headers={"User-Agent": "Mozilla/5.0"}) as r:
+    async with _aiohttp.ClientSession() as aio:
+        # --- Spotify: embed JSON scraping (mais confiável) + oEmbed fallback ---
+        if "spotify.com" in platform or "spotify:" in platform:
+            # Método 1: scraping do JSON embutido na página embed (tem artista + título sempre)
+            try:
+                track_path = re.search(r"/(track|album|episode)/([a-zA-Z0-9]+)", url)
+                if track_path:
+                    embed_url = f"https://open.spotify.com/embed/{track_path.group(1)}/{track_path.group(2)}"
+                    async with aio.get(embed_url, timeout=_aiohttp.ClientTimeout(total=5),
+                                       headers={"User-Agent": "Mozilla/5.0"}) as r:
                         if r.status == 200:
                             html = await r.text()
                             # Extrair do JSON embutido: "name":"Track" e "artists":[{"name":"Artist"}]
@@ -1631,13 +1669,12 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                             if track_name:
                                 log.info("Spotify embed JSON (só título): %s → %s", url[:60], track_name.group(1))
                                 return f"ytsearch1:{track_name.group(1)}"
-        except Exception as e:
-            log.debug("Spotify embed scraping falhou: %s", e)
-        # Método 2: oEmbed API (nem sempre retorna author_name)
-        try:
-            oembed_url = f"https://open.spotify.com/oembed?url={url}"
-            async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
+            except Exception as e:
+                log.debug("Spotify embed scraping falhou: %s", e)
+            # Método 2: oEmbed API (nem sempre retorna author_name)
+            try:
+                oembed_url = f"https://open.spotify.com/oembed?url={url}"
+                async with aio.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
                     if r.status == 200:
                         data = await r.json()
                         title = data.get("title", "")
@@ -1647,17 +1684,16 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                             query = f"{artist} {title}".strip() if artist else title
                             log.info("Spotify oEmbed: %s → %s", url[:60], query)
                             return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Spotify oEmbed falhou: %s", e)
-        return None
+            except Exception as e:
+                log.debug("Spotify oEmbed falhou: %s", e)
+            return None
 
-    # --- Deezer: oEmbed + fallback API pública ---
-    if "deezer.com" in platform:
-        # Método 1: oEmbed
-        try:
-            oembed_url = f"https://api.deezer.com/oembed?url={url}"
-            async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
+        # --- Deezer: oEmbed + fallback API pública ---
+        if "deezer.com" in platform:
+            # Método 1: oEmbed
+            try:
+                oembed_url = f"https://api.deezer.com/oembed?url={url}"
+                async with aio.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
                     if r.status == 200:
                         data = await r.json()
                         title = data.get("title", "")
@@ -1667,16 +1703,15 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                             query = f"{artist} {title}".strip() if artist else title
                             log.info("Deezer oEmbed: %s → %s", url[:60], query)
                             return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Deezer oEmbed falhou: %s", e)
-        # Método 2: API pública (/track/{id} ou /album/{id})
-        try:
-            track_match = re.search(r"/track/(\d+)", url)
-            album_match = re.search(r"/album/(\d+)", url)
-            if track_match:
-                async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(f"https://api.deezer.com/track/{track_match.group(1)}",
-                                        timeout=_aiohttp.ClientTimeout(total=3)) as r:
+            except Exception as e:
+                log.debug("Deezer oEmbed falhou: %s", e)
+            # Método 2: API pública (/track/{id} ou /album/{id})
+            try:
+                track_match = re.search(r"/track/(\d+)", url)
+                album_match = re.search(r"/album/(\d+)", url)
+                if track_match:
+                    async with aio.get(f"https://api.deezer.com/track/{track_match.group(1)}",
+                                       timeout=_aiohttp.ClientTimeout(total=3)) as r:
                         if r.status == 200:
                             data = await r.json()
                             artist = data.get("artist", {}).get("name", "")
@@ -1685,10 +1720,9 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                                 query = f"{artist} {title}".strip()
                                 log.info("Deezer API track: %s → %s", url[:60], query)
                                 return f"ytsearch1:{query}"
-            elif album_match:
-                async with _aiohttp.ClientSession() as sess:
-                    async with sess.get(f"https://api.deezer.com/album/{album_match.group(1)}",
-                                        timeout=_aiohttp.ClientTimeout(total=3)) as r:
+                elif album_match:
+                    async with aio.get(f"https://api.deezer.com/album/{album_match.group(1)}",
+                                       timeout=_aiohttp.ClientTimeout(total=3)) as r:
                         if r.status == 200:
                             data = await r.json()
                             artist = data.get("artist", {}).get("name", "")
@@ -1697,17 +1731,16 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                                 query = f"{artist} {title}".strip()
                                 log.info("Deezer API album: %s → %s", url[:60], query)
                                 return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Deezer API falhou: %s", e)
-        return None
+            except Exception as e:
+                log.debug("Deezer API falhou: %s", e)
+            return None
 
-    # --- Apple Music: oEmbed + fallback scraping + URL parsing ---
-    if "music.apple.com" in platform:
-        # Método 1: oEmbed
-        try:
-            oembed_url = f"https://music.apple.com/services/oembed?url={url}"
-            async with _aiohttp.ClientSession() as sess:
-                async with sess.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
+        # --- Apple Music: oEmbed + fallback scraping + URL parsing ---
+        if "music.apple.com" in platform:
+            # Método 1: oEmbed
+            try:
+                oembed_url = f"https://music.apple.com/services/oembed?url={url}"
+                async with aio.get(oembed_url, timeout=_aiohttp.ClientTimeout(total=3)) as r:
                     if r.status == 200:
                         data = await r.json()
                         title = data.get("title", "")
@@ -1717,13 +1750,12 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                             query = f"{artist} {title}".strip() if artist else title
                             log.info("Apple Music oEmbed: %s → %s", url[:60], query)
                             return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Apple Music oEmbed falhou: %s", e)
-        # Método 2: scraping da página (og:title)
-        try:
-            async with _aiohttp.ClientSession() as sess:
-                async with sess.get(url, timeout=_aiohttp.ClientTimeout(total=5),
-                                    headers={"User-Agent": "Mozilla/5.0"}) as r:
+            except Exception as e:
+                log.debug("Apple Music oEmbed falhou: %s", e)
+            # Método 2: scraping da página (og:title)
+            try:
+                async with aio.get(url, timeout=_aiohttp.ClientTimeout(total=5),
+                                   headers={"User-Agent": "Mozilla/5.0"}) as r:
                     if r.status == 200:
                         html = await r.text()
                         og = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
@@ -1737,24 +1769,24 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
                                 query = raw
                             log.info("Apple Music scraping: %s → %s", url[:60], query)
                             return f"ytsearch1:{query}"
-        except Exception as e:
-            log.debug("Apple Music scraping falhou: %s", e)
-        # Método 3: extrair do path da URL
-        try:
-            parts = url.split("/")
-            for p in reversed(parts):
-                clean = p.split("?")[0].replace("-", " ").strip()
-                if clean and not clean.isdigit() and len(clean) > 3:
-                    log.info("Apple Music fallback URL: %s", clean)
-                    return f"ytsearch1:{clean}"
-        except Exception:
-            pass
-        return None
+            except Exception as e:
+                log.debug("Apple Music scraping falhou: %s", e)
+            # Método 3: extrair do path da URL
+            try:
+                parts = url.split("/")
+                for p in reversed(parts):
+                    clean = p.split("?")[0].replace("-", " ").strip()
+                    if clean and not clean.isdigit() and len(clean) > 3:
+                        log.info("Apple Music fallback URL: %s", clean)
+                        return f"ytsearch1:{clean}"
+            except Exception:
+                pass
+            return None
 
     return None
 
 
-MAX_SONG_DURATION_SEC = 10 * 60  # 10 minutos — rejeita músicas acima disso
+MAX_SONG_DURATION_SEC = 20 * 60  # 20 minutos — rejeita músicas acima disso
 
 
 def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
@@ -2037,7 +2069,7 @@ _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t$ ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
     + "\n- /help, /queue, /status (slash)\n"
-    "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/sai», «Tiffany, [pergunta]»\n"
+    "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/pausa/continua/limpa/sai», «Tiffany, o que está tocando», «Tiffany, avança 30 segundos», «Tiffany, [pergunta]» (a música pausa enquanto responde)\n"
     "Se o usuário perguntar como usar o bot, cite o comando exato (ex: t$p para tocar)."
 )
 
@@ -2456,6 +2488,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if not vc.is_connected():
                         source.cleanup()
                         break
+                    # Verificar se t$cl foi chamado durante o download
+                    if session._cancel_download:
+                        session._cancel_download = False
+                        session.current_song = ""
+                        source.cleanup()
+                        continue
                     # Salvar referência ao arquivo para seek
                     session.current_file = dl_fp or ""
                     session.current_tmpdir = dl_tmpdir
@@ -2628,7 +2666,7 @@ async def _voice_listen_loop(
                 if not members_in_vc:
                     if _empty_since is None:
                         _empty_since = agora
-                    elif (agora - _empty_since) > 600:
+                    elif (agora - _empty_since) > _EMPTY_CHANNEL_LEAVE_SEC:
                         sess = _sessions.pop(guild_id, None)
                         if sess:
                             if sess.listen_task:
@@ -2707,7 +2745,16 @@ async def _voice_listen_loop(
                     dur, peak, voiced_ratio * 100,
                 )
                 _stt_fail_count += 1
-                # Não spammar no chat — só logar silenciosamente
+                # Após 5 falhas consecutivas, avisar no chat (com cooldown)
+                if _stt_fail_count == 5:
+                    now_hint = time.monotonic()
+                    if now_hint - session.last_stt_hint_ts >= 120:
+                        session.last_stt_hint_ts = now_hint
+                        await _notify(
+                            bot, session.text_channel_id,
+                            "🎤 Estou com dificuldade de te ouvir. Fale mais perto do mic: "
+                            "**Tiffany, qual é a capital do Brasil?** e fique 2s em silêncio.",
+                        )
                 continue
             _stt_fail_count = 0  # reset ao reconhecer algo
             action, arg = _parse_voice_command(text)
@@ -2847,12 +2894,91 @@ async def _voice_listen_loop(
                 await _notify(bot, text_ch_id, "👋 **Tiffany saiu** do canal de voz.")
                 return
             
+            if action == "pause":
+                if vc.is_playing():
+                    vc.pause()
+                    await _notify(bot, session.text_channel_id, "⏸️ Pausei a música.")
+                else:
+                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando.")
+                continue
+
+            if action == "resume":
+                if vc.is_paused():
+                    vc.resume()
+                    await _notify(bot, session.text_channel_id, "▶️ Continuando a música.")
+                else:
+                    await _notify(bot, session.text_channel_id, "⚠️ Música não está pausada.")
+                continue
+
+            if action == "clear":
+                try:
+                    while True:
+                        session.music_queue.get_nowait()
+                        session.music_queue.task_done()
+                except Exception:
+                    pass
+                session.queue_display.clear()
+                session.queue_durations.clear()
+                session.skip_votes.clear()
+                session._cancel_download = True
+                _clear_loop(session)
+                session.current_song = ""
+                if vc.is_playing() or vc.is_paused():
+                    vc.stop()
+                _clear_voice_state(guild_id)
+                await _notify(bot, session.text_channel_id, "🗑️ Fila limpa.")
+                continue
+
+            if action == "nowplaying":
+                if session.current_song:
+                    dur = f" `{_fmt_dur(session.current_duration)}`" if session.current_duration > 0 else ""
+                    elapsed = f" · {_fmt_dur(time.monotonic() - session.song_start_time)} decorrido" if session.song_start_time > 0 else ""
+                    await _notify(bot, session.text_channel_id, f"🎵 **{session.current_song[:80]}**{dur}{elapsed}")
+                else:
+                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando agora.")
+                continue
+
+            if action == "queue_show":
+                if not session.queue_display:
+                    await _notify(bot, session.text_channel_id, "📋 A fila está vazia.")
+                else:
+                    lines = [f"`{i+1}.` {s[:60]}" for i, s in enumerate(session.queue_display[:10])]
+                    if len(session.queue_display) > 10:
+                        lines.append(f"... e mais {len(session.queue_display) - 10}")
+                    await _notify(bot, session.text_channel_id, "📋 **Fila:**\n" + "\n".join(lines))
+                continue
+
+            if action in ("seek_fwd", "seek_back") and arg:
+                if not session.current_song or not session.current_file:
+                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando para pular.")
+                    continue
+                try:
+                    delta = int(arg)
+                    elapsed = time.monotonic() - session.song_start_time if session.song_start_time else 0
+                    target = elapsed + delta if action == "seek_fwd" else elapsed - delta
+                    target = max(0, target)
+                    dur = session.current_duration
+                    if dur > 0 and target >= dur:
+                        target = dur - 5
+                    new_src = _YTSource.from_file(session.current_file, seek_sec=target)
+                    if new_src:
+                        session.seeking = True
+                        vc.stop()
+                        await asyncio.sleep(0.3)
+                        session.song_start_time = time.monotonic() - target
+                        vc.play(new_src)
+                        direction = "⏩" if action == "seek_fwd" else "⏪"
+                        await _notify(bot, session.text_channel_id, f"{direction} Pulando para {_fmt_dur(target)}")
+                except Exception as e:
+                    log.debug("Seek via voz falhou: %s", e)
+                continue
+
             if action == "question" and arg:
                 if not _check_cooldown(speaker_uid):
                     await _notify(bot, session.text_channel_id, "⏳ Aguarde alguns segundos antes de perguntar novamente.")
                     continue
                 await session.question_queue.put((speaker_uid, arg))
-                await _notify(bot, session.text_channel_id, f"💬 Pergunta recebida: «{arg[:80]}» — processando...")
+                await _notify(bot, session.text_channel_id, f"💬 «{arg[:80]}» — processando...")
                 continue
             
             if action == "play" and arg:
@@ -3319,6 +3445,11 @@ def register_voice(bot: commands.Bot) -> None:
                     session.question_queue.task_done()
                     continue
 
+                # Pausar música durante processamento (comportamento Alexa)
+                _was_playing = vc.is_playing()
+                if _was_playing:
+                    vc.pause()
+                    await asyncio.sleep(0.2)
                 try:
                     answer = await _answer_question(question, guild_id, session, vc, user_id=user_id)
                 except Exception:
@@ -3326,6 +3457,9 @@ def register_voice(bot: commands.Bot) -> None:
                     answer = "Desculpa, tive um problema ao processar sua pergunta. Tenta de novo!"
                 finally:
                     session.question_queue.task_done()
+                # Retomar música se foi pausada e TTS não retomou
+                if _was_playing and vc.is_connected() and vc.is_paused():
+                    vc.resume()
                 ch = bot.get_channel(session.text_channel_id)
                 if ch:
                     try:
@@ -3778,8 +3912,9 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             songs = []
             if session.current_song:
-                # Reconstroi query do current_song como busca
-                songs.append({"display": session.current_song, "query": f"ytsearch1:{session.current_song}"})
+                # Usa current_query para preservar URL original (Spotify, YouTube, etc.)
+                saved_q = session.current_query or f"ytsearch1:{session.current_song}"
+                songs.append({"display": session.current_song, "query": saved_q})
             for display in session.queue_display:
                 songs.append({"display": display, "query": f"ytsearch1:{display}"})
             if not songs:
@@ -3865,6 +4000,12 @@ def register_voice(bot: commands.Bot) -> None:
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
+        fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
+        if fila_atual >= QUEUE_MAX:
+            eta = _queue_eta_sec(sess)
+            eta_str = f" (fila termina em ~{_fmt_dur(eta)})" if eta > 0 else ""
+            await ctx.send(embed=_embed(f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}){eta_str}. Aguarde."))
+            return
         song, from_discovery = _pick_random_song(sess, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
         display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
         tag = " 🆕" if from_discovery else ""
@@ -3917,7 +4058,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
         if fila_atual >= QUEUE_MAX:
-            await ctx.send(embed=_embed(f"⚠️ A fila já está cheia ({fila_atual}/{QUEUE_MAX}). Aguarde terminar alguma música."))
+            eta = _queue_eta_sec(sess)
+            eta_str = f" A fila termina em ~{_fmt_dur(eta)}." if eta > 0 else ""
+            await ctx.send(embed=_embed(f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).{eta_str}"))
             return
 
         # Feedback imediato: a busca/resolução pode levar alguns segundos.
@@ -4379,6 +4522,8 @@ def register_voice(bot: commands.Bot) -> None:
                 pass  # QueueEmpty — fila limpa
         session.queue_display.clear()
         session.queue_durations.clear()
+        session.skip_votes.clear()
+        session._cancel_download = True
         _clear_loop(session)
         session.current_song = ""
         # Para a musica atual tambem
@@ -5123,6 +5268,7 @@ def register_voice(bot: commands.Bot) -> None:
                 current_d = info.get("current_display", "")
                 saved_queries = info.get("queue_queries", [])
                 saved_displays = info.get("queue_displays", [])
+                session.history = info.get("history", [])
                 # Restaurar posição de playback (seek_sec salvo + tempo de restart)
                 raw_seek = info.get("current_seek_sec", 0.0)
                 if raw_seek > 0 and current_q:
@@ -5193,15 +5339,13 @@ def register_voice(bot: commands.Bot) -> None:
             "`t$d` / `t$roll` — `d20`, `2d6+3`, `2d20kh1`, `5d10>=7`, `2d6!`, `4dF+2`\n"
             "Inline: `[1d20+5]` ou `[Ataque] 2d6+3` em qualquer mensagem"
         ), inline=False)
-        em.add_field(name="🔔 Alertas de Preço", value=(
-            "`t$alerta <produto>` — cria alerta (recebe DM quando sair oferta)\n"
-            "`t$alerta list` — seus alertas ativos\n"
-            "`t$alerta remove <número>` — remove alerta"
-        ), inline=False)
         em.add_field(name="🎙️ Voz na call", value=(
             "«Tiffany, toca `[música]`» — Adicionar à fila\n"
-            "«Tiffany, para / pula / sai» — Controle por voz\n"
-            "«Tiffany, `[pergunta]`» — Perguntar à IA"
+            "«Tiffany, para / pula / pausa / continua / sai» — Controle\n"
+            "«Tiffany, limpa / shuffle / loop / replay» — Fila\n"
+            "«Tiffany, o que está tocando / mostra a fila» — Info\n"
+            "«Tiffany, avança/volta `[N]` segundos» — Seek\n"
+            "«Tiffany, `[pergunta]`» — IA pausa a música e responde"
         ), inline=False)
         em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/status` · `/stats`", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
