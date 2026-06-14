@@ -108,7 +108,7 @@ if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
 discord_client = commands.Bot(
-    command_prefix=commands.when_mentioned_or("t$", "T$"),
+    command_prefix=commands.when_mentioned_or("t!", "T!"),
     case_insensitive=True,
     intents=intents,
     help_command=None,  # /help (slash command) fornece a ajuda dos comandos
@@ -2100,7 +2100,7 @@ _CMD_NAMES = (
 
 @discord_client.event
 async def on_message(message: discord.Message):
-    """Normaliza comandos sem espaço (ex: t$phttps://... → t$p https://...)."""
+    """Normaliza comandos sem espaço (ex: t!phttps://... → t!p https://...)."""
     try:
         if message.author.bot:
             return
@@ -2108,7 +2108,7 @@ async def on_message(message: discord.Message):
         if not content:
             return
         lower = content.lower()
-        if lower.startswith("t$"):
+        if lower.startswith("t!"):
             after_prefix = content[2:]
             matched = False
             # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/su)
@@ -2118,12 +2118,12 @@ async def on_message(message: discord.Message):
                         # Comando já formatado corretamente (exato ou com espaço)
                         break
                     # Insere espaço entre comando e argumento
-                    message.content = f"t${cmd} {after_prefix[len(cmd):]}"
+                    message.content = f"t!{cmd} {after_prefix[len(cmd):]}"
                     matched = True
                     break
-            # Normaliza prefixo para minúsculo (T$ → t$)
-            if not matched and content[:2] != "t$":
-                message.content = f"t${content[2:]}"
+            # Normaliza prefixo para minúsculo (T! → t!)
+            if not matched and content[:2] != "t!":
+                message.content = f"t!{content[2:]}"
         await discord_client.process_commands(message)
     except Exception:
         log.exception("Erro no on_message")

@@ -132,7 +132,7 @@ log.addHandler(_file_handler)
 # =========================
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="t$", intents=intents)
+bot = commands.Bot(command_prefix="t!", intents=intents)
 http_session: Optional[aiohttp.ClientSession] = None
 # Contador diário de menções ao cargo (máx 3 por dia)
 _mention_count_ofertas: int = 0
@@ -1197,7 +1197,7 @@ async def _notify_price_alerts(deal: dict, msg) -> None:
             elif msg.jump_url:
                 desc += f"\n[Ver no Discord]({msg.jump_url})"
             em = discord.Embed(description=desc, color=0xFF4500)
-            em.set_footer(text="Use t$alerta list para gerenciar seus alertas")
+            em.set_footer(text="Use t!alerta list para gerenciar seus alertas")
             await user.send(embed=em)
             notified.add(user_id)
             log.info(f"  🔔 DM de alerta enviada para user {user_id} (keyword: {keyword})")

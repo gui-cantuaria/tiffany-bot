@@ -1,4 +1,4 @@
-"""Lista de ~5050 músicas internacionais de grande sucesso para t$r / t$random."""
+"""Lista de ~5050 músicas internacionais de grande sucesso para t!r / t!random."""
 
 RANDOM_SONGS: list[str] = [
     "ytsearch1:The Weeknd - Blinding Lights",

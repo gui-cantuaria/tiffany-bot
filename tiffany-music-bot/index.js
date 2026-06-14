@@ -116,7 +116,7 @@ client.once('ready', async () => {
 });
 
 client.on('messageCreate', async (message) => {
-  if (!message.content.startsWith('t$') || message.author.bot) return;
+  if (!message.content.startsWith('t!') || message.author.bot) return;
   const contentAfterPrefix = message.content.slice(2).trim();
   if (!contentAfterPrefix) return;
   const [commandName, ...args] = contentAfterPrefix.split(/\s+/);

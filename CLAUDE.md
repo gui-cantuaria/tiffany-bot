@@ -36,7 +36,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
   └── launcher.py (supervisor, fcntl lockfile /tmp/tiffany_launcher.lock)
         ├── notices.py (news bot + voice module)
         │     └── imports tiffany_voice.py
-        │           └── imports random_songs.py (~5050 songs for t$r)
+        │           └── imports random_songs.py (~5050 songs for t!r)
         └── offers.py (deals bot, independent process)
 ```
 
@@ -47,7 +47,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - AI analysis via OpenRouter (Gemini 3.1 Flash Lite for text and image validation)
 - Budget-limited AI: max 3 text analysis + max 2 vision calls per cycle
 - Discord publishing with embeds, threads, and image attachments
-- Command normalization (`on_message` handler for spaceless commands like `T$Phttps://...`)
+- Command normalization (`on_message` handler for spaceless commands like `T!Phttps://...`)
 - Imports and registers `tiffany_voice.py` commands
 - Log noise suppression for discord.ext.voice_recv and gateway warnings
 - Embed safety: title truncated to 256, description to 4096, thread name to 100 chars
@@ -59,10 +59,10 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Music playback via yt-dlp download + FFmpeg (download-to-file approach, not streaming)
 - Platform resolution: Spotify, Deezer, Apple Music, Amazon Music, YouTube Music -> YouTube search
 - Voice recognition: discord-ext-voice-recv -> Opus decode -> Google STT / Vosk fallback
-- AI chat (`t$c`), URL summarization (`t$su`), TTS responses
+- AI chat (`t!c`), URL summarization (`t!su`), TTS responses
 - Session persistence across restarts (`voice_state.json`)
 - Playlist save/load system (`playlists.json`)
-- Audio Clip (`t$clip`) — saves last 30s of voice channel audio as WAV file (stereo 48kHz buffer)
+- Audio Clip (`t!clip`) — saves last 30s of voice channel audio as WAV file (stereo 48kHz buffer)
 - Auto-disconnect on 5min idle (no interaction) or empty channel (with guard against duplicate handlers)
 - Bot moved/kicked detection via `on_voice_state_update`
 - Voice command speaker channel membership validation
@@ -93,7 +93,7 @@ systemd (tiffany-bot.service, KillMode=control-group)
 | `tiffany_voice.py` | Music, voice commands, AI chat, clip, playlists (~4,100 lines) |
 | `offers.py` | Deals/offers bot (separate process, ~940 lines) |
 | `launcher.py` | Process supervisor with lockfile |
-| `random_songs.py` | ~5050 international songs for t$r |
+| `random_songs.py` | ~5050 international songs for t!r |
 | `affiliate_config.py` | Affiliate link builder per store (env-driven) |
 | `notices_history.json` | Dedup state (URL hashes + SimHash, 7-day cleanup) |
 | `notices_metrics.json` | News cycle metrics (posts, AI calls, etc.) |
@@ -101,26 +101,26 @@ systemd (tiffany-bot.service, KillMode=control-group)
 | `offers_history.json` | Processed offers (7-day cleanup) |
 | `voice_state.json` | Music session persistence (current song, queue) |
 | `playlists.json` | Saved playlists per guild |
-| `chat_memory.json` | Persistent conversation context (t$c, 24h TTL) |
+| `chat_memory.json` | Persistent conversation context (t!c, 24h TTL) |
 | `cookies.txt` | YouTube cookies for yt-dlp (optional) |
 | `vosk-model-small-pt-0.3/` | Vosk STT model (offline fallback) |
 | `scripts/deploy.sh` | VPS deploy script (git fetch + checkout + restart) |
 | `scripts/tiffany-bot.service` | systemd unit file for VPS |
 | `.github/workflows/deploy.yml` | GitHub Actions CI/CD (push to main -> deploy) |
 
-## Bot Commands (prefix: `t$`, case-insensitive)
+## Bot Commands (prefix: `t!`, case-insensitive)
 
 Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany_voice.py`.
 
-**Chat & IA:** `t$c`/`t$chat`, `t$su`/`t$summary`
+**Chat & IA:** `t!c`/`t!chat`, `t!su`/`t!summary`
 
-**Music:** `t$e`/`t$enter`, `t$leave`/`t$lv`, `t$p`/`t$play`, `t$pa`/`t$pause`, `t$re`/`t$resume`, `t$s`/`t$skip`, `t$l`/`t$loop`, `t$sh`/`t$shuffle`, `t$rp`/`t$replay`, `t$cl`/`t$clear`, `t$r`/`t$random`, `t$ff`/`t$seek`, `t$q`/`t$queue`, `t$np`/`t$nowplaying`, `t$hi`/`t$history`, `t$ap`/`t$autoplay`, `t$247`/`t$nonstop`, `t$ly`/`t$lyrics`
+**Music:** `t!e`/`t!enter`, `t!leave`/`t!lv`, `t!p`/`t!play`, `t!pa`/`t!pause`, `t!re`/`t!resume`, `t!s`/`t!skip`, `t!l`/`t!loop`, `t!sh`/`t!shuffle`, `t!rp`/`t!replay`, `t!cl`/`t!clear`, `t!r`/`t!random`, `t!ff`/`t!seek`, `t!q`/`t!queue`, `t!np`/`t!nowplaying`, `t!hi`/`t!history`, `t!ap`/`t!autoplay`, `t!247`/`t!nonstop`, `t!ly`/`t!lyrics`
 
-**Clip:** `t$clip`
+**Clip:** `t!clip`
 
-**Playlists:** `t$pl`/`t$playlist`
+**Playlists:** `t!pl`/`t!playlist`
 
-**RPG & Dados:** `t$d`/`t$roll`, inline `[d20+5]`
+**RPG & Dados:** `t!d`/`t!roll`, inline `[d20+5]`
 
 **Voice (in call):**
 - "Tiffany, toca [song]" — Add to queue
@@ -166,7 +166,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 
 ### AI Model
 - **Unified model:** google/gemini-3.1-flash-lite (via OpenRouter)
-- Used for: text analysis, image validation (vision), chat (`t$c`), URL summary (`t$su`), voice questions
+- Used for: text analysis, image validation (vision), chat (`t!c`), URL summary (`t!su`), voice questions
 - No fallback chain — same model for all attempts (3 retries with backoff)
 - **Cost control:** Previous model (gemini-3.5-flash) was 6x more expensive and burned ~$5/day. Current model costs ~$0.25/M input, $1.50/M output tokens.
 
@@ -242,7 +242,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 ### Playback Architecture
 - Download audio to temp file via yt-dlp (through WARP SOCKS5 proxy on VPS)
 - Play local file with FFmpeg (no proxy needed)
-- Seek (`t$ff`): reuse downloaded file with FFmpeg `-ss` parameter, safety timeout on worker wait loop
+- Seek (`t!ff`): reuse downloaded file with FFmpeg `-ss` parameter, safety timeout on worker wait loop
 - Session persistence: save current_query + queue to `voice_state.json`
 - Queue limit: 25 songs max
 - Playlist extraction: `extract_flat="in_playlist"`, `ignoreerrors: True`
@@ -269,7 +269,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 `STT_TAIL_SEC=6`: if audio > 6s, sends only last 6s to STT.
 Enabled by `STT_GEMINI_FALLBACK=1` (default). Disable with `STT_GEMINI_FALLBACK=0` for Google+Vosk only.
 
-### AI Chat (`t$c`)
+### AI Chat (`t!c`)
 - Model: google/gemini-3.1-flash-lite (via OpenRouter)
 - AI semaphore: 3 concurrent calls max + global rate limit (15/min)
 - Per-user sliding window: 5 turns in-memory, 3 turns persisted in `chat_memory.json`, 24h TTL
@@ -277,7 +277,7 @@ Enabled by `STT_GEMINI_FALLBACK=1` (default). Disable with `STT_GEMINI_FALLBACK=
 - Supports image attachments (same model handles vision natively)
 - Whitespace-only input rejected
 
-### Audio Clip (`t$clip`)
+### Audio Clip (`t!clip`)
 - Circular PCM buffer (last 30s, stereo 48kHz 16-bit, ~5.76MB max)
 - All voice-recv audio from all users stored in `session.clip_buffer`
 - Exports as WAV file sent via `discord.File`
@@ -293,7 +293,7 @@ Enabled by `STT_GEMINI_FALLBACK=1` (default). Disable with `STT_GEMINI_FALLBACK=
 - `_notify` truncates content to 4000 chars
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
-### Random Music (`t$r`)
+### Random Music (`t!r`)
 - ~5050 international songs in `random_songs.py` (expand via `scripts/merge_all_song_sources.py`)
 - Categories: Most Streamed, Pop, Rap/Hip-Hop, Rock, EDM, Indie/Alt, 80s-90s, R&B, Latin, K-Pop, Afrobeats, Country, Classic Anthems
 - Avoids repeating last played random song
@@ -343,8 +343,8 @@ sleep 3 && PYTHONUNBUFFERED=1 nohup python3 launcher.py >> bot.log 2>&1 &
 ## Code Conventions
 
 - **Language:** All user-facing strings, AI prompts, and logs in Portuguese (BR)
-- **Bot prefix:** `t$` (case-insensitive)
-- **Help:** Only via `/help` slash command (ephemeral, embed rosa). No `t$h`/`t$help` text command.
+- **Bot prefix:** `t!` (case-insensitive)
+- **Help:** Only via `/help` slash command (ephemeral, embed rosa). No `t!h`/`t!help` text command.
 - **File naming:** English (offers.py not ofertas.py)
 - **No database:** All state in JSON files
 - **AI model:** Single unified model (Gemini 3.1 Flash Lite) for all AI tasks — no fallback chains
