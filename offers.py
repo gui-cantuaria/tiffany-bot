@@ -288,13 +288,27 @@ def _is_duplicate(history: dict, url: str) -> bool:
     return h in history.get("deals", {})
 
 
+def _is_title_key_in_history(history: dict, key: str) -> bool:
+    """Checa se um title_key já existe no histórico persistente (7 dias)."""
+    if not key:
+        return False
+    for v in history.get("deals", {}).values():
+        if isinstance(v, dict) and v.get("tkey") == key:
+            return True
+    return False
+
+
 def _mark_posted(history: dict, url: str, title: str) -> None:
     h = _deal_hash(url)
-    history.setdefault("deals", {})[h] = {
+    entry = {
         "url": url,
         "title": title[:100],
         "ts": time.time(),
     }
+    key = _title_key(title)
+    if key:
+        entry["tkey"] = key
+    history.setdefault("deals", {})[h] = entry
     _save_history(history)
 
 
@@ -1366,13 +1380,16 @@ async def _run_deals_cycle_inner() -> None:
 
     # Dedup por URL (histórico 7 dias) + intraday por produto (mesmo produto, preço diferente)
     candidates = []
+    _cycle_keys: set[str] = set()  # dedup dentro do mesmo ciclo
     for deal in all_deals:
         if _is_duplicate(history, deal["url"]):
             continue
         key = _title_key(deal["title"])
-        if key and key in _posted_title_keys:
-            log.debug(f"  Dedup intraday (produto similar já postado): {deal['title'][:60]}")
+        if key and (key in _posted_title_keys or key in _cycle_keys or _is_title_key_in_history(history, key)):
+            log.debug(f"  Dedup produto similar (intraday ou histórico 7d): {deal['title'][:60]}")
             continue
+        if key:
+            _cycle_keys.add(key)
         candidates.append(deal)
 
     log.info(f"Após dedup: {len(candidates)} candidatas")

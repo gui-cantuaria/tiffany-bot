@@ -399,10 +399,10 @@ def save_history(h: dict) -> None:
         novo["_simhash_idx"] = _simhash_prune(h["_simhash_idx"])
     if "_title_idx" in h:
         novo["_title_idx"] = _title_idx_prune(h["_title_idx"])
-    if "_topic_idx" in h:
-        novo["_topic_idx"] = _topic_idx_prune(h["_topic_idx"])
+    if "_entity_groups" in h:
+        novo["_entity_groups"] = _entity_groups_prune(h["_entity_groups"])[-400:]
     for k, v in h.items():
-        if k in ("_simhash_idx", "_title_idx", "_topic_idx"):
+        if k in ("_simhash_idx", "_title_idx", "_entity_groups", "_topic_idx"):
             continue
         if isinstance(v, dict) and "ts" in v:
             if v["ts"] > cutoff:
@@ -581,8 +581,8 @@ def _extract_topic_keys(titulo: str) -> frozenset[str]:
     # Combinar: nomes próprios primeiro, depois outras palavras significativas
     ordered = [p for p in palavras if p in capitalized]
     ordered += [p for p in palavras if p not in capitalized]
-    # Pegar as 3 palavras mais significativas
-    keys = ordered[:3]
+    # Pegar as 5 palavras mais significativas (mais cobertura para overlap)
+    keys = ordered[:5]
     if len(keys) < 2:
         return frozenset()  # Muito genérico, não dá pra deduplicar por tema
     return frozenset(keys)
@@ -592,45 +592,54 @@ def _topic_fingerprint(titulo: str) -> str:
     keys = _extract_topic_keys(titulo)
     if not keys:
         return ""
-    # Ordenar para consistência
     return "|".join(sorted(keys))
 
-# Topic index no histórico
-def _get_topic_index(h: dict) -> dict[str, int]:
-    idx = h.get("_topic_idx")
-    return idx if isinstance(idx, dict) else {}
+# ---- Entity-overlap dedup (substitui exact-match de fingerprint) ----
+# Armazena grupos de entidades por artigo; dedup se 2+ entidades coincidem
+_ENTITY_OVERLAP_MIN = 2  # mínimo de entidades em comum para considerar duplicata
 
-def _topic_idx_prune(idx: dict[str, int]) -> dict[str, int]:
+def _get_entity_groups(h: dict) -> list:
+    """Retorna lista de {keys: [str], ts: int} de artigos recentes."""
+    g = h.get("_entity_groups")
+    return g if isinstance(g, list) else []
+
+def _entity_groups_prune(groups: list) -> list:
     cutoff = int(time.time()) - (TOPIC_IDX_TTL_HORAS * 3600)
-    return {k: ts for k, ts in idx.items() if ts >= cutoff}
+    return [g for g in groups if g.get("ts", 0) >= cutoff]
 
-_topic_pruned_this_cycle = False
+_entity_pruned_this_cycle = False
 
-def _ensure_topic_pruned(h: dict) -> dict[str, int]:
-    global _topic_pruned_this_cycle
-    idx = _get_topic_index(h)
-    if not _topic_pruned_this_cycle:
-        idx = _topic_idx_prune(idx)
-        h["_topic_idx"] = idx
-        _topic_pruned_this_cycle = True
-    return idx
+def _ensure_entity_pruned(h: dict) -> list:
+    global _entity_pruned_this_cycle
+    groups = _get_entity_groups(h)
+    if not _entity_pruned_this_cycle:
+        groups = _entity_groups_prune(groups)
+        if len(groups) > 400:
+            groups = groups[-400:]
+        h["_entity_groups"] = groups
+        _entity_pruned_this_cycle = True
+    return groups
 
 def topic_is_dup(h: dict, titulo: str) -> bool:
-    """Verifica se o tema/assunto do título já foi coberto recentemente."""
-    fp = _topic_fingerprint(titulo)
-    if not fp:
+    """Verifica se o tema/assunto já foi coberto (overlap de 2+ entidades)."""
+    keys = _extract_topic_keys(titulo)
+    if len(keys) < _ENTITY_OVERLAP_MIN:
         return False
-    idx = _ensure_topic_pruned(h)
-    return fp in idx
+    groups = _ensure_entity_pruned(h)
+    for g in groups:
+        past_keys = set(g.get("keys", []))
+        if len(keys & past_keys) >= _ENTITY_OVERLAP_MIN:
+            return True
+    return False
 
 def topic_add(h: dict, titulo: str) -> None:
-    """Registra o tema como coberto."""
-    fp = _topic_fingerprint(titulo)
-    if not fp:
+    """Registra as entidades do artigo para dedup futuro."""
+    keys = _extract_topic_keys(titulo)
+    if len(keys) < 2:
         return
-    idx = _ensure_topic_pruned(h)
-    idx[fp] = int(time.time())
-    h["_topic_idx"] = idx
+    groups = _ensure_entity_pruned(h)
+    groups.append({"keys": sorted(keys), "ts": int(time.time())})
+    h["_entity_groups"] = groups
 
 # SimHash index no histórico
 def _get_simhash_index(h: dict) -> dict[str, int]:
@@ -1596,7 +1605,7 @@ def _deve_rodar_slot(agora: datetime) -> bool:
 @tasks.loop(minutes=1)
 async def verificar_feeds():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
-    global _simhash_pruned_this_cycle, _title_pruned_this_cycle
+    global _simhash_pruned_this_cycle, _title_pruned_this_cycle, _entity_pruned_this_cycle
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
@@ -1611,7 +1620,7 @@ async def verificar_feeds():
     # Resetar flags de prune para este ciclo
     _simhash_pruned_this_cycle = False
     _title_pruned_this_cycle = False
-    _topic_pruned_this_cycle = False
+    _entity_pruned_this_cycle = False
 
     if not http_session or http_session.closed:
         connector = aiohttp.TCPConnector(limit=15, limit_per_host=3)
@@ -1720,7 +1729,7 @@ async def verificar_feeds():
     # Sets de dedup in-cycle (não poluem o histórico persistente)
     _cycle_titles: set[str] = set()
     _cycle_simhashes: set[int] = set()
-    _cycle_topics: set[str] = set()
+    _cycle_topic_groups: list[frozenset[str]] = []  # entity overlap dedup in-cycle
 
     for nome_site, feed in resultados_feeds:
         if not feed or not feed.entries:
@@ -1769,9 +1778,13 @@ async def verificar_feeds():
                 total_dedup += 1
                 continue
 
-            # Dedup por TEMA/ASSUNTO (mesma notícia de fontes diferentes com títulos distintos)
-            _topic_fp = _topic_fingerprint(title)
-            if _topic_fp and (topic_is_dup(history, title) or _topic_fp in _cycle_topics):
+            # Dedup por TEMA/ASSUNTO (entity overlap — 2+ entidades em comum = duplicata)
+            _topic_keys = _extract_topic_keys(title)
+            _cycle_topic_dup = any(
+                len(_topic_keys & past) >= _ENTITY_OVERLAP_MIN
+                for past in _cycle_topic_groups
+            ) if len(_topic_keys) >= _ENTITY_OVERLAP_MIN else False
+            if _topic_keys and (topic_is_dup(history, title) or _cycle_topic_dup):
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_topico"})
                 total_dedup += 1
                 log.info(f"  ✗ Tema repetido: [{nome_site}] {title[:60]}")
@@ -1820,8 +1833,8 @@ async def verificar_feeds():
             # Dedup cross-site no mesmo ciclo: usar set em memória (não polui o histórico persistente)
             _cycle_titles.add(_title_fingerprint(title))
             _cycle_simhashes.add(sh)
-            if _topic_fp:
-                _cycle_topics.add(_topic_fp)
+            if len(_topic_keys) >= 2:
+                _cycle_topic_groups.append(_topic_keys)
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
 
