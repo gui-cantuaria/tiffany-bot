@@ -21,6 +21,7 @@ import shutil
 import time
 import threading
 import wave
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -159,7 +160,7 @@ MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap para evitar memory leak se usuár
 CLIP_DURATION_SEC = 30
 CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
 
-QUEUE_MAX = 25  # máximo de músicas na fila
+QUEUE_MAX = 30  # máximo de músicas na fila
 _QUEUE_EMPTY_LEAVE_SEC = 180  # sair da call 3 min após a fila acabar (sem t$247)
 _DEFAULT_TRACK_EST_SEC = 210  # estimativa por faixa quando duração desconhecida
 
