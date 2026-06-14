@@ -587,13 +587,6 @@ def _extract_topic_keys(titulo: str) -> frozenset[str]:
         return frozenset()  # Muito genérico, não dá pra deduplicar por tema
     return frozenset(keys)
 
-def _topic_fingerprint(titulo: str) -> str:
-    """Gera fingerprint do tema/assunto baseado em palavras-chave."""
-    keys = _extract_topic_keys(titulo)
-    if not keys:
-        return ""
-    return "|".join(sorted(keys))
-
 # ---- Entity-overlap dedup (substitui exact-match de fingerprint) ----
 # Armazena grupos de entidades por artigo; dedup se 2+ entidades coincidem
 _ENTITY_OVERLAP_MIN = 2  # mínimo de entidades em comum para considerar duplicata
