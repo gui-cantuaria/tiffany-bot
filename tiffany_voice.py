@@ -3460,7 +3460,7 @@ async def _voice_listen_loop(
                 continue
             
             if action == "play" and arg:
-                if await _should_block_content(arg):
+                if _contains_blocked_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Essa eu não toco."))
@@ -4541,8 +4541,9 @@ def register_voice(bot: commands.Bot) -> None:
         query = query.strip()
         # Limitar tamanho da query para evitar abuso
         query = query[:500]
-        # Bloqueio precoce: pega texto digitado (URLs são checadas depois, pelo título).
-        if not re.match(r"^https?://", query) and await _should_block_content(query):
+        # Bloqueio precoce (instantâneo, literal): pega texto digitado. A IA roda depois,
+        # em segundo plano, no worker — para não atrasar a reprodução.
+        if not re.match(r"^https?://", query) and _contains_blocked_content(query):
             await ctx.send(embed=_embed(_BLOCKED_REPLY))
             return
         _stats["commands_used"] += 1
@@ -4841,9 +4842,10 @@ def register_voice(bot: commands.Bot) -> None:
         if probe_title and (display == "link recebido" or display == query):
             display = probe_title
 
-        # Bloqueio pós-resolução: o título real (ex: vídeo do YouTube) pode revelar
-        # conteúdo proibido que a URL crua escondia. Texto (literal + IA) + thumbnail (visão).
-        if await _should_block_media(display, query) or await _should_block_content(probe_title or ""):
+        # Bloqueio pós-resolução (instantâneo, literal): título real pode revelar conteúdo
+        # proibido. A moderação por IA (texto + thumbnail) roda em segundo plano no worker,
+        # sem atrasar o início da música.
+        if _contains_blocked_content(display) or _contains_blocked_content(probe_title or ""):
             await status.edit(embed=_embed(_BLOCKED_REPLY))
             return
 
