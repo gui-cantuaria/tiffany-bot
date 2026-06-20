@@ -75,8 +75,8 @@ systemd (tiffany-bot.service, KillMode=control-group)
 **offers.py** — Deals bot (~960 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
 - 15 categories: hardware-perifericos, notebooks, notebook-gamer, monitor, processador, placa-mae, pc-gamer, roteador-e-repetidor (rede/adaptadores), teclado, mouse, headset, webcam, ssd, memoria-ram, mesa-digitalizadora
-- **Active store whitelist** (affiliate configured): Terabyte/TerabyteShop, ShopInfo, Amazon, Mercado Livre, Shopee
-- Full whitelist (when all affiliates active): + KaBuM, Magalu, Pichau, AliExpress (commented out)
+- **Active store whitelist** (affiliate configured): Terabyte/TerabyteShop, ShopInfo, Amazon, Mercado Livre, Shopee, AliExpress
+- Full whitelist (when all affiliates active): + KaBuM, Magalu, Pichau (commented out)
 - Filters: 15-100% discount, image required, stars >= 4.3, sales >= 50, at least one quality metric
 - `DESCONTO_SEM_METRICA = 25%` — accepts offers without stars/sales data if discount >= 25%
 - Coupon extraction, tag display, store redirect URLs
@@ -213,7 +213,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Image required
 - **Relevance filter** (`_is_irrelevant` / `_IRRELEVANT_KEYWORDS`): rejects non-IT products that Promobit sometimes lists inside PC categories (appliances/kitchen/toys: pipoqueira, liquidificador, fritadeira, etc.). Fixes cases like "Pipoqueira Disney Mickey Mouse" landing in `/mouse/`.
 - **Stars >= 4.3, sales >= 50**
-- Store must be in active whitelist (Terabyte, ShopInfo, Amazon, Mercado Livre, Shopee)
+- Store must be in active whitelist (Terabyte, ShopInfo, Amazon, Mercado Livre, Shopee, AliExpress)
 - Must have at least one quality metric (stars OR sales) — or discount >= 25% if no data at all (`DESCONTO_SEM_METRICA`)
 - **Rede/adaptadores** (`_is_rede`: categoria `roteador-e-repetidor` ou título com palavra-chave de adaptador): filtros próprios e mais rígidos — stars >= 4.5 AND sales >= 100 AND discount >= 40%, sem fallback "sem métrica" (exige dados reais do Promobit)
 
