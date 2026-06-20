@@ -20,6 +20,7 @@ import collections
 import shutil
 import time
 import threading
+import unicodedata
 import wave
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -164,13 +165,73 @@ VOICE_OVER_MUSIC_WAIT_SEC = 2.0
 CLIP_DURATION_SEC = 30
 CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
 
-QUEUE_MAX = 30  # máximo de músicas na fila
+QUEUE_MAX = 50  # máximo de músicas na fila
 _QUEUE_EMPTY_LEAVE_SEC = 180  # sair da call 3 min após a fila acabar (sem t!247)
 _EMPTY_CHANNEL_LEAVE_SEC = 120  # sair da call 2 min após canal ficar vazio
 _DEFAULT_TRACK_EST_SEC = 210  # estimativa por faixa quando duração desconhecida
 
 # Tamanho mínimo para considerar uma pergunta (não apenas comando de música)
 MIN_QUESTION_WORDS = 2
+
+# === Conteúdo bloqueado (ditadores, regimes totalitários e termos pesados) ===
+# A Tiffany sempre recusa qualquer pedido (música, chat, voz, resumo) que envolva
+# estes termos. Comparação feita sem acentos e com limites de palavra.
+_BLOCKED_TERMS = frozenset({
+    # Ditadores / figuras de regimes totalitários
+    "hitler", "adolf hitler", "stalin", "josef stalin", "joseph stalin",
+    "kim jong un", "kim jong-un", "kim jong il", "kim il sung",
+    "maduro", "nicolas maduro", "mussolini", "benito mussolini",
+    "pol pot", "mao tse tung", "mao zedong", "saddam hussein",
+    "gaddafi", "kadafi", "khadafi", "muammar gaddafi",
+    "franco", "francisco franco", "pinochet", "augusto pinochet",
+    "idi amin", "bashar al assad", "bashar assad", "lenin",
+    "che guevara", "fidel castro", "ho chi minh", "ceausescu",
+    # Ideologias / regimes
+    "nazism", "nazismo", "nazista", "nazistas", "nazi", "nazis",
+    "neonazismo", "neonazista", "neonazi", "fascismo", "fascista", "fascist",
+    "terceiro reich", "third reich", "reich",
+    "stalinismo", "stalinista", "leninismo",
+    "ku klux klan", "kkk", "supremacia branca", "white supremacy",
+    "apartheid", "gestapo", "ss nazista", "wehrmacht",
+    "holocausto", "holocaust", "shoah", "auschwitz", "campo de concentracao",
+    "genocidio", "genocide", "limpeza etnica", "ethnic cleansing",
+    # Símbolos / saudações
+    "heil hitler", "sieg heil", "suastica", "svastica", "swastika",
+    "cruz suastica", "esvastica",
+    # Outros termos pesados
+    "terrorismo", "terrorista", "isis", "al qaeda", "al-qaeda",
+    "estado islamico", "boko haram", "talibã", "taliban",
+    "pedofilia", "pedofilo", "estupro", "estuprador",
+    "escravidao", "escravagismo",
+})
+
+
+def _strip_accents_lower(text: str) -> str:
+    """Minúsculas + remoção de acentos para comparação robusta."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
+
+
+def _contains_blocked_content(text: str) -> bool:
+    """True se o texto envolver ditadores, regimes totalitários ou termos pesados."""
+    if not text:
+        return False
+    norm = _strip_accents_lower(text)
+    # Colapsa pontuação/espaços para detectar variações (ex: "h.i.t.l.e.r", "nazi-smo")
+    collapsed = re.sub(r"[^a-z0-9\s]", " ", norm)
+    collapsed = re.sub(r"\s+", " ", collapsed).strip()
+    for term in _BLOCKED_TERMS:
+        t = _strip_accents_lower(term)
+        # Limite de palavra para evitar falsos positivos (ex: "franco" em "francês")
+        if re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", collapsed):
+            return True
+    return False
+
+
+_BLOCKED_REPLY = (
+    "🚫 Desculpa, mas eu não falo nem toco nada que envolva ditadores, "
+    "regimes totalitários ou conteúdo desse tipo. Pede outra coisa pra mim. 💖"
+)
 
 YDL_OPTS: dict[str, Any] = {
     "format": "bestaudio/best",
@@ -3149,6 +3210,12 @@ async def _voice_listen_loop(
                 continue
 
             if action == "question" and arg:
+                if _contains_blocked_content(arg):
+                    if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                        vc.resume()
+                    asyncio.create_task(_tts_speak_quick(vc, "Desculpa, não falo sobre isso."))
+                    await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                    continue
                 if not _check_cooldown(speaker_uid):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
@@ -3161,6 +3228,12 @@ async def _voice_listen_loop(
                 continue
             
             if action == "play" and arg:
+                if _contains_blocked_content(arg):
+                    if _paused_for_listen and vc.is_connected() and vc.is_paused():
+                        vc.resume()
+                    asyncio.create_task(_tts_speak_quick(vc, "Essa eu não toco."))
+                    await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                    continue
                 # Verifica limite de fila
                 fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
                 if fila_atual >= QUEUE_MAX:
@@ -4236,6 +4309,9 @@ def register_voice(bot: commands.Bot) -> None:
         query = query.strip()
         # Limitar tamanho da query para evitar abuso
         query = query[:500]
+        if _contains_blocked_content(query):
+            await ctx.send(embed=_embed(_BLOCKED_REPLY))
+            return
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
         sess, vc = await _ensure_connected(ctx)
@@ -4615,6 +4691,9 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("💬 Use: `t!c <pergunta>` (ou `t!chat` / `t!ch`) — ou anexe uma imagem."))
             return
         question = question.strip() if question else ""
+        if _contains_blocked_content(question):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            return
 
         async with ctx.typing():
             answer = await _answer_question(
@@ -5060,6 +5139,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if not url or not re.match(r"^https?://", url):
             await ctx.send(embed=_embed("⚠️ Uso: `t!su <URL>` — precisa ser um link completo (https://...)"))
+            return
+        if _contains_blocked_content(url):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
         if not _check_cooldown(ctx.author.id):
             await ctx.send(embed=_embed("⏳ Aguarde alguns segundos antes de usar novamente."), delete_after=5)

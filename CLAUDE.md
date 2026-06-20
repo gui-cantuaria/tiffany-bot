@@ -69,7 +69,8 @@ systemd (tiffany-bot.service, KillMode=control-group)
 - Random music from ~5050 international hits (`random_songs.py`)
 - Anti-spam: auto-delete @everyone/@here with sarcastic response
 - Inline dice rolls: `[d20+5 ataque]` detected in any message
-- Queue limit: 25 songs max
+- Queue limit: 50 songs max
+- Content blocklist: refuses any music/chat/voice/summary request involving dictators, totalitarian regimes, or heavy terms (`_contains_blocked_content` / `_BLOCKED_TERMS`)
 
 **offers.py** — Deals bot (~960 lines). Handles:
 - Promobit scraping (JSON-LD listing + serverOffer detail pages)
@@ -244,7 +245,7 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Play local file with FFmpeg (no proxy needed)
 - Seek (`t!ff`): reuse downloaded file with FFmpeg `-ss` parameter, safety timeout on worker wait loop
 - Session persistence: save current_query + queue to `voice_state.json`
-- Queue limit: 25 songs max
+- Queue limit: 50 songs max
 - Playlist extraction: `extract_flat="in_playlist"`, `ignoreerrors: True`
 - Shuffle: zip display+query together before shuffling (keeps them synchronized)
 
