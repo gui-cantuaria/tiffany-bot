@@ -293,6 +293,98 @@ async def _should_block_content(text: str) -> bool:
     return await _ai_content_is_blocked(text)
 
 
+# Palavras que tornam um título "suspeito" o suficiente para valer a análise da
+# thumbnail por visão (gasto de crédito só nesses casos — modo híbrido).
+_RISK_HINT_RE = re.compile(
+    r"\b(ai cover|ai voice|sings|singing|canta|parody|parodia|"
+    r"war|guerra|reich|soviet|ussr|urss|nazi|fascis|comunis|communis|"
+    r"dictator|ditador|regime|wehrmacht|propaganda|anthem|hino|marcha|march|"
+    r"wwii|ww2|world war|segunda guerra|cold war|guerra fria|fuhrer|kremlin|"
+    r"gulag|holocaust|holocausto|genoc|hitler|stalin|mussolini|kim jong|maduro|"
+    r"painter|pintor|corporal|cabo)\b"
+)
+
+
+def _title_is_risky(title: str) -> bool:
+    """True se o título tem pistas que justificam checar a thumbnail por visão."""
+    if not title:
+        return False
+    return bool(_RISK_HINT_RE.search(_strip_accents_lower(title)))
+
+
+def _youtube_thumb_url(s: str) -> Optional[str]:
+    """Extrai o ID de vídeo do YouTube e devolve a URL da thumbnail (sem extração extra)."""
+    if not s:
+        return None
+    m = re.search(r"(?:v=|youtu\.be/|/embed/|/shorts/|/watch\?v=)([A-Za-z0-9_-]{11})", s)
+    if m:
+        return f"https://i.ytimg.com/vi/{m.group(1)}/hqdefault.jpg"
+    return None
+
+
+_thumb_mod_cache: dict[str, bool] = {}
+
+
+async def _ai_thumbnail_is_blocked(image_url: str) -> bool:
+    """IA (visão) analisa a thumbnail e decide se mostra conteúdo proibido. Cacheia por URL."""
+    if not image_url:
+        return False
+    if image_url in _thumb_mod_cache:
+        return _thumb_mod_cache[image_url]
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        return False
+    try:
+        import openai as _openai
+        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="google/gemini-3.1-flash-lite",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Analise esta imagem (thumbnail de vídeo). Ela MOSTRA ou faz apologia a: "
+                                    "ditadores (Hitler, Stalin, Mussolini, Kim Jong Un, Maduro etc.), símbolos "
+                                    "nazistas/fascistas (suástica, águia nazista, saudação nazista, SS), símbolos "
+                                    "de ódio ou supremacia racial (KKK), ou cenas de genocídio/violência extrema? "
+                                    "Responda APENAS com 'SIM' ou 'NAO'."
+                                ),
+                            },
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                ],
+                max_tokens=4,
+                temperature=0.0,
+                timeout=12.0,
+            )
+        ans = (resp.choices[0].message.content or "").strip().upper()
+        blocked = ans.startswith("S") or "SIM" in ans
+        _thumb_mod_cache[image_url] = blocked
+        if len(_thumb_mod_cache) > 2000:
+            _thumb_mod_cache.clear()
+        return blocked
+    except Exception as e:
+        log.debug("IA moderação de thumbnail falhou: %s", e)
+        return False
+
+
+async def _should_block_media(title: str, source_query: str = "") -> bool:
+    """Bloqueio para mídia: texto (literal + IA) e, em títulos suspeitos, a thumbnail (visão)."""
+    if await _should_block_content(title):
+        return True
+    if source_query and _title_is_risky(title):
+        thumb = _youtube_thumb_url(source_query)
+        if thumb and await _ai_thumbnail_is_blocked(thumb):
+            log.info("Thumbnail bloqueada pela visão: %s", title[:80])
+            return True
+    return False
+
+
 _BLOCKED_REPLY = (
     "🚫 **Não vou reproduzir nem falar sobre esse tipo de conteúdo.**\n\n"
     "**Motivo:** envolve ditadores, regimes totalitários, ideologias de ódio "
@@ -2685,8 +2777,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         session.current_song = display_name
                     # Bloqueio final (à prova de URL): o título resolvido pode revelar
                     # conteúdo proibido que a busca/URL escondia. Última barreira antes de tocar.
-                    # Usa lista literal + IA (pega apelidos codificados tipo "Austrian Painter").
-                    if _contains_blocked_content(query) or await _should_block_content(display_name):
+                    # Texto (literal + IA) + thumbnail por visão em títulos suspeitos.
+                    if _contains_blocked_content(query) or await _should_block_media(display_name, query):
                         log.info("Conteúdo bloqueado detectado, pulando: %s", display_name[:80])
                         session.current_song = ""
                         source.cleanup()
@@ -4529,7 +4621,8 @@ def register_voice(bot: commands.Bot) -> None:
 
             track_display = track.title or display
             # Bloqueio pós-resolução: título real pode revelar conteúdo proibido.
-            if await _should_block_content(track_display):
+            _lv_src = getattr(track, "uri", "") or query
+            if await _should_block_media(track_display, _lv_src):
                 await status.edit(embed=_embed(_BLOCKED_REPLY))
                 return
             # Dedup
@@ -4687,8 +4780,8 @@ def register_voice(bot: commands.Bot) -> None:
             display = probe_title
 
         # Bloqueio pós-resolução: o título real (ex: vídeo do YouTube) pode revelar
-        # conteúdo proibido que a URL crua escondia. Literal + IA (apelidos codificados).
-        if await _should_block_content(display) or await _should_block_content(probe_title or ""):
+        # conteúdo proibido que a URL crua escondia. Texto (literal + IA) + thumbnail (visão).
+        if await _should_block_media(display, query) or await _should_block_content(probe_title or ""):
             await status.edit(embed=_embed(_BLOCKED_REPLY))
             return
 
