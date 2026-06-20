@@ -198,6 +198,12 @@ _BLOCKED_TERMS = frozenset({
     # Símbolos / saudações
     "heil hitler", "sieg heil", "suastica", "svastica", "swastika",
     "cruz suastica", "esvastica",
+    # Apelidos / eufemismos codificados (usados para burlar filtros)
+    "austrian painter", "pintor austriaco", "the austrian painter",
+    "bohemian corporal", "cabo boemio", "uncle adolf", "tio adolf",
+    "schicklgruber", "grofaz", "fuhrer", "fuehrer", "der fuhrer", "o fuhrer",
+    "1488", "14 88", "88 hh", "gas man", "uncle joe",
+    "viennese watercolorist", "failed art student",
     # Outros termos pesados
     "terrorismo", "terrorista", "isis", "al qaeda", "al-qaeda",
     "estado islamico", "boko haram", "talibã", "taliban",
@@ -226,6 +232,65 @@ def _contains_blocked_content(text: str) -> bool:
         if re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", collapsed):
             return True
     return False
+
+
+_content_mod_cache: dict[str, bool] = {}
+
+
+async def _ai_content_is_blocked(text: str) -> bool:
+    """IA detecta referências (inclusive CODIFICADAS/eufemismos) a ditadores, nazismo,
+    regimes totalitários, ódio etc. Complementa a lista literal. Cacheia resultados."""
+    if not text or not text.strip():
+        return False
+    key = _strip_accents_lower(text.strip())[:200]
+    if key in _content_mod_cache:
+        return _content_mod_cache[key]
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        return False
+    try:
+        import openai as _openai
+        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="google/gemini-3.1-flash-lite",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Você é um moderador de conteúdo rigoroso. Analise o TÍTULO/texto e decida se ele faz "
+                            "referência, homenagem, apologia ou alusão — MESMO que CODIFICADA, por apelidos, eufemismos "
+                            "ou trocadilhos — a: ditadores (Hitler, Stalin, Mussolini, Kim Jong Un, Maduro, Pol Pot, "
+                            "Pinochet, Saddam, Gaddafi etc.), nazismo, fascismo, regimes totalitários, genocídio/Holocausto, "
+                            "supremacia ou ódio racial, terrorismo, ou pedofilia. "
+                            "Fique MUITO atento a apelidos codificados: 'Austrian Painter'/'Pintor Austríaco', "
+                            "'Bohemian Corporal', 'Uncle Adolf', 'Failed Art Student', 'Schicklgruber', 'GROFAZ', "
+                            "'1488', 'Führer' = Hitler; 'Uncle Joe' = Stalin; 'Il Duce' = Mussolini. "
+                            "Responda APENAS com 'SIM' (deve bloquear) ou 'NAO' (conteúdo ok)."
+                        ),
+                    },
+                    {"role": "user", "content": text[:300]},
+                ],
+                max_tokens=4,
+                temperature=0.0,
+                timeout=10.0,
+            )
+        ans = (resp.choices[0].message.content or "").strip().upper()
+        blocked = ans.startswith("S") or "SIM" in ans
+        _content_mod_cache[key] = blocked
+        if len(_content_mod_cache) > 2000:
+            _content_mod_cache.clear()
+        return blocked
+    except Exception as e:
+        log.debug("IA moderação de conteúdo falhou: %s", e)
+        return False
+
+
+async def _should_block_content(text: str) -> bool:
+    """Bloqueio combinado: lista literal (rápida) + moderação por IA (eufemismos)."""
+    if _contains_blocked_content(text):
+        return True
+    return await _ai_content_is_blocked(text)
 
 
 _BLOCKED_REPLY = (
@@ -2620,7 +2685,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         session.current_song = display_name
                     # Bloqueio final (à prova de URL): o título resolvido pode revelar
                     # conteúdo proibido que a busca/URL escondia. Última barreira antes de tocar.
-                    if _contains_blocked_content(display_name) or _contains_blocked_content(query):
+                    # Usa lista literal + IA (pega apelidos codificados tipo "Austrian Painter").
+                    if _contains_blocked_content(query) or await _should_block_content(display_name):
                         log.info("Conteúdo bloqueado detectado, pulando: %s", display_name[:80])
                         session.current_song = ""
                         source.cleanup()
@@ -3222,7 +3288,7 @@ async def _voice_listen_loop(
                 continue
 
             if action == "question" and arg:
-                if _contains_blocked_content(arg):
+                if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Desculpa, não falo sobre isso."))
@@ -3240,7 +3306,7 @@ async def _voice_listen_loop(
                 continue
             
             if action == "play" and arg:
-                if _contains_blocked_content(arg):
+                if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Essa eu não toco."))
@@ -4321,7 +4387,8 @@ def register_voice(bot: commands.Bot) -> None:
         query = query.strip()
         # Limitar tamanho da query para evitar abuso
         query = query[:500]
-        if _contains_blocked_content(query):
+        # Bloqueio precoce: pega texto digitado (URLs são checadas depois, pelo título).
+        if not re.match(r"^https?://", query) and await _should_block_content(query):
             await ctx.send(embed=_embed(_BLOCKED_REPLY))
             return
         _stats["commands_used"] += 1
@@ -4462,7 +4529,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             track_display = track.title or display
             # Bloqueio pós-resolução: título real pode revelar conteúdo proibido.
-            if _contains_blocked_content(track_display):
+            if await _should_block_content(track_display):
                 await status.edit(embed=_embed(_BLOCKED_REPLY))
                 return
             # Dedup
@@ -4620,8 +4687,8 @@ def register_voice(bot: commands.Bot) -> None:
             display = probe_title
 
         # Bloqueio pós-resolução: o título real (ex: vídeo do YouTube) pode revelar
-        # conteúdo proibido que a URL crua escondia.
-        if _contains_blocked_content(display) or _contains_blocked_content(probe_title or ""):
+        # conteúdo proibido que a URL crua escondia. Literal + IA (apelidos codificados).
+        if await _should_block_content(display) or await _should_block_content(probe_title or ""):
             await status.edit(embed=_embed(_BLOCKED_REPLY))
             return
 
@@ -4713,7 +4780,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("💬 Use: `t!c <pergunta>` (ou `t!chat` / `t!ch`) — ou anexe uma imagem."))
             return
         question = question.strip() if question else ""
-        if _contains_blocked_content(question):
+        if question and await _should_block_content(question):
             await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
 
