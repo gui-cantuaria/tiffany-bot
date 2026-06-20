@@ -3836,7 +3836,7 @@ def register_voice(bot: commands.Bot) -> None:
             system_msg = {
                 "role": "system",
                 "content": (
-                    "Você é a Tiffany, a assistente oficial do servidor Discord do Tuffine. "
+                    "Você é a Tiffany, uma assistente de Discord criada pelo Tuffine. "
                     "Sua personalidade: esperta, direta, levemente sarcástica quando cabe, mas sempre simpática. "
                     "Você trata os membros pelo nome quando possível e adapta o tom — se alguém brinca, você brinca de volta; "
                     "se alguém faz uma pergunta séria, você responde com precisão. "
@@ -4801,8 +4801,9 @@ def register_voice(bot: commands.Bot) -> None:
             best = scored[0]
             best_score = _match_score(search_term, best["title"])
             second_score = _match_score(search_term, scored[1]["title"]) if len(scored) > 1 else 0.0
-            # Confiante só se o melhor for forte E claramente acima do 2º (sem ambiguidade)
-            confident = best_score >= 0.75 and (len(scored) == 1 or (best_score - second_score) >= 0.15)
+            # Confiante: toca o 1º resultado direto na maioria dos casos.
+            # Só pergunta quando o score é muito baixo OU os 2 primeiros são quase iguais (ambiguidade real, ex: paródia vs original).
+            confident = best_score >= 0.55 and (len(scored) == 1 or (best_score - second_score) >= 0.08)
 
             if not confident:
                 linhas = []
