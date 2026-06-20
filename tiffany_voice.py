@@ -229,8 +229,12 @@ def _contains_blocked_content(text: str) -> bool:
 
 
 _BLOCKED_REPLY = (
-    "🚫 Desculpa, mas eu não falo nem toco nada que envolva ditadores, "
-    "regimes totalitários ou conteúdo desse tipo. Pede outra coisa pra mim. 💖"
+    "🚫 **Não vou reproduzir nem falar sobre esse tipo de conteúdo.**\n\n"
+    "**Motivo:** envolve ditadores, regimes totalitários, ideologias de ódio "
+    "ou temas que fazem apologia à violência, ao genocídio e à opressão. "
+    "Esse tipo de conteúdo é ofensivo, causa dano e vai contra as minhas diretrizes — "
+    "por isso eu bloqueio sempre, sem exceção.\n\n"
+    "Pode me pedir outra coisa que eu fico feliz em ajudar! 💖"
 )
 
 YDL_OPTS: dict[str, Any] = {
