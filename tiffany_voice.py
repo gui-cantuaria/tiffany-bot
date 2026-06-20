@@ -204,6 +204,12 @@ _BLOCKED_TERMS = frozenset({
     "schicklgruber", "grofaz", "fuhrer", "fuehrer", "der fuhrer", "o fuhrer",
     "1488", "14 88", "88 hh", "gas man", "uncle joe",
     "viennese watercolorist", "failed art student",
+    # Cirílico (russo) — burla comum por troca de alfabeto
+    "гитлер", "адольф гитлер", "сталин", "иосиф сталин",
+    "муссолини", "ким чен ын", "мадуро", "пол пот", "пиночет",
+    "нацизм", "нацист", "наци", "фашизм", "фашист", "неонацизм",
+    "третий рейх", "рейх", "холокост", "геноцид", "гестапо",
+    "свастика", "зиг хайль", "хайль гитлер",
     # Outros termos pesados
     "terrorismo", "terrorista", "isis", "al qaeda", "al-qaeda",
     "estado islamico", "boko haram", "talibã", "taliban",
@@ -219,17 +225,18 @@ def _strip_accents_lower(text: str) -> str:
 
 
 def _contains_blocked_content(text: str) -> bool:
-    """True se o texto envolver ditadores, regimes totalitários ou termos pesados."""
+    """True se o texto envolver ditadores, regimes totalitários ou termos pesados.
+    Unicode-aware: também detecta termos em cirílico (ex: "ГИТЛЕР" = Hitler)."""
     if not text:
         return False
     norm = _strip_accents_lower(text)
-    # Colapsa pontuação/espaços para detectar variações (ex: "h.i.t.l.e.r", "nazi-smo")
-    collapsed = re.sub(r"[^a-z0-9\s]", " ", norm)
+    # Colapsa pontuação preservando letras de qualquer alfabeto (cirílico, latino...).
+    collapsed = re.sub(r"[^\w\s]", " ", norm, flags=re.UNICODE)
     collapsed = re.sub(r"\s+", " ", collapsed).strip()
     for term in _BLOCKED_TERMS:
         t = _strip_accents_lower(term)
-        # Limite de palavra para evitar falsos positivos (ex: "franco" em "francês")
-        if re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", collapsed):
+        # Limite de palavra Unicode para evitar falsos positivos (ex: "franco" em "francês")
+        if re.search(rf"(?<!\w){re.escape(t)}(?!\w)", collapsed, flags=re.UNICODE):
             return True
     return False
 
@@ -301,7 +308,16 @@ _RISK_HINT_RE = re.compile(
     r"dictator|ditador|regime|wehrmacht|propaganda|anthem|hino|marcha|march|"
     r"wwii|ww2|world war|segunda guerra|cold war|guerra fria|fuhrer|kremlin|"
     r"gulag|holocaust|holocausto|genoc|hitler|stalin|mussolini|kim jong|maduro|"
-    r"painter|pintor|corporal|cabo)\b"
+    r"painter|pintor|corporal|cabo)\b",
+    re.UNICODE,
+)
+
+# Pistas em cirílico (russo) — sem \b porque a fronteira de palavra difere por alfabeto.
+_RISK_HINT_CYRILLIC_RE = re.compile(
+    r"(гитлер|сталин|муссолини|ким чен|мадуро|нацизм|наци|фашизм|фашист|"
+    r"рейх|холокост|геноцид|свастика|хайль|вермахт|гестапо|"
+    r"кавер|cover|пародия)",
+    re.UNICODE,
 )
 
 
@@ -309,7 +325,15 @@ def _title_is_risky(title: str) -> bool:
     """True se o título tem pistas que justificam checar a thumbnail por visão."""
     if not title:
         return False
-    return bool(_RISK_HINT_RE.search(_strip_accents_lower(title)))
+    norm = _strip_accents_lower(title)
+    if _RISK_HINT_RE.search(norm):
+        return True
+    if _RISK_HINT_CYRILLIC_RE.search(norm):
+        return True
+    # Qualquer título com caracteres cirílicos + indício de cover/IA é suspeito.
+    if re.search(r"[\u0400-\u04FF]", title) and re.search(r"(cover|кавер|ai)", norm):
+        return True
+    return False
 
 
 def _youtube_thumb_url(s: str) -> Optional[str]:
