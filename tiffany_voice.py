@@ -248,6 +248,24 @@ def _contains_blocked_content(text: str) -> bool:
 
 
 _content_mod_cache: dict[str, bool] = {}
+_openrouter_client_singleton = None
+
+
+def _get_openrouter_client():
+    """Cliente OpenRouter compartilhado (evita criar/abrir httpx a cada chamada)."""
+    global _openrouter_client_singleton
+    if _openrouter_client_singleton is None:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return None
+        try:
+            import openai as _openai
+            _openrouter_client_singleton = _openai.AsyncOpenAI(
+                api_key=api_key, base_url="https://openrouter.ai/api/v1"
+            )
+        except Exception:
+            return None
+    return _openrouter_client_singleton
 
 
 async def _ai_content_is_blocked(text: str) -> bool:
@@ -258,12 +276,10 @@ async def _ai_content_is_blocked(text: str) -> bool:
     key = _strip_accents_lower(text.strip())[:200]
     if key in _content_mod_cache:
         return _content_mod_cache[key]
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
+    client = _get_openrouter_client()
+    if client is None:
         return False
     try:
-        import openai as _openai
-        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
                 model="google/gemini-3.1-flash-lite",
@@ -369,12 +385,10 @@ async def _ai_thumbnail_is_blocked(image_url: str) -> bool:
         return False
     if image_url in _thumb_mod_cache:
         return _thumb_mod_cache[image_url]
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
+    client = _get_openrouter_client()
+    if client is None:
         return False
     try:
-        import openai as _openai
-        client = _openai.AsyncOpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
                 model="google/gemini-3.1-flash-lite",
@@ -425,8 +439,13 @@ async def _should_block_media(title: str, source_query: str = "") -> bool:
 
 async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None:
     """Checagem por IA em SEGUNDO PLANO (não trava o início da música).
+    Só gasta IA em títulos suspeitos — o resto já passou pela lista literal.
     Se detectar conteúdo proibido, corta a faixa que está tocando e avisa."""
     try:
+        # Gate de custo/desempenho: sem pista de risco, não chama IA (evita carga por música).
+        if not _title_is_risky(title):
+            return
+        await asyncio.sleep(0)  # cede o controle ao loop antes de qualquer I/O
         if not await _should_block_media(title, query):
             return
         # Só age se ainda for a mesma música tocando (evita cortar a faixa seguinte).
