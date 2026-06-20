@@ -2618,6 +2618,14 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if info and info != "sem resultado para a busca":
                         display_name = _format_track_display(info)
                         session.current_song = display_name
+                    # Bloqueio final (à prova de URL): o título resolvido pode revelar
+                    # conteúdo proibido que a busca/URL escondia. Última barreira antes de tocar.
+                    if _contains_blocked_content(display_name) or _contains_blocked_content(query):
+                        log.info("Conteúdo bloqueado detectado, pulando: %s", display_name[:80])
+                        session.current_song = ""
+                        source.cleanup()
+                        await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                        continue
                     # Aplicar seek de restauração (posição salva antes do restart)
                     if _restore_seek > 0 and dl_fp and dl_duration > 10:
                         capped = min(_restore_seek, dl_duration - 5.0)
@@ -4453,6 +4461,10 @@ def register_voice(bot: commands.Bot) -> None:
                 return
 
             track_display = track.title or display
+            # Bloqueio pós-resolução: título real pode revelar conteúdo proibido.
+            if _contains_blocked_content(track_display):
+                await status.edit(embed=_embed(_BLOCKED_REPLY))
+                return
             # Dedup
             def _normalize_for_dup(s: str) -> str:
                 return re.sub(r'[^\w\s]', '', s).lower().strip()
@@ -4606,6 +4618,12 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if probe_title and (display == "link recebido" or display == query):
             display = probe_title
+
+        # Bloqueio pós-resolução: o título real (ex: vídeo do YouTube) pode revelar
+        # conteúdo proibido que a URL crua escondia.
+        if _contains_blocked_content(display) or _contains_blocked_content(probe_title or ""):
+            await status.edit(embed=_embed(_BLOCKED_REPLY))
+            return
 
         # Detecção de duplicata: verificar se a música já está tocando ou na fila
         def _normalize_for_dup(s: str) -> str:
