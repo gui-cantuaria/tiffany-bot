@@ -423,6 +423,28 @@ async def _should_block_media(title: str, source_query: str = "") -> bool:
     return False
 
 
+async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None:
+    """Checagem por IA em SEGUNDO PLANO (não trava o início da música).
+    Se detectar conteúdo proibido, corta a faixa que está tocando e avisa."""
+    try:
+        if not await _should_block_media(title, query):
+            return
+        # Só age se ainda for a mesma música tocando (evita cortar a faixa seguinte).
+        if getattr(session, "current_query", None) != query:
+            return
+        if not (vc and vc.is_connected()):
+            return
+        log.info("Conteúdo bloqueado pós-início (guard IA), pulando: %s", title[:80])
+        _clear_loop(session)  # evita repetir a música bloqueada se loop estava ligado
+        try:
+            vc.stop()  # dispara _after -> worker avança para a próxima
+        except Exception:
+            pass
+        await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+    except Exception:
+        log.debug("Guard de moderação em background falhou", exc_info=True)
+
+
 _BLOCKED_REPLY = (
     "🚫 **Não vou reproduzir nem falar sobre esse tipo de conteúdo.**\n\n"
     "**Motivo:** envolve ditadores, regimes totalitários, ideologias de ódio "
@@ -2813,15 +2835,17 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if info and info != "sem resultado para a busca":
                         display_name = _format_track_display(info)
                         session.current_song = display_name
-                    # Bloqueio final (à prova de URL): o título resolvido pode revelar
-                    # conteúdo proibido que a busca/URL escondia. Última barreira antes de tocar.
-                    # Texto (literal + IA) + thumbnail por visão em títulos suspeitos.
-                    if _contains_blocked_content(query) or await _should_block_media(display_name, query):
+                    # Bloqueio rápido (instantâneo): lista literal no título/URL. Não usa IA
+                    # aqui para NÃO atrasar o início da música. A checagem por IA (texto +
+                    # thumbnail) roda em segundo plano logo abaixo, cortando se necessário.
+                    if _contains_blocked_content(query) or _contains_blocked_content(display_name):
                         log.info("Conteúdo bloqueado detectado, pulando: %s", display_name[:80])
                         session.current_song = ""
                         source.cleanup()
                         await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
                         continue
+                    # Guarda por IA em segundo plano (não trava a reprodução).
+                    asyncio.create_task(_bg_moderation_guard(session, vc, bot, display_name, query))
                     # Aplicar seek de restauração (posição salva antes do restart)
                     if _restore_seek > 0 and dl_fp and dl_duration > 10:
                         capped = min(_restore_seek, dl_duration - 5.0)
