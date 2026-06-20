@@ -224,10 +224,10 @@ _CATEGORY_PRIORITY = {
     "Mousepad": 2,
     "Webcam": 2,
     "Mesa digitalizadora": 2,
-    "Suporte e Acessórios": 2,
     "Hardware e periféricos": 2,
     "PC Gamer": 3,
     "Notebook": 3,
+    "Suporte e Acessórios": 4,
     "TV": 4,
     "Tablet": 4,
     "Celular": 4,
@@ -942,6 +942,27 @@ def _is_rede(deal: dict) -> bool:
     return any(k in title for k in REDE_KEYWORDS)
 
 
+# Palavras que indicam produto que NÃO é de informática (eletrodoméstico, cozinha,
+# higiene, brinquedo etc.). O Promobit às vezes lista esses itens dentro de categorias
+# de PC (ex.: "Pipoqueira Disney Mickey Mouse" caiu em /mouse/). Rejeitamos pelo título.
+_IRRELEVANT_KEYWORDS = (
+    "pipoqueira", "liquidificador", "fritadeira", "air fryer", "airfryer",
+    "frigideira", "geladeira", "fogao", "fogão", "microondas", "micro-ondas",
+    "cafeteira", "ventilador", "aspirador", "batedeira", "sanduicheira",
+    "ferro de passar", "secador de cabelo", "chapinha", "barbeador", "depilador",
+    "brinquedo", "boneca", "boneco", "lego", "fralda", "shampoo", "perfume",
+    "espremedor", "purificador", "umidificador", "aquecedor", "climatizador",
+    "torradeira", "chaleira", "panela eletrica", "panela elétrica", "panela de",
+    "escova de dente", "garrafa termica", "garrafa térmica",
+)
+
+
+def _is_irrelevant(deal: dict) -> bool:
+    """True se o título indica produto que não é de informática/PC."""
+    title = (deal.get("title") or "").lower()
+    return any(k in title for k in _IRRELEVANT_KEYWORDS)
+
+
 def _passes_filters(deal: dict) -> tuple[bool, str]:
     """Verifica se a oferta passa nos filtros. Retorna (passed, reason)."""
     # Oferta encerrada/expirada no Promobit
@@ -951,6 +972,10 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     # Deve ter imagem
     if not deal.get("image"):
         return False, "sem imagem"
+
+    # Produto fora do escopo de informática (eletrodoméstico, brinquedo, etc.)
+    if _is_irrelevant(deal):
+        return False, "produto irrelevante (não é informática)"
 
     # Deve ter desconto >= 15% e <= 100% (rejeita valores absurdos/negativos)
     disc = deal.get("discount_pct", 0)
@@ -1024,6 +1049,32 @@ def _interleave_by_store(deals: list) -> list:
             result.append(remaining.pop(0))
             last_store = _normalize_store(result[-1].get("store", ""))
     return result
+
+
+def _select_diverse(deals: list, limit: int, max_per_cat: int = 2) -> list:
+    """Seleciona até `limit` ofertas garantindo VARIEDADE de categorias.
+    Espera `deals` já ordenado por (prioridade de categoria, -score). Faz round-robin:
+    pega a melhor de cada categoria por vez (no máx. `max_per_cat` por categoria),
+    o que dá vez às peças prioritárias e evita encher o ciclo de uma categoria só."""
+    from collections import OrderedDict
+    by_cat: "OrderedDict[str, list]" = OrderedDict()
+    for d in deals:
+        by_cat.setdefault(d.get("category", "") or "?", []).append(d)
+
+    selected: list = []
+    counts: dict[str, int] = {}
+    progressed = True
+    while len(selected) < limit and progressed:
+        progressed = False
+        for cat, items in by_cat.items():
+            if len(selected) >= limit:
+                break
+            if counts.get(cat, 0) >= max_per_cat or not items:
+                continue
+            selected.append(items.pop(0))
+            counts[cat] = counts.get(cat, 0) + 1
+            progressed = True
+    return selected
 
 
 # =========================
@@ -1406,8 +1457,12 @@ async def _run_deals_cycle_inner() -> None:
             descartadas_loja += 1
             continue
         pre_candidates.append(deal)
-    # Prioriza quem já tem loja da whitelist confirmada (garante vaga dentro do limite)
-    pre_candidates.sort(key=lambda d: 0 if (d.get("store") and _store_allowed(d.get("store", ""))) else 1)
+    # Prioriza por (1) categoria prioritária — para peças (CPU/GPU/RAM) ganharem vaga no
+    # orçamento de enriquecimento antes de monitor/placa-mãe — e (2) loja já confirmada.
+    pre_candidates.sort(key=lambda d: (
+        _CATEGORY_PRIORITY.get(d.get("category", ""), 99),
+        0 if (d.get("store") and _store_allowed(d.get("store", ""))) else 1,
+    ))
     log.info(
         f"Triagem de loja: {len(pre_candidates)} a enriquecer "
         f"({descartadas_loja} descartadas por whitelist antes de enriquecer)"
@@ -1415,7 +1470,7 @@ async def _run_deals_cycle_inner() -> None:
 
     # Enriquecer cada oferta (buscar detalhes)
     enriched = []
-    for deal in pre_candidates[:20]:  # Limitar para não abusar
+    for deal in pre_candidates[:26]:  # Limitar para não abusar (cobre mais categorias)
         try:
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
@@ -1459,6 +1514,9 @@ async def _run_deals_cycle_inner() -> None:
             -_deal_score(d),
         )
     )
+    # Diversificar por categoria: round-robin, no máx. 2 da mesma categoria por ciclo.
+    # Garante variedade (peças prioritárias têm vez) e evita encher de monitor/placa-mãe.
+    approved = _select_diverse(approved, MAX_POSTS_POR_CICLO, max_per_cat=2)
     # Variar lojas: evitar back-to-back da mesma loja
     approved = _interleave_by_store(approved)
 

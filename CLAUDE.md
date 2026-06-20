@@ -203,9 +203,15 @@ Lista completa em `/help` (slash command, ephemeral) ou `_HELP_TEXT` em `tiffany
 - Hours: 8h-18h SP, 30min cycle (`SCAN_INTERVAL_MIN=30`), max 5 posts per cycle, 3min spacing
 - First cycle runs immediately on bot startup (no delay)
 
+### Category Variety / Prioritization
+- **Enrichment ordering**: `pre_candidates` sorted by `_CATEGORY_PRIORITY` first (then whitelist-known store), so priority parts (CPU/GPU/RAM = priority 1) get the limited enrichment budget (`[:26]`) before monitors/motherboards
+- **Diversification** (`_select_diverse`): final post selection is a round-robin across categories, **max 2 per category per cycle**, so a single category (e.g. monitor) can't dominate and priority parts surface. Applied after priority+score sort, before `_interleave_by_store`
+- Accessories ("Suporte e Acessórios": monitor arms/stands) demoted to priority 4 (was 2) to avoid crowding out real parts
+
 ### Filters
 - Discount: 15-100% (rejects negatives and absurd values > 100%)
 - Image required
+- **Relevance filter** (`_is_irrelevant` / `_IRRELEVANT_KEYWORDS`): rejects non-IT products that Promobit sometimes lists inside PC categories (appliances/kitchen/toys: pipoqueira, liquidificador, fritadeira, etc.). Fixes cases like "Pipoqueira Disney Mickey Mouse" landing in `/mouse/`.
 - **Stars >= 4.3, sales >= 50**
 - Store must be in active whitelist (Terabyte, ShopInfo, Amazon, Mercado Livre, Shopee)
 - Must have at least one quality metric (stars OR sales) — or discount >= 25% if no data at all (`DESCONTO_SEM_METRICA`)
