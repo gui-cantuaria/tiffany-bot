@@ -210,6 +210,12 @@ _BLOCKED_TERMS = frozenset({
     "нацизм", "нацист", "наци", "фашизм", "фашист", "неонацизм",
     "третий рейх", "рейх", "холокост", "геноцид", "гестапо",
     "свастика", "зиг хайль", "хайль гитлер",
+    # Hinos / canções de regimes nazista e fascista (vetor sem palavra óbvia)
+    "horst wessel", "horst wessel lied", "die fahne hoch",
+    "giovinezza", "cara al sol", "erika lied", "panzerlied",
+    "wenn die soldaten", "es zittern die morschen knochen",
+    "deutschland erwache", "blut und ehre", "blood and honour",
+    "ss marschiert", "waffen ss", "hitlerjugend", "juventude hitlerista",
     # Outros termos pesados
     "terrorismo", "terrorista", "isis", "al qaeda", "al-qaeda",
     "estado islamico", "boko haram", "talibã", "taliban",
@@ -265,14 +271,20 @@ async def _ai_content_is_blocked(text: str) -> bool:
                     {
                         "role": "system",
                         "content": (
-                            "Você é um moderador de conteúdo rigoroso. Analise o TÍTULO/texto e decida se ele faz "
-                            "referência, homenagem, apologia ou alusão — MESMO que CODIFICADA, por apelidos, eufemismos "
-                            "ou trocadilhos — a: ditadores (Hitler, Stalin, Mussolini, Kim Jong Un, Maduro, Pol Pot, "
-                            "Pinochet, Saddam, Gaddafi etc.), nazismo, fascismo, regimes totalitários, genocídio/Holocausto, "
-                            "supremacia ou ódio racial, terrorismo, ou pedofilia. "
+                            "Você é um moderador de conteúdo rigoroso. Analise o TÍTULO/texto (em QUALQUER idioma ou "
+                            "alfabeto, incluindo russo/cirílico) e decida se ele faz referência, homenagem, apologia ou "
+                            "alusão — MESMO que CODIFICADA, por apelidos, eufemismos ou trocadilhos — a: ditadores "
+                            "(Hitler, Stalin, Mussolini, Kim Jong Un, Maduro, Pol Pot, Pinochet, Saddam, Gaddafi etc.), "
+                            "nazismo, fascismo, regimes totalitários, genocídio/Holocausto, supremacia ou ódio racial, "
+                            "terrorismo, ou pedofilia. "
+                            "Bloqueie também HINOS, MARCHAS e CANÇÕES de regimes nazista/fascista ou de partidos de ódio, "
+                            "mesmo que o nome não cite o regime. Exemplos a BLOQUEAR: 'Horst Wessel Lied', 'Die Fahne Hoch', "
+                            "'Giovinezza', 'Cara al Sol', 'Erika', 'Panzerlied', 'SS marschiert', 'Deutschland Erwache', "
+                            "'Blut und Ehre', canções da Wehrmacht/SS/Hitlerjugend e marchas de regimes totalitários. "
                             "Fique MUITO atento a apelidos codificados: 'Austrian Painter'/'Pintor Austríaco', "
                             "'Bohemian Corporal', 'Uncle Adolf', 'Failed Art Student', 'Schicklgruber', 'GROFAZ', "
-                            "'1488', 'Führer' = Hitler; 'Uncle Joe' = Stalin; 'Il Duce' = Mussolini. "
+                            "'1488', 'Führer' = Hitler; 'Uncle Joe' = Stalin; 'Il Duce' = Mussolini; 'Гитлер' = Hitler. "
+                            "Na dúvida sobre música histórica de regime totalitário, prefira bloquear. "
                             "Responda APENAS com 'SIM' (deve bloquear) ou 'NAO' (conteúdo ok)."
                         ),
                     },
@@ -308,7 +320,9 @@ _RISK_HINT_RE = re.compile(
     r"dictator|ditador|regime|wehrmacht|propaganda|anthem|hino|marcha|march|"
     r"wwii|ww2|world war|segunda guerra|cold war|guerra fria|fuhrer|kremlin|"
     r"gulag|holocaust|holocausto|genoc|hitler|stalin|mussolini|kim jong|maduro|"
-    r"painter|pintor|corporal|cabo)\b",
+    r"painter|pintor|corporal|cabo|"
+    r"lied|marsch|deutschland|wessel|giovinezza|panzer|waffen|wehrmacht|"
+    r"erwache|blut und ehre|cara al sol|hitlerjugend)\b",
     re.UNICODE,
 )
 
