@@ -2146,6 +2146,13 @@ async def on_ready():
         log.info("Slash commands sincronizados (global, %d guilds limpos).", len(discord_client.guilds))
     except Exception as e:
         log.warning(f"Erro ao sincronizar slash commands: {e}")
+    # Carregar Cog de ofertas (antes era um processo separado)
+    if not discord_client.get_cog("OffersCog"):
+        try:
+            await discord_client.load_extension("offers_cog")
+            log.info("🛒 Cog de ofertas carregado com sucesso.")
+        except Exception as e:
+            log.error(f"❌ Falha ao carregar Cog de ofertas: {e}")
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 
@@ -2272,4 +2279,5 @@ def _sync_cleanup():
 
 atexit.register(_sync_cleanup)
 
-discord_client.run(DISCORD_TOKEN)
+if __name__ == "__main__":
+    discord_client.run(DISCORD_TOKEN)

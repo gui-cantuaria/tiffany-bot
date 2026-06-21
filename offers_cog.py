@@ -1,9 +1,3 @@
-# ==============================================================================
-# ATENÇÃO: ESTE ARQUIVO ESTÁ DEPRECIADO E MANTIDO APENAS COMO BACKUP.
-# A LÓGICA ATIVA DE OFERTAS FOI MOVIDA PARA `offers_cog.py`, QUE É CARREGADA
-# DIRETAMENTE PELO `notices.py` PARA EVITAR MENSAGENS DUPLICADAS.
-# ==============================================================================
-
 import discord
 from discord.ext import tasks, commands
 import os
@@ -136,9 +130,7 @@ log.addHandler(_file_handler)
 # =========================
 # DISCORD CLIENT
 # =========================
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="t!", intents=intents)
+_bot = None
 http_session: Optional[aiohttp.ClientSession] = None
 # Contador diário de menções ao cargo (máx 3 por dia)
 _mention_count_ofertas: int = 0
@@ -1235,7 +1227,7 @@ async def _notify_price_alerts(deal: dict, msg) -> None:
         if not _monitor_matches(keyword, title):
             continue
         try:
-            user = await bot.fetch_user(user_id)
+            user = await _bot.fetch_user(user_id)
             if not user:
                 continue
             price_str = ""
@@ -1527,7 +1519,7 @@ async def _run_deals_cycle_inner() -> None:
     approved = _interleave_by_store(approved)
 
     # Postar
-    channel = bot.get_channel(CANAL_OFERTAS_ID)
+    channel = _bot.get_channel(CANAL_OFERTAS_ID)
     if not channel:
         log.error(f"Canal {CANAL_OFERTAS_ID} não encontrado!")
         return
@@ -1599,66 +1591,58 @@ async def _run_deals_cycle_inner() -> None:
 # TASKS LOOP
 # =========================
 
-@tasks.loop(minutes=SCAN_INTERVAL_MIN)
-async def deals_loop():
-    """Loop principal que roda a cada 30 minutos."""
-    agora = datetime.now(FUSO_HORARIO_BR)
-
-    if not (HORA_INICIO <= agora.hour < HORA_FIM):
-        log.info(f"Fora do horário ({agora.hour}h). Pulando ciclo.")
-        return
-
-    try:
-        await _run_deals_cycle()
-    except Exception as e:
-        log.exception(f"Erro no ciclo de ofertas: {e}")
-
-
-@deals_loop.before_loop
-async def _before_deals_loop():
-    await bot.wait_until_ready()
-    log.info("Bot de ofertas pronto. Primeiro ciclo será executado imediatamente pelo loop.")
-
-
 # =========================
-# EVENTOS
+# COG WRAPPER
 # =========================
 
-@bot.event
-async def on_ready():
-    log.info(f"✅ Deals bot conectado como {bot.user} (ID: {bot.user.id})")
-    # Log de programas de afiliado ativos
-    progs = affiliate_config.active_programs()
-    if progs:
-        log.info(f"💰 Afiliados ativos: {', '.join(progs)}")
-    else:
-        log.warning("⚠️ Nenhum programa de afiliado configurado no .env")
-    if not deals_loop.is_running():
-        deals_loop.start()
+class OffersCog(commands.Cog):
+    """Cog de ofertas — publica promoções automaticamente."""
+    
+    def __init__(self, bot: commands.Bot):
+        global _bot
+        _bot = bot
+        self.bot = bot
+        self.deals_loop.start()
+    
+    def cog_unload(self):
+        self.deals_loop.cancel()
+    
+    @tasks.loop(minutes=SCAN_INTERVAL_MIN)
+    async def deals_loop(self):
+        agora = datetime.now(FUSO_HORARIO_BR)
+        if not (HORA_INICIO <= agora.hour < HORA_FIM):
+            log.info(f"Fora do horário ({agora.hour}h). Pulando ciclo.")
+            return
+        try:
+            await _run_deals_cycle()
+        except Exception as e:
+            log.exception(f"Erro no ciclo de ofertas: {e}")
+    
+    @deals_loop.before_loop
+    async def _before_deals_loop(self):
+        await self.bot.wait_until_ready()
+        log.info("Cog de ofertas pronto. Primeiro ciclo será executado imediatamente pelo loop.")
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        log.info(f"✅ Offers Cog carregado — bot: {self.bot.user}")
+        progs = affiliate_config.active_programs()
+        if progs:
+            log.info(f"💰 Afiliados ativos: {', '.join(progs)}")
+        else:
+            log.warning("⚠️ Nenhum programa de afiliado configurado no .env")
+    
+    @commands.Cog.listener()
+    async def on_disconnect(self):
+        log.warning("⚠️ [Offers] Bot desconectado do Discord.")
+    
+    @commands.Cog.listener()
+    async def on_close(self):
+        global http_session
+        if http_session and not http_session.closed:
+            await http_session.close()
+            http_session = None
+        log.info("🔌 [Offers] Sessão HTTP fechada.")
 
-
-@bot.event
-async def on_disconnect():
-    log.warning("⚠️ Bot desconectado do Discord.")
-
-
-@bot.event
-async def on_close():
-    global http_session
-    if http_session and not http_session.closed:
-        await http_session.close()
-        http_session = None
-    log.info("🔌 Sessão HTTP fechada. Bot desligando.")
-
-
-# =========================
-# MAIN
-# =========================
-
-if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        log.error("DISCORD_TOKEN não configurado!")
-        exit(1)
-
-    log.info("🛒 Iniciando Tiffany Deals Bot...")
-    bot.run(DISCORD_TOKEN, log_handler=None)
+async def setup(bot: commands.Bot):
+    await bot.add_cog(OffersCog(bot))

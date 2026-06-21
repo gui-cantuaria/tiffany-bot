@@ -36,7 +36,7 @@ if sys.platform != "win32":
 # --- LISTA DE BOTS ---
 bots = [
     {"arquivo": "notices.py", "nome": "📰 Bot Notícias"},
-    {"arquivo": "offers.py", "nome": "🛒 Bot Ofertas"},  # Afiliados configurados: Amazon, ML, Terabyte/ShopInfo
+    # offers.py agora roda como Cog dentro do notices.py (offers_cog.py)
 ]
 
 LOG_DIR = "logs"
