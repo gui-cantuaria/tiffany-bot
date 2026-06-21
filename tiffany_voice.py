@@ -2804,15 +2804,21 @@ class _YTSource(discord.AudioSource):
             fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query, display))
         if not fp:
             return None, title, None, None, 0
-        # Qualidade extrema: envia Opus a 192k nativo + volume direto no FFmpeg (ignora discord.py recoding)
+        # Opus 192k + volume — pula from_probe (já sabemos o formato do yt-dlp)
+        # -analyzeduration 0 -probesize 32768: início instantâneo sem análise prévia
+        # -thread_queue_size 512: buffer grande para evitar engasgo durante reprodução
         options = f"-vn -b:a 192k -filter:a volume={volume}"
-        before = f"-ss {seek_sec:.1f}" if seek_sec > 0 else ""
+        before_parts = ["-analyzeduration 0", "-probesize 32768", "-thread_queue_size 512"]
+        if seek_sec > 0:
+            before_parts.append(f"-ss {seek_sec:.1f}")
+        before = " ".join(before_parts)
         try:
-            src = await discord.FFmpegOpusAudio.from_probe(
-                fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None
+            src = discord.FFmpegOpusAudio(
+                fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH,
+                options=options, before_options=before,
             )
         except Exception:
-            src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None)
+            src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before)
         return cls(src, tmpdir=tmpdir), title, fp, tmpdir, duration
 
     @classmethod
@@ -2821,10 +2827,14 @@ class _YTSource(discord.AudioSource):
         if not os.path.isfile(filepath):
             return None
         options = f"-vn -b:a 192k -filter:a volume={volume}"
-        before = f"-ss {seek_sec:.1f}" if seek_sec > 0 else None
+        before_parts = ["-analyzeduration 0", "-probesize 32768", "-thread_queue_size 512"]
+        if seek_sec > 0:
+            before_parts.append(f"-ss {seek_sec:.1f}")
+        before = " ".join(before_parts)
         try:
-            src = await discord.FFmpegOpusAudio.from_probe(
-                filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before
+            src = discord.FFmpegOpusAudio(
+                filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH,
+                options=options, before_options=before,
             )
         except Exception:
             src = FFmpegPCMAudio(filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before)
@@ -3021,22 +3031,24 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if not (_restore_seek > 0 and session.song_start_time > 0):
                         session.song_start_time = time.monotonic()
                     session.last_activity = time.monotonic()
-                    _stats["songs_played"] += 1
-                    _save_stats()
-                    # Salvar estado para restaurar após restart
-                    if vc.channel:
-                        _save_voice_state(guild_id, vc.channel.id, session.text_channel_id, session)
                     # Garantir que nenhum áudio anterior está tocando antes de iniciar
                     if vc.is_playing() or vc.is_paused():
                         vc.stop()
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(0.05)
+                    vc.play(source, after=_after)
+                    # --- Tudo abaixo roda APÓS o play (não trava o início da música) ---
+                    _stats["songs_played"] += 1
+                    asyncio.get_running_loop().run_in_executor(None, _save_stats)
+                    if vc.channel:
+                        asyncio.get_running_loop().run_in_executor(
+                            None, _save_voice_state, guild_id, vc.channel.id, session.text_channel_id, session
+                        )
                     src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
-                    await _notify(
+                    asyncio.create_task(_notify(
                         bot,
                         session.text_channel_id,
                         f"▶️  **{src}** — **Tocando agora:**  {display_name[:100]}",
-                    )
-                    vc.play(source, after=_after)
+                    ))
                     # Watchdog: timeout proporcional à duração (mín 10 min, máx duração + 2 min)
                     watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
                     # shield() protege fut de ser cancelado pelo timeout, permitindo await fut após vc.stop()
@@ -3082,6 +3094,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_song = ""
                     session.current_query = ""
                     session.current_file = ""
+                    # Atualizar voice_state para deploy gracioso detectar fila vazia
+                    if vc.channel:
+                        asyncio.get_running_loop().run_in_executor(
+                            None, _save_voice_state, guild_id, vc.channel.id, session.text_channel_id, session
+                        )
                     if session.current_tmpdir:
                         shutil.rmtree(session.current_tmpdir, ignore_errors=True)
                         session.current_tmpdir = None
