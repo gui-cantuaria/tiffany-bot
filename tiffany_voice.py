@@ -5362,6 +5362,10 @@ def register_voice(bot: commands.Bot) -> None:
         if not search_term:
             await ctx.send(embed=_embed("⚠️ Nada tocando. Use: `t!ly <nome da música>`"))
             return
+        # Verificar conteúdo bloqueado na busca
+        if _contains_blocked_content(search_term):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            return
         _touch_activity(ctx.guild.id)
         # Limpar prefixos de display (Auto:, ytsearch, etc)
         search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
@@ -5369,6 +5373,10 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = await _fetch_lyrics(search_term)
         if not lyrics:
             await ctx.send(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
+            return
+        # Verificar conteúdo bloqueado na letra retornada
+        if _contains_blocked_content(lyrics):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
         # Truncar para caber no embed (4096 chars)
         if len(lyrics) > 3800:
@@ -5566,6 +5574,10 @@ def register_voice(bot: commands.Bot) -> None:
             return
         async with ctx.typing():
             summary = await _summarize_url(url, api_key)
+        # Verificar conteúdo bloqueado na resposta
+        if _contains_blocked_content(summary):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            return
         await ctx.reply(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
         # Salvar no contexto do usuário para referência futura em t!c
         _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
