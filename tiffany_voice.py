@@ -4224,7 +4224,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await existing_vc.disconnect(force=True)
             except Exception:
                 pass
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
         # Conectar
         try:
@@ -4265,7 +4265,7 @@ def register_voice(bot: commands.Bot) -> None:
                             await existing.disconnect(force=True)
                         except Exception:
                             pass
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.2)
                     vc = await asyncio.wait_for(
                         channel.connect(self_deaf=False),
                         timeout=timeout,
@@ -4640,6 +4640,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         # Se passou URL/query, redirecionar para t!p (ex: t!r https://...)
         if query and query.strip():
             ctx.message.content = f"t!p {query}"
@@ -5112,6 +5113,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_loop(ctx: commands.Context):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
@@ -5134,6 +5136,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_pause(ctx: commands.Context):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
@@ -5154,6 +5157,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_resume(ctx: commands.Context):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
@@ -5174,6 +5178,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_clear(ctx: commands.Context):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
@@ -5424,6 +5429,9 @@ def register_voice(bot: commands.Bot) -> None:
         if len(args) < 3:
             await ctx.send(embed=_embed("⚠️ Uso: `t!alerta <produto>` — ex: `t!alerta RTX 5060`"), delete_after=10)
             return
+        if _contains_blocked_content(args):
+            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            return
         user_mons = [m for m in monitors if m["user_id"] == user_id]
         if len(user_mons) >= 10:
             await ctx.send(embed=_embed("⚠️ Limite de 10 alertas por usuário. Remove algum com `t!alerta remove <número>`."), delete_after=15)
@@ -5460,6 +5468,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
         if not ctx.guild:
             return
+        _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
