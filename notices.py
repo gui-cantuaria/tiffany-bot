@@ -107,7 +107,21 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
-discord_client = commands.Bot(
+class _ReplyContext(commands.Context):
+    """Contexto customizado que faz reply automatico na mensagem do usuario."""
+    async def send(self, content=None, **kwargs):
+        if "reference" not in kwargs:
+            kwargs["reference"] = self.message
+            kwargs.setdefault("mention_author", False)
+        return await super().send(content, **kwargs)
+
+
+class _TiffanyBot(commands.Bot):
+    async def get_context(self, message, *, cls=_ReplyContext):
+        return await super().get_context(message, cls=cls)
+
+
+discord_client = _TiffanyBot(
     command_prefix=commands.when_mentioned_or("t!", "T!"),
     case_insensitive=True,
     intents=intents,
@@ -2091,11 +2105,12 @@ async def verificar_feeds():
 
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "enter", "entra", "leave", "loop", "play", "chat", "seek", "nonstop", "queue",
+    "loop", "play", "chat", "seek", "nonstop", "queue",
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "lv", "cp", "lo",
+    "alerta", "alert", "monitor",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "lo",
     "ch", "247", "q",
-    "l", "e", "s", "c", "p", "r", "d",
+    "s", "c", "p", "r", "d",
 )
 
 @discord_client.event

@@ -10,7 +10,7 @@ echo "[deploy] Baixando atualizações..."
 git fetch origin main
 
 echo "[deploy] Aplicando arquivos atualizados..."
-git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers.py affiliate_config.py random_songs.py requirements.txt 2>/dev/null || true
+git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers.py offers_cog.py affiliate_config.py random_songs.py requirements.txt 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/tiffany-bot.service CLAUDE.md 2>/dev/null || true
 
 echo "[deploy] Atualizando service do systemd..."
@@ -61,7 +61,7 @@ sys.exit(1)
         echo "[deploy] Timeout de ${MAX_WAIT}s — reiniciando mesmo assim (fila será restaurada)."
     fi
 else
-    echo "[deploy] Nenhuma música tocando — reiniciando imediatamente."
+    echo "[deploy] Nenhuma musica tocando — reiniciando imediatamente."
 fi
 
 echo "[deploy] Parando serviço e processos órfãos..."
