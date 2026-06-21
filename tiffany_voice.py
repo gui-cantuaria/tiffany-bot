@@ -2691,13 +2691,19 @@ async def _ensure_opus() -> None:
         log.warning("Opus não carregado explicitamente; discord pode falhar em voice.")
 
 
-class _YTSource(PCMVolumeTransformer):
-    def __init__(self, original, volume: float = 0.35, tmpdir: Optional[str] = None):
-        super().__init__(original, volume=volume)
+class _YTSource(discord.AudioSource):
+    def __init__(self, original, tmpdir: Optional[str] = None):
+        self.original = original
         self._tmpdir = tmpdir
 
+    def read(self):
+        return self.original.read()
+
+    def is_opus(self):
+        return self.original.is_opus()
+
     def cleanup(self) -> None:
-        super().cleanup()
+        self.original.cleanup()
         if self._tmpdir:
             shutil.rmtree(self._tmpdir, ignore_errors=True)
             self._tmpdir = None
@@ -2710,22 +2716,31 @@ class _YTSource(PCMVolumeTransformer):
             fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query, display))
         if not fp:
             return None, title, None, None, 0
-        options = "-vn"
-        before = ""
-        if seek_sec > 0:
-            before = f"-ss {seek_sec:.1f}"
-        src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None)
-        return cls(src, volume=volume, tmpdir=tmpdir), title, fp, tmpdir, duration
+        # Qualidade extrema: envia Opus a 192k nativo + volume direto no FFmpeg (ignora discord.py recoding)
+        options = f"-vn -b:a 192k -filter:a volume={volume}"
+        before = f"-ss {seek_sec:.1f}" if seek_sec > 0 else ""
+        try:
+            src = await discord.FFmpegOpusAudio.from_probe(
+                fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None
+            )
+        except Exception:
+            src = FFmpegPCMAudio(fp, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before if before else None)
+        return cls(src, tmpdir=tmpdir), title, fp, tmpdir, duration
 
     @classmethod
-    def from_file(cls, filepath: str, *, volume: float = 0.35, seek_sec: float = 0) -> Optional["_YTSource"]:
+    async def from_file(cls, filepath: str, *, volume: float = 0.35, seek_sec: float = 0) -> Optional["_YTSource"]:
         """Cria source a partir de arquivo já baixado com seek opcional."""
         if not os.path.isfile(filepath):
             return None
-        options = "-vn"
+        options = f"-vn -b:a 192k -filter:a volume={volume}"
         before = f"-ss {seek_sec:.1f}" if seek_sec > 0 else None
-        src = FFmpegPCMAudio(filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before)
-        return cls(src, volume=volume, tmpdir=None)
+        try:
+            src = await discord.FFmpegOpusAudio.from_probe(
+                filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before
+            )
+        except Exception:
+            src = FFmpegPCMAudio(filepath, executable=FFMPEG_EXECUTABLE or FFMPEG_PATH, options=options, before_options=before)
+        return cls(src, tmpdir=None)
 
 
 def _clear_loop(session: _GuildVoiceSession) -> None:
@@ -2895,7 +2910,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if _restore_seek > 0 and dl_fp and dl_duration > 10:
                         capped = min(_restore_seek, dl_duration - 5.0)
                         if capped > 5:
-                            seek_src = _YTSource.from_file(dl_fp, seek_sec=capped)
+                            seek_src = await _YTSource.from_file(dl_fp, seek_sec=capped)
                             if seek_src:
                                 source.cleanup()
                                 source = seek_src
@@ -3429,7 +3444,7 @@ async def _voice_listen_loop(
                     dur = session.current_duration
                     if dur > 0 and target >= dur:
                         target = dur - 5
-                    new_src = _YTSource.from_file(session.current_file, seek_sec=target)
+                    new_src = await _YTSource.from_file(session.current_file, seek_sec=target)
                     if new_src:
                         session.seeking = True
                         vc.stop()
@@ -5401,7 +5416,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
         else:
             # yt-dlp: recriar source com FFmpeg -ss
-            new_source = _YTSource.from_file(session.current_file, seek_sec=target_sec)
+            new_source = await _YTSource.from_file(session.current_file, seek_sec=target_sec)
             if not new_source:
                 await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
                 return
