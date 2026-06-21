@@ -4212,7 +4212,6 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="e", aliases=["enter", "entra"], help="Entra no canal de voz: t!e / t!enter")
     async def cmd_entrar(ctx: commands.Context, channel: Optional[discord.VoiceChannel] = None):
         if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         sess, vc = await _ensure_connected(ctx, specific_channel=channel)
         if not sess:
@@ -4222,7 +4221,6 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="leave", aliases=["lv", "l"], help="Sai do canal de voz: t!leave / t!lv / t!l")
     async def cmd_sair(ctx: commands.Context):
         if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
@@ -4269,7 +4267,6 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas")
     async def cmd_pular(ctx: commands.Context, *, args: str = ""):
         if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
@@ -4529,7 +4526,6 @@ def register_voice(bot: commands.Bot) -> None:
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not ctx.guild:
             return
@@ -4584,7 +4580,6 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         if not _voice_enabled():
-            await ctx.send(embed=_embed("⚠️ A função de voz está desativada no momento."))
             return
         if not query or not query.strip():
             await ctx.send(embed=_embed("🎵 Use: `t!p <nome da música ou URL>`"))

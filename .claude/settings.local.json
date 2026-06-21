@@ -73,7 +73,8 @@
       "Bash(py -3 --version)",
       "Bash(python3 -c \"import ast; ast.parse\\(open\\(''notices.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''notices.py: OK''\\)\")",
       "Bash(py:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(ssh:*)"
     ]
   }
 }
