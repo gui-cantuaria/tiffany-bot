@@ -2545,7 +2545,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("ly", ["lyrics"], "t!ly / t!lyrics — letra"),
     ("c", ["chat", "ch"], "t!c / t!chat / t!ch <pergunta>"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
-    ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: 4d6)"),
+    ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: t20, 4t6, c20+5)"),
     ("cp", ["clip"], "t!cp / t!clip — últimos 30s de áudio"),
     ("alert", ["alerta", "monitor"], "t!alert <product> — price alert via DM"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
@@ -2555,7 +2555,7 @@ _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t! ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
     + "\n- /help, /queue, /status, /stats (slash)\n"
-    "- Dados SEM prefixo: digite direto no chat (ex: 4d6, d20, 2d20kh1, 3#d20, 4d6 for glory, [1d20+5 ataque], &50+50)\n"
+    "- Dados SEM prefixo: digite direto no chat (ex: t20, 4t6, 2t20kh1, 3#t20, 4t6 for glory, [t20+5 ataque], c50+50)\n"
     "- Voz na call: «Tiffany, toca [musica]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatoria/autoplay/24-7», «Tiffany, o que esta tocando», «Tiffany, avanca/volta 30 segundos», «Tiffany, [pergunta]» (a musica pausa enquanto responde)\n"
     "A Tiffany entra na call automaticamente quando voce pede uma musica (t!p). Sai automaticamente apos inatividade ou com t!cl.\n"
     "Se o usuario perguntar como usar o bot, cite o comando exato (ex: t!p para tocar)."
@@ -3838,6 +3838,13 @@ _DICE_TERM_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Converte notacao 't' (Tiffany) para 'd' interno: 4t6 → 4d6, t20 → d20
+_T_TO_D_RE = re.compile(r"(\d*)t(\d+|f)", re.IGNORECASE)
+
+def _t_to_d(expr: str) -> str:
+    """Converte notacao de dados 't' para 'd' internamente."""
+    return _T_TO_D_RE.sub(r"\1d\2", expr)
+
 
 def _roll_fate_die() -> int:
     import random
@@ -3954,11 +3961,13 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
     if len(sorted_rolls) > 24:
         rolls_show += "…"
 
+    # Mostrar com notacao 't' para o usuario (d → t)
+    display_term = re.sub(r"(\d*)d(\d+|f)", r"\1t\2", term, flags=re.IGNORECASE)
     if pool_op:
         succ = _pool_count(kept, pool_op, pool_target)
-        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]{term} ({pool_op}{pool_target})", crits
+        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]{display_term} ({pool_op}{pool_target})", crits
     total = sum(kept)
-    return float(total), f"{total} ← [{rolls_show}]{term}", crits
+    return float(total), f"{total} ← [{rolls_show}]{display_term}", crits
 
 
 def _safe_math_eval(expr: str) -> float:
@@ -3968,11 +3977,11 @@ def _safe_math_eval(expr: str) -> float:
     return float(eval(safe, {"__builtins__": {}}, {}))
 
 
-def _roll_single(expression: str, label: str = "") -> str:
-    """Rola uma expressao de dados. Formato rollem: ``total ← [rolls]expr``."""
+def _roll_single(expression: str, label: str = "") -> tuple[str, int]:
+    """Rola uma expressao de dados. Retorna (texto, total_crits)."""
     raw = expression.strip()
     if not raw:
-        return "⚠️ Informe uma expressao. Ex: `d20`, `2d6+3`, `4d6dl1`, `5d10>=7`"
+        return ("⚠️ Informe uma expressao. Ex: `t20`, `2t6+3`, `4t6dl1`, `5t10>=7`", 0)
     work = raw
     # Label via [Label] prefixo inline
     label_m = re.match(r"^\[([^\]]+)\]\s*(.+)$", work)
@@ -3985,57 +3994,72 @@ def _roll_single(expression: str, label: str = "") -> str:
         terms = list(_DICE_TERM_RE.finditer(work_lower))
         if not terms:
             val = _safe_math_eval(work_lower)
-            return f"{prefix}{val:g} ← {raw}"
+            return (f"{prefix}{val:g} ← {raw}", 0)
         details: list[str] = []
+        total_crits = 0
         math_expr = work_lower
         offset = 0
         for m in terms:
             term = m.group(0)
-            val, detail, _crits = _roll_one_dice_term(term)
+            val, detail, crits = _roll_one_dice_term(term)
+            total_crits += crits
             details.append(detail)
             repl = str(int(val) if val == int(val) else val)
             start = m.start() + offset
             math_expr = math_expr[:start] + repl + math_expr[m.end() + offset:]
             offset += len(repl) - (m.end() - m.start())
         if len(terms) == 1 and not re.search(r"[+*/()-]", _DICE_TERM_RE.sub("0", work_lower)):
-            return f"{prefix}{details[0]}"
+            return (f"{prefix}{details[0]}", total_crits)
         total = _safe_math_eval(math_expr)
         if len(details) > 1:
-            return f"{prefix}\n" + "\n".join(details) + f"\n**Total: {total:g}**"
-        return f"{prefix}{details[0]} → **{total:g}**"
+            return (f"{prefix}\n" + "\n".join(details) + f"\n**Total: {total:g}**", total_crits)
+        return (f"{prefix}{details[0]} → **{total:g}**", total_crits)
     except Exception:
         return (
-            f"**{raw}** — nao entendi. Ex: `1d8+3`, `2d20kh1`, `4d6dl1`, "
-            "`5d10>=7`, `2d6!`, `4dF+2`, `3#1d20+8`"
+            f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
+            "`5t10>=7`, `2t6!`, `4tF+2`, `3#1t20+8`",
+            0,
         )
 
 
-def _roll_dice(expression: str, label: str = "") -> str:
+def _roll_dice(expression: str, label: str = "") -> tuple[str, int]:
+    """Rola dados. Aceita notacao 't' (4t6) ou 'd' (4d6). Retorna (texto, crits)."""
     import random
-    expression = expression.strip()
+    expression = _t_to_d(expression.strip())
     low = expression.lower()
+
+    # t!d20 → normalizado como "20" pelo parser de comandos — corrigir para "d20"
+    if re.match(r"^\d+(?:\s*[+\-]|$)", low) and not re.search(r"d[f\d]", low):
+        expression = f"d{expression}"
+        low = expression.lower()
 
     # Atalhos RPG (so funcionam via t!d)
     if low in ("adv", "advantage", "vantagem"):
-        return _roll_single("2d20kh1") + "\n*(Vantagem: maior de 2d20)*"
+        text, crits = _roll_single("2d20kh1")
+        return (text + "\n*(Vantagem: maior de 2d20)*", crits)
     if low in ("dis", "disadvantage", "desvantagem"):
-        return _roll_single("2d20kl1") + "\n*(Desvantagem: menor de 2d20)*"
+        text, crits = _roll_single("2d20kl1")
+        return (text + "\n*(Desvantagem: menor de 2d20)*", crits)
     adv_m = re.match(r"^(?:adv|advantage|vantagem)\s*([+-]\d+)$", low)
     if adv_m:
         mod = adv_m.group(1)
-        return _roll_single(f"2d20kh1{mod}") + f"\n*(Vantagem {mod})*"
+        text, crits = _roll_single(f"2d20kh1{mod}")
+        return (text + f"\n*(Vantagem {mod})*", crits)
     dis_m = re.match(r"^(?:dis|disadvantage|desvantagem)\s*([+-]\d+)$", low)
     if dis_m:
         mod = dis_m.group(1)
-        return _roll_single(f"2d20kl1{mod}") + f"\n*(Desvantagem {mod})*"
+        text, crits = _roll_single(f"2d20kl1{mod}")
+        return (text + f"\n*(Desvantagem {mod})*", crits)
 
     if low in ("stats", "atributos", "stat", "atributo"):
         labels = ["FOR", "DES", "CON", "INT", "SAB", "CAR"]
         lines = []
+        total_crits = 0
         for lbl in labels:
-            result = _roll_single("4d6dl1")
-            lines.append(f"**{lbl}:** {result}")
-        return "**Rolagem de Atributos (4d6dl1)**\n" + "\n".join(lines)
+            text, crits = _roll_single("4d6dl1")
+            total_crits += crits
+            lines.append(f"**{lbl}:** {text}")
+        return ("**Rolagem de Atributos (4t6dl1)**\n" + "\n".join(lines), total_crits)
 
     init_m = re.match(r"^(?:init|iniciativa|initiative)\s*([+-]?\d*)$", low)
     if init_m:
@@ -4044,76 +4068,81 @@ def _roll_dice(expression: str, label: str = "") -> str:
         roll_val = random.randint(1, 20)
         total = roll_val + mod
         mod_display = f"+{mod}" if mod >= 0 else str(mod)
-        r_str = f"**{roll_val}**" if roll_val == 20 else (f"**{roll_val}**" if roll_val == 1 else str(roll_val))
-        return f"{total} ← [{r_str}]d20{mod_display} *(Iniciativa)*"
+        is_crit = roll_val == 20 or roll_val == 1
+        r_str = f"**{roll_val}**" if is_crit else str(roll_val)
+        return (f"{total} ← [{r_str}]t20{mod_display} *(Iniciativa)*", 1 if roll_val == 20 else 0)
 
     if low in ("coin", "moeda", "coinflip", "cara", "coroa"):
         result = random.choice(["Cara", "Coroa"])
-        return f"**{result}!** 🪙"
+        return (f"**{result}!**", 0)
 
     # Percentual (d100 / d%)
-    if low in ("d%", "d100", "percentual"):
+    if low in ("d%", "d100", "t%", "t100", "percentual"):
         roll_val = random.randint(1, 100)
-        return f"{roll_val} ← [{roll_val}]d100"
+        return (f"{roll_val} ← [{roll_val}]t100", 0)
 
     rep_m = re.match(r"^(\d+)#(.+)$", expression, re.IGNORECASE)
     if rep_m:
         count = min(int(rep_m.group(1)), 20)
         sub = rep_m.group(2).strip()
-        lines = [_roll_single(sub, label) for _ in range(count)]
-        return "\n".join(lines)
+        results = [_roll_single(sub, label) for _ in range(count)]
+        total_crits = sum(c for _, c in results)
+        numbered = [f"`{i+1}.` {text}" for i, (text, _) in enumerate(results)]
+        return ("\n".join(numbered), total_crits)
     return _roll_single(expression, label)
 
 
-def _parse_inline_rolls(content: str) -> list[str]:
-    results = []
+def _parse_inline_rolls(content: str) -> list[tuple[str, int]]:
+    """Detecta rolagens inline [4t6], [t20+5 ataque], [4d6]. Retorna lista de (texto, crits)."""
+    results: list[tuple[str, int]] = []
     for m in re.finditer(r"\[([^\]]+)\]", content):
         inner = m.group(1).strip()
         if not inner:
             continue
-        if _DICE_TERM_RE.search(inner) or re.search(r"\d*d[fF\d]", inner):
-            # Separar expressao de label dentro de [expr label]
-            parts = inner.split(None, 1)
+        converted = _t_to_d(inner)
+        if _DICE_TERM_RE.search(converted):
+            parts = converted.split(None, 1)
             if len(parts) == 2 and _DICE_TERM_RE.search(parts[0]):
-                # Checar se a segunda parte e label ou continuacao da expressao
                 if not _DICE_TERM_RE.search(parts[1]) and not re.match(r'^[+\-*/]', parts[1]):
                     results.append(_roll_single(parts[0], parts[1]))
                     continue
-            results.append(_roll_single(inner))
+            results.append(_roll_single(converted))
     return results
 
 
-# Regex para detectar mensagens que sao expressoes de dados (sem prefixo)
+# Regex para detectar mensagens que sao expressoes de dados (sem prefixo, notacao 't')
 _DICE_MSG_EXPR_RE = re.compile(
     r"^(?:\d+#)?"  # repeticoes opcionais (3#)
-    r"(\d*d[f\d]+)"  # primeiro termo de dado obrigatorio
+    r"(\d*t[f\d]+)"  # primeiro termo de dado obrigatorio (t20, 4t6, etc)
     r"([!]?)"  # explode opcional
     r"((?:kh|kl|k|dh|dl)\d*)?"  # keep/drop opcional
     r"((?:>=|<=|>|<|==|=)\d+)?"  # pool opcional
     r"(ns)?"  # nosort opcional
-    r"(\s*[+\-*/]\s*(?:\d+|\d*d[f\d]+[!]?(?:(?:kh|kl|k|dh|dl)\d*)?(?:(?:>=|<=|>|<|==|=)\d+)?(?:ns)?))*"  # termos adicionais
+    r"(\s*[+\-*/]\s*(?:\d+|\d*t[f\d]+[!]?(?:(?:kh|kl|k|dh|dl)\d*)?(?:(?:>=|<=|>|<|==|=)\d+)?(?:ns)?))*"  # termos adicionais
     r"(?:\s+(.+))?$",  # label opcional
     re.IGNORECASE,
 )
 
-_DICE_MATH_RE = re.compile(r"^&([\d(].*)$")
+_DICE_MATH_RE = re.compile(r"^c([\d(].*)$", re.IGNORECASE)
 
 
 def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
-    """Tenta interpretar uma mensagem como dados. Retorna (expressao, label) ou None."""
+    """Tenta interpretar uma mensagem como dados (notacao 't'). Retorna (expressao_d, label) ou None."""
     content = content.strip()
     if not content:
         return None
-    # Math com prefixo &
+    # Math com prefixo c (ex: c20+5)
     math_m = _DICE_MATH_RE.match(content)
     if math_m:
         return math_m.group(1), ""
-    # Expressao de dados
+    # Expressao de dados com notacao 't'
     m = _DICE_MSG_EXPR_RE.match(content)
     if not m:
         return None
     label = (m.group(7) or "").strip()
     expr = content[: m.start(7)].strip() if label else content.strip()
+    # Converter t → d para processamento interno
+    expr = _t_to_d(expr)
     return expr, label
 
 
@@ -4128,7 +4157,7 @@ def register_voice(bot: commands.Bot) -> None:
     except ImportError:
         _RANDOM_DISCOVERY: list[str] = []
 
-    # --- Listener de dados sem prefixo (estilo rollem-next) ---
+    # --- Listener de dados sem prefixo (notacao 't': t20, 4t6, c20+5) ---
     @bot.listen("on_message")
     async def _on_message_dice(message: discord.Message):
         if message.author.bot or not message.guild:
@@ -4144,26 +4173,29 @@ def register_voice(bot: commands.Bot) -> None:
         if message.content.startswith("<@"):
             return
 
-        results: list[str] = []
+        roll_results: list[tuple[str, int]] = []
 
-        # 1. Inline dice: [4d6], [2d20kh1 ataque], Rolling [4d6 for glory]
+        # 1. Inline dice: [4t6], [2t20kh1 ataque]
         if "[" in content and "]" in content:
-            results = _parse_inline_rolls(content)
+            roll_results = _parse_inline_rolls(content)
 
-        # 2. Mensagem inteira e expressao de dados
-        if not results:
+        # 2. Mensagem inteira e expressao de dados (t20, 4t6+3, c20+5)
+        if not roll_results:
             parsed = _try_parse_dice_msg(content)
             if parsed:
                 expr, lbl = parsed
-                result = _roll_dice(expr, lbl)
-                if "nao entendi" not in result and "⚠️" not in result:
-                    results = [result]
+                text, crits = _roll_dice(expr, lbl)
+                if "nao entendi" not in text and "⚠️" not in text:
+                    roll_results = [(text, crits)]
 
-        if results:
+        if roll_results:
             _touch_activity(message.guild.id)
-            text = "\n".join(results)
+            total_crits = sum(c for _, c in roll_results)
+            body = "\n".join(t for t, _ in roll_results)
+            desc = f"**Criticos: {total_crits}**\n\n{body}" if total_crits > 0 else body
+            em = _embed(desc)
             try:
-                await message.reply(text, mention_author=False)
+                await message.reply(embed=em, mention_author=False)
             except Exception:
                 pass
 
@@ -5655,26 +5687,27 @@ def register_voice(bot: commands.Bot) -> None:
         if not ctx.guild:
             return
         if not expression.strip():
-            await ctx.send(
-                "🎲 **Dados da Tiffany**\n\n"
+            await ctx.send(embed=_embed(
+                "**Dados da Tiffany**\n\n"
                 "**Sem prefixo** — digite direto no chat:\n"
-                "`4d6`, `d20`, `2d20kh1+5`, `3#d20`, `6#4d6dl1`\n"
-                "`4d6 for glory` — com label\n"
-                "`[1d20+5 ataque]` — inline em qualquer mensagem\n"
-                "`&50+50` — calculadora\n\n"
+                "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `6#4t6dl1`\n"
+                "`4t6 for glory` — com label\n"
+                "`[t20+5 ataque]` — inline em qualquer msg\n"
+                "`c50+50` — calculadora\n\n"
                 "**Atalhos RPG** (com `t!d`):\n"
                 "`t!d adv` / `t!d dis` — Vantagem / Desvantagem\n"
                 "`t!d adv+5` — Vantagem com modificador\n"
-                "`t!d stats` — Atributos (6x 4d6dl1)\n"
-                "`t!d init +3` — Iniciativa (d20+mod)\n"
+                "`t!d stats` — Atributos (6x 4t6dl1)\n"
+                "`t!d init +3` — Iniciativa (t20+mod)\n"
                 "`t!d coin` — Cara ou coroa\n"
-                "`t!d d%` — Percentual (d100)\n\n"
-                "**Criticos** em **negrito**, dados descartados ~~riscados~~"
-            )
+                "`t!d t%` — Percentual (t100)\n\n"
+                "Criticos em **negrito**, descartados ~~riscados~~"
+            ))
             return
         _touch_activity(ctx.guild.id)
-        result = _roll_dice(expression.strip())
-        await ctx.send(f"🎲 {result}")
+        text, crits = _roll_dice(expression.strip())
+        desc = f"**Criticos: {crits}**\n\n{text}" if crits > 0 else text
+        await ctx.send(embed=_embed(desc))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -5869,22 +5902,6 @@ def register_voice(bot: commands.Bot) -> None:
         msg = random.choice(_ANTISPAM_MSGS).format(mention=message.author.mention)
         try:
             await channel.send(msg)
-        except discord.HTTPException:
-            pass
-
-    @bot.listen("on_message")
-    async def _inline_dice_listener(message: discord.Message) -> None:
-        """Detecta rolagens inline [d20+5 ataque] em mensagens normais."""
-        if message.author.bot or not message.guild:
-            return
-        if not message.content or "[" not in message.content:
-            return
-        results = _parse_inline_rolls(message.content)
-        if not results:
-            return
-        lines = [f"🎲 {r}" for r in results[:5]]
-        try:
-            await message.reply("\n".join(lines), mention_author=False)
         except discord.HTTPException:
             pass
 
@@ -6241,12 +6258,12 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=True)
         em.add_field(name="🎲 Dados / RPG", value=(
             "**Sem prefixo** — digite direto:\n"
-            "`4d6`, `d20`, `2d20kh1+5`, `3#d20`, `6#4d6dl1`\n"
-            "`4d6 for glory` — com label\n"
-            "`[1d20+5 ataque]` — inline em qualquer msg\n"
-            "`&50+50` — calculadora\n"
-            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`, `d%`\n"
-            "Criticos **negrito**, descartados ~~riscados~~"
+            "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `6#4t6dl1`\n"
+            "`4t6 for glory` — com label\n"
+            "`[t20+5 ataque]` — inline em qualquer msg\n"
+            "`c50+50` — calculadora\n"
+            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`, `t%`\n"
+            "Criticos em **negrito**, descartados ~~riscados~~"
         ), inline=False)
         em.add_field(name="🔔 Alerts", value=(
             "`t!alert <product>` — Price alert via DM\n"

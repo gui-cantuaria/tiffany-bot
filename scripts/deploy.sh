@@ -66,25 +66,31 @@ fi
 
 echo "[deploy] Parando serviço e processos órfãos..."
 systemctl stop tiffany-bot 2>/dev/null || true
-sleep 1
+sleep 2
 # SIGKILL para garantir que nenhum processo sobreviva
 pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
 pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
 pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
 rm -f /tmp/tiffany_launcher.lock
-sleep 2
-# Verificar se realmente morreu.
+sleep 3
+# Verificar se realmente morreu — loop até confirmar.
 # IMPORTANTE: NUNCA usar pkill -f "/opt/tiffany-bot/" genérico aqui — o próprio
 # deploy.sh roda como "bash /opt/tiffany-bot/scripts/deploy.sh" e seria morto,
 # derrubando a sessão SSH (exit 137) e causando falhas intermitentes no Actions.
 # Por isso só matamos os scripts específicos do bot.
-if pgrep -f "/opt/tiffany-bot/(launcher|notices|offers).py" > /dev/null 2>&1; then
-    echo "[deploy] Processos ainda vivos, forçando kill..."
+KILL_ATTEMPTS=0
+while pgrep -f "/opt/tiffany-bot/(launcher|notices|offers).py" > /dev/null 2>&1; do
+    KILL_ATTEMPTS=$((KILL_ATTEMPTS + 1))
+    if [ $KILL_ATTEMPTS -ge 5 ]; then
+        echo "[deploy] ERRO: processos nao morreram apos 5 tentativas!"
+        break
+    fi
+    echo "[deploy] Processos ainda vivos (tentativa $KILL_ATTEMPTS), forcando kill..."
     pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
     pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
     pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
-    sleep 2
-fi
+    sleep 3
+done
 
 echo "[deploy] Iniciando serviço..."
 systemctl start tiffany-bot
