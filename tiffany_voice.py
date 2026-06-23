@@ -3961,13 +3961,11 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
     if len(sorted_rolls) > 24:
         rolls_show += "…"
 
-    # Mostrar com notacao 't' para o usuario (d → t)
-    display_term = re.sub(r"(\d*)d(\d+|f)", r"\1t\2", term, flags=re.IGNORECASE)
     if pool_op:
         succ = _pool_count(kept, pool_op, pool_target)
-        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]{display_term} ({pool_op}{pool_target})", crits
+        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]", crits
     total = sum(kept)
-    return float(total), f"{total} ← [{rolls_show}]{display_term}", crits
+    return float(total), f"[{rolls_show}]", crits
 
 
 def _safe_math_eval(expr: str) -> float:
@@ -3995,25 +3993,32 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int]:
         if not terms:
             val = _safe_math_eval(work_lower)
             return (f"{prefix}{val:g} ← {raw}", 0)
-        details: list[str] = []
+        rolls_parts: list[str] = []
+        vals: list[float] = []
         total_crits = 0
         math_expr = work_lower
         offset = 0
         for m in terms:
             term = m.group(0)
-            val, detail, crits = _roll_one_dice_term(term)
+            val, rolls_str, crits = _roll_one_dice_term(term)
             total_crits += crits
-            details.append(detail)
+            rolls_parts.append(rolls_str)
+            vals.append(val)
             repl = str(int(val) if val == int(val) else val)
             start = m.start() + offset
             math_expr = math_expr[:start] + repl + math_expr[m.end() + offset:]
             offset += len(repl) - (m.end() - m.start())
         if len(terms) == 1 and not re.search(r"[+*/()-]", _DICE_TERM_RE.sub("0", work_lower)):
-            return (f"{prefix}{details[0]}", total_crits)
+            # Termo simples sem math: "**total** ← [rolls]"
+            v = int(vals[0]) if vals[0] == int(vals[0]) else vals[0]
+            return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits)
         total = _safe_math_eval(math_expr)
-        if len(details) > 1:
-            return (f"{prefix}\n" + "\n".join(details) + f"\n**Total: {total:g}**", total_crits)
-        return (f"{prefix}{details[0]} → **{total:g}**", total_crits)
+        if len(terms) > 1:
+            # Múltiplos termos: mostrar cada um, depois total
+            lines = [f"{rolls_parts[i]} = {int(vals[i]) if vals[i] == int(vals[i]) else vals[i]}" for i in range(len(terms))]
+            return (f"{prefix}\n" + "\n".join(lines) + f"\n**Total: {total:g}**", total_crits)
+        # Um termo + math: "[rolls] + mods = **total**"
+        return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits)
     except Exception:
         return (
             f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
