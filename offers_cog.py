@@ -59,18 +59,13 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/placa-de-video/s/",
     "/promocoes/memoria-ram/s/",
     "/promocoes/placa-mae/s/",
-    "/promocoes/ssd/s/",
     "/promocoes/gabinete/s/",
-    "/promocoes/pasta-termica/s/",
     # === Periféricos ===
     "/promocoes/monitor/s/",
     "/promocoes/teclado/s/",
     "/promocoes/mouse/s/",
     "/promocoes/headset/s/",
-    "/promocoes/mousepad/s/",
     "/promocoes/webcam/s/",
-    "/promocoes/mesa-digitalizadora/s/",
-    "/promocoes/braco-articulado-para-monitor/s/",
     # === Hardware geral ===
     "/promocoes/hardware-perifericos/s/",
     "/promocoes/pc-gamer/s/",
@@ -78,9 +73,9 @@ CATEGORIAS_PROMOBIT = [
     # === Outros ===
     "/promocoes/notebooks/s/",
     "/promocoes/notebook-gamer/s/",
-    "/promocoes/televisao/s/",
-    "/promocoes/tablet/s/",
-    "/promocoes/celular/s/",
+    # Removidos (404 no Promobit desde jun/2026):
+    # ssd, pasta-termica, mousepad, mesa-digitalizadora,
+    # braco-articulado-para-monitor, televisao, tablet, celular
 ]
 
 # Whitelist completa (para quando todos os afiliados estiverem ativos)
