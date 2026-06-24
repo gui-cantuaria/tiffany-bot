@@ -56,7 +56,6 @@ PROMOBIT_BASE = "https://www.promobit.com.br"
 CATEGORIAS_PROMOBIT = [
     # === Peças de PC (prioridade máxima) ===
     "/promocoes/processador/s/",
-    "/promocoes/placa-de-video/s/",
     "/promocoes/memoria-ram/s/",
     "/promocoes/placa-mae/s/",
     "/promocoes/gabinete/s/",
