@@ -164,7 +164,7 @@ CATEGORIAS_EMOJI = {
     "SSD": "💾",
     "Memória RAM": "🧩",
     "Mesa digitalizadora": "🎨",
-    "Gabinete": "🗄️",
+    "Gabinete": "🖥️",
     "Mousepad": "🖱️",
     "Pasta Térmica": "🔧",
     "Tablet": "📱",
@@ -325,15 +325,42 @@ _TITLE_GENERIC = frozenset({
 })
 
 
+import html as html_module
+
+# Regex para extrair códigos de modelo/SKU
+_MODEL_RE = re.compile(
+    r'\b(?:'
+    r'[A-Za-z]{1,4}\d{2,}[A-Za-z0-9\-]*'  # B450M, RTX4050, H61M2-V2, 24MS500-B
+    r'|[A-Za-z]\d+[A-Za-z]\d*'              # i7, M7, H510
+    r')\b'
+)
+
 def _title_key(title: str) -> str:
     """Gera chave de produto para dedup intraday.
-    Remove palavras genéricas de categoria, mantém marca + modelo.
-    Ex: 'Samsung Galaxy Book4 i5 512GB...' → 'samsung galaxy book4'"""
+    Remove palavras genéricas de categoria, mantém marca + modelo."""
     t = unicodedata.normalize("NFD", title.lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    t = re.sub(r"[^\w\s]", " ", t)
+    t = re.sub(r"[^\w\s\-]", " ", t)
+    
+    # Extrair códigos de modelo (SKU)
+    models = sorted(set(m.lower() for m in _MODEL_RE.findall(title)))
+    
+    # Palavras significativas (sem genéricas)
     words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
-    return " ".join(words[:3])
+    
+    # Combinar: modelos + primeiras palavras significativas, ORDENADOS
+    tokens = sorted(set(models + words[:4]))[:5]
+    return " ".join(tokens)
+
+def _sanitize_title(title: str) -> str:
+    """Remove entidades HTML e escapes do título."""
+    t = html_module.unescape(title)
+    t = t.replace('\\"', '"')
+    # Colapsar espaços duplicados
+    t = re.sub(r'\s+', ' ', t).strip()
+    # Remover palavra duplicada consecutiva (MOUSE MOUSE → MOUSE)
+    t = re.sub(r'\b(\w+)\s+\1\b', r'\1', t, flags=re.IGNORECASE)
+    return t
 
 
 def _is_valid_coupon(code: str) -> bool:
@@ -690,7 +717,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         await _resolve_product_url(session, deal, alias)
 
     # Título limpo orientado ao comprador — remove dump de specs técnicas
-    deal["title"] = await _ai_clean_title(session, deal["title"], deal.get("category", ""))
+    deal["title"] = await _ai_clean_title(session, _sanitize_title(deal["title"]), deal.get("category", ""))
 
     return deal
 
@@ -949,11 +976,36 @@ _IRRELEVANT_KEYWORDS = (
 )
 
 
-def _is_irrelevant(deal: dict) -> bool:
-    """True se o título indica produto que não é de informática/PC."""
-    title = (deal.get("title") or "").lower()
-    return any(k in title for k in _IRRELEVANT_KEYWORDS)
+_OBSOLETE_KEYWORDS = (
+    "ddr2 ", " ddr2", "lga775", "lga1150", "lga1151", "lga1155",
+    "am3+", "am3 ", " fm2",
+)
 
+def _is_spam_title(title: str) -> bool:
+    """True se o título parece spam ou listing genérico."""
+    words = title.lower().split()
+    # Palavra duplicada consecutiva (MOUSE MOUSE)
+    for i in range(len(words) - 1):
+        if words[i] == words[i+1] and len(words[i]) >= 3:
+            return True
+    return False
+
+def _is_irrelevant(deal: dict) -> bool:
+    """True se o título indica produto que não é de informática/PC ou é spam/obsoleto."""
+    title = (deal.get("title") or "").lower()
+    if any(k in title for k in _IRRELEVANT_KEYWORDS):
+        return True
+    if any(k in title for k in _OBSOLETE_KEYWORDS):
+        return True
+    if _is_spam_title(deal.get("title", "")):
+        return True
+    return False
+
+
+_MARKETPLACE_STORES = {"shopee", "aliexpress"}
+
+def _is_marketplace(store: str) -> bool:
+    return _normalize_store(store) in _MARKETPLACE_STORES
 
 def _passes_filters(deal: dict) -> tuple[bool, str]:
     """Verifica se a oferta passa nos filtros. Retorna (passed, reason)."""
@@ -967,7 +1019,13 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
 
     # Produto fora do escopo de informática (eletrodoméstico, brinquedo, etc.)
     if _is_irrelevant(deal):
-        return False, "produto irrelevante (não é informática)"
+        return False, "produto irrelevante/spam/obsoleto"
+
+    # Check de preço 'de' inflado
+    lowest = deal.get("lowest_price_30d")
+    orig = deal.get("original_price")
+    if lowest and orig and orig > lowest * 3:
+        return False, f"preço 'de' inflado: original R${orig:.0f} > 3× menor_30d R${lowest:.0f}"
 
     # Deve ter desconto >= 15% e <= 100% (rejeita valores absurdos/negativos)
     disc = deal.get("discount_pct", 0)
@@ -1005,9 +1063,14 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     # Sem dados de qualidade (Promobit não trouxe estrelas nem vendas): como a loja
     # já passou pela whitelist (é confiável), aceita desde que o desconto seja bom.
     if stars is None and sales is None:
-        if disc >= DESCONTO_SEM_METRICA:
+        max_disc = 50 if _is_marketplace(deal.get("store", "")) else DESCONTO_SEM_METRICA
+        if disc > 70:
+            return False, f"desconto {disc}% > 70% sem métricas (suspeito)"
+        if disc >= max_disc:
+            if _is_marketplace(deal.get("store", "")):
+                return False, f"marketplace sem métrica e desconto {disc}% >= {max_disc}%"
             return True, "ok (sem métrica, desconto alto)"
-        return False, f"sem métrica e desconto {disc}% < {DESCONTO_SEM_METRICA}%"
+        return False, f"sem métrica e desconto {disc}% < {max_disc}%"
 
     return True, "ok"
 
@@ -1043,11 +1106,11 @@ def _interleave_by_store(deals: list) -> list:
     return result
 
 
-def _select_diverse(deals: list, limit: int, max_per_cat: int = 2) -> list:
-    """Seleciona até `limit` ofertas garantindo VARIEDADE de categorias.
+def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store: int = 2) -> list:
+    """Seleciona até `limit` ofertas garantindo VARIEDADE de categorias e limitando por loja.
     Espera `deals` já ordenado por (prioridade de categoria, -score). Faz round-robin:
     pega a melhor de cada categoria por vez (no máx. `max_per_cat` por categoria),
-    o que dá vez às peças prioritárias e evita encher o ciclo de uma categoria só."""
+    respeitando o limite de `max_per_store` por loja."""
     from collections import OrderedDict
     by_cat: "OrderedDict[str, list]" = OrderedDict()
     for d in deals:
@@ -1055,6 +1118,7 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2) -> list:
 
     selected: list = []
     counts: dict[str, int] = {}
+    store_counts: dict[str, int] = {}
     progressed = True
     while len(selected) < limit and progressed:
         progressed = False
@@ -1063,8 +1127,25 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2) -> list:
                 break
             if counts.get(cat, 0) >= max_per_cat or not items:
                 continue
-            selected.append(items.pop(0))
+                
+            # Procurar o primeiro item desta categoria que não exceda o limite da loja
+            idx_to_pop = -1
+            for i, item in enumerate(items):
+                store = _normalize_store(item.get("store", ""))
+                if store_counts.get(store, 0) < max_per_store:
+                    idx_to_pop = i
+                    break
+            
+            if idx_to_pop == -1:
+                # Todos os itens restantes desta categoria estouram o limite de loja
+                continue
+                
+            item = items.pop(idx_to_pop)
+            selected.append(item)
             counts[cat] = counts.get(cat, 0) + 1
+            
+            store = _normalize_store(item.get("store", ""))
+            store_counts[store] = store_counts.get(store, 0) + 1
             progressed = True
     return selected
 
@@ -1140,8 +1221,23 @@ def _format_description(deal: dict) -> str:
     has_frete_gratis = any("frete" in n.lower() and "grát" in n.lower() for n in tag_names)
     if has_frete_gratis:
         detalhes.append("✅ Frete grátis")
-    # Demais tags relevantes (exceto "Parcelado" já tratado e "Frete Grátis" já tratado)
-    outros = [n for n in tag_names if "frete" not in n.lower() and "parcelado" not in n.lower()]
+    # Demais tags relevantes
+    _TAGS_IGNORAR = {"app", "nacional", "internacional", "cupom", "promoção", "oferta"}
+    _TAGS_MAPEAR = {
+        "app": "📱 Cupom no app da loja",
+        "taxa inclusa": "🏷️ Taxa inclusa",
+    }
+    outros = []
+    for n in tag_names:
+        nl = n.lower()
+        if "frete" in nl or "parcelado" in nl:
+            continue
+        if nl in _TAGS_IGNORAR:
+            mapped = _TAGS_MAPEAR.get(nl)
+            if mapped:
+                detalhes.append(mapped)
+            continue
+        outros.append(n)
     if outros:
         detalhes.append(" • ".join(outros[:2]))
 
@@ -1305,7 +1401,7 @@ def _build_embed(deal: dict) -> discord.Embed:
     cor = _cor_embed(deal)
 
     # Título: emoji + nome completo do produto (desconto já aparece na descrição)
-    title = f"{EMOJI_FOGO} {deal['title'][:200]}"
+    title = f"{EMOJI_FOGO} {_sanitize_title(deal['title'][:200])}"
 
     desc = _format_description(deal)
     # URL unificada para título e botão (evita inconsistência)
@@ -1537,13 +1633,16 @@ async def _run_deals_cycle_inner() -> None:
             global _mention_count_ofertas, _mention_date_ofertas
             content = None
             guild = getattr(channel, "guild", None)
-            # Menciona o cargo apenas nas 3 primeiras ofertas do dia
+            # Menciona o cargo apenas nas 3 primeiras ULTRA-OFERTAS do dia
             hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
             if hoje_br != _mention_date_ofertas:
                 _mention_date_ofertas = hoje_br
                 _mention_count_ofertas = 0
+            
             cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
-            if cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
+            is_ultra = deal.get("discount_pct", 0) >= DESCONTO_ULTRA_OFERTA
+            
+            if is_ultra and cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
                 content = f"<@&{cargo_id}>"
                 _mention_count_ofertas += 1
 

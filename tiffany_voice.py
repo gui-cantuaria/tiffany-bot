@@ -3894,12 +3894,8 @@ def _apply_keep_drop(rolls: list[int], keep_str: str, nosort: bool) -> list[int]
     return list(rolls)
 
 
-def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
-    """Rola um termo de dados e retorna (valor, texto_formatado, criticos).
-
-    Formato rollem: ``total ← [rolls]term``
-    Criticos (max) e fumbles (1) em negrito, dados descartados riscados.
-    """
+def _roll_one_dice_term(term: str) -> tuple[float, str, int, int]:
+    """Rola um termo de dados e retorna (valor, texto_formatado, criticos, fumbles)."""
     import random
     m = _DICE_TERM_RE.fullmatch(term.strip().lower())
     if not m:
@@ -3944,6 +3940,7 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
     sorted_rolls = rolls if nosort else sorted(rolls, reverse=True)
     kept_remaining = list(kept)
     crits = 0
+    fumbles = 0
     formatted: list[str] = []
     for r in sorted_rolls[:24]:
         is_kept = r in kept_remaining
@@ -3953,7 +3950,9 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
         is_fumble = not is_fate and r == 1
         if is_crit and is_kept:
             crits += 1
-        r_str = f"**{r}**" if (is_crit or is_fumble) else str(r)
+        if is_fumble and is_kept:
+            fumbles += 1
+        r_str = f"**{r}**" if is_crit else (f"**{r}**" if is_fumble else str(r))
         if not is_kept:
             r_str = f"~~{r_str}~~"
         formatted.append(r_str)
@@ -3963,9 +3962,9 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int]:
 
     if pool_op:
         succ = _pool_count(kept, pool_op, pool_target)
-        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]", crits
+        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]", crits, fumbles
     total = sum(kept)
-    return float(total), f"[{rolls_show}]", crits
+    return float(total), f"[{rolls_show}]", crits, fumbles
 
 
 def _safe_math_eval(expr: str) -> float:
@@ -3975,11 +3974,11 @@ def _safe_math_eval(expr: str) -> float:
     return float(eval(safe, {"__builtins__": {}}, {}))
 
 
-def _roll_single(expression: str, label: str = "") -> tuple[str, int]:
-    """Rola uma expressao de dados. Retorna (texto, total_crits)."""
+def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
+    """Rola uma expressao de dados. Retorna (texto, total_crits, total_fumbles)."""
     raw = expression.strip()
     if not raw:
-        return ("⚠️ Informe uma expressao. Ex: `t20`, `2t6+3`, `4t6dl1`, `5t10>=7`", 0)
+        return ("⚠️ Informe uma expressao. Ex: `t20`, `2t6+3`, `4t6dl1`, `5t10>=7`", 0, 0)
     work = raw
     # Label via [Label] prefixo inline
     label_m = re.match(r"^\[([^\]]+)\]\s*(.+)$", work)
@@ -3992,16 +3991,18 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int]:
         terms = list(_DICE_TERM_RE.finditer(work_lower))
         if not terms:
             val = _safe_math_eval(work_lower)
-            return (f"{prefix}{val:g} ← {raw}", 0)
+            return (f"{prefix}{val:g} ← {raw}", 0, 0)
         rolls_parts: list[str] = []
         vals: list[float] = []
         total_crits = 0
+        total_fumbles = 0
         math_expr = work_lower
         offset = 0
         for m in terms:
             term = m.group(0)
-            val, rolls_str, crits = _roll_one_dice_term(term)
+            val, rolls_str, crits, fumbles = _roll_one_dice_term(term)
             total_crits += crits
+            total_fumbles += fumbles
             rolls_parts.append(rolls_str)
             vals.append(val)
             repl = str(int(val) if val == int(val) else val)
@@ -4011,24 +4012,25 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int]:
         if len(terms) == 1 and not re.search(r"[+*/()-]", _DICE_TERM_RE.sub("0", work_lower)):
             # Termo simples sem math: "**total** ← [rolls]"
             v = int(vals[0]) if vals[0] == int(vals[0]) else vals[0]
-            return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits)
+            return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits, total_fumbles)
         total = _safe_math_eval(math_expr)
         if len(terms) > 1:
             # Múltiplos termos: mostrar cada um, depois total
             lines = [f"{rolls_parts[i]} = {int(vals[i]) if vals[i] == int(vals[i]) else vals[i]}" for i in range(len(terms))]
-            return (f"{prefix}\n" + "\n".join(lines) + f"\n**Total: {total:g}**", total_crits)
+            return (f"{prefix}\n" + "\n".join(lines) + f"\n**Total: {total:g}**", total_crits, total_fumbles)
         # Um termo + math: "[rolls] + mods = **total**"
-        return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits)
+        return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits, total_fumbles)
     except Exception:
         return (
             f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
             "`5t10>=7`, `2t6!`, `4tF+2`, `3#1t20+8`",
             0,
+            0,
         )
 
 
-def _roll_dice(expression: str, label: str = "") -> tuple[str, int]:
-    """Rola dados. Aceita notacao 't' (4t6) ou 'd' (4d6). Retorna (texto, crits)."""
+def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
+    """Rola dados. Aceita notacao 't' (4t6) ou 'd' (4d6). Retorna (texto, crits, fumbles)."""
     import random
     expression = _t_to_d(expression.strip())
     low = expression.lower()
@@ -4040,31 +4042,33 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int]:
 
     # Atalhos RPG (so funcionam via t!d)
     if low in ("adv", "advantage", "vantagem"):
-        text, crits = _roll_single("2d20kh1")
-        return (text + "\n*(Vantagem: maior de 2d20)*", crits)
+        text, crits, fumbles = _roll_single("2d20kh1")
+        return (text + "\n*(Vantagem: maior de 2d20)*", crits, fumbles)
     if low in ("dis", "disadvantage", "desvantagem"):
-        text, crits = _roll_single("2d20kl1")
-        return (text + "\n*(Desvantagem: menor de 2d20)*", crits)
+        text, crits, fumbles = _roll_single("2d20kl1")
+        return (text + "\n*(Desvantagem: menor de 2d20)*", crits, fumbles)
     adv_m = re.match(r"^(?:adv|advantage|vantagem)\s*([+-]\d+)$", low)
     if adv_m:
         mod = adv_m.group(1)
-        text, crits = _roll_single(f"2d20kh1{mod}")
-        return (text + f"\n*(Vantagem {mod})*", crits)
+        text, crits, fumbles = _roll_single(f"2d20kh1{mod}")
+        return (text + f"\n*(Vantagem {mod})*", crits, fumbles)
     dis_m = re.match(r"^(?:dis|disadvantage|desvantagem)\s*([+-]\d+)$", low)
     if dis_m:
         mod = dis_m.group(1)
-        text, crits = _roll_single(f"2d20kl1{mod}")
-        return (text + f"\n*(Desvantagem {mod})*", crits)
+        text, crits, fumbles = _roll_single(f"2d20kl1{mod}")
+        return (text + f"\n*(Desvantagem {mod})*", crits, fumbles)
 
     if low in ("stats", "atributos", "stat", "atributo"):
         labels = ["FOR", "DES", "CON", "INT", "SAB", "CAR"]
         lines = []
         total_crits = 0
+        total_fumbles = 0
         for lbl in labels:
-            text, crits = _roll_single("4d6dl1")
+            text, crits, fumbles = _roll_single("4d6dl1")
             total_crits += crits
+            total_fumbles += fumbles
             lines.append(f"**{lbl}:** {text}")
-        return ("**Rolagem de Atributos (4t6dl1)**\n" + "\n".join(lines), total_crits)
+        return ("**Rolagem de Atributos (4t6dl1)**\n" + "\n".join(lines), total_crits, total_fumbles)
 
     init_m = re.match(r"^(?:init|iniciativa|initiative)\s*([+-]?\d*)$", low)
     if init_m:
@@ -4073,33 +4077,35 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int]:
         roll_val = random.randint(1, 20)
         total = roll_val + mod
         mod_display = f"+{mod}" if mod >= 0 else str(mod)
-        is_crit = roll_val == 20 or roll_val == 1
-        r_str = f"**{roll_val}**" if is_crit else str(roll_val)
-        return (f"{total} ← [{r_str}]t20{mod_display} *(Iniciativa)*", 1 if roll_val == 20 else 0)
+        is_crit = roll_val == 20
+        is_fumble = roll_val == 1
+        r_str = f"**[{roll_val}]**" if is_crit else (f"**({roll_val})**" if is_fumble else str(roll_val))
+        return (f"{total} ← [{r_str}]t20{mod_display} *(Iniciativa)*", 1 if is_crit else 0, 1 if is_fumble else 0)
 
     if low in ("coin", "moeda", "coinflip", "cara", "coroa"):
         result = random.choice(["Cara", "Coroa"])
-        return (f"**{result}!**", 0)
+        return (f"**{result}!**", 0, 0)
 
     # Percentual (d100 / d%)
     if low in ("d%", "d100", "t%", "t100", "percentual"):
         roll_val = random.randint(1, 100)
-        return (f"{roll_val} ← [{roll_val}]t100", 0)
+        return (f"{roll_val} ← [{roll_val}]t100", 0, 0)
 
     rep_m = re.match(r"^(\d+)#(.+)$", expression, re.IGNORECASE)
     if rep_m:
         count = min(int(rep_m.group(1)), 20)
         sub = rep_m.group(2).strip()
         results = [_roll_single(sub, label) for _ in range(count)]
-        total_crits = sum(c for _, c in results)
-        numbered = [f"`{i+1}.` {text}" for i, (text, _) in enumerate(results)]
-        return ("\n".join(numbered), total_crits)
+        total_crits = sum(c for _, c, _ in results)
+        total_fumbles = sum(f for _, _, f in results)
+        numbered = [f"`{i+1}.` {text}" for i, (text, _, _) in enumerate(results)]
+        return ("\n".join(numbered), total_crits, total_fumbles)
     return _roll_single(expression, label)
 
 
-def _parse_inline_rolls(content: str) -> list[tuple[str, int]]:
-    """Detecta rolagens inline [4t6], [t20+5 ataque], [4d6]. Retorna lista de (texto, crits)."""
-    results: list[tuple[str, int]] = []
+def _parse_inline_rolls(content: str) -> list[tuple[str, int, int]]:
+    """Detecta rolagens inline [4t6], [t20+5 ataque], [4d6]. Retorna lista de (texto, crits, fumbles)."""
+    results: list[tuple[str, int, int]] = []
     for m in re.finditer(r"\[([^\]]+)\]", content):
         inner = m.group(1).strip()
         if not inner:
@@ -4151,7 +4157,86 @@ def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
     return expr, label
 
 
+_MACROS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dice_macros.json")
+_dice_macros: dict[str, dict[str, str]] = {}
+
+def _load_dice_macros():
+    global _dice_macros
+    if os.path.exists(_MACROS_FILE):
+        try:
+            with open(_MACROS_FILE, "r", encoding="utf-8") as f:
+                _dice_macros = json.load(f)
+        except Exception:
+            _dice_macros = {}
+
+def _save_dice_macros():
+    with open(_MACROS_FILE, "w", encoding="utf-8") as f:
+        json.dump(_dice_macros, f, ensure_ascii=False, indent=2)
+
+def _get_dice_macro(user_id: int, name: str) -> str:
+    uid = str(user_id)
+    return _dice_macros.get(uid, {}).get(name.lower(), "")
+
+def _set_dice_macro(user_id: int, name: str, expr: str):
+    uid = str(user_id)
+    if uid not in _dice_macros:
+        _dice_macros[uid] = {}
+    _dice_macros[uid][name.lower()] = expr
+    _save_dice_macros()
+
+def _remove_dice_macro(user_id: int, name: str) -> bool:
+    uid = str(user_id)
+    if uid in _dice_macros and name.lower() in _dice_macros[uid]:
+        del _dice_macros[uid][name.lower()]
+        _save_dice_macros()
+        return True
+    return False
+
+def _build_dice_embed(desc: str, crits: int, fumbles: int) -> discord.Embed:
+    color = 0x2B2D31
+    if crits > 0:
+        color = 0x00FF00
+    elif fumbles > 0:
+        color = 0xFF0000
+    em = discord.Embed(description=desc, color=color)
+    return em
+
+class DiceRerollView(discord.ui.View):
+    def __init__(self, rolls_info: list[tuple[str, str]]):
+        super().__init__(timeout=None)
+        # rolls_info is a list of (expression, label)
+        self.rolls_info = rolls_info
+
+    @discord.ui.button(label="🔄 Rolar de Novo", style=discord.ButtonStyle.secondary, custom_id="dice_reroll_btn")
+    async def btn_reroll(self, interaction: discord.Interaction, button: discord.ui.Button):
+        roll_results = []
+        for expr, lbl in self.rolls_info:
+            text, crits, fumbles = _roll_dice(expr, lbl)
+            if "nao entendi" not in text and "⚠️" not in text:
+                roll_results.append((text, crits, fumbles))
+        
+        if not roll_results:
+            await interaction.response.send_message("⚠️ Não consegui re-rolar.", ephemeral=True)
+            return
+            
+        total_crits = sum(c for _, c, _ in roll_results)
+        total_fumbles = sum(f for _, _, f in roll_results)
+        body = "\n".join(t for t, _, _ in roll_results)
+        
+        desc = body
+        if total_crits > 0:
+            desc = f"🟩 **Críticos: {total_crits}**\n\n{desc}"
+        elif total_fumbles > 0:
+            desc = f"🟥 **Falhas Críticas: {total_fumbles}**\n\n{desc}"
+            
+        em = _build_dice_embed(desc, total_crits, total_fumbles)
+        # Identificar quem rolou
+        content = f"<@{interaction.user.id}> rolou novamente:"
+        await interaction.response.send_message(content=content, embed=em, view=DiceRerollView(self.rolls_info))
+
+
 def register_voice(bot: commands.Bot) -> None:
+    _load_dice_macros()
     global _ai_semaphore, _stats
     _stats = _load_stats()
     _cleanup_stale_tempfiles()
@@ -4178,35 +4263,57 @@ def register_voice(bot: commands.Bot) -> None:
         if message.content.startswith("<@"):
             return
 
-        roll_results: list[tuple[str, int]] = []
+        roll_results: list[tuple[str, int, int]] = []
+        rolls_info: list[tuple[str, str]] = []
 
         # 1. Inline dice: [4t6], [2t20kh1 ataque]
         if "[" in content and "]" in content:
-            roll_results = _parse_inline_rolls(content)
+            inline = _parse_inline_rolls(content)
+            if inline:
+                roll_results = inline
+                rolls_info = [(content, "INLINE")]
 
         # 2. Mensagem inteira e expressao de dados (t20, 4t6+3, c20+5)
         if not roll_results:
             parsed = _try_parse_dice_msg(content)
             if parsed:
                 expr, lbl = parsed
-                text, crits = _roll_dice(expr, lbl)
+                text, crits, fumbles = _roll_dice(expr, lbl)
                 if "nao entendi" not in text and "⚠️" not in text:
-                    roll_results = [(text, crits)]
+                    roll_results = [(text, crits, fumbles)]
+                    rolls_info = [(expr, lbl)]
 
         if roll_results:
             _touch_activity(message.guild.id)
-            total_crits = sum(c for _, c in roll_results)
-            body = "\n".join(t for t, _ in roll_results)
-            desc = f"**Criticos: {total_crits}**\n\n{body}" if total_crits > 0 else body
-            em = _embed(desc)
+            total_crits = sum(c for _, c, _ in roll_results)
+            total_fumbles = sum(f for _, _, f in roll_results)
+            body = "\n".join(t for t, _, _ in roll_results)
+            
+            desc = body
+            if total_crits > 0:
+                desc = f"🟩 **Críticos: {total_crits}**\n\n{desc}"
+            elif total_fumbles > 0:
+                desc = f"🟥 **Falhas Críticas: {total_fumbles}**\n\n{desc}"
+                
+            em = _build_dice_embed(desc, total_crits, total_fumbles)
             try:
-                await message.reply(embed=em, mention_author=False)
+                await message.reply(embed=em, view=DiceRerollView(rolls_info), mention_author=False)
             except Exception:
                 pass
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
         """Responde pergunta usando IA. Se image_urls fornecido, usa modelo com visão."""
         try:
+            _ctx_id = user_id or guild_id
+            
+            # Anti-spam: check if exact same question was asked recently
+            if _ctx_id and question and not image_urls:
+                entry = _user_context.get(_ctx_id)
+                if entry and entry.get("history"):
+                    last_q = entry["history"][-1].get("q", "")
+                    if question.strip().lower() == last_q.strip().lower():
+                        return "Você já me perguntou exatamente a mesma coisa! Para evitar repetições, aguarde um pouco ou faça uma pergunta diferente. 😉"
+
             client = _get_openrouter_client()
             if client is None:
                 return "Desculpe, chave da API não configurada."
@@ -5710,9 +5817,62 @@ def register_voice(bot: commands.Bot) -> None:
             ))
             return
         _touch_activity(ctx.guild.id)
-        text, crits = _roll_dice(expression.strip())
-        desc = f"**Criticos: {crits}**\n\n{text}" if crits > 0 else text
-        await ctx.send(embed=_embed(desc))
+        
+        low = expression.lower().strip()
+        
+        # Macros
+        if low.startswith("macro add "):
+            parts = expression.split(" ", 2)
+            if len(parts) == 3:
+                name_expr = parts[2].strip().split(" ", 1)
+                if len(name_expr) == 2:
+                    name = name_expr[0]
+                    expr = name_expr[1]
+                    _set_dice_macro(ctx.author.id, name, expr)
+                    await ctx.send(embed=_embed(f"✅ Macro **{name}** salva como `{expr}`."))
+                    return
+            await ctx.send(embed=_embed("⚠️ Uso correto: `t!d macro add <nome> <fórmula>`"))
+            return
+            
+        if low.startswith("macro remove ") or low.startswith("macro rm "):
+            parts = expression.split(" ", 2)
+            if len(parts) == 3:
+                name = parts[2].strip()
+                if _remove_dice_macro(ctx.author.id, name):
+                    await ctx.send(embed=_embed(f"🗑️ Macro **{name}** removida."))
+                else:
+                    await ctx.send(embed=_embed(f"⚠️ Macro **{name}** não encontrada."))
+                return
+            await ctx.send(embed=_embed("⚠️ Uso correto: `t!d macro remove <nome>`"))
+            return
+            
+        if low == "macro list" or low == "macro":
+            macros = _dice_macros.get(str(ctx.author.id), {})
+            if not macros:
+                await ctx.send(embed=_embed("Você não tem nenhuma macro salva. Use `t!d macro add <nome> <fórmula>`."))
+                return
+            lines = [f"**{name}**: `{expr}`" for name, expr in macros.items()]
+            await ctx.send(embed=_embed("**Suas Macros de Dados:**\n\n" + "\n".join(lines)))
+            return
+
+        # Verificar se a expressão é uma macro salva
+        macro_expr = _get_dice_macro(ctx.author.id, low)
+        if macro_expr:
+            expression = macro_expr
+            low = expression.lower()
+
+        text, crits, fumbles = _roll_dice(expression)
+        desc = text
+        if crits > 0:
+            desc = f"🟩 **Críticos: {crits}**\n\n{desc}"
+        elif fumbles > 0:
+            desc = f"🟥 **Falhas Críticas: {fumbles}**\n\n{desc}"
+            
+        em = _build_dice_embed(desc, crits, fumbles)
+        try:
+            await ctx.reply(embed=em, view=DiceRerollView([(expression, "")]), mention_author=False)
+        except Exception:
+            pass
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):

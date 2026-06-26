@@ -1673,6 +1673,10 @@ async def verificar_feeds():
             if simhash_is_dup(history, sh_item):
                 log.info(f"  ✗ Fila: simhash duplicado, descartando: {titulo_item[:60]}")
                 continue
+            # Dedup: verificar por tema/entidade (Entity Overlap)
+            if titulo_item and topic_is_dup(history, titulo_item):
+                log.info(f"  ✗ Fila: tema duplicado, descartando: {titulo_item[:60]}")
+                continue
             # Revalidar imagem da fila (URLs podem ter morrido)
             if not await validar_imagem(img):
                 log.warning(f"  ✗ Imagem inválida na fila, descartando: {item.get('titulo', '?')[:60]}")
@@ -1681,6 +1685,7 @@ async def verificar_feeds():
                 posts_feitos += 1
                 title_add(history, titulo_item)
                 simhash_add(history, sh_item)
+                topic_add(history, titulo_item)
                 if posts_feitos < MAX_POSTS_POR_CICLO:
                     await asyncio.sleep(POST_SPACING_SEC)
             else:
