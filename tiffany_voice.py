@@ -4193,13 +4193,7 @@ def _remove_dice_macro(user_id: int, name: str) -> bool:
     return False
 
 def _build_dice_embed(desc: str, crits: int, fumbles: int) -> discord.Embed:
-    color = 0x2B2D31
-    if crits > 0:
-        color = 0x00FF00
-    elif fumbles > 0:
-        color = 0xFF0000
-    em = discord.Embed(description=desc, color=color)
-    return em
+    return _embed(desc)
 
 class DiceRerollView(discord.ui.View):
     def __init__(self, rolls_info: list[tuple[str, str]]):
@@ -4207,7 +4201,7 @@ class DiceRerollView(discord.ui.View):
         # rolls_info is a list of (expression, label)
         self.rolls_info = rolls_info
 
-    @discord.ui.button(label="🔄 Rolar de Novo", style=discord.ButtonStyle.secondary, custom_id="dice_reroll_btn")
+    @discord.ui.button(label="🔄 Reroll", style=discord.ButtonStyle.secondary, custom_id="dice_reroll_btn")
     async def btn_reroll(self, interaction: discord.Interaction, button: discord.ui.Button):
         roll_results = []
         for expr, lbl in self.rolls_info:
