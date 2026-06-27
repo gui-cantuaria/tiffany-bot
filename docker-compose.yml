@@ -1,44 +1,20 @@
+version: '3.8'
+
 services:
-  lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4
-    container_name: tiffany-lavalink
-    restart: unless-stopped
-    volumes:
-      - ./lavalink/application.yml:/opt/Lavalink/application.yml
-      - lavalink-logs:/opt/Lavalink/logs
-    networks:
-      - tiffany-net
-    expose:
-      - "2333"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:2333/version"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  bot:
+  tiffany-bot:
     build: .
-    container_name: tiffany-bot
+    container_name: tiffany_bot
     restart: unless-stopped
-    env_file: .env
-    environment:
-      - LAVALINK_ENABLED=1
-      - LAVALINK_HOST=lavalink
-      - LAVALINK_PORT=2333
-      - LAVALINK_PASSWORD=tiffany_lavalink_2026
+    env_file:
+      - .env
     volumes:
-      - ./data:/app/data
-      - bot-logs:/app/logs
-    networks:
-      - tiffany-net
-    depends_on:
-      lavalink:
-        condition: service_healthy
-
-volumes:
-  lavalink-logs:
-  bot-logs:
-
-networks:
-  tiffany-net:
-    driver: bridge
+      # Espelha o diretório local para dentro do container
+      # Isso garante que logs e históricos (arquivos .json) sejam persistentes
+      - .:/app
+    # Evita que o container fique em loop de reinicialização infinito muito rápido caso haja erro grave
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 120s

@@ -1654,46 +1654,40 @@ async def verificar_feeds():
     em_horario_ativo = HORA_INICIO <= agora.hour < HORA_FIM
     if queue and em_horario_ativo:
         log.info(f"═══ FASE 0: Postando {len(queue)} da fila ═══")
-        nova_queue = []
+        queue_restante = queue.copy()
         for item in queue:
             if posts_feitos >= MAX_POSTS_POR_CICLO:
-                nova_queue.append(item)
-                continue
+                break
             img = item.get("imagem")
             if not img:
                 log.warning(f"  ✗ Item da fila sem imagem, descartando: {item.get('titulo', '?')[:60]}")
+                queue_restante.remove(item)
+                save_queue(queue_restante)
                 continue
-            # Dedup: verificar se título já foi postado
-            titulo_item = item.get("titulo", "")
-            if titulo_item and title_is_dup(history, titulo_item):
-                log.info(f"  ✗ Fila: título duplicado, descartando: {titulo_item[:60]}")
-                continue
-            # Dedup: verificar simhash do conteúdo
-            sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
-            if simhash_is_dup(history, sh_item):
-                log.info(f"  ✗ Fila: simhash duplicado, descartando: {titulo_item[:60]}")
-                continue
-            # Dedup: verificar por tema/entidade (Entity Overlap)
-            if titulo_item and topic_is_dup(history, titulo_item):
-                log.info(f"  ✗ Fila: tema duplicado, descartando: {titulo_item[:60]}")
-                continue
+            
             # Revalidar imagem da fila (URLs podem ter morrido)
             if not await validar_imagem(img):
                 log.warning(f"  ✗ Imagem inválida na fila, descartando: {item.get('titulo', '?')[:60]}")
+                queue_restante.remove(item)
+                save_queue(queue_restante)
                 continue
+                
             if await _postar_noticia(channel, item, history, metrics):
                 posts_feitos += 1
+                titulo_item = item.get("titulo", "")
+                sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
                 title_add(history, titulo_item)
                 simhash_add(history, sh_item)
                 topic_add(history, titulo_item)
+                save_history(history)
+                save_metrics(metrics)
+                queue_restante.remove(item)
+                save_queue(queue_restante)
                 if posts_feitos < MAX_POSTS_POR_CICLO:
                     await asyncio.sleep(POST_SPACING_SEC)
             else:
-                nova_queue.append(item)
-        save_queue(nova_queue)
-        save_history(history)
-        save_metrics(metrics)
-
+                pass # Permanece na fila
+        
         if posts_feitos >= MAX_POSTS_POR_CICLO:
             _last_cycle_time = agora.strftime("%H:%M:%S")
             _last_cycle_stats = {"posts": posts_feitos, "fonte": "fila"}
@@ -2044,9 +2038,9 @@ async def verificar_feeds():
         log.info(f"  ✓ Aprovado (nota {nota}): [{cand['nome_site']}] {res.get('titulo', '')[:60]}")
 
     log.info(f"Fase 2 concluída: {_ai_calls_this_cycle} chamadas IA → {len(aprovados)} aprovados")
+    save_history(history)
 
     if not aprovados:
-        save_history(history)
         save_metrics(metrics)
         return
 
@@ -2070,20 +2064,8 @@ async def verificar_feeds():
     para_fila = com_imagem[posts_restantes:] if em_horario_ativo else com_imagem
 
     posts_fase3 = 0
-    for i, noticia in enumerate(para_postar):
-        # Revalidar imagem no momento do post (URLs podem ter morrido)
-        img = noticia.get("imagem")
-        if not img or not await validar_imagem(img):
-            log.warning(f"  ✗ Imagem inválida ao postar, descartando: {noticia.get('titulo', '?')[:60]}")
-            historico_set(history, noticia["link_norm"], noticia["dedupe"], "skipped", {"reason": "sem_imagem_post"})
-            continue
-        log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
-        if await _postar_noticia(channel, noticia, history, metrics):
-            posts_fase3 += 1
-        if i < len(para_postar) - 1:
-            await asyncio.sleep(POST_SPACING_SEC)
-
-    # Enfileirar restantes para próximo ciclo
+    
+    # Enfileirar restantes para próximo ciclo ANTES de postar (segurança contra crash)
     if para_fila:
         queue_atual = load_queue()
         # Validar campos obrigatórios antes de enfileirar
@@ -2094,6 +2076,21 @@ async def verificar_feeds():
         queue_atual = sorted(queue_atual, key=lambda x: x.get("nota", 0), reverse=True)[:10]
         save_queue(queue_atual)
         log.info(f"  📋 {len(para_fila)} notícias enfileiradas para próximo ciclo (fila total: {len(queue_atual)})")
+
+    for i, noticia in enumerate(para_postar):
+        # Revalidar imagem no momento do post (URLs podem ter morrido)
+        img = noticia.get("imagem")
+        if not img or not await validar_imagem(img):
+            log.warning(f"  ✗ Imagem inválida ao postar, descartando: {noticia.get('titulo', '?')[:60]}")
+            historico_set(history, noticia["link_norm"], noticia["dedupe"], "skipped", {"reason": "sem_imagem_post"})
+            save_history(history)
+            continue
+        log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
+        if await _postar_noticia(channel, noticia, history, metrics):
+            posts_fase3 += 1
+            save_metrics(metrics)
+        if i < len(para_postar) - 1:
+            await asyncio.sleep(POST_SPACING_SEC)
 
     save_history(history)
     save_metrics(metrics)
