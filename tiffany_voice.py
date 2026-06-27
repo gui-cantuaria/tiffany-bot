@@ -4023,8 +4023,8 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
             
         total = _safe_math_eval(math_expr)
         
-        # Formato padronizado: **Total** ← expressao
-        return (f"{prefix}**{total:g}** ← {display_expr}", total_crits, total_fumbles)
+        # Formato de equação simples (esquerda para direita)
+        return (f"{prefix}{display_expr} = **{total:g}**", total_crits, total_fumbles)
     except Exception:
         return (
             f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
