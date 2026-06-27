@@ -4012,6 +4012,8 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
         if len(terms) == 1 and not re.search(r"[+*/()-]", _DICE_TERM_RE.sub("0", work_lower)):
             # Termo simples sem math: "**total** ← [rolls]"
             v = int(vals[0]) if vals[0] == int(vals[0]) else vals[0]
+            if "," not in rolls_parts[0] and "sucesso" not in rolls_parts[0]:
+                return (f"{prefix}**{v}**", total_crits, total_fumbles)
             return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits, total_fumbles)
         total = _safe_math_eval(math_expr)
         if len(terms) > 1:
