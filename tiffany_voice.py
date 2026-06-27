@@ -2543,7 +2543,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("hi", ["history"], "t!hi / t!history — histórico"),
     ("ap", ["autoplay"], "t!ap / t!autoplay"),
     ("ly", ["lyrics"], "t!ly / t!lyrics — letra"),
-    ("c", ["chat", "ch"], "t!c / t!chat / t!ch <pergunta>"),
+    ("c", ["chat"], "t!c / t!chat <pergunta>"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: t20, 4t6, c20+5)"),
     ("cp", ["clip"], "t!cp / t!clip — últimos 30s de áudio"),
@@ -3977,6 +3977,25 @@ def _safe_math_eval(expr: str) -> float:
 def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
     """Rola uma expressao de dados. Retorna (texto, total_crits, total_fumbles)."""
     raw = expression.strip()
+    
+    err_msg = (
+        f"❌ **Não entendi o comando:** `{raw}`\n\n"
+        "💡 **Como usar a Tiffany:**\n"
+        "> Use **T** para dados (ex: `1t8+3`, `2t20kh1`, `4t6dl1`)\n"
+        "> Use **C** para contas (ex: `c50+50`, `c100/4`)\n"
+        "*(Comandos de outros bots como 'r40' ou 'd20' não funcionam aqui)*"
+    )
+
+    if raw.startswith("!ERROR_ROLLEM:"):
+        raw = raw.replace("!ERROR_ROLLEM:", "")
+        err_msg = (
+            f"❌ **Não entendi o comando:** `{raw}`\n\n"
+            "💡 **Como usar a Tiffany:**\n"
+            "> Use **T** para dados (ex: `1t8+3`, `2t20kh1`, `4t6dl1`)\n"
+            "> Use **C** para contas (ex: `c50+50`, `c100/4`)\n"
+            "*(Comandos de outros bots como 'r40' ou 'd20' não funcionam aqui)*"
+        )
+        return (err_msg, 0, 0)
     if not raw:
         return ("⚠️ Informe uma expressao. Ex: `t20`, `2t6+3`, `4t6dl1`, `5t10>=7`", 0, 0)
     work = raw
@@ -3986,7 +4005,7 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
         label = label_m.group(1).strip()
         work = label_m.group(2).strip()
     work_lower = work.lower()
-    prefix = f"*'{label}'*, " if label else ""
+    prefix = f"**{label.upper()}:** " if label else ""
     try:
         terms = list(_DICE_TERM_RE.finditer(work_lower))
         if not terms:
@@ -4014,7 +4033,7 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
             v = int(vals[0]) if vals[0] == int(vals[0]) else vals[0]
             if "," not in rolls_parts[0] and "sucesso" not in rolls_parts[0]:
                 return (f"{prefix}**{v}**", total_crits, total_fumbles)
-            return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits, total_fumbles)
+            return (f"{prefix}{rolls_parts[0]} = **{v}**", total_crits, total_fumbles)
         total = _safe_math_eval(math_expr)
         if len(terms) > 1:
             # Múltiplos termos: mostrar cada um, depois total
@@ -4023,12 +4042,7 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
         # Um termo + math: "[rolls] + mods = **total**"
         return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits, total_fumbles)
     except Exception:
-        return (
-            f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
-            "`5t10>=7`, `2t6!`, `4tF+2`, `3#1t20+8`",
-            0,
-            0,
-        )
+        return (err_msg, 0, 0)
 
 
 def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
@@ -4137,7 +4151,7 @@ _DICE_MSG_EXPR_RE = re.compile(
     re.IGNORECASE,
 )
 
-_DICE_MATH_RE = re.compile(r"^c([\d(].*)$", re.IGNORECASE)
+_DICE_MATH_RE = re.compile(r"^c\s*([\d(].*)$", re.IGNORECASE)
 
 
 def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
@@ -4149,6 +4163,11 @@ def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
     math_m = _DICE_MATH_RE.match(content)
     if math_m:
         return math_m.group(1), ""
+
+    # Bloquear comandos do Rollem Next para acionar a dica de erro amigável
+    low = content.lower()
+    if re.match(r"^(?:r|rt|tr)\s*\d", low) or re.match(r"^\d*d\d+", low):
+        return "!ERROR_ROLLEM:" + content, ""
     # Expressao de dados com notacao 't'
     m = _DICE_MSG_EXPR_RE.match(content)
     if not m:
@@ -5397,7 +5416,7 @@ def register_voice(bot: commands.Bot) -> None:
             )
         )
 
-    @bot.command(name="c", aliases=["chat", "ch"], help="Pergunta à IA: t!c / t!chat / t!ch <pergunta> (aceita imagens)")
+    @bot.command(name="c", aliases=["chat"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not ctx.guild:
             return
@@ -5425,7 +5444,7 @@ def register_voice(bot: commands.Bot) -> None:
         ]
 
         if not (question and question.strip()) and not image_urls:
-            await ctx.send(embed=_embed("💬 Use: `t!c <pergunta>` (ou `t!chat` / `t!ch`) — ou anexe uma imagem."))
+            await ctx.send(embed=_embed("💬 Use: `t!c <pergunta>` (ou `t!chat`) — ou anexe uma imagem."))
             return
         question = question.strip() if question else ""
         if question and await _should_block_content(question):
@@ -5799,10 +5818,10 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(
                 "**Dados da Tiffany**\n\n"
                 "**Sem prefixo** — digite direto no chat:\n"
-                "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `6#4t6dl1`\n"
-                "`4t6 for glory` — com label\n"
-                "`[t20+5 ataque]` — inline em qualquer msg\n"
-                "`c50+50` — calculadora\n\n"
+                "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
+                "`4t6 ataque` — Rolagem com um nome/label\n"
+                "`[t20+5]` — Rolar no meio de uma frase\n"
+                "`c50+50` — Calculadora\n\n"
                 "**Atalhos RPG** (com `t!d`):\n"
                 "`t!d adv` / `t!d dis` — Vantagem / Desvantagem\n"
                 "`t!d adv+5` — Vantagem com modificador\n"
@@ -5810,6 +5829,9 @@ def register_voice(bot: commands.Bot) -> None:
                 "`t!d init +3` — Iniciativa (t20+mod)\n"
                 "`t!d coin` — Cara ou coroa\n"
                 "`t!d t%` — Percentual (t100)\n\n"
+                "**Macros**:\n"
+                "`t!d macro add <nome> <dado>` — Criar atalho (ex: `add espada 1t20+5`)\n"
+                "`t!d macro list` — Ver suas macros\n\n"
                 "Criticos em **negrito**, descartados ~~riscados~~"
             ))
             return
@@ -6391,7 +6413,7 @@ def register_voice(bot: commands.Bot) -> None:
         if interaction.guild and interaction.guild.me and interaction.guild.me.avatar:
             em.set_thumbnail(url=interaction.guild.me.avatar.url)
         em.add_field(name="💬 Chat & IA", value=(
-            "`t!c` / `t!chat` / `t!ch` — Pergunta à IA (aceita imagens)\n"
+            "`t!c` / `t!chat` — Pergunta à IA (aceita imagens)\n"
             "`t!su` / `t!summary` — Resume um link"
         ), inline=False)
         em.add_field(name="🎵 Musica", value=(
@@ -6420,11 +6442,12 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=True)
         em.add_field(name="🎲 Dados / RPG", value=(
             "**Sem prefixo** — digite direto:\n"
-            "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `6#4t6dl1`\n"
-            "`4t6 for glory` — com label\n"
-            "`[t20+5 ataque]` — inline em qualquer msg\n"
-            "`c50+50` — calculadora\n"
-            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`, `t%`\n"
+            "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
+            "`4t6 ataque` — Rolagem com um nome\n"
+            "`[t20+5]` — Rolar no meio de uma frase\n"
+            "`c50+50` — Calculadora\n"
+            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`\n"
+            "**Macros**: `t!d macro add <nome> <dado>` · `t!d macro list`\n"
             "Criticos em **negrito**, descartados ~~riscados~~"
         ), inline=False)
         em.add_field(name="🔔 Alerts", value=(

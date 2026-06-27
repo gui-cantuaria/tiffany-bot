@@ -1611,6 +1611,12 @@ def _deve_rodar_slot(agora: datetime) -> bool:
 
 @tasks.loop(minutes=1)
 async def verificar_feeds():
+    try:
+        await _verificar_feeds_inner()
+    except Exception as e:
+        log.exception(f"Erro fatal no ciclo de notícias: {e}")
+
+async def _verificar_feeds_inner():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     global _simhash_pruned_this_cycle, _title_pruned_this_cycle, _entity_pruned_this_cycle
     await discord_client.wait_until_ready()
