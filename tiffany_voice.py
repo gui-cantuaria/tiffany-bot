@@ -3991,7 +3991,7 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
         terms = list(_DICE_TERM_RE.finditer(work_lower))
         if not terms:
             val = _safe_math_eval(work_lower)
-            return (f"{prefix}{val:g} ← {raw}", 0, 0)
+            return (f"{prefix}{raw} = **{val:g}**", 0, 0)
         rolls_parts: list[str] = []
         vals: list[float] = []
         total_crits = 0
