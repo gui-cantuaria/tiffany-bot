@@ -4037,8 +4037,9 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
     expression = _t_to_d(expression.strip())
     low = expression.lower()
 
-    # t!d20 → normalizado como "20" pelo parser de comandos — corrigir para "d20"
-    if re.match(r"^\d+(?:\s*[+\-]|$)", low) and not re.search(r"d[f\d]", low):
+    # Se digitar apenas um número solto (ex: t!d 20), converte para d20.
+    # Mas se tiver matemática (50 + 25), deixa como matemática!
+    if re.match(r"^\d+$", low):
         expression = f"d{expression}"
         low = expression.lower()
 
