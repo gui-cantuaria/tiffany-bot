@@ -4009,22 +4009,17 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
             start = m.start() + offset
             math_expr = math_expr[:start] + repl + math_expr[m.end() + offset:]
             offset += len(repl) - (m.end() - m.start())
-        display_expr = work_lower
-        offset_disp = 0
-        for i, m in enumerate(terms):
-            repl_disp = rolls_parts[i]
-            start = m.start() + offset_disp
-            display_expr = display_expr[:start] + repl_disp + display_expr[m.end() + offset_disp:]
-            offset_disp += len(repl_disp) - (m.end() - m.start())
-
         if len(terms) == 1 and not re.search(r"[+*/()-]", _DICE_TERM_RE.sub("0", work_lower)):
+            # Termo simples sem math: "**total** ← [rolls]"
             v = int(vals[0]) if vals[0] == int(vals[0]) else vals[0]
-            return (f"{prefix}**{v:g}** ← {display_expr}", total_crits, total_fumbles)
-            
+            return (f"{prefix}**{v}** ← {rolls_parts[0]}", total_crits, total_fumbles)
         total = _safe_math_eval(math_expr)
-        
-        # Formato de equação simples (esquerda para direita)
-        return (f"{prefix}{display_expr} = **{total:g}**", total_crits, total_fumbles)
+        if len(terms) > 1:
+            # Múltiplos termos: mostrar cada um, depois total
+            lines = [f"{rolls_parts[i]} = {int(vals[i]) if vals[i] == int(vals[i]) else vals[i]}" for i in range(len(terms))]
+            return (f"{prefix}\n" + "\n".join(lines) + f"\n**Total: {total:g}**", total_crits, total_fumbles)
+        # Um termo + math: "[rolls] + mods = **total**"
+        return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits, total_fumbles)
     except Exception:
         return (
             f"**{raw}** — nao entendi. Ex: `1t8+3`, `2t20kh1`, `4t6dl1`, "
