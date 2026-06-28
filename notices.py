@@ -107,12 +107,23 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
+# Comandos de música: não fazer reply (resposta já é óbvia via embed rosa)
+_MUSIC_CMDS = frozenset({
+    "p", "play", "s", "skip", "np", "nowplaying", "q", "queue",
+    "247", "nonstop", "pl", "playlist", "r", "random",
+    "lo", "loop", "pa", "pause", "re", "resume", "cl", "clear",
+    "sh", "shuffle", "rp", "replay", "hi", "history",
+    "ap", "autoplay", "ly", "lyrics", "ff", "seek", "su", "summary",
+})
+
 class _ReplyContext(commands.Context):
-    """Contexto customizado que faz reply automatico na mensagem do usuario."""
+    """Contexto customizado que faz reply automatico na mensagem do usuario (exceto música)."""
     async def send(self, content=None, **kwargs):
         if "reference" not in kwargs:
-            kwargs["reference"] = self.message
-            kwargs.setdefault("mention_author", False)
+            cmd_name = self.command.name if self.command else ""
+            if cmd_name not in _MUSIC_CMDS:
+                kwargs["reference"] = self.message
+                kwargs.setdefault("mention_author", False)
         return await super().send(content, **kwargs)
 
 

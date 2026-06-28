@@ -4720,7 +4720,7 @@ def register_voice(bot: commands.Bot) -> None:
         mode_str = "Lavalink" if use_lavalink else "yt-dlp"
         log.info("Sessão criada guild=%s mode=%s voice=%s", gid, mode_str, session.listen_task is not None)
         _save_voice_state(gid, channel.id, ctx.channel.id)
-        await ctx.send(embed=_embed(f"🎙️ **Tiffany entrou** em **{channel.name}**."))
+        log.info("Tiffany entrou em %s (guild=%s)", channel.name, gid)
         return session, vc
 
 
