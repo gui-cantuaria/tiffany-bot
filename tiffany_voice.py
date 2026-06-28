@@ -2863,10 +2863,9 @@ class _YTSource(discord.AudioSource):
         if not fp:
             return None, title, None, None, 0
         # Opus 192k + volume — pula from_probe (já sabemos o formato do yt-dlp)
-        # -analyzeduration 0 -probesize 32768: início instantâneo sem análise prévia
-        # -thread_queue_size 512: buffer grande para evitar engasgo durante reprodução
-        options = f"-vn -b:a 192k -filter:a volume={volume}"
-        before_parts = ["-analyzeduration 0", "-probesize 32768", "-thread_queue_size 512"]
+        # -thread_queue_size 4096: buffer maior para evitar engasgo na leitura do disco/rede
+        options = f"-vn -b:a 192k -filter:a volume={volume} -threads 2"
+        before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
         before = " ".join(before_parts)
@@ -2884,8 +2883,8 @@ class _YTSource(discord.AudioSource):
         """Cria source a partir de arquivo já baixado com seek opcional."""
         if not os.path.isfile(filepath):
             return None
-        options = f"-vn -b:a 192k -filter:a volume={volume}"
-        before_parts = ["-analyzeduration 0", "-probesize 32768", "-thread_queue_size 512"]
+        options = f"-vn -b:a 192k -filter:a volume={volume} -threads 2"
+        before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
         before = " ".join(before_parts)
