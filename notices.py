@@ -595,8 +595,8 @@ def _extract_topic_keys(titulo: str) -> frozenset[str]:
     # Combinar: nomes próprios primeiro, depois outras palavras significativas
     ordered = [p for p in palavras if p in capitalized]
     ordered += [p for p in palavras if p not in capitalized]
-    # Pegar as 5 palavras mais significativas (mais cobertura para overlap)
-    keys = ordered[:5]
+    # Pegar as 8 palavras mais significativas (mais cobertura para overlap de temas similares)
+    keys = ordered[:8]
     if len(keys) < 2:
         return frozenset()  # Muito genérico, não dá pra deduplicar por tema
     return frozenset(keys)
@@ -1677,11 +1677,29 @@ async def _verificar_feeds_inner():
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
-                
+
+            # Dedup: verificar se artigo similar já foi postado (pode ter sido postado
+            # no ciclo anterior ou por outro item da fila neste mesmo ciclo)
+            titulo_item = item.get("titulo", "")
+            if title_is_dup(history, titulo_item):
+                log.info(f"  ✗ Dedup fila (título): {titulo_item[:60]}")
+                queue_restante.remove(item)
+                save_queue(queue_restante)
+                continue
+            sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
+            if simhash_is_dup(history, sh_item):
+                log.info(f"  ✗ Dedup fila (simhash): {titulo_item[:60]}")
+                queue_restante.remove(item)
+                save_queue(queue_restante)
+                continue
+            if topic_is_dup(history, titulo_item):
+                log.info(f"  ✗ Dedup fila (tema): {titulo_item[:60]}")
+                queue_restante.remove(item)
+                save_queue(queue_restante)
+                continue
+
             if await _postar_noticia(channel, item, history, metrics):
                 posts_feitos += 1
-                titulo_item = item.get("titulo", "")
-                sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
                 title_add(history, titulo_item)
                 simhash_add(history, sh_item)
                 topic_add(history, titulo_item)
@@ -2077,7 +2095,17 @@ async def _verificar_feeds_inner():
         # Validar campos obrigatórios antes de enfileirar
         _campos_obrigatorios = ("titulo", "imagem", "link", "nota")
         para_fila = [n for n in para_fila if all(n.get(c) for c in _campos_obrigatorios)]
-        queue_atual.extend(para_fila)
+        # Dedup: não enfileirar se já existe item similar na fila
+        _queue_titles = {_title_fingerprint(q.get("titulo", "")) for q in queue_atual if q.get("titulo")}
+        para_fila_dedup = []
+        for item_fila in para_fila:
+            fp = _title_fingerprint(item_fila.get("titulo", ""))
+            if fp not in _queue_titles:
+                para_fila_dedup.append(item_fila)
+                _queue_titles.add(fp)
+            else:
+                log.info(f"  ✗ Dedup fila (já enfileirado): {item_fila.get('titulo', '?')[:60]}")
+        queue_atual.extend(para_fila_dedup)
         # Limitar fila a 10 itens (evitar acúmulo infinito)
         queue_atual = sorted(queue_atual, key=lambda x: x.get("nota", 0), reverse=True)[:10]
         save_queue(queue_atual)

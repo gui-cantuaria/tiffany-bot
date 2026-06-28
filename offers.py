@@ -304,14 +304,15 @@ def _is_title_key_in_history(history: dict, key: str) -> bool:
     return False
 
 
-def _mark_posted(history: dict, url: str, title: str) -> None:
+def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "") -> None:
     h = _deal_hash(url)
     entry = {
         "url": url,
         "title": title[:100],
         "ts": time.time(),
     }
-    key = _title_key(title)
+    # Usar a title key ORIGINAL (pré-enriquecimento) para que o dedup cross-ciclo funcione
+    key = orig_tkey or _title_key(title)
     if key:
         entry["tkey"] = key
     history.setdefault("deals", {})[h] = entry
@@ -1438,7 +1439,11 @@ async def _run_deals_cycle_inner() -> None:
     # Dedup por URL (histórico 7 dias) + intraday por produto (mesmo produto, preço diferente)
     candidates = []
     _cycle_keys: set[str] = set()  # dedup dentro do mesmo ciclo
+    _cycle_urls: set[str] = set()  # dedup URL dentro do mesmo ciclo (cross-categoria)
     for deal in all_deals:
+        if deal["url"] in _cycle_urls:
+            continue
+        _cycle_urls.add(deal["url"])
         if _is_duplicate(history, deal["url"]):
             continue
         key = _title_key(deal["title"])
@@ -1478,6 +1483,8 @@ async def _run_deals_cycle_inner() -> None:
     enriched = []
     for deal in pre_candidates[:26]:  # Limitar para não abusar (cobre mais categorias)
         try:
+            # Salvar title key ORIGINAL antes do enriquecimento mutar o título
+            deal["_orig_tkey"] = _title_key(deal["title"])
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
 
@@ -1568,8 +1575,10 @@ async def _run_deals_cycle_inner() -> None:
                 msg = await channel.send(content=content, embed=embed, file=file)
 
             # Marcar como postado DEPOIS de enviar com sucesso
-            _mark_posted(history, deal["url"], deal["title"])
-            _posted_title_keys.add(_title_key(deal["title"]))
+            # Usar title key original (pré-enriquecimento) para dedup cross-ciclo consistente
+            _orig_tkey = deal.get("_orig_tkey") or _title_key(deal["title"])
+            _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey)
+            _posted_title_keys.add(_orig_tkey)
 
             # Notificar usuários com alerta de preço matching
             await _notify_price_alerts(deal, msg)
