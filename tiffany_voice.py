@@ -5151,8 +5151,15 @@ def register_voice(bot: commands.Bot) -> None:
                 pass
         # Para URLs diretas (YouTube etc.), tentar resolver o título via probe antes de enfileirar.
         # Isso garante que o embed "Faixa adicionada" mostre o nome real da música.
+        _probe_dur: Optional[float] = None
+        _probe_title: str = ""
         if is_url and not resolved_from_platform:
-            _probe_dur, _probe_title = await _probe(query)
+            try:
+                _probe_dur, _probe_title = await asyncio.wait_for(
+                    asyncio.to_thread(_blocking_ytdl_probe, query), timeout=25.0
+                )
+            except (asyncio.TimeoutError, Exception):
+                _probe_dur, _probe_title = None, ""
             if _probe_title:
                 display = _probe_title
                 dur = _probe_dur  # type: ignore[assignment]
@@ -5270,8 +5277,8 @@ def register_voice(bot: commands.Bot) -> None:
                 log.warning("Search yt-dlp excedeu 25s: %s", term[:80])
                 return []
 
-        dur: Optional[float] = None
-        probe_title = ""
+        dur: Optional[float] = _probe_dur if _probe_title else None
+        probe_title = _probe_title
         is_text_search = (not is_url) and query.startswith("ytsearch")
 
         if is_text_search:
