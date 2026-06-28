@@ -5149,9 +5149,15 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-        # Mostrar nome da música resolvida, ou "link recebido" para YouTube direto
+        # Para URLs diretas (YouTube etc.), tentar resolver o título via probe antes de enfileirar.
+        # Isso garante que o embed "Faixa adicionada" mostre o nome real da música.
         if is_url and not resolved_from_platform:
-            display = "link recebido"
+            _probe_dur, _probe_title = await _probe(query)
+            if _probe_title:
+                display = _probe_title
+                dur = _probe_dur  # type: ignore[assignment]
+            else:
+                display = "link recebido"
         # === MODO LAVALINK ===
         if _is_wavelink_player(vc):
             player: wavelink.Player = vc
@@ -5338,8 +5344,9 @@ def register_voice(bot: commands.Bot) -> None:
             elif best.get("url"):
                 query = best["url"]
         else:
-            # URL direta ou link de plataforma já resolvido: probe simples
-            dur, probe_title = await _probe(query)
+            # URL de plataforma já resolvido: probe se não foi feito acima
+            if not (is_url and not resolved_from_platform):
+                dur, probe_title = await _probe(query)
 
         if dur and dur > MAX_SONG_DURATION_SEC:
             await status.edit(
