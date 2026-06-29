@@ -2548,7 +2548,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("ly", ["lyrics"], "t!ly / t!lyrics — letra"),
     ("c", ["chat"], "t!c / t!chat <pergunta>"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
-    ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: t20, 4t6, c20+5)"),
+    ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: d20, 4d6, c50+50)"),
     ("cp", ["clip"], "t!cp / t!clip — últimos 30s de áudio"),
     ("alert", ["alerta", "monitor"], "t!alert <product> — price alert via DM"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
@@ -2558,7 +2558,7 @@ _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t! ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
     + "\n- /help, /queue, /stats (slash) · /player-status (admin)\n"
-    "- Dados SEM prefixo: digite direto no chat (ex: t20, 4t6, 2t20kh1, 3#t20, 4t6 for glory, [t20+5 ataque], c50+50)\n"
+    "- Dados SEM prefixo: digite direto no chat (ex: d20, 4d6, 2d20kh1, 3#d20, 4d6 for glory, [d20+5 ataque], c50+50)\n"
     "- Voz na call: «Tiffany, toca [musica]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatoria/autoplay/24-7», «Tiffany, o que esta tocando», «Tiffany, avanca/volta 30 segundos», «Tiffany, [pergunta]» (a musica pausa enquanto responde)\n"
     "A Tiffany entra na call automaticamente quando voce pede uma musica (t!p). Sai automaticamente apos inatividade ou com t!cl.\n"
     "Se o usuario perguntar como usar o bot, cite o comando exato (ex: t!p para tocar)."
@@ -4005,12 +4005,12 @@ _DICE_TERM_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Converte notacao 't' (Tiffany) para 'd' interno: 4t6 → 4d6, t20 → d20
+# Compat legado: notação antiga t20 → d20 (silencioso, sem erro)
 _T_TO_D_RE = re.compile(r"(\d*)t(\d+|f)", re.IGNORECASE)
 
-def _t_to_d(expr: str) -> str:
-    """Converte notacao de dados 't' para 'd' internamente."""
-    return _T_TO_D_RE.sub(r"\1d\2", expr)
+
+def _normalize_dice_expr(expr: str) -> str:
+    return _T_TO_D_RE.sub(r"\1d\2", expr.strip())
 
 
 def _roll_fate_die() -> int:
@@ -4141,30 +4141,35 @@ def _safe_math_eval(expr: str) -> float:
     return float(eval(safe, {"__builtins__": {}}, {}))
 
 
+def _format_dice_with_math(
+    work_lower: str,
+    terms: list[re.Match[str]],
+    rolls_parts: list[str],
+    total: float,
+) -> str:
+    """Monta exibição clara: [4] + 4 + 6 = **14** (dado + modificadores = total)."""
+    display = work_lower
+    offset = 0
+    for m, rolls_str in zip(terms, rolls_parts):
+        start = m.start() + offset
+        end = m.end() + offset
+        display = display[:start] + rolls_str + display[end:]
+        offset += len(rolls_str) - (end - start)
+    display = re.sub(r"\s*([+\-*/()])\s*", r" \1 ", display).strip()
+    total_s = str(int(total)) if total == int(total) else f"{total:g}"
+    return f"{display} = **{total_s}**"
+
+
 def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
     """Rola uma expressao de dados. Retorna (texto, total_crits, total_fumbles)."""
     raw = expression.strip()
     
     err_msg = (
-        f"❌ **Não entendi o comando:** `{raw}`\n\n"
-        "💡 **Como usar a Tiffany:**\n"
-        "> Use **T** para dados (ex: `1t8+3`, `2t20kh1`, `4t6dl1`)\n"
-        "> Use **C** para contas (ex: `c50+50`, `c100/4`)\n"
-        "*(Comandos de outros bots como 'r40' ou 'd20' não funcionam aqui)*"
+        f"❌ **Não entendi:** `{raw}`\n\n"
+        "💡 Exemplos: `d20`, `2d6+3`, `4d6dl1`, `5d10>=7` · calculadora: `c50+50`"
     )
-
-    if raw.startswith("!ERROR_ROLLEM:"):
-        raw = raw.replace("!ERROR_ROLLEM:", "")
-        err_msg = (
-            f"❌ **Não entendi o comando:** `{raw}`\n\n"
-            "💡 **Como usar a Tiffany:**\n"
-            "> Use **T** para dados (ex: `1t8+3`, `2t20kh1`, `4t6dl1`)\n"
-            "> Use **C** para contas (ex: `c50+50`, `c100/4`)\n"
-            "*(Comandos de outros bots como 'r40' ou 'd20' não funcionam aqui)*"
-        )
-        return (err_msg, 0, 0)
     if not raw:
-        return ("⚠️ Informe uma expressao. Ex: `t20`, `2t6+3`, `4t6dl1`, `5t10>=7`", 0, 0)
+        return ("⚠️ Informe uma expressão. Ex: `d20`, `2d6+3`, `4d6dl1`, `5d10>=7`", 0, 0)
     work = raw
     # Label via [Label] prefixo inline
     label_m = re.match(r"^\[([^\]]+)\]\s*(.+)$", work)
@@ -4206,16 +4211,16 @@ def _roll_single(expression: str, label: str = "") -> tuple[str, int, int]:
             # Múltiplos termos: mostrar cada um, depois total
             lines = [f"{rolls_parts[i]} = {int(vals[i]) if vals[i] == int(vals[i]) else vals[i]}" for i in range(len(terms))]
             return (f"{prefix}\n" + "\n".join(lines) + f"\n**Total: {total:g}**", total_crits, total_fumbles)
-        # Um termo + math: "[rolls] + mods = **total**"
-        return (f"{prefix}{rolls_parts[0]} = **{total:g}**", total_crits, total_fumbles)
+        # Um termo + math: "[dado] + mods = **total**"
+        return (f"{prefix}{_format_dice_with_math(work_lower, terms, rolls_parts, total)}", total_crits, total_fumbles)
     except Exception:
         return (err_msg, 0, 0)
 
 
 def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
-    """Rola dados. Aceita notacao 't' (4t6) ou 'd' (4d6). Retorna (texto, crits, fumbles)."""
+    """Rola dados (notação padrão d20, 4d6…). Retorna (texto, crits, fumbles)."""
     import random
-    expression = _t_to_d(expression.strip())
+    expression = _normalize_dice_expr(expression)
     low = expression.lower()
 
     # Se digitar apenas um número solto (ex: t!d 20), converte para d20.
@@ -4252,7 +4257,7 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
             total_crits += crits
             total_fumbles += fumbles
             lines.append(f"**{lbl}:** {text}")
-        return ("**Rolagem de Atributos (4t6dl1)**\n" + "\n".join(lines), total_crits, total_fumbles)
+        return ("**Rolagem de Atributos (4d6dl1)**\n" + "\n".join(lines), total_crits, total_fumbles)
 
     init_m = re.match(r"^(?:init|iniciativa|initiative)\s*([+-]?\d*)$", low)
     if init_m:
@@ -4264,7 +4269,7 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
         is_crit = roll_val == 20
         is_fumble = roll_val == 1
         r_str = f"**[{roll_val}]**" if is_crit else (f"**({roll_val})**" if is_fumble else str(roll_val))
-        return (f"{total} ← [{r_str}]t20{mod_display} *(Iniciativa)*", 1 if is_crit else 0, 1 if is_fumble else 0)
+        return (f"{total} ← [{r_str}]d20{mod_display} *(Iniciativa)*", 1 if is_crit else 0, 1 if is_fumble else 0)
 
     if low in ("coin", "moeda", "coinflip", "cara", "coroa"):
         result = random.choice(["Cara", "Coroa"])
@@ -4294,7 +4299,7 @@ def _parse_inline_specs(content: str) -> list[tuple[str, str]]:
         inner = m.group(1).strip()
         if not inner:
             continue
-        converted = _t_to_d(inner)
+        converted = _normalize_dice_expr(inner)
         if _DICE_TERM_RE.search(converted):
             parts = converted.split(None, 1)
             if len(parts) == 2 and _DICE_TERM_RE.search(parts[0]):
@@ -4323,15 +4328,15 @@ def _dice_roll_ok(text: str) -> bool:
     return "nao entendi" not in low and "não entendi" not in low and "⚠️" not in text and "❌" not in text
 
 
-# Regex para detectar mensagens que sao expressoes de dados (sem prefixo, notacao 't')
+# Regex para detectar mensagens que são expressões de dados (sem prefixo, notação d)
 _DICE_MSG_EXPR_RE = re.compile(
-    r"^(?:\d+#)?"  # repeticoes opcionais (3#)
-    r"(\d*t[f\d]+)"  # primeiro termo de dado obrigatorio (t20, 4t6, etc)
+    r"^(?:\d+#)?"  # repetições opcionais (3#)
+    r"(\d*d[f\d%]+)"  # primeiro termo de dado (d20, 4d6, d%, df…)
     r"([!]?)"  # explode opcional
     r"((?:kh|kl|k|dh|dl)\d*)?"  # keep/drop opcional
     r"((?:>=|<=|>|<|==|=)\d+)?"  # pool opcional
     r"(ns)?"  # nosort opcional
-    r"(\s*[+\-*/]\s*(?:\d+|\d*t[f\d]+[!]?(?:(?:kh|kl|k|dh|dl)\d*)?(?:(?:>=|<=|>|<|==|=)\d+)?(?:ns)?))*"  # termos adicionais
+    r"(\s*[+\-*/]\s*(?:\d+|\d*d[f\d%]+[!]?(?:(?:kh|kl|k|dh|dl)\d*)?(?:(?:>=|<=|>|<|==|=)\d+)?(?:ns)?))*"  # termos adicionais
     r"(?:\s+(.+))?$",  # label opcional
     re.IGNORECASE,
 )
@@ -4340,28 +4345,26 @@ _DICE_MATH_RE = re.compile(r"^c\s*([\d(].*)$", re.IGNORECASE)
 
 
 def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
-    """Tenta interpretar uma mensagem como dados (notacao 't'). Retorna (expressao_d, label) ou None."""
+    """Tenta interpretar uma mensagem como dados (d20, 4d6…). Retorna (expressão, label) ou None."""
     content = content.strip()
     if not content:
         return None
-    # Math com prefixo c (ex: c20+5)
+    # Calculadora com prefixo c (ex: c20+5)
     math_m = _DICE_MATH_RE.match(content)
     if math_m:
         return math_m.group(1), ""
 
-    # Bloquear comandos do Rollem Next para acionar a dica de erro amigável
-    low = content.lower()
-    if re.match(r"^(?:r|rt|tr)\s*\d", low) or re.match(r"^\d*d\d+", low):
-        return "!ERROR_ROLLEM:" + content, ""
-    # Expressao de dados com notacao 't'
     m = _DICE_MSG_EXPR_RE.match(content)
     if not m:
-        return None
+        legacy = _normalize_dice_expr(content)
+        if legacy != content.lower() and _DICE_MSG_EXPR_RE.match(legacy):
+            m = _DICE_MSG_EXPR_RE.match(legacy)
+            content = legacy
+        else:
+            return None
     label = (m.group(7) or "").strip()
     expr = content[: m.start(7)].strip() if label else content.strip()
-    # Converter t → d para processamento interno
-    expr = _t_to_d(expr)
-    return expr, label
+    return _normalize_dice_expr(expr), label
 
 
 _MACROS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dice_macros.json")
@@ -4371,6 +4374,76 @@ _DICE_COOLDOWN_SEC = 1.5
 _DICE_REROLL_PREFIX = "reroll:"
 _dice_macros: dict[str, dict[str, str]] = {}
 _dice_last_roll: dict[int, float] = {}
+
+# @rollem-next (Discord app id 840409146738475028)
+_ROLLEM_NEXT_BOT_ID = 840409146738475028
+# @rollem clássico — incluído se ROLLEM_DELETE_ALL=1
+_ROLLEM_PRIME_BOT_ID = 240732567744151553
+_ROLLEM_DEV_BOT_ID = 243615627581980672
+_rollem_conflict_warned: set[int] = set()
+
+
+def _rollem_known_bot_ids() -> frozenset[int]:
+    return frozenset({_ROLLEM_NEXT_BOT_ID, _ROLLEM_PRIME_BOT_ID, _ROLLEM_DEV_BOT_ID})
+
+
+async def _guild_has_rollem(guild: discord.Guild) -> bool:
+    for bid in _rollem_known_bot_ids():
+        try:
+            await guild.fetch_member(bid)
+            return True
+        except discord.NotFound:
+            continue
+        except discord.HTTPException:
+            continue
+    return False
+
+
+async def _maybe_warn_rollem_conflict(
+    channel: discord.abc.Messageable,
+    guild: discord.Guild,
+) -> None:
+    """Avisa uma vez por servidor se Rollem também estiver presente (mesma sintaxe d20)."""
+    gid = guild.id
+    if gid in _rollem_conflict_warned:
+        return
+    if not await _guild_has_rollem(guild):
+        return
+    _rollem_conflict_warned.add(gid)
+    try:
+        await channel.send(
+            embed=_embed(
+                "⚠️ Detectei o **Rollem** neste servidor. Tiffany e Rollem usam a mesma sintaxe "
+                "(`d20`, `4d6`…) — podem aparecer **duas respostas** no mesmo comando. "
+                "Recomendo deixar só uma bot no canal de dados."
+            ),
+            delete_after=60,
+        )
+    except discord.HTTPException:
+        pass
+
+
+def _rollem_auto_delete_enabled() -> bool:
+    return os.getenv("DICE_DELETE_ROLLEM", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _rollem_delete_bot_ids() -> frozenset[int]:
+    raw = os.getenv("ROLLEM_DELETE_BOT_IDS", "").strip()
+    if raw:
+        return frozenset(int(p.strip()) for p in raw.split(",") if p.strip().isdigit())
+    ids = {_ROLLEM_NEXT_BOT_ID}
+    if os.getenv("ROLLEM_DELETE_ALL", "0").strip().lower() in ("1", "true", "yes", "on"):
+        ids.add(_ROLLEM_PRIME_BOT_ID)
+    return frozenset(ids)
+
+
+def _can_delete_in_channel(message: discord.Message) -> bool:
+    if not message.guild or message.guild.me is None:
+        return False
+    channel = message.channel
+    if not hasattr(channel, "permissions_for"):
+        return False
+    return channel.permissions_for(message.guild.me).manage_messages
 
 
 def _dice_allowed_channels() -> Optional[set[int]]:
@@ -4438,11 +4511,9 @@ def _validate_dice_expression(expr: str) -> Optional[str]:
         return "Fórmula vazia."
     if len(expr) > 200:
         return "Fórmula longa demais (máx. 200 caracteres)."
-    if expr.lower().startswith("!error_rollem"):
-        return "Use notação **T** (`t20`), não sintaxe Rollem (`d20`, `r40`)."
     text, _, _ = _roll_dice(expr)
     if not _dice_roll_ok(text):
-        return "Fórmula inválida. Ex: `1t20+5`, `4t6dl1`, `2t20kh1`."
+        return "Fórmula inválida. Ex: `1d20+5`, `4d6dl1`, `2d20kh1`."
     return None
 
 
@@ -4478,12 +4549,6 @@ def _remove_dice_macro(user_id: int, name: str) -> bool:
     return False
 
 
-def _encode_rolls_info(rolls_info: list[tuple[str, str]]) -> str:
-    import base64
-    payload = json.dumps(rolls_info, ensure_ascii=False).encode("utf-8")
-    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
-
-
 def _decode_rolls_info(token: str) -> list[tuple[str, str]]:
     import base64
     if not token:
@@ -4506,14 +4571,6 @@ def _rolls_info_from_footer(footer_text: str) -> list[tuple[str, str]]:
     return _decode_rolls_info(token)
 
 
-def _dice_footer_text(rolls_info: list[tuple[str, str]], roller: str = "") -> str:
-    enc = _encode_rolls_info(rolls_info)
-    core = f"{_DICE_REROLL_PREFIX}{enc}"
-    if roller:
-        return f"{roller} · {core}"[:2048]
-    return core[:2048]
-
-
 def _format_dice_description(roll_results: list[tuple[str, int, int]]) -> tuple[str, int, int]:
     total_crits = sum(c for _, c, _ in roll_results)
     total_fumbles = sum(f for _, _, f in roll_results)
@@ -4526,37 +4583,26 @@ def _format_dice_description(roll_results: list[tuple[str, int, int]]) -> tuple[
     return desc, total_crits, total_fumbles
 
 
-def _build_dice_embed(
-    desc: str,
-    crits: int,
-    fumbles: int,
-    *,
-    roller: str = "",
-    rolls_info: Optional[list[tuple[str, str]]] = None,
-) -> discord.Embed:
-    em = discord.Embed(title="🎲 Rolagem", description=desc, color=TIFFANY_PINK)
-    footer = _dice_footer_text(rolls_info or [], roller) if rolls_info else roller
-    if footer:
-        em.set_footer(text=footer)
-    return em
+def _build_dice_embed(desc: str, crits: int, fumbles: int) -> discord.Embed:
+    return _embed(desc)
 
 
 _DICE_HELP_TEXT = (
     "**Dados da Tiffany**\n\n"
     "**Sem prefixo** — digite direto no chat:\n"
-    "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
-    "`4t6 ataque` — Rolagem com label\n"
-    "`[t20+5]` — Rolar no meio de uma frase\n"
+    "`d20`, `4d6`, `2d20kh1+5` — Rolagens de dados\n"
+    "`4d6 ataque` — Rolagem com label\n"
+    "`[d20+5]` — Rolar no meio de uma frase\n"
     "`c50+50` — Calculadora\n"
-    "`3#t20` — Repetir 3 vezes · `4t6!` — Explosivo\n"
-    "`5t10>=7` — Pool de sucessos · `tf` — Dado Fate\n"
-    "`4t6dl1 ns` — Drop lowest, sem ordenar\n\n"
+    "`3#d20` — Repetir 3 vezes · `4d6!` — Explosivo\n"
+    "`5d10>=7` — Pool de sucessos · `df` — Dado Fate\n"
+    "`4d6dl1 ns` — Drop lowest, sem ordenar\n\n"
     "**Atalhos RPG** (com `t!d`):\n"
     "`t!d adv` / `t!d dis` — Vantagem / Desvantagem\n"
     "`t!d adv+5` — Vantagem com modificador\n"
-    "`t!d stats` — Atributos (6× 4t6dl1)\n"
-    "`t!d init +3` — Iniciativa (t20+mod)\n"
-    "`t!d coin` — Cara ou coroa · `t!d t%` — Percentual\n\n"
+    "`t!d stats` — Atributos (6× 4d6dl1)\n"
+    "`t!d init +3` — Iniciativa (d20+mod)\n"
+    "`t!d coin` — Cara ou coroa · `t!d d%` — Percentual\n\n"
     "**Macros** (máx. 20):\n"
     "`t!d macro add <nome> <dado>` — Criar atalho\n"
     "`t!d macro list` · `t!d macro remove <nome>`\n\n"
@@ -4565,7 +4611,7 @@ _DICE_HELP_TEXT = (
 
 
 class DiceRerollView(discord.ui.View):
-    """View persistente — fórmulas ficam no footer do embed (reroll:...)."""
+    """Botão reroll — fórmulas ficam na instância da view (mensagens antigas: footer legado)."""
 
     def __init__(self, rolls_info: Optional[list[tuple[str, str]]] = None):
         super().__init__(timeout=None)
@@ -4603,11 +4649,7 @@ class DiceRerollView(discord.ui.View):
             return
 
         desc, total_crits, total_fumbles = _format_dice_description(roll_results)
-        roller = f"Re-roll por {interaction.user.display_name}"
-        em = _build_dice_embed(
-            desc, total_crits, total_fumbles,
-            roller=roller, rolls_info=rolls_info,
-        )
+        em = _build_dice_embed(desc, total_crits, total_fumbles)
         await interaction.response.send_message(
             content=f"<@{interaction.user.id}> rolou novamente:",
             embed=em,
@@ -4615,7 +4657,15 @@ class DiceRerollView(discord.ui.View):
         )
 
 
+_voice_registered = False
+
+
 def register_voice(bot: commands.Bot) -> None:
+    global _voice_registered
+    if _voice_registered:
+        log.warning("register_voice chamado mais de uma vez — ignorando duplicata.")
+        return
+    _voice_registered = True
     _load_dice_macros()
     bot.add_view(DiceRerollView())
     global _ai_semaphore, _stats
@@ -4628,7 +4678,7 @@ def register_voice(bot: commands.Bot) -> None:
     except ImportError:
         _RANDOM_DISCOVERY: list[str] = []
 
-    # --- Listener de dados sem prefixo (notacao 't': t20, 4t6, c20+5) ---
+    # --- Listener de dados sem prefixo (d20, 4d6, c50+50…) ---
     @bot.listen("on_message")
     async def _on_message_dice(message: discord.Message):
         if message.author.bot or not message.guild:
@@ -4671,19 +4721,35 @@ def register_voice(bot: commands.Bot) -> None:
 
         _touch_activity(message.guild.id)
         desc, total_crits, total_fumbles = _format_dice_description(roll_results)
-        roller = message.author.display_name
-        em = _build_dice_embed(
-            desc, total_crits, total_fumbles,
-            roller=roller, rolls_info=rolls_info,
-        )
+        em = _build_dice_embed(desc, total_crits, total_fumbles)
         try:
             await message.reply(
                 embed=em,
                 view=DiceRerollView(rolls_info),
                 mention_author=False,
             )
+            if message.guild:
+                await _maybe_warn_rollem_conflict(message.channel, message.guild)
         except discord.HTTPException as e:
             log.warning("Falha ao enviar rolagem de dados: %s", e)
+
+    @bot.listen("on_message")
+    async def _delete_rollem_replies(message: discord.Message) -> None:
+        """Apaga respostas do Rollem Next (e opcionalmente @rollem) para não poluir o canal."""
+        if not message.guild or not message.author.bot:
+            return
+        if not _rollem_auto_delete_enabled():
+            return
+        if message.author.id not in _rollem_delete_bot_ids():
+            return
+        if not _dice_channel_ok(message.channel.id):
+            return
+        if not _can_delete_in_channel(message):
+            return
+        try:
+            await message.delete()
+        except discord.HTTPException as e:
+            log.debug("Não foi possível apagar mensagem do Rollem (%s): %s", message.author.id, e)
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
         """Responde pergunta usando IA. Se image_urls fornecido, usa modelo com visão."""
@@ -6269,18 +6335,16 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(text))
             return
         desc, total_crits, total_fumbles = _format_dice_description([(text, crits, fumbles)])
-        roller = ctx.author.display_name
         rolls_info = [(expression, "")]
-        em = _build_dice_embed(
-            desc, total_crits, total_fumbles,
-            roller=roller, rolls_info=rolls_info,
-        )
+        em = _build_dice_embed(desc, total_crits, total_fumbles)
         try:
             await ctx.reply(
                 embed=em,
                 view=DiceRerollView(rolls_info),
                 mention_author=False,
             )
+            if ctx.guild:
+                await _maybe_warn_rollem_conflict(ctx.channel, ctx.guild)
         except discord.HTTPException as e:
             log.warning("Falha ao enviar rolagem t!d: %s", e)
             await ctx.send(embed=_embed("⚠️ Não consegui enviar a rolagem. Verifique minhas permissões no canal."))
@@ -6676,7 +6740,6 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
         """Reconecta automaticamente aos canais de voz apos restart."""
-        bot.add_view(DiceRerollView())
         await asyncio.sleep(4)  # aguarda guilds carregarem completamente
 
         # Conectar ao Lavalink só se explicitamente habilitado (LAVALINK_ENABLED=1).
@@ -6834,8 +6897,8 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=True)
         em.add_field(name="🎲 Dados / RPG", value=(
             "**Sem prefixo** — digite direto:\n"
-            "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `4t6!`, `5t10>=7`, `tf`\n"
-            "`4t6 ataque` — Label · `[t20+5]` — Inline · `c50+50` — Calc\n"
+            "`d20`, `4d6`, `2d20kh1+5`, `3#d20`, `4d6!`, `5d10>=7`, `df`\n"
+            "`4d6 ataque` — Label · `[d20+5]` — Inline · `c50+50` — Calc\n"
             "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`, `t%`\n"
             "**Macros**: `t!d macro add|list|remove` (máx. 20)\n"
             "Críticos **negrito**, descartados ~~riscados~~ · botão 🔄 Reroll"
