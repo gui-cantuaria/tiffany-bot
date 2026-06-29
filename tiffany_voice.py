@@ -2557,7 +2557,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
 _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t! ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
-    + "\n- /help, /queue, /stats (slash) · /status (admin)\n"
+    + "\n- /help, /queue, /stats (slash) · /player-status (admin)\n"
     "- Dados SEM prefixo: digite direto no chat (ex: t20, 4t6, 2t20kh1, 3#t20, 4t6 for glory, [t20+5 ataque], c50+50)\n"
     "- Voz na call: «Tiffany, toca [musica]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatoria/autoplay/24-7», «Tiffany, o que esta tocando», «Tiffany, avanca/volta 30 segundos», «Tiffany, [pergunta]» (a musica pausa enquanto responde)\n"
     "A Tiffany entra na call automaticamente quando voce pede uma musica (t!p). Sai automaticamente apos inatividade ou com t!cl.\n"
@@ -2855,7 +2855,7 @@ def _format_status_embed(
     session: Optional["_GuildVoiceSession"],
     vc,
 ) -> discord.Embed:
-    """Embed de status da sessão de voz (slash /status)."""
+    """Embed de status da sessão de voz (slash /player-status)."""
     em = discord.Embed(title="🎀 Tiffany · Status", color=TIFFANY_PINK)
     if not session or not vc or not vc.is_connected():
         em.description = "⚠️ Não estou em nenhum canal de voz.\nUse `t!p` para eu entrar na call."
@@ -6854,7 +6854,7 @@ def register_voice(bot: commands.Bot) -> None:
             "«Tiffany, avanca/volta `[N]` segundos» — Seek\n"
             "«Tiffany, `[pergunta]`» — IA pausa a musica e responde"
         ), inline=False)
-        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/stats` · `/status` *(admin)*", inline=False)
+        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/stats` · `/player-status` *(admin)*", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
 
@@ -6875,14 +6875,14 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await _slash_reply(interaction, q_em)
 
-    @bot.tree.command(name="status", description="Status da sessão de música na call (admin)")
+    @bot.tree.command(name="player-status", description="Status da sessão de música na call (admin)")
     @app_commands.default_permissions(administrator=True)
-    async def slash_status(interaction: discord.Interaction):
+    async def slash_player_status(interaction: discord.Interaction):
         if not interaction.guild:
             await _slash_reply(interaction, "⚠️ Use em um servidor.")
             return
         if isinstance(interaction.user, discord.Member) and not interaction.user.guild_permissions.administrator:
-            await _slash_reply(interaction, "⚠️ Apenas **administradores** podem usar `/status`.")
+            await _slash_reply(interaction, "⚠️ Apenas **administradores** podem usar `/player-status`.")
             return
         session = _sessions.get(interaction.guild.id)
         vc = interaction.guild.voice_client
