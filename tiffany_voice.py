@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import discord
-from discord import FFmpegPCMAudio, PCMVolumeTransformer
+from discord import app_commands, FFmpegPCMAudio, PCMVolumeTransformer
 from discord.ext import commands
 
 try:
@@ -660,6 +660,8 @@ class _GuildVoiceSession:
     loop_enabled: bool = False
     loop_query: str = ""
     loop_display: str = ""
+    _loop_cache_file: str = ""  # arquivo local reutilizado no loop (evita re-download)
+    _loop_cache_tmpdir: Optional[str] = None
     last_activity: float = field(default_factory=time.monotonic)  # timestamp da última interação
     history: list[str] = field(default_factory=list)  # últimas músicas tocadas (display names)
     random_picked: set[str] = field(default_factory=set)  # chaves já sorteadas por t!r nesta sessão
@@ -676,6 +678,8 @@ class _GuildVoiceSession:
     _cancel_download: bool = False
     # Flag: música foi pausada para escutar comando — question worker deve resumir após resposta
     _resume_after_question: bool = False
+    # Mensagem "pensando..." da última pergunta por voz — editada quando a resposta chega
+    last_question_status_msg: Any = None
 
 
 _sessions: dict[int, _GuildVoiceSession] = {}
@@ -2532,11 +2536,10 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("pa", ["pause"], "t!pa / t!pause — pausar"),
     ("re", ["resume"], "t!re / t!resume — retomar"),
     ("cl", ["clear"], "t!cl / t!clear — limpar fila"),
-    ("lo", ["loop"], "t!lo / t!loop — loop on/off"),
+    ("l", ["loop", "lo"], "t!l / t!loop — loop on/off"),
     ("sh", ["shuffle"], "t!sh / t!shuffle — embaralhar fila"),
     ("rp", ["replay"], "t!rp / t!replay — repetir do início"),
     ("np", ["nowplaying"], "t!np / t!nowplaying — tocando agora"),
-    ("q", ["queue"], "t!q / t!queue — ver fila"),
     ("r", ["random"], "t!r / t!random — música aleatória (sem repetir na fila/sessão)"),
     ("pl", ["playlist"], "t!pl save|load|list|del <nome>"),
     ("ff", ["seek"], "t!ff / t!seek +30, -15, 1:30"),
@@ -2554,7 +2557,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
 _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t! ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
-    + "\n- /help, /queue, /status, /stats (slash)\n"
+    + "\n- /help, /queue, /stats (slash) · /status (admin)\n"
     "- Dados SEM prefixo: digite direto no chat (ex: t20, 4t6, 2t20kh1, 3#t20, 4t6 for glory, [t20+5 ataque], c50+50)\n"
     "- Voz na call: «Tiffany, toca [musica]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatoria/autoplay/24-7», «Tiffany, o que esta tocando», «Tiffany, avanca/volta 30 segundos», «Tiffany, [pergunta]» (a musica pausa enquanto responde)\n"
     "A Tiffany entra na call automaticamente quando voce pede uma musica (t!p). Sai automaticamente apos inatividade ou com t!cl.\n"
@@ -2713,15 +2716,14 @@ _COMMON_TYPOS: dict[str, str] = {
     "cha": "c", "caht": "c", "cah": "c", "cht": "c", "ia": "c", "perguntar": "c",
     "skp": "s", "ski": "s", "skpi": "s", "pular": "s", "pulr": "s", "next": "s",
     "entrar": "e", "entr": "e", "join": "e", "entar": "e",
-    "sair": "l", "leav": "l", "leve": "l", "leaev": "l", "sai": "l", "disconnect": "l",
+    "sair": "cl", "leav": "cl", "leve": "cl", "leaev": "cl", "sai": "cl", "disconnect": "cl",
     "paus": "pa", "pausar": "pa", "pausa": "pa", "stop": "pa",
     "resum": "re", "reusme": "re", "rsume": "re", "retomar": "re", "continuar": "re", "volta": "re",
     "cler": "cl", "clar": "cl", "limpiar": "cl", "limpar": "cl", "limpa": "cl",
-    "lop": "lo", "loo": "lo", "lopo": "lo", "repetir": "lo",
+    "lop": "l", "loo": "l", "lopo": "l",
     "shuf": "sh", "shuffl": "sh", "embaralhar": "sh", "misturar": "sh", "shufle": "sh",
     "repl": "rp", "repla": "rp", "repaly": "rp", "repetir": "rp",
     "now": "np", "nowplay": "np", "tocando": "np",
-    "queu": "q", "fila": "q", "qeueu": "q", "que": "q", "qeue": "q",
     "rand": "r", "rando": "r", "aleatorio": "r", "aleatoria": "r",
     "playl": "pl", "playlis": "pl",
     "see": "ff", "seee": "ff", "sek": "ff",
@@ -2747,6 +2749,11 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
     w = (wrong or "").lower()
     if not w:
         return "Comando nao reconhecido. Prefixo: **`t!`** -- ex: `t!p`, `t!c`. Lista completa: `/help`."
+    if w in {"q", "queue", "fila", "queu", "que", "qeueu", "qeue"}:
+        return (
+            "Para ver a fila, use **`/queue`** (slash).\n"
+            "Para saber o que está tocando: `t!np`."
+        )
     # Mapa de typos comuns -> comando correto
     if w in _COMMON_TYPOS:
         target = _COMMON_TYPOS[w]
@@ -2806,22 +2813,141 @@ def _embed(description: str, *, title: str = None, footer: str = None) -> discor
     return em
 
 
-async def _notify(bot: discord.Client, channel_id: int, content: str) -> None:
+_QUEUE_DISPLAY_LIMIT = 20
+
+
+def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed]:
+    """Monta embed da fila (slash, voz e texto). Retorna None se vazio."""
+    lines: list[str] = []
+    if session.current_song:
+        elapsed = ""
+        if session.song_start_time > 0:
+            elapsed = f" · `{_fmt_dur(time.monotonic() - session.song_start_time)}` decorrido"
+        dur = f" `{_fmt_dur(session.current_duration)}`" if session.current_duration > 0 else ""
+        lines.append(f"▶️ **Tocando agora:** {session.current_song[:100]}{dur}{elapsed}")
+    if session.queue_display:
+        if lines:
+            lines.append("")
+        eta_total = _fmt_dur(_queue_eta_sec(session)) if session.queue_durations else ""
+        if eta_total and eta_total != "?:??":
+            lines.append(f"⏳ Tempo até o fim da fila: **{eta_total}**")
+            lines.append("")
+        for i, name in enumerate(session.queue_display[:_QUEUE_DISPLAY_LIMIT], start=1):
+            lines.append(f"`{i}.` {name[:80]}")
+        if len(session.queue_display) > _QUEUE_DISPLAY_LIMIT:
+            lines.append(f"*... e mais {len(session.queue_display) - _QUEUE_DISPLAY_LIMIT}*")
+    if not lines:
+        return None
+    em = discord.Embed(title="📋 Fila de músicas", description="\n".join(lines), color=TIFFANY_PINK)
+    extras: list[str] = []
+    if session.loop_enabled:
+        extras.append("🔁 Loop")
+    if session.autoplay:
+        extras.append("▶️ Autoplay")
+    if session.stay_24_7:
+        extras.append("🔒 24/7")
+    if extras:
+        em.set_footer(text=" · ".join(extras))
+    return em
+
+
+def _format_status_embed(
+    session: Optional["_GuildVoiceSession"],
+    vc,
+) -> discord.Embed:
+    """Embed de status da sessão de voz (slash /status)."""
+    em = discord.Embed(title="🎀 Tiffany · Status", color=TIFFANY_PINK)
+    if not session or not vc or not vc.is_connected():
+        em.description = "⚠️ Não estou em nenhum canal de voz.\nUse `t!p` para eu entrar na call."
+        return em
+    if vc.channel:
+        humans = len([m for m in vc.channel.members if not m.bot])
+        em.add_field(name="Canal", value=f"{vc.channel.mention} · {humans} pessoa(s)", inline=False)
+    if session.current_song:
+        if _is_wavelink_player(vc) and hasattr(vc, "position"):
+            elapsed = int(vc.position / 1000)
+        else:
+            elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
+        m, s = divmod(elapsed, 60)
+        dur = session.current_duration
+        song_line = f"**{session.current_song[:100]}**"
+        if dur > 0:
+            dm, ds = divmod(int(dur), 60)
+            bar_len = 16
+            filled = min(bar_len, int((elapsed / dur) * bar_len))
+            song_line += f"\n⏱️ {m:02d}:{s:02d} / {dm:02d}:{ds:02d}\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
+        else:
+            song_line += f"\n⏱️ {m:02d}:{s:02d}"
+        src = _track_source_label(session.current_query)
+        em.add_field(name=f"▶️ Tocando ({src})", value=song_line, inline=False)
+    else:
+        em.add_field(name="▶️ Tocando", value="Nada no momento", inline=False)
+    queue_n = len(session.queue_display)
+    fila_val = f"{queue_n} música(s)"
+    if queue_n and session.queue_durations:
+        eta = _fmt_dur(_queue_eta_sec(session))
+        if eta and eta != "?:??":
+            fila_val += f" · ~{eta} restantes"
+    em.add_field(name="📋 Fila", value=fila_val, inline=True)
+    mods: list[str] = []
+    if session.loop_enabled:
+        mods.append("🔁 Loop")
+    if session.autoplay:
+        mods.append("▶️ Autoplay")
+    if session.stay_24_7:
+        mods.append("🔒 24/7")
+    em.add_field(name="Modos", value=" · ".join(mods) if mods else "Nenhum", inline=True)
+    voice_on = session.listen_task is not None and not session.listen_task.done()
+    em.add_field(name="🎤 Comandos por voz", value="Ativos" if voice_on else "Indisponíveis", inline=True)
+    return em
+
+
+async def _slash_reply(
+    interaction: discord.Interaction,
+    content: str | discord.Embed,
+    *,
+    ephemeral: bool = True,
+) -> None:
+    """Resposta slash padronizada (embed rosa)."""
+    embed = content if isinstance(content, discord.Embed) else _embed(content)
+    if interaction.response.is_done():
+        await interaction.followup.send(embed=embed, ephemeral=ephemeral)
+    else:
+        await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+
+
+async def _try_react_ok(message: Optional[discord.Message]) -> None:
+    """Reação rápida de confirmação — complementa embeds de comandos curtos."""
+    if not message:
+        return
+    try:
+        await message.add_reaction("✅")
+    except discord.HTTPException:
+        pass
+
+
+async def _notify(
+    bot: discord.Client,
+    channel_id: int,
+    content: str,
+    *,
+    return_message: bool = False,
+) -> Optional[discord.Message]:
     ch = bot.get_channel(channel_id)
     if ch and hasattr(ch, "send"):
-        # Verificar permissoes antes de enviar
         if hasattr(ch, "guild") and ch.guild and ch.guild.me:
             perms = ch.permissions_for(ch.guild.me)
             if not perms.send_messages or not perms.embed_links:
                 log.warning("Sem permissão send_messages/embed_links no canal %s", channel_id)
-                return
+                return None
         try:
-            # Truncar conteúdo para não estourar limite de embed (4096 chars)
             if len(content) > 4000:
                 content = content[:4000] + "..."
-            await ch.send(embed=_embed(content))
+            msg = await ch.send(embed=_embed(content))
+            return msg if return_message else None
         except discord.HTTPException:
             log.warning("Falha ao enviar mensagem no canal %s", channel_id)
+    return None
 
 
 async def _ensure_opus() -> None:
@@ -2902,6 +3028,10 @@ def _clear_loop(session: _GuildVoiceSession) -> None:
     session.loop_enabled = False
     session.loop_query = ""
     session.loop_display = ""
+    if session._loop_cache_tmpdir:
+        shutil.rmtree(session._loop_cache_tmpdir, ignore_errors=True)
+    session._loop_cache_file = ""
+    session._loop_cache_tmpdir = None
 
 
 async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: discord.Client) -> None:
@@ -3010,15 +3140,32 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     # Timeout no download: max 120s para evitar travar em vídeos enormes
                     _restore_seek = session.restore_seek_sec
                     session.restore_seek_sec = 0.0
-                    try:
-                        source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
-                            _YTSource.from_query(query, display=display_name), timeout=120.0
-                        )
-                    except asyncio.TimeoutError:
-                        session.current_song = ""
-                        log.warning("Download timeout (120s): %s", display_name[:80])
-                        await _notify(bot, session.text_channel_id, f"⏳ Download demorou demais, pulando: `{display_name[:80]}`")
-                        continue
+                    source = None
+                    info = display_name
+                    dl_fp = ""
+                    dl_tmpdir = None
+                    dl_duration = session.current_duration or 0.0
+                    # Loop: reutiliza o arquivo já baixado (instantâneo, sem novo download)
+                    if (
+                        not from_queue
+                        and session.loop_enabled
+                        and session._loop_cache_file
+                        and os.path.isfile(session._loop_cache_file)
+                    ):
+                        source = await _YTSource.from_file(session._loop_cache_file)
+                        if source:
+                            dl_fp = session._loop_cache_file
+                            dl_tmpdir = session._loop_cache_tmpdir
+                    if source is None:
+                        try:
+                            source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
+                                _YTSource.from_query(query, display=display_name), timeout=120.0
+                            )
+                        except asyncio.TimeoutError:
+                            session.current_song = ""
+                            log.warning("Download timeout (120s): %s", display_name[:80])
+                            await _notify(bot, session.text_channel_id, f"⏳ Download demorou demais, pulando: `{display_name[:80]}`")
+                            continue
                     if source is None:
                         session.current_song = ""
                         session._failed_songs.append(display_name[:70])
@@ -3150,6 +3297,16 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.current_song = ""
                     session.current_query = ""
                     session.current_file = ""
+                    # Loop ativo: preserva arquivo local para a próxima repetição
+                    if session.loop_enabled and dl_fp and os.path.isfile(dl_fp):
+                        session._loop_cache_file = dl_fp
+                        session._loop_cache_tmpdir = dl_tmpdir
+                        session.current_tmpdir = None
+                    else:
+                        session._loop_cache_file = ""
+                        session._loop_cache_tmpdir = None
+                        if dl_tmpdir:
+                            shutil.rmtree(dl_tmpdir, ignore_errors=True)
                     # Atualizar voice_state para deploy gracioso detectar fila vazia
                     if vc.channel:
                         _vs_entry = _snapshot_voice_entry(guild_id, vc.channel.id, session.text_channel_id, session)
@@ -3444,9 +3601,11 @@ async def _voice_listen_loop(
                 continue
 
             if action == "loop":
-                if not session.current_query:
+                if not session.current_song and not session.current_query:
                     await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
                     continue
+                if not session.current_query and session.current_song:
+                    session.current_query = f"ytsearch1:{session.current_song}"
                 session.loop_enabled = not session.loop_enabled
                 if session.loop_enabled:
                     session.loop_query = session.current_query
@@ -3581,13 +3740,16 @@ async def _voice_listen_loop(
                 continue
 
             if action == "queue_show":
-                if not session.queue_display:
-                    await _notify(bot, session.text_channel_id, "📋 A fila está vazia.")
+                q_em = _format_queue_embed(session)
+                if q_em:
+                    ch = bot.get_channel(session.text_channel_id)
+                    if ch and hasattr(ch, "send"):
+                        try:
+                            await ch.send(embed=q_em)
+                        except discord.HTTPException:
+                            pass
                 else:
-                    lines = [f"`{i+1}.` {s[:60]}" for i, s in enumerate(session.queue_display[:10])]
-                    if len(session.queue_display) > 10:
-                        lines.append(f"... e mais {len(session.queue_display) - 10}")
-                    await _notify(bot, session.text_channel_id, "📋 **Fila:**\n" + "\n".join(lines))
+                    await _notify(bot, session.text_channel_id, "📭 A fila está vazia.")
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -3677,7 +3839,13 @@ async def _voice_listen_loop(
                 if _paused_for_listen:
                     session._resume_after_question = True
                 await session.question_queue.put((speaker_uid, arg))
-                await _notify(bot, session.text_channel_id, f"💬 «{arg[:80]}» — processando...")
+                status_msg = await _notify(
+                    bot,
+                    session.text_channel_id,
+                    f"💬 **{arg[:80]}**\n🧠 Pensando...",
+                    return_message=True,
+                )
+                session.last_question_status_msg = status_msg
                 continue
             
             if action == "play" and arg:
@@ -4119,9 +4287,9 @@ def _roll_dice(expression: str, label: str = "") -> tuple[str, int, int]:
     return _roll_single(expression, label)
 
 
-def _parse_inline_rolls(content: str) -> list[tuple[str, int, int]]:
-    """Detecta rolagens inline [4t6], [t20+5 ataque], [4d6]. Retorna lista de (texto, crits, fumbles)."""
-    results: list[tuple[str, int, int]] = []
+def _parse_inline_specs(content: str) -> list[tuple[str, str]]:
+    """Extrai (expressao, label) de cada [rolagem] inline — usado no reroll."""
+    specs: list[tuple[str, str]] = []
     for m in re.finditer(r"\[([^\]]+)\]", content):
         inner = m.group(1).strip()
         if not inner:
@@ -4130,11 +4298,29 @@ def _parse_inline_rolls(content: str) -> list[tuple[str, int, int]]:
         if _DICE_TERM_RE.search(converted):
             parts = converted.split(None, 1)
             if len(parts) == 2 and _DICE_TERM_RE.search(parts[0]):
-                if not _DICE_TERM_RE.search(parts[1]) and not re.match(r'^[+\-*/]', parts[1]):
-                    results.append(_roll_single(parts[0], parts[1]))
+                if not _DICE_TERM_RE.search(parts[1]) and not re.match(r"^[+\-*/]", parts[1]):
+                    specs.append((parts[0], parts[1]))
                     continue
-            results.append(_roll_single(converted))
-    return results
+            specs.append((converted, ""))
+    return specs
+
+
+def _parse_inline_rolls(content: str) -> tuple[list[tuple[str, int, int]], list[tuple[str, str]]]:
+    """Rola [inline] e retorna (resultados, specs para reroll)."""
+    results: list[tuple[str, int, int]] = []
+    specs = _parse_inline_specs(content)
+    rolls_info: list[tuple[str, str]] = []
+    for expr, lbl in specs:
+        text, crits, fumbles = _roll_dice(expr, lbl)
+        if _dice_roll_ok(text):
+            results.append((text, crits, fumbles))
+            rolls_info.append((expr, lbl))
+    return results, rolls_info
+
+
+def _dice_roll_ok(text: str) -> bool:
+    low = (text or "").lower()
+    return "nao entendi" not in low and "não entendi" not in low and "⚠️" not in text and "❌" not in text
 
 
 # Regex para detectar mensagens que sao expressoes de dados (sem prefixo, notacao 't')
@@ -4179,7 +4365,41 @@ def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
 
 
 _MACROS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dice_macros.json")
+_DICE_MACROS_MAX = 20
+_DICE_MACRO_NAME_MAX = 30
+_DICE_COOLDOWN_SEC = 1.5
+_DICE_REROLL_PREFIX = "reroll:"
 _dice_macros: dict[str, dict[str, str]] = {}
+_dice_last_roll: dict[int, float] = {}
+
+
+def _dice_allowed_channels() -> Optional[set[int]]:
+    """Canais permitidos para rolagem sem prefixo. None = todos."""
+    raw = os.getenv("DICE_CHANNELS", "").strip()
+    if not raw:
+        return None
+    ids: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.add(int(part))
+    return ids or None
+
+
+def _dice_channel_ok(channel_id: int) -> bool:
+    allowed = _dice_allowed_channels()
+    return allowed is None or channel_id in allowed
+
+
+def _dice_cooldown_ok(user_id: int) -> tuple[bool, float]:
+    now = time.monotonic()
+    last = _dice_last_roll.get(user_id, 0.0)
+    wait = _DICE_COOLDOWN_SEC - (now - last)
+    if wait > 0:
+        return False, wait
+    _dice_last_roll[user_id] = now
+    return True, 0.0
+
 
 def _load_dice_macros():
     global _dice_macros
@@ -4190,68 +4410,214 @@ def _load_dice_macros():
         except Exception:
             _dice_macros = {}
 
+
 def _save_dice_macros():
-    with open(_MACROS_FILE, "w", encoding="utf-8") as f:
+    tmp = _MACROS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(_dice_macros, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, _MACROS_FILE)
+
 
 def _get_dice_macro(user_id: int, name: str) -> str:
     uid = str(user_id)
     return _dice_macros.get(uid, {}).get(name.lower(), "")
 
-def _set_dice_macro(user_id: int, name: str, expr: str):
+
+def _validate_dice_macro_name(name: str) -> Optional[str]:
+    name = (name or "").strip().lower()
+    if not name or len(name) > _DICE_MACRO_NAME_MAX:
+        return f"Nome inválido (1–{_DICE_MACRO_NAME_MAX} caracteres)."
+    if not re.match(r"^[\w\-]+$", name, re.UNICODE):
+        return "Nome só pode ter letras, números, `_` e `-`."
+    return None
+
+
+def _validate_dice_expression(expr: str) -> Optional[str]:
+    expr = (expr or "").strip()
+    if not expr:
+        return "Fórmula vazia."
+    if len(expr) > 200:
+        return "Fórmula longa demais (máx. 200 caracteres)."
+    if expr.lower().startswith("!error_rollem"):
+        return "Use notação **T** (`t20`), não sintaxe Rollem (`d20`, `r40`)."
+    text, _, _ = _roll_dice(expr)
+    if not _dice_roll_ok(text):
+        return "Fórmula inválida. Ex: `1t20+5`, `4t6dl1`, `2t20kh1`."
+    return None
+
+
+def _set_dice_macro(user_id: int, name: str, expr: str) -> tuple[bool, str]:
+    err = _validate_dice_macro_name(name)
+    if err:
+        return False, err
+    err = _validate_dice_expression(expr)
+    if err:
+        return False, err
     uid = str(user_id)
-    if uid not in _dice_macros:
-        _dice_macros[uid] = {}
-    _dice_macros[uid][name.lower()] = expr
+    key = name.strip().lower()
+    user_macros = _dice_macros.setdefault(uid, {})
+    if key not in user_macros and len(user_macros) >= _DICE_MACROS_MAX:
+        return False, (
+            f"Limite de **{_DICE_MACROS_MAX}** macros por usuário. "
+            f"Remova uma com `t!d macro remove <nome>`."
+        )
+    user_macros[key] = expr.strip()
     _save_dice_macros()
+    return True, ""
+
 
 def _remove_dice_macro(user_id: int, name: str) -> bool:
     uid = str(user_id)
-    if uid in _dice_macros and name.lower() in _dice_macros[uid]:
-        del _dice_macros[uid][name.lower()]
+    key = name.lower()
+    if uid in _dice_macros and key in _dice_macros[uid]:
+        del _dice_macros[uid][key]
+        if not _dice_macros[uid]:
+            del _dice_macros[uid]
         _save_dice_macros()
         return True
     return False
 
-def _build_dice_embed(desc: str, crits: int, fumbles: int) -> discord.Embed:
-    return _embed(desc)
+
+def _encode_rolls_info(rolls_info: list[tuple[str, str]]) -> str:
+    import base64
+    payload = json.dumps(rolls_info, ensure_ascii=False).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def _decode_rolls_info(token: str) -> list[tuple[str, str]]:
+    import base64
+    if not token:
+        return []
+    pad = "=" * (-len(token) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(token + pad)
+        data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, list):
+            return [(str(a), str(b)) for a, b in data]
+    except Exception:
+        pass
+    return []
+
+
+def _rolls_info_from_footer(footer_text: str) -> list[tuple[str, str]]:
+    if not footer_text or _DICE_REROLL_PREFIX not in footer_text:
+        return []
+    token = footer_text.split(_DICE_REROLL_PREFIX, 1)[1].strip()
+    return _decode_rolls_info(token)
+
+
+def _dice_footer_text(rolls_info: list[tuple[str, str]], roller: str = "") -> str:
+    enc = _encode_rolls_info(rolls_info)
+    core = f"{_DICE_REROLL_PREFIX}{enc}"
+    if roller:
+        return f"{roller} · {core}"[:2048]
+    return core[:2048]
+
+
+def _format_dice_description(roll_results: list[tuple[str, int, int]]) -> tuple[str, int, int]:
+    total_crits = sum(c for _, c, _ in roll_results)
+    total_fumbles = sum(f for _, _, f in roll_results)
+    body = "\n".join(t for t, _, _ in roll_results)
+    desc = body
+    if total_crits > 0:
+        desc = f"🟩 **Críticos: {total_crits}**\n\n{desc}"
+    elif total_fumbles > 0:
+        desc = f"🟥 **Falhas Críticas: {total_fumbles}**\n\n{desc}"
+    return desc, total_crits, total_fumbles
+
+
+def _build_dice_embed(
+    desc: str,
+    crits: int,
+    fumbles: int,
+    *,
+    roller: str = "",
+    rolls_info: Optional[list[tuple[str, str]]] = None,
+) -> discord.Embed:
+    em = discord.Embed(title="🎲 Rolagem", description=desc, color=TIFFANY_PINK)
+    footer = _dice_footer_text(rolls_info or [], roller) if rolls_info else roller
+    if footer:
+        em.set_footer(text=footer)
+    return em
+
+
+_DICE_HELP_TEXT = (
+    "**Dados da Tiffany**\n\n"
+    "**Sem prefixo** — digite direto no chat:\n"
+    "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
+    "`4t6 ataque` — Rolagem com label\n"
+    "`[t20+5]` — Rolar no meio de uma frase\n"
+    "`c50+50` — Calculadora\n"
+    "`3#t20` — Repetir 3 vezes · `4t6!` — Explosivo\n"
+    "`5t10>=7` — Pool de sucessos · `tf` — Dado Fate\n"
+    "`4t6dl1 ns` — Drop lowest, sem ordenar\n\n"
+    "**Atalhos RPG** (com `t!d`):\n"
+    "`t!d adv` / `t!d dis` — Vantagem / Desvantagem\n"
+    "`t!d adv+5` — Vantagem com modificador\n"
+    "`t!d stats` — Atributos (6× 4t6dl1)\n"
+    "`t!d init +3` — Iniciativa (t20+mod)\n"
+    "`t!d coin` — Cara ou coroa · `t!d t%` — Percentual\n\n"
+    "**Macros** (máx. 20):\n"
+    "`t!d macro add <nome> <dado>` — Criar atalho\n"
+    "`t!d macro list` · `t!d macro remove <nome>`\n\n"
+    "Críticos em **negrito**, descartados ~~riscados~~"
+)
+
 
 class DiceRerollView(discord.ui.View):
-    def __init__(self, rolls_info: list[tuple[str, str]]):
-        super().__init__(timeout=None)
-        # rolls_info is a list of (expression, label)
-        self.rolls_info = rolls_info
+    """View persistente — fórmulas ficam no footer do embed (reroll:...)."""
 
-    @discord.ui.button(label="🔄 Reroll", style=discord.ButtonStyle.secondary, custom_id="dice_reroll_btn")
+    def __init__(self, rolls_info: Optional[list[tuple[str, str]]] = None):
+        super().__init__(timeout=None)
+        self.rolls_info = rolls_info or []
+
+    @discord.ui.button(
+        label="🔄 Reroll",
+        style=discord.ButtonStyle.secondary,
+        custom_id="tiffany:dice_reroll",
+    )
     async def btn_reroll(self, interaction: discord.Interaction, button: discord.ui.Button):
-        roll_results = []
-        for expr, lbl in self.rolls_info:
-            text, crits, fumbles = _roll_dice(expr, lbl)
-            if "nao entendi" not in text and "⚠️" not in text:
-                roll_results.append((text, crits, fumbles))
-        
-        if not roll_results:
-            await interaction.response.send_message("⚠️ Não consegui re-rolar.", ephemeral=True)
+        rolls_info = list(self.rolls_info)
+        if not rolls_info and interaction.message and interaction.message.embeds:
+            ft = interaction.message.embeds[0].footer
+            if ft and ft.text:
+                rolls_info = _rolls_info_from_footer(ft.text)
+        if not rolls_info:
+            await interaction.response.send_message(
+                embed=_embed("⚠️ Não consegui re-rolar — fórmula não encontrada."),
+                ephemeral=True,
+            )
             return
-            
-        total_crits = sum(c for _, c, _ in roll_results)
-        total_fumbles = sum(f for _, _, f in roll_results)
-        body = "\n".join(t for t, _, _ in roll_results)
-        
-        desc = body
-        if total_crits > 0:
-            desc = f"🟩 **Críticos: {total_crits}**\n\n{desc}"
-        elif total_fumbles > 0:
-            desc = f"🟥 **Falhas Críticas: {total_fumbles}**\n\n{desc}"
-            
-        em = _build_dice_embed(desc, total_crits, total_fumbles)
-        # Identificar quem rolou
-        content = f"<@{interaction.user.id}> rolou novamente:"
-        await interaction.response.send_message(content=content, embed=em, view=DiceRerollView(self.rolls_info))
+
+        roll_results: list[tuple[str, int, int]] = []
+        for expr, lbl in rolls_info:
+            text, crits, fumbles = _roll_dice(expr, lbl)
+            if _dice_roll_ok(text):
+                roll_results.append((text, crits, fumbles))
+
+        if not roll_results:
+            await interaction.response.send_message(
+                embed=_embed("⚠️ Não consegui re-rolar."),
+                ephemeral=True,
+            )
+            return
+
+        desc, total_crits, total_fumbles = _format_dice_description(roll_results)
+        roller = f"Re-roll por {interaction.user.display_name}"
+        em = _build_dice_embed(
+            desc, total_crits, total_fumbles,
+            roller=roller, rolls_info=rolls_info,
+        )
+        await interaction.response.send_message(
+            content=f"<@{interaction.user.id}> rolou novamente:",
+            embed=em,
+            view=DiceRerollView(rolls_info),
+        )
 
 
 def register_voice(bot: commands.Bot) -> None:
     _load_dice_macros()
+    bot.add_view(DiceRerollView())
     global _ai_semaphore, _stats
     _stats = _load_stats()
     _cleanup_stale_tempfiles()
@@ -4267,54 +4633,57 @@ def register_voice(bot: commands.Bot) -> None:
     async def _on_message_dice(message: discord.Message):
         if message.author.bot or not message.guild:
             return
+        if not _dice_channel_ok(message.channel.id):
+            return
         content = message.content.strip()
         if not content:
             return
         lower = content.lower()
-        # Pular se comecar com prefixo de bot
         if lower.startswith(("t!", "!", "/", "-", ".", ";", ">", "?", "%")):
             return
-        # Pular se for menção ao bot
         if message.content.startswith("<@"):
             return
 
         roll_results: list[tuple[str, int, int]] = []
         rolls_info: list[tuple[str, str]] = []
 
-        # 1. Inline dice: [4t6], [2t20kh1 ataque]
         if "[" in content and "]" in content:
-            inline = _parse_inline_rolls(content)
-            if inline:
-                roll_results = inline
-                rolls_info = [(content, "INLINE")]
+            inline_results, inline_specs = _parse_inline_rolls(content)
+            if inline_results:
+                roll_results = inline_results
+                rolls_info = inline_specs
 
-        # 2. Mensagem inteira e expressao de dados (t20, 4t6+3, c20+5)
         if not roll_results:
             parsed = _try_parse_dice_msg(content)
             if parsed:
                 expr, lbl = parsed
                 text, crits, fumbles = _roll_dice(expr, lbl)
-                if "nao entendi" not in text and "⚠️" not in text:
+                if _dice_roll_ok(text):
                     roll_results = [(text, crits, fumbles)]
                     rolls_info = [(expr, lbl)]
 
-        if roll_results:
-            _touch_activity(message.guild.id)
-            total_crits = sum(c for _, c, _ in roll_results)
-            total_fumbles = sum(f for _, _, f in roll_results)
-            body = "\n".join(t for t, _, _ in roll_results)
-            
-            desc = body
-            if total_crits > 0:
-                desc = f"🟩 **Críticos: {total_crits}**\n\n{desc}"
-            elif total_fumbles > 0:
-                desc = f"🟥 **Falhas Críticas: {total_fumbles}**\n\n{desc}"
-                
-            em = _build_dice_embed(desc, total_crits, total_fumbles)
-            try:
-                await message.reply(embed=em, view=DiceRerollView(rolls_info), mention_author=False)
-            except Exception:
-                pass
+        if not roll_results:
+            return
+
+        allowed, wait = _dice_cooldown_ok(message.author.id)
+        if not allowed:
+            return
+
+        _touch_activity(message.guild.id)
+        desc, total_crits, total_fumbles = _format_dice_description(roll_results)
+        roller = message.author.display_name
+        em = _build_dice_embed(
+            desc, total_crits, total_fumbles,
+            roller=roller, rolls_info=rolls_info,
+        )
+        try:
+            await message.reply(
+                embed=em,
+                view=DiceRerollView(rolls_info),
+                mention_author=False,
+            )
+        except discord.HTTPException as e:
+            log.warning("Falha ao enviar rolagem de dados: %s", e)
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
         """Responde pergunta usando IA. Se image_urls fornecido, usa modelo com visão."""
@@ -4492,7 +4861,7 @@ def register_voice(bot: commands.Bot) -> None:
                     ch = bot.get_channel(session.text_channel_id)
                     if ch:
                         try:
-                            await ch.send("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos.", delete_after=8)
+                            await ch.send(embed=_embed("🧠 Muitas perguntas ao mesmo tempo! Espera uns segundos."), delete_after=8)
                         except Exception:
                             pass
                     session.question_queue.task_done()
@@ -4516,9 +4885,17 @@ def register_voice(bot: commands.Bot) -> None:
                 if _should_resume and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 ch = bot.get_channel(session.text_channel_id)
+                mention = f"<@{user_id}> " if user_id else ""
+                status_msg = session.last_question_status_msg
+                session.last_question_status_msg = None
+                if status_msg:
+                    try:
+                        await status_msg.edit(content=mention, embed=_embed(f"💬 {answer}"))
+                        continue
+                    except discord.HTTPException:
+                        pass
                 if ch:
                     try:
-                        mention = f"<@{user_id}> " if user_id else ""
                         await ch.send(mention, embed=_embed(f"💬 {answer}"))
                     except discord.HTTPException as e:
                         log.warning("Falha ao enviar resposta de voz: %s", e)
@@ -4529,7 +4906,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     def _revive_workers(gid: int, vc, session) -> None:
         """Reinicia os workers de música/perguntas se morreram — garante que a fila
-        nunca congele mesmo quando o usuário usa comandos de controle (t!s, t!q...)
+        nunca congele mesmo quando o usuário usa comandos de controle (t!s, /queue...)
         e não apenas t!p. No modo Lavalink não há worker (usa event listeners)."""
         try:
             if not vc or not vc.is_connected() or _is_wavelink_player(vc):
@@ -4565,7 +4942,7 @@ def register_voice(bot: commands.Bot) -> None:
                     await vc.move_to(specific_channel)
                     return sess, vc
                 except Exception as e:
-                    await ctx.send(f"⚠️ Erro ao mover para o canal: {e}")
+                    await ctx.send(embed=_embed(f"⚠️ Erro ao mover para o canal: {e}"))
                     return None, None
             # Reinicia workers mortos (garante fila sempre processada)
             if sess.music_task is None or sess.music_task.done():
@@ -4826,34 +5203,6 @@ def register_voice(bot: commands.Bot) -> None:
             f"⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}{autoplay_info}"
         ))
 
-    @bot.command(name="q", aliases=["queue"], help="Mostra a fila: t!q / t!queue")
-    async def cmd_queue(ctx: commands.Context):
-        if not ctx.guild:
-            return
-        _stats["commands_used"] += 1
-        _touch_activity(ctx.guild.id)
-        session = _sessions.get(ctx.guild.id)
-        vc = ctx.guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
-            return
-        lines = []
-        if session.current_song:
-            lines.append(f"▶️  **Tocando:** {session.current_song[:80]}")
-        if session.queue_display:
-            lines.append("")
-            eta_total = _fmt_dur(_queue_eta_sec(session)) if session.queue_durations else ""
-            if eta_total and eta_total != "?:??":
-                lines.append(f"⏳ Tempo estimado até o fim da fila: **{eta_total}**")
-            for i, name in enumerate(session.queue_display[:20], start=1):
-                lines.append(f"`{i}.` {name[:80]}")
-            if len(session.queue_display) > 20:
-                lines.append(f"*... e mais {len(session.queue_display) - 20}*")
-        if not lines:
-            await ctx.send(embed=_embed("📭 Fila vazia."))
-            return
-        await ctx.send(embed=_embed("\n".join(lines)))
-
     @bot.command(name="247", aliases=["nonstop"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)")
     async def cmd_nonstop(ctx: commands.Context):
         if not ctx.guild:
@@ -4925,17 +5274,21 @@ def register_voice(bot: commands.Bot) -> None:
         elif action == "load":
             songs = guild_pls.get(name)
             if not songs:
-                await ctx.send(f"⚠️ Playlist **{name}** nao encontrada.")
+                await ctx.send(embed=_embed(f"⚠️ Playlist **{name}** não encontrada."))
                 return
+            total = len(songs)
             sess, vc = await _ensure_connected(ctx)
             if not sess:
                 return
+            status = await ctx.send(embed=_embed(f"📋 Carregando playlist **{name}** ({total} faixa(s))..."))
             fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
+            vagas = max(0, QUEUE_MAX - fila_atual)
             added = 0
+            failed = 0
 
             if _is_wavelink_player(vc):
                 for song in songs:
-                    if fila_atual + added >= QUEUE_MAX:
+                    if added >= vagas:
                         break
                     display = song.get("display", song.get("query", "???"))
                     query = song.get("query", f"ytsearch1:{display}")
@@ -4944,6 +5297,7 @@ def register_voice(bot: commands.Bot) -> None:
                     except Exception:
                         tracks = []
                     if not tracks:
+                        failed += 1
                         continue
                     track = tracks[0]
                     track_dur = (track.length or 0) / 1000.0
@@ -4958,9 +5312,16 @@ def register_voice(bot: commands.Bot) -> None:
                     else:
                         vc.queue.put(track)
                     added += 1
+                    if added % 5 == 0:
+                        try:
+                            await status.edit(embed=_embed(
+                                f"📋 Carregando **{name}**... `{added}/{min(total, vagas)}` faixa(s)"
+                            ))
+                        except discord.HTTPException:
+                            pass
             else:
                 for song in songs:
-                    if fila_atual + added >= QUEUE_MAX:
+                    if added >= vagas:
                         break
                     display = song.get("display", song.get("query", "???"))
                     query = song.get("query", f"ytsearch1:{display}")
@@ -4969,11 +5330,22 @@ def register_voice(bot: commands.Bot) -> None:
                     await sess.music_queue.put(query)
                     added += 1
 
-            await ctx.send(embed=_embed(f"▶️ Playlist **{name}**: {added} musica(s) adicionadas a fila."))
+            skipped = max(0, total - added - failed)
+            if added == 0:
+                msg = f"❌ Não consegui carregar faixas de **{name}**."
+                if failed:
+                    msg += f"\n{failed} faixa(s) não encontrada(s)."
+            else:
+                msg = f"▶️ Playlist **{name}**: **{added}** música(s) adicionadas à fila."
+                if failed:
+                    msg += f"\n⚠️ {failed} faixa(s) não encontrada(s)."
+                if skipped:
+                    msg += f"\n⚠️ {skipped} faixa(s) ignorada(s) — fila cheia."
+            await status.edit(embed=_embed(msg))
 
         elif action == "del":
             if name not in guild_pls:
-                await ctx.send(f"⚠️ Playlist **{name}** nao encontrada.")
+                await ctx.send(embed=_embed(f"⚠️ Playlist **{name}** não encontrada."))
                 return
             del guild_pls[name]
             _save_playlists(data)
@@ -5055,6 +5427,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
+        was_connected = bool(ctx.guild.voice_client and ctx.guild.voice_client.is_connected())
         sess, vc = await _ensure_connected(ctx)
         if not sess:
             return
@@ -5068,7 +5441,12 @@ def register_voice(bot: commands.Bot) -> None:
         # Feedback imediato: a busca/resolução pode levar alguns segundos.
         # Todas as respostas finais editam ESTE mesmo balão (status) → nunca fica mudo.
         _ack_name = re.sub(r"^https?://\S*", "link", query)[:80]
-        status = await ctx.send(embed=_embed(f"🔎 Procurando **{_ack_name}**..."))
+        if not was_connected and vc and vc.channel:
+            status = await ctx.send(embed=_embed(
+                f"🔊 Entrei em **{vc.channel.name}**\n🔎 Procurando **{_ack_name}**..."
+            ))
+        else:
+            status = await ctx.send(embed=_embed(f"🔎 Procurando **{_ack_name}**..."))
 
         is_url = bool(re.match(r"^https?://", query))
 
@@ -5241,6 +5619,7 @@ def register_voice(bot: commands.Bot) -> None:
             if not player.playing:
                 await player.play(track)
                 sess.current_song = track_display
+                sess.current_query = getattr(track, "uri", None) or search_query or query
                 sess.current_duration = track_dur_sec
                 sess.song_start_time = time.monotonic()
                 sess.history.append(track_display)
@@ -5464,15 +5843,15 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
 
-        async with ctx.typing():
-            answer = await _answer_question(
-                question, ctx.guild.id, None, None,
-                image_urls=image_urls if image_urls else None,
-                user_id=ctx.author.id,
-            )
-        await ctx.reply(embed=_embed(f"💬 {answer}"))
+        thinking = await ctx.reply(embed=_embed("🧠 Pensando..."), mention_author=False)
+        answer = await _answer_question(
+            question, ctx.guild.id, None, None,
+            image_urls=image_urls if image_urls else None,
+            user_id=ctx.author.id,
+        )
+        await thinking.edit(embed=_embed(f"💬 {answer}"))
 
-    @bot.command(name="lo", aliases=["loop"], help="Loop da musica atual (liga/desliga): t!lo ou t!loop")
+    @bot.command(name="l", aliases=["loop", "lo"], help="Loop da musica atual (liga/desliga): t!l / t!loop")
     async def cmd_loop(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -5482,18 +5861,26 @@ def register_voice(bot: commands.Bot) -> None:
         if not session or not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if not session.current_query:
+        if _is_wavelink_player(vc):
+            is_playing = bool(vc.playing or vc.current)
+        else:
+            is_playing = vc.is_playing() or vc.is_paused()
+        if not is_playing and not session.current_song:
             await ctx.send(embed=_embed("⚠️ Nada tocando no momento. Use `t!p` primeiro."))
             return
+        if not session.current_query and session.current_song:
+            session.current_query = f"ytsearch1:{session.current_song}"
         session.loop_enabled = not session.loop_enabled
         if session.loop_enabled:
             session.loop_query = session.current_query
             session.loop_display = session.current_song or session.current_query
             nome = session.loop_display[:100]
             await ctx.send(embed=_embed(f"🔁 Loop **ativado** — repetindo: **{nome}**"))
+            await _try_react_ok(ctx.message)
         else:
             _clear_loop(session)
             await ctx.send(embed=_embed("🔁 Loop **desativado**."))
+            await _try_react_ok(ctx.message)
 
     @bot.command(name="pa", aliases=["pause"], help="Pausa a música: t!pa / t!pause")
     async def cmd_pause(ctx: commands.Context):
@@ -5515,6 +5902,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             vc.pause()
         await ctx.send(embed=_embed("⏸️ Pausei a música. Diz `t!re` quando quiser continuar."))
+        await _try_react_ok(ctx.message)
 
     @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t!re / t!resume")
     async def cmd_resume(ctx: commands.Context):
@@ -5536,6 +5924,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             vc.resume()
         await ctx.send(embed=_embed("▶️ Voltando de onde parou!"))
+        await _try_react_ok(ctx.message)
 
     @bot.command(name="cl", aliases=["clear"], help="Para musica, limpa fila e sai da call: t!cl / t!clear")
     async def cmd_clear(ctx: commands.Context):
@@ -5749,21 +6138,20 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
         _touch_activity(ctx.guild.id)
-        # Limpar prefixos de display (Auto:, ytsearch, etc)
         search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
-        async with ctx.typing():
-            lyrics = await _fetch_lyrics(search_term)
+        status = await ctx.reply(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."), mention_author=False)
+        lyrics = await _fetch_lyrics(search_term)
         if not lyrics:
-            await ctx.send(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
+            await status.edit(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
             return
         # Verificar conteúdo bloqueado na letra retornada
         if _contains_blocked_content(lyrics):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            await status.edit(embed=_embed(_BLOCKED_REPLY))
             return
         # Truncar para caber no embed (4096 chars)
         if len(lyrics) > 3800:
             lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
-        await ctx.send(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
+        await status.edit(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
 
     @bot.command(name="alert", aliases=["alerta", "monitor"], help="Price alert: t!alert <product> | t!alert list | t!alert remove <id>")
     async def cmd_alerta(ctx: commands.Context, *, args: str = ""):
@@ -5779,10 +6167,10 @@ def register_voice(bot: commands.Bot) -> None:
         if args.lower() in ("list", "lista", "listar", ""):
             user_mons = [m for m in monitors if m["user_id"] == user_id]
             if not user_mons:
-                await ctx.send(embed=_embed("📭 No active price alerts.\nUse `t!alert <product>` to create one."), delete_after=30)
+                await ctx.send(embed=_embed("📭 Nenhum alerta de preço ativo.\nUse `t!alert <produto>` para criar um."), delete_after=30)
                 return
             lines = [f"`{i+1}.` {m['keyword']}" for i, m in enumerate(user_mons)]
-            await ctx.send(embed=_embed("🔔 **Your price alerts:**\n" + "\n".join(lines) + "\n\nUse `t!alert remove <number>` to remove."), delete_after=60)
+            await ctx.send(embed=_embed("🔔 **Seus alertas de preço:**\n" + "\n".join(lines) + "\n\nUse `t!alert remove <número>` para remover."), delete_after=60)
             return
 
         # Remover alerta
@@ -5794,24 +6182,24 @@ def register_voice(bot: commands.Bot) -> None:
                 if idx < 0 or idx >= len(user_mons):
                     raise ValueError
             except ValueError:
-                await ctx.send(embed=_embed(f"⚠️ Invalid number. Use `t!alert list` to see your alerts."), delete_after=10)
+                await ctx.send(embed=_embed("⚠️ Número inválido. Use `t!alert list` para ver seus alertas."), delete_after=10)
                 return
             to_remove = user_mons[idx]
             monitors = [m for m in monitors if m is not to_remove]
             _save_monitors(monitors)
-            await ctx.send(embed=_embed(f"🗑️ Alert **{to_remove['keyword']}** removed."), delete_after=15)
+            await ctx.send(embed=_embed(f"🗑️ Alerta **{to_remove['keyword']}** removido."), delete_after=15)
             return
 
         # Adicionar alerta
         if len(args) < 3:
-            await ctx.send(embed=_embed("⚠️ Usage: `t!alert <product>` — e.g. `t!alert RTX 5060`"), delete_after=10)
+            await ctx.send(embed=_embed("⚠️ Uso: `t!alert <produto>` — ex: `t!alert RTX 5060`"), delete_after=10)
             return
         if _contains_blocked_content(args):
             await ctx.reply(embed=_embed(_BLOCKED_REPLY))
             return
         user_mons = [m for m in monitors if m["user_id"] == user_id]
         if len(user_mons) >= 10:
-            await ctx.send(embed=_embed("⚠️ Limit of 10 alerts per user. Remove one with `t!alert remove <number>`."), delete_after=15)
+            await ctx.send(embed=_embed("⚠️ Limite de 10 alertas por usuário. Remova um com `t!alert remove <número>`."), delete_after=15)
             return
         monitors.append({
             "id": int(time.monotonic() * 1000) % 10**9,
@@ -5821,47 +6209,30 @@ def register_voice(bot: commands.Bot) -> None:
             "added_at": datetime.now().isoformat(),
         })
         _save_monitors(monitors)
-        await ctx.send(embed=_embed(f"🔔 Alert created! You'll receive a DM when we find an offer for **{args[:80]}**."), delete_after=30)
+        await ctx.send(embed=_embed(f"🔔 Alerta criado! Você receberá um DM quando encontrarmos oferta de **{args[:80]}**."), delete_after=30)
 
     @bot.command(name="d", aliases=["roll", "dice"], help="Rola dados: t!d / t!roll <expressão>")
     async def cmd_roll(ctx: commands.Context, *, expression: str = ""):
         if not ctx.guild:
             return
         if not expression.strip():
-            await ctx.send(embed=_embed(
-                "**Dados da Tiffany**\n\n"
-                "**Sem prefixo** — digite direto no chat:\n"
-                "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
-                "`4t6 ataque` — Rolagem com um nome/label\n"
-                "`[t20+5]` — Rolar no meio de uma frase\n"
-                "`c50+50` — Calculadora\n\n"
-                "**Atalhos RPG** (com `t!d`):\n"
-                "`t!d adv` / `t!d dis` — Vantagem / Desvantagem\n"
-                "`t!d adv+5` — Vantagem com modificador\n"
-                "`t!d stats` — Atributos (6x 4t6dl1)\n"
-                "`t!d init +3` — Iniciativa (t20+mod)\n"
-                "`t!d coin` — Cara ou coroa\n"
-                "`t!d t%` — Percentual (t100)\n\n"
-                "**Macros**:\n"
-                "`t!d macro add <nome> <dado>` — Criar atalho (ex: `add espada 1t20+5`)\n"
-                "`t!d macro list` — Ver suas macros\n\n"
-                "Criticos em **negrito**, descartados ~~riscados~~"
-            ))
+            await ctx.send(embed=_embed(_DICE_HELP_TEXT))
             return
         _touch_activity(ctx.guild.id)
         
         low = expression.lower().strip()
         
-        # Macros
         if low.startswith("macro add "):
             parts = expression.split(" ", 2)
             if len(parts) == 3:
                 name_expr = parts[2].strip().split(" ", 1)
                 if len(name_expr) == 2:
-                    name = name_expr[0]
-                    expr = name_expr[1]
-                    _set_dice_macro(ctx.author.id, name, expr)
-                    await ctx.send(embed=_embed(f"✅ Macro **{name}** salva como `{expr}`."))
+                    name, expr = name_expr[0], name_expr[1]
+                    ok, err = _set_dice_macro(ctx.author.id, name, expr)
+                    if ok:
+                        await ctx.send(embed=_embed(f"✅ Macro **{name.lower()}** salva como `{expr}`."))
+                    else:
+                        await ctx.send(embed=_embed(f"⚠️ {err}"))
                     return
             await ctx.send(embed=_embed("⚠️ Uso correto: `t!d macro add <nome> <fórmula>`"))
             return
@@ -5894,17 +6265,25 @@ def register_voice(bot: commands.Bot) -> None:
             low = expression.lower()
 
         text, crits, fumbles = _roll_dice(expression)
-        desc = text
-        if crits > 0:
-            desc = f"🟩 **Críticos: {crits}**\n\n{desc}"
-        elif fumbles > 0:
-            desc = f"🟥 **Falhas Críticas: {fumbles}**\n\n{desc}"
-            
-        em = _build_dice_embed(desc, crits, fumbles)
+        if not _dice_roll_ok(text):
+            await ctx.send(embed=_embed(text))
+            return
+        desc, total_crits, total_fumbles = _format_dice_description([(text, crits, fumbles)])
+        roller = ctx.author.display_name
+        rolls_info = [(expression, "")]
+        em = _build_dice_embed(
+            desc, total_crits, total_fumbles,
+            roller=roller, rolls_info=rolls_info,
+        )
         try:
-            await ctx.reply(embed=em, view=DiceRerollView([(expression, "")]), mention_author=False)
-        except Exception:
-            pass
+            await ctx.reply(
+                embed=em,
+                view=DiceRerollView(rolls_info),
+                mention_author=False,
+            )
+        except discord.HTTPException as e:
+            log.warning("Falha ao enviar rolagem t!d: %s", e)
+            await ctx.send(embed=_embed("⚠️ Não consegui enviar a rolagem. Verifique minhas permissões no canal."))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -5959,7 +6338,7 @@ def register_voice(bot: commands.Bot) -> None:
         dur = session.current_duration
         if dur > 0 and target_sec >= dur:
             dm, ds = divmod(int(dur), 60)
-            await ctx.send(f"⚠️ A música só tem **{dm}:{ds:02d}** de duração. Escolha um tempo menor.")
+            await ctx.send(embed=_embed(f"⚠️ A música só tem **{dm}:{ds:02d}** de duração. Escolha um tempo menor."))
             return
         if _is_wavelink_player(vc):
             # Lavalink: seek nativo
@@ -6023,13 +6402,13 @@ def register_voice(bot: commands.Bot) -> None:
         if not api_key:
             await ctx.send(embed=_embed("⚠️ Chave da API não configurada."))
             return
-        async with ctx.typing():
-            summary = await _summarize_url(url, api_key)
+        status = await ctx.reply(embed=_embed("📄 Lendo o link..."), mention_author=False)
+        summary = await _summarize_url(url, api_key)
         # Verificar conteúdo bloqueado na resposta
         if _contains_blocked_content(summary):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            await status.edit(embed=_embed(_BLOCKED_REPLY))
             return
-        await ctx.reply(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
+        await status.edit(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
         # Salvar no contexto do usuário para referência futura em t!c
         _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
 
@@ -6297,6 +6676,7 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
         """Reconecta automaticamente aos canais de voz apos restart."""
+        bot.add_view(DiceRerollView())
         await asyncio.sleep(4)  # aguarda guilds carregarem completamente
 
         # Conectar ao Lavalink só se explicitamente habilitado (LAVALINK_ENABLED=1).
@@ -6434,7 +6814,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!pa` / `t!pause` — Pausar\n"
             "`t!re` / `t!resume` — Retomar\n"
             "`t!s` / `t!skip` — Pular faixa\n"
-            "`t!lo` / `t!loop` — Loop on/off\n"
+            "`t!l` / `t!loop` — Loop on/off\n"
             "`t!sh` / `t!shuffle` — Embaralhar fila"
         ), inline=False)
         em.add_field(name="🎵 Musica (cont.)", value=(
@@ -6443,7 +6823,6 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!rp` / `t!replay` — Repetir do inicio\n"
             "`t!ff` / `t!seek` — Pular tempo (`+30`, `-15`, `1:30`)\n"
             "`t!np` / `t!nowplaying` — Tocando agora\n"
-            "`t!q` / `t!queue` — Ver fila\n"
             "`t!hi` / `t!history` — Historico\n"
             "`t!ap` / `t!autoplay` — Autoplay\n"
             "`t!ly` / `t!lyrics` — Letra da musica\n"
@@ -6455,13 +6834,11 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=True)
         em.add_field(name="🎲 Dados / RPG", value=(
             "**Sem prefixo** — digite direto:\n"
-            "`t20`, `4t6`, `2t20kh1+5` — Rolagens de dados\n"
-            "`4t6 ataque` — Rolagem com um nome\n"
-            "`[t20+5]` — Rolar no meio de uma frase\n"
-            "`c50+50` — Calculadora\n"
-            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`\n"
-            "**Macros**: `t!d macro add <nome> <dado>` · `t!d macro list`\n"
-            "Criticos em **negrito**, descartados ~~riscados~~"
+            "`t20`, `4t6`, `2t20kh1+5`, `3#t20`, `4t6!`, `5t10>=7`, `tf`\n"
+            "`4t6 ataque` — Label · `[t20+5]` — Inline · `c50+50` — Calc\n"
+            "**Atalhos** (`t!d`): `adv`, `dis`, `stats`, `init +3`, `coin`, `t%`\n"
+            "**Macros**: `t!d macro add|list|remove` (máx. 20)\n"
+            "Críticos **negrito**, descartados ~~riscados~~ · botão 🔄 Reroll"
         ), inline=False)
         em.add_field(name="🔔 Alerts", value=(
             "`t!alert <product>` — Price alert via DM\n"
@@ -6477,7 +6854,7 @@ def register_voice(bot: commands.Bot) -> None:
             "«Tiffany, avanca/volta `[N]` segundos» — Seek\n"
             "«Tiffany, `[pergunta]`» — IA pausa a musica e responde"
         ), inline=False)
-        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/status` · `/stats`", inline=False)
+        em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/stats` · `/status` *(admin)*", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
 
@@ -6485,27 +6862,31 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.tree.command(name="queue", description="Mostra a fila de músicas")
     async def slash_queue(interaction: discord.Interaction):
         if not interaction.guild:
-            await interaction.response.send_message("⚠️ Use em um servidor.", ephemeral=True)
+            await _slash_reply(interaction, "⚠️ Use em um servidor.")
             return
         session = _sessions.get(interaction.guild.id)
         vc = interaction.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await interaction.response.send_message("⚠️ Não estou em nenhum canal de voz.", ephemeral=True)
+            await _slash_reply(interaction, "⚠️ Não estou em nenhum canal de voz.\nUse `t!p` para eu entrar na call.")
             return
-        lines = []
-        if session.current_song:
-            lines.append(f"▶️  **Tocando agora:**  {session.current_song[:80]}")
-        if session.queue_display:
-            lines.append("")
-            _QUEUE_DISPLAY_LIMIT = 20
-            for i, name in enumerate(session.queue_display[:_QUEUE_DISPLAY_LIMIT], start=1):
-                lines.append(f"`{i}.` {name[:80]}")
-            if len(session.queue_display) > _QUEUE_DISPLAY_LIMIT:
-                lines.append(f"*... e mais {len(session.queue_display) - _QUEUE_DISPLAY_LIMIT} músicas*")
-        if not lines:
-            await interaction.response.send_message("📭 Fila vazia.", ephemeral=True)
+        q_em = _format_queue_embed(session)
+        if not q_em:
+            await _slash_reply(interaction, "📭 Fila vazia.\nUse `t!p` para adicionar músicas.")
             return
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await _slash_reply(interaction, q_em)
+
+    @bot.tree.command(name="status", description="Status da sessão de música na call (admin)")
+    @app_commands.default_permissions(administrator=True)
+    async def slash_status(interaction: discord.Interaction):
+        if not interaction.guild:
+            await _slash_reply(interaction, "⚠️ Use em um servidor.")
+            return
+        if isinstance(interaction.user, discord.Member) and not interaction.user.guild_permissions.administrator:
+            await _slash_reply(interaction, "⚠️ Apenas **administradores** podem usar `/status`.")
+            return
+        session = _sessions.get(interaction.guild.id)
+        vc = interaction.guild.voice_client
+        await _slash_reply(interaction, _format_status_embed(session, vc))
 
     @bot.tree.command(name="stats", description="Estatísticas da Tiffany")
     async def slash_stats(interaction: discord.Interaction):
@@ -6570,9 +6951,18 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             track = payload.track
             session.current_song = track.title or "Desconhecido"
+            uri = getattr(track, "uri", "") or ""
+            if uri:
+                session.current_query = uri
             session.current_duration = (track.length or 0) / 1000.0
             session.song_start_time = time.monotonic()
             log.info("Lavalink tocando: %s (%.0fs)", track.title, session.current_duration)
+            src = _track_source_label(uri) if uri else "🎵"
+            asyncio.create_task(_notify(
+                bot,
+                session.text_channel_id,
+                f"▶️  **{src}** — **Tocando agora:**  {(track.title or 'Desconhecido')[:100]}",
+            ))
 
         @bot.listen("on_wavelink_track_end")
         async def _on_track_end(payload: wavelink.TrackEndEventPayload) -> None:
@@ -6603,6 +6993,9 @@ def register_voice(bot: commands.Bot) -> None:
             if not player.queue.is_empty:
                 next_track = player.queue.get()
                 session.current_song = next_track.title or "Desconhecido"
+                next_uri = getattr(next_track, "uri", "") or ""
+                if next_uri:
+                    session.current_query = next_uri
                 session.current_duration = (next_track.length or 0) / 1000.0
                 session.song_start_time = time.monotonic()
                 session.history.append(session.current_song)

@@ -5,6 +5,7 @@ services:
     build: .
     container_name: tiffany_bot
     restart: unless-stopped
+    network_mode: "host"
     env_file:
       - .env
     volumes:

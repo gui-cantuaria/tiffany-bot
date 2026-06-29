@@ -109,9 +109,9 @@ if os.getenv("VOICE_ENABLED", "1").strip() == "1":
 intents.message_content = True
 # Comandos de música: não fazer reply (resposta já é óbvia via embed rosa)
 _MUSIC_CMDS = frozenset({
-    "p", "play", "s", "skip", "np", "nowplaying", "q", "queue",
+    "p", "play", "s", "skip", "np", "nowplaying",
     "247", "nonstop", "pl", "playlist", "r", "random",
-    "lo", "loop", "pa", "pause", "re", "resume", "cl", "clear",
+    "l", "loop", "lo", "pa", "pause", "re", "resume", "cl", "clear",
     "sh", "shuffle", "rp", "replay", "hi", "history",
     "ap", "autoplay", "ly", "lyrics", "ff", "seek", "su", "summary",
 })
@@ -2152,11 +2152,11 @@ async def _verificar_feeds_inner():
 
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "loop", "play", "chat", "seek", "nonstop", "queue",
+    "loop", "play", "chat", "seek", "nonstop",
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
     "alerta", "alert", "monitor",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "lo",
-    "ch", "247", "q",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "l",
+    "ch", "247",
     "s", "c", "p", "r", "d",
 )
 
