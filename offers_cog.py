@@ -275,6 +275,41 @@ def _deal_hash(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
+def _listing_key(url: str) -> str:
+    """ID estável do anúncio na loja (MLB…, ASIN…) — dedup mesmo produto, URL Promobit diferente."""
+    if not url:
+        return ""
+    u = url.lower().split("?")[0].split("#")[0]
+    m = re.search(r"mercadolivre\.com\.br/(?:[^/]+/)*p/(mlb\d+)", u)
+    if m:
+        return f"ml:{m.group(1)}"
+    m = re.search(r"mercadolivre\.com\.br/(mlb\d+)", u)
+    if m:
+        return f"ml:{m.group(1)}"
+    m = re.search(r"amazon\.[^/]+/(?:.*/)?(?:dp|gp/product)/([a-z0-9]{10})", u)
+    if m:
+        return f"amz:{m.group(1)}"
+    m = re.search(r"shopee\.com\.br/[^?#]*-i\.(\d+\.\d+)", u)
+    if m:
+        return f"shopee:{m.group(1)}"
+    try:
+        p = urlparse(u)
+        path = re.sub(r"/+$", "", p.path or "")
+        if p.netloc and len(path) > 8:
+            return f"{p.netloc}{path}"[:120]
+    except Exception:
+        pass
+    return ""
+
+
+def _deal_listing_key(deal: dict) -> str:
+    for raw in (deal.get("real_store_url"), deal.get("product_url"), deal.get("url")):
+        key = _listing_key(raw or "")
+        if key:
+            return key
+    return ""
+
+
 def _is_duplicate(history: dict, url: str) -> bool:
     h = _deal_hash(url)
     return h in history.get("deals", {})
@@ -290,7 +325,16 @@ def _is_title_key_in_history(history: dict, key: str) -> bool:
     return False
 
 
-def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "") -> None:
+def _is_listing_in_history(history: dict, listing: str) -> bool:
+    if not listing:
+        return False
+    for v in history.get("deals", {}).values():
+        if isinstance(v, dict) and v.get("listing") == listing:
+            return True
+    return False
+
+
+def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listing: str = "") -> None:
     h = _deal_hash(url)
     entry = {
         "url": url,
@@ -301,6 +345,8 @@ def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "") -> No
     key = orig_tkey or _title_key(title)
     if key:
         entry["tkey"] = key
+    if listing:
+        entry["listing"] = listing
     history.setdefault("deals", {})[h] = entry
     _save_history(history)
 
@@ -338,20 +384,20 @@ _MODEL_RE = re.compile(
 
 def _title_key(title: str) -> str:
     """Gera chave de produto para dedup intraday.
-    Remove palavras genéricas de categoria, mantém marca + modelo."""
+    Prioriza marca + SKU/modelo para pegar o mesmo item com títulos diferentes."""
     t = unicodedata.normalize("NFD", title.lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     t = re.sub(r"[^\w\s\-]", " ", t)
-    
-    # Extrair códigos de modelo (SKU)
+
     models = sorted(set(m.lower() for m in _MODEL_RE.findall(title)))
-    
-    # Palavras significativas (sem genéricas)
     words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
-    
-    # Combinar: modelos + primeiras palavras significativas, ORDENADOS
-    tokens = sorted(set(models + words[:4]))[:5]
-    return " ".join(tokens)
+    brand = words[0] if words else ""
+
+    if models:
+        parts = sorted(set(([brand] if brand else []) + models))
+        return " ".join(parts)
+
+    return " ".join(sorted(set(words[:5])))
 
 def _sanitize_title(title: str) -> str:
     """Remove entidades HTML e escapes do título."""
@@ -1584,15 +1630,20 @@ async def _run_deals_cycle_inner() -> None:
     # Aplicar filtros
     approved = []
     rejeicoes: dict[str, int] = {}
+    _seen_listings: set[str] = set()
     for deal in enriched:
         passed, reason = _passes_filters(deal)
-        if passed:
-            approved.append(deal)
-        else:
-            # Agrupa motivos trocando números por "N" (ex: "estrelas 3.8 < 4.2" → "estrelas N < N")
+        if not passed:
             bucket = re.sub(r"\d+([.,]\d+)?", "N", reason)
             rejeicoes[bucket] = rejeicoes.get(bucket, 0) + 1
-            log.debug(f"  Rejeitada: {deal['title'][:50]} — {reason}")
+            continue
+        listing = _deal_listing_key(deal)
+        if listing and (listing in _seen_listings or _is_listing_in_history(history, listing)):
+            log.debug(f"  Dedup anúncio loja (7d): {deal['title'][:60]}")
+            continue
+        if listing:
+            _seen_listings.add(listing)
+        approved.append(deal)
 
     log.info(f"Após filtros: {len(approved)} aprovadas")
     # Diagnóstico: resumo dos motivos de rejeição (visível mesmo com LOG_LEVEL=INFO)
@@ -1662,20 +1713,12 @@ async def _run_deals_cycle_inner() -> None:
             # Marcar como postado DEPOIS de enviar com sucesso
             # Usar title key original (pré-enriquecimento) para dedup cross-ciclo consistente
             _orig_tkey = deal.get("_orig_tkey") or _title_key(deal["title"])
-            _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey)
+            _listing = _deal_listing_key(deal)
+            _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey, listing=_listing)
             _posted_title_keys.add(_orig_tkey)
 
             # Notificar usuários com alerta de preço matching
             await _notify_price_alerts(deal, msg)
-
-            try:
-                thread_name = f"🛒 {deal.get('store', 'Oferta')}: {deal['title'][:70]}"[:100]
-                await msg.create_thread(
-                    name=thread_name,
-                    auto_archive_duration=1440,
-                )
-            except Exception as e:
-                log.warning(f"Erro ao criar thread: {e}")
 
             posted += 1
             log.info(f"  🛒 Postada: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
@@ -1696,6 +1739,9 @@ async def _run_deals_cycle_inner() -> None:
 # =========================
 # COG WRAPPER
 # =========================
+
+_cog_loaded = False
+
 
 class OffersCog(commands.Cog):
     """Cog de ofertas — publica promoções automaticamente."""
@@ -1747,4 +1793,9 @@ class OffersCog(commands.Cog):
         log.info("🔌 [Offers] Sessão HTTP fechada.")
 
 async def setup(bot: commands.Bot):
+    global _cog_loaded
+    if _cog_loaded:
+        log.warning("offers_cog já carregado — ignorando extensão duplicada.")
+        return
+    _cog_loaded = True
     await bot.add_cog(OffersCog(bot))
