@@ -797,6 +797,70 @@ _USER_RL_BLOCK_SEC = 40.0 # Tempo de bloqueio
 
 _user_rl_data: dict[int, dict] = {}
 
+# --- Rate limit por comando (anti-spam, por usuário) ---
+_CMD_RL_DEFAULT = 1.5
+_CMD_COOLDOWN_MAP: dict[str, float] = {
+    # 1s — consulta rápida
+    "np": 1.0, "nowplaying": 1.0,
+    "s": 1.0, "skip": 1.0,
+    "hi": 1.0, "history": 1.0,
+    "d": 1.0, "roll": 1.0, "dice": 1.0,
+    "help": 1.0, "queue": 1.0, "stats": 1.0,
+    # 1.5s — controle leve
+    "pa": 1.5, "pause": 1.5, "re": 1.5, "resume": 1.5,
+    "l": 1.5, "loop": 1.5, "lo": 1.5,
+    "cl": 1.5, "clear": 1.5,
+    "247": 1.5, "nonstop": 1.5,
+    "ap": 1.5, "autoplay": 1.5,
+    "sh": 1.5, "shuffle": 1.5,
+    "pl": 1.5, "playlist": 1.5,
+    # 2s — rede / IA / fila
+    "p": 2.0, "play": 2.0,
+    "r": 2.0, "random": 2.0,
+    "ff": 2.0, "seek": 2.0,
+    "rp": 2.0, "replay": 2.0,
+    "ly": 2.0, "lyrics": 2.0,
+    "c": 2.0, "chat": 2.0,
+    "su": 2.0, "summary": 2.0,
+    "alert": 2.0, "alerta": 2.0, "monitor": 2.0,
+    "player-status": 2.0,
+    # 5s — gravação de áudio
+    "cp": 5.0, "clip": 5.0,
+}
+_cmd_rl_last: dict[tuple[int, str], float] = {}
+
+
+class TiffanyRateLimited(commands.CommandError):
+    """Comando usado antes do intervalo mínimo."""
+
+    def __init__(self, retry_after: float, cmd: str, *, slash: bool = False):
+        self.retry_after = retry_after
+        self.cmd = cmd
+        self.slash = slash
+        super().__init__()
+
+
+def _cmd_rate_sec(cmd_name: str) -> float:
+    return _CMD_COOLDOWN_MAP.get(cmd_name, _CMD_RL_DEFAULT)
+
+
+def _check_cmd_rate_limit(user_id: int, cmd_name: str) -> tuple[bool, float]:
+    """Retorna (permitido, segundos_restantes)."""
+    sec = _cmd_rate_sec(cmd_name)
+    key = (user_id, cmd_name)
+    now = time.monotonic()
+    last = _cmd_rl_last.get(key, 0.0)
+    wait = sec - (now - last)
+    if wait > 0:
+        return False, wait
+    _cmd_rl_last[key] = now
+    if len(_cmd_rl_last) > 800:
+        cutoff = now - 120
+        for k, t in list(_cmd_rl_last.items()):
+            if t < cutoff:
+                _cmd_rl_last.pop(k, None)
+    return True, 0.0
+
 
 def _check_cooldown(user_id: int) -> tuple[bool, int]:
     """Retorna (permitido, segundos_restantes). Usa janela deslizante e bloqueio de abusos."""
@@ -888,13 +952,13 @@ async def _ai_interpret_song(query: str) -> Optional[str]:
                     {
                         "role": "system",
                         "content": (
-                            "O usuario quer buscar uma musica. Pode ter escrito errado, abreviado, ou misturado palavras-chave. "
+                            "O usuário quer buscar uma música. Pode ter escrito errado, abreviado ou misturado palavras-chave. "
                             "Interprete e responda APENAS com o nome correto para buscar no YouTube, nada mais. "
-                            "Formato: Nome da Musica - Artista. "
+                            "Formato: Nome da Música - Artista. "
                             "Exemplos: 'anny frieren blue' -> 'Bye-Bye-Bye - Yorushika Frieren', "
                             "'eminem lose' -> 'Lose Yourself - Eminem', "
                             "'op naruto blue' -> 'Blue Bird - Ikimono-gakari'. "
-                            "Se nao conseguir identificar, responda apenas: ?"
+                            "Se não conseguir identificar, responda apenas: ?"
                         ),
                     },
                     {"role": "user", "content": query},
@@ -984,11 +1048,11 @@ _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "play
 
 
 _ANTISPAM_MSGS = [
-    "{mention} Otima estrategia para ser ignorado por todos. Mensagem removida.",
-    "{mention} Marcar todo mundo e coisa de quem nao tem mais nada a perder. Mensagem removida.",
-    "{mention} Nao aqui. Mensagem removida.",
+    "{mention} Ótima estratégia para ser ignorado por todos. Mensagem removida.",
+    "{mention} Marcar todo mundo é coisa de quem não tem mais nada a perder. Mensagem removida.",
+    "{mention} Não aqui. Mensagem removida.",
     "{mention} Que ousadia. Apaguei antes que o estrago fosse maior.",
-    "{mention} Interessante. A proxima eu nem apago, so bano. Mensagem removida.",
+    "{mention} Interessante. Na próxima eu nem apago — só bano. Mensagem removida.",
 ]
 
 
@@ -998,11 +1062,11 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
     try:
         import aiohttp as _aiohttp
     except ImportError:
-        return "aiohttp nao instalado."
+        return "aiohttp não instalado."
     try:
         from bs4 import BeautifulSoup
     except ImportError:
-        return "beautifulsoup4 nao instalado. Rode: pip install beautifulsoup4"
+        return "beautifulsoup4 não instalado. Rode: pip install beautifulsoup4"
 
     headers = {
         "User-Agent": (
@@ -1016,10 +1080,10 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
         async with _aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=_aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:
-                    return f"Nao consegui acessar a pagina (HTTP {resp.status})."
+                    return f"Não consegui acessar a página (HTTP {resp.status})."
                 html = await resp.text(errors="replace")
     except Exception as e:
-        return f"Erro ao buscar a pagina: {e}"
+        return f"Erro ao buscar a página: {e}"
 
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
@@ -1042,7 +1106,7 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
     try:
         client = _get_openrouter_client()
         if client is None:
-            return "Chave da API nao configurada."
+            return "Chave da API não configurada."
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
                 model="google/gemini-3.1-flash-lite",
@@ -1050,10 +1114,10 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
                     {
                         "role": "system",
                         "content": (
-                            "Voce e um assistente que resume paginas web. "
-                            "Escreva um resumo objetivo em portugues do Brasil, em um unico paragrafo denso (4 a 6 frases). "
-                            "Explique do que se trata o conteudo, os pontos principais e a conclusao ou impacto. "
-                            "Nao use bullet points nem emojis. Nao invente informacoes."
+                            "Você é um assistente que resume páginas web. "
+                            "Escreva um resumo objetivo em português do Brasil, em um único parágrafo denso (4 a 6 frases). "
+                            "Explique do que se trata o conteúdo, os pontos principais e a conclusão ou impacto. "
+                            "Não use bullet points nem emojis. Não invente informações."
                         ),
                     },
                     {"role": "user", "content": f"Resuma este conteudo:\n\n{text}"},
@@ -2531,7 +2595,7 @@ TIFFANY_PINK = 0xFF69B4  # cor rosa da logo
 
 # Registro de comandos: (nome curto, aliases, uso) — usado em sugestões de erro e contexto da IA
 _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
-    ("p", ["play"], "t!p / t!play <musica ou URL>"),
+    ("p", ["play"], "t!p / t!play <música ou URL>"),
     ("s", ["skip"], "t!s / t!skip — pular faixa"),
     ("pa", ["pause"], "t!pa / t!pause — pausar"),
     ("re", ["resume"], "t!re / t!resume — retomar"),
@@ -2559,9 +2623,9 @@ _HELP_COMMANDS_TEXT = (
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
     + "\n- /help, /queue, /stats (slash) · /player-status (admin)\n"
     "- Dados SEM prefixo: digite direto no chat (ex: d20, 4d6, 2d20kh1, 3#d20, 4d6 for glory, [d20+5 ataque], c50+50)\n"
-    "- Voz na call: «Tiffany, toca [musica]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatoria/autoplay/24-7», «Tiffany, o que esta tocando», «Tiffany, avanca/volta 30 segundos», «Tiffany, [pergunta]» (a musica pausa enquanto responde)\n"
-    "A Tiffany entra na call automaticamente quando voce pede uma musica (t!p). Sai automaticamente apos inatividade ou com t!cl.\n"
-    "Se o usuario perguntar como usar o bot, cite o comando exato (ex: t!p para tocar)."
+    "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatória/autoplay/24-7», «Tiffany, o que está tocando», «Tiffany, avança/volta 30 segundos», «Tiffany, [pergunta]» (a música pausa enquanto responde)\n"
+    "A Tiffany entra na call automaticamente quando você pede uma música (t!p). Sai automaticamente após inatividade ou com t!cl.\n"
+    "Se o usuário perguntar como usar o bot, cite o comando exato (ex: t!p para tocar)."
 )
 
 
@@ -2748,7 +2812,7 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
         return "Comandos da Tiffany usam o prefixo **`t!`** (ex: `t!p`, `t!c`, `t!s`). Veja tudo em `/help`."
     w = (wrong or "").lower()
     if not w:
-        return "Comando nao reconhecido. Prefixo: **`t!`** -- ex: `t!p`, `t!c`. Lista completa: `/help`."
+        return "Comando não reconhecido. Prefixo: **`t!`** — ex: `t!p`, `t!c`. Lista completa: `/help`."
     if w in {"q", "queue", "fila", "queu", "que", "qeueu", "qeue"}:
         return (
             "Para ver a fila, use **`/queue`** (slash).\n"
@@ -2757,15 +2821,15 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
     # Mapa de typos comuns -> comando correto
     if w in _COMMON_TYPOS:
         target = _COMMON_TYPOS[w]
-        return f"Comando **`t!{w}`** nao existe. Voce quis dizer **`t!{target}`**?\n{_usage_for_cmd(target)}"
+        return f"Comando **`t!{w}`** não existe. Você quis dizer **`t!{target}`**?\n{_usage_for_cmd(target)}"
     # Fuzzy matching com cutoff mais baixo para pegar mais variações
     matches = difflib.get_close_matches(w, _all_cmd_tokens(), n=1, cutoff=0.45)
     if matches:
         m = matches[0]
         for primary, aliases, _ in _COMMAND_REGISTRY:
             if m == primary or m in aliases:
-                return f"Comando **`t!{w}`** nao existe. Voce quis dizer **`t!{primary}`**?\n{_usage_for_cmd(primary)}"
-    return f"Comando **`t!{w}`** nao existe. Use **`/help`** ou veja exemplos: `t!p`, `t!c`, `t!s`, `t!d`."
+                return f"Comando **`t!{w}`** não existe. Você quis dizer **`t!{primary}`**?\n{_usage_for_cmd(primary)}"
+    return f"Comando **`t!{w}`** não existe. Use **`/help`** ou veja exemplos: `t!p`, `t!c`, `t!s`, `t!d`."
 
 
 def _embed_music_added(
@@ -4370,10 +4434,8 @@ def _try_parse_dice_msg(content: str) -> tuple[str, str] | None:
 _MACROS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dice_macros.json")
 _DICE_MACROS_MAX = 20
 _DICE_MACRO_NAME_MAX = 30
-_DICE_COOLDOWN_SEC = 1.5
 _DICE_REROLL_PREFIX = "reroll:"
 _dice_macros: dict[str, dict[str, str]] = {}
-_dice_last_roll: dict[int, float] = {}
 
 # @rollem-next (Discord app id 840409146738475028)
 _ROLLEM_NEXT_BOT_ID = 840409146738475028
@@ -4462,16 +4524,6 @@ def _dice_allowed_channels() -> Optional[set[int]]:
 def _dice_channel_ok(channel_id: int) -> bool:
     allowed = _dice_allowed_channels()
     return allowed is None or channel_id in allowed
-
-
-def _dice_cooldown_ok(user_id: int) -> tuple[bool, float]:
-    now = time.monotonic()
-    last = _dice_last_roll.get(user_id, 0.0)
-    wait = _DICE_COOLDOWN_SEC - (now - last)
-    if wait > 0:
-        return False, wait
-    _dice_last_roll[user_id] = now
-    return True, 0.0
 
 
 def _load_dice_macros():
@@ -4672,6 +4724,30 @@ def register_voice(bot: commands.Bot) -> None:
     _stats = _load_stats()
     _cleanup_stale_tempfiles()
 
+    @bot.check
+    async def _global_cmd_rate_limit(ctx: commands.Context) -> bool:
+        if ctx.author.bot or not ctx.command:
+            return True
+        ok, wait = _check_cmd_rate_limit(ctx.author.id, ctx.command.name)
+        if not ok:
+            raise TiffanyRateLimited(wait, ctx.command.name)
+        return True
+
+    @bot.tree.interaction_check
+    async def _slash_cmd_rate_limit(interaction: discord.Interaction) -> bool:
+        if interaction.user.bot or not interaction.command:
+            return True
+        name = interaction.command.name
+        ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
+        if not ok:
+            em = _embed(f"⏳ Calma! Espera **{wait:.0f}s** antes de usar `/{name}` de novo.")
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=em, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=em, ephemeral=True)
+            return False
+        return True
+
     from random_songs import RANDOM_SONGS as _RANDOM_SONGS
     try:
         from random_songs import RANDOM_DISCOVERY as _RANDOM_DISCOVERY
@@ -4715,7 +4791,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not roll_results:
             return
 
-        allowed, wait = _dice_cooldown_ok(message.author.id)
+        allowed, wait = _check_cmd_rate_limit(message.author.id, "d")
         if not allowed:
             return
 
@@ -4779,7 +4855,7 @@ def register_voice(bot: commands.Bot) -> None:
                     "PERSONALITY:\n"
                     "- Smart, direct, slightly witty when appropriate, always kind and respectful.\n"
                     "- Match the user's energy: if they joke, joke back; if they're serious, be precise.\n"
-                    "- Call users by name when possible. Adapt language to the user's — if they write in Portuguese, reply in Portuguese. "
+                    "- Call users by name when possible. Adapt language to the user's — if they write in Portuguese, reply in Portuguese (BR) with correct spelling and accents. "
                     "If they write in English, reply in English. Default: Portuguese (BR).\n"
                     "- You have memory: you remember past conversations with each user. Use this for coherent, personalized responses.\n"
                     "- ALWAYS finish your response completely — never cut mid-sentence or mid-list.\n\n"
@@ -5209,7 +5285,7 @@ def register_voice(bot: commands.Bot) -> None:
             prox = session.queue_display[0] if session.queue_display else None
             await _do_skip()
             if prox:
-                await ctx.send(embed=_embed(f"⏭️ Pulado. Proxima: **{prox[:80]}**"))
+                await ctx.send(embed=_embed(f"⏭️ Pulado. Próxima: **{prox[:80]}**"))
             else:
                 await ctx.send(embed=_embed("⏭️ Pulado. Fila vazia."))
         else:
@@ -5221,7 +5297,7 @@ def register_voice(bot: commands.Bot) -> None:
                 prox = session.queue_display[0] if session.queue_display else None
                 await _do_skip()
                 if prox:
-                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Proxima: **{prox[:80]}**"))
+                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Próxima: **{prox[:80]}**"))
                 else:
                     await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Fila vazia."))
             else:
@@ -5276,7 +5352,7 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Toque uma musica primeiro com `t!p` para eu entrar na call."))
+            await ctx.send(embed=_embed("⚠️ Toque uma música primeiro com `t!p` para eu entrar na call."))
             return
         session.stay_24_7 = not session.stay_24_7
         session._queue_empty_since = 0.0
@@ -5302,7 +5378,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             lines = [f"**Playlists salvas:**"]
             for pname, songs in guild_pls.items():
-                lines.append(f"`{pname}` — {len(songs)} musica(s)")
+                lines.append(f"`{pname}` — {len(songs)} música(s)")
             await ctx.send(embed=_embed("\n".join(lines)))
             return
 
@@ -5335,7 +5411,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             guild_pls[name] = songs
             _save_playlists(data)
-            await ctx.send(embed=_embed(f"💾 Playlist **{name}** salva com {len(songs)} musica(s)."))
+            await ctx.send(embed=_embed(f"💾 Playlist **{name}** salva com {len(songs)} música(s)."))
 
         elif action == "load":
             songs = guild_pls.get(name)
@@ -5421,7 +5497,6 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Ação inválida. Use: `save`, `load`, `list` ou `del`."))
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória (sem repetir na fila/sessão): t!r")
-    @commands.cooldown(1, 3, commands.BucketType.user)
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not _voice_enabled():
             return
@@ -5474,7 +5549,6 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila{tag}: **{display}**"))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t!p / t!play <nome ou URL>")
-    @commands.cooldown(1, 3, commands.BucketType.user)
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
@@ -5917,7 +5991,7 @@ def register_voice(bot: commands.Bot) -> None:
         )
         await thinking.edit(embed=_embed(f"💬 {answer}"))
 
-    @bot.command(name="l", aliases=["loop", "lo"], help="Loop da musica atual (liga/desliga): t!l / t!loop")
+    @bot.command(name="l", aliases=["loop", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop")
     async def cmd_loop(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -5992,7 +6066,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed("▶️ Voltando de onde parou!"))
         await _try_react_ok(ctx.message)
 
-    @bot.command(name="cl", aliases=["clear"], help="Para musica, limpa fila e sai da call: t!cl / t!clear")
+    @bot.command(name="cl", aliases=["clear"], help="Para música, limpa fila e sai da call: t!cl / t!clear")
     async def cmd_clear(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -6001,7 +6075,7 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(gid)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Nao estou em nenhum canal de voz."))
+            await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
         # Esvazia a fila interna e o display
         if _is_wavelink_player(vc):
@@ -6481,7 +6555,6 @@ def register_voice(bot: commands.Bot) -> None:
     # ============================
 
     @bot.command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip")
-    @commands.cooldown(1, 10, commands.BucketType.user)
     async def cmd_clip(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -6549,7 +6622,13 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.listen("on_command_error")
     async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(embed=_embed(f"⏳ Calma! Espera {error.retry_after:.0f}s pra usar de novo."), delete_after=4)
+            await ctx.send(embed=_embed(f"⏳ Calma! Espera {error.retry_after:.0f}s para usar de novo."), delete_after=4)
+        elif isinstance(error, TiffanyRateLimited):
+            prefix = "/" if error.slash else "t!"
+            await ctx.send(
+                embed=_embed(f"⏳ Calma! Espera **{error.retry_after:.0f}s** antes de usar `{prefix}{error.cmd}` de novo."),
+                delete_after=4,
+            )
         elif isinstance(error, commands.MissingPermissions):
             await ctx.send(embed=_embed("⚠️ Você não tem permissão para usar este comando."), delete_after=5)
         elif isinstance(error, commands.NoPrivateMessage):
@@ -6872,23 +6951,23 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!c` / `t!chat` — Pergunta à IA (aceita imagens)\n"
             "`t!su` / `t!summary` — Resume um link"
         ), inline=False)
-        em.add_field(name="🎵 Musica", value=(
-            "`t!p` / `t!play` — Tocar musica ou URL (entra na call automatico)\n"
+        em.add_field(name="🎵 Música", value=(
+            "`t!p` / `t!play` — Tocar música ou URL (entra na call automaticamente)\n"
             "`t!pa` / `t!pause` — Pausar\n"
             "`t!re` / `t!resume` — Retomar\n"
             "`t!s` / `t!skip` — Pular faixa\n"
             "`t!l` / `t!loop` — Loop on/off\n"
             "`t!sh` / `t!shuffle` — Embaralhar fila"
         ), inline=False)
-        em.add_field(name="🎵 Musica (cont.)", value=(
+        em.add_field(name="🎵 Música (cont.)", value=(
             "`t!cl` / `t!clear` — Parar, limpar fila e sair da call\n"
-            "`t!r` / `t!random` — Aleatoria (sem repetir fila/sessao)\n"
-            "`t!rp` / `t!replay` — Repetir do inicio\n"
+            "`t!r` / `t!random` — Aleatória (sem repetir fila/sessão)\n"
+            "`t!rp` / `t!replay` — Repetir do início\n"
             "`t!ff` / `t!seek` — Pular tempo (`+30`, `-15`, `1:30`)\n"
             "`t!np` / `t!nowplaying` — Tocando agora\n"
-            "`t!hi` / `t!history` — Historico\n"
+            "`t!hi` / `t!history` — Histórico\n"
             "`t!ap` / `t!autoplay` — Autoplay\n"
-            "`t!ly` / `t!lyrics` — Letra da musica\n"
+            "`t!ly` / `t!lyrics` — Letra da música\n"
             "`t!247` / `t!nonstop` — Modo 24/7 na call"
         ), inline=False)
         em.add_field(name="🎬 Clip & 📂 Playlists", value=(
@@ -6909,13 +6988,13 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!alert remove <n>` — Remove alert"
         ), inline=True)
         em.add_field(name="🎙️ Voz na call", value=(
-            "«Tiffany, toca `[musica]`» — Adicionar a fila\n"
+            "«Tiffany, toca `[música]`» — Adicionar à fila\n"
             "«Tiffany, para / pula / pausa / continua» — Controle\n"
             "«Tiffany, limpa / shuffle / loop / replay» — Fila\n"
-            "«Tiffany, aleatoria / autoplay / 24/7» — Modos\n"
-            "«Tiffany, o que esta tocando / mostra a fila» — Info\n"
-            "«Tiffany, avanca/volta `[N]` segundos» — Seek\n"
-            "«Tiffany, `[pergunta]`» — IA pausa a musica e responde"
+            "«Tiffany, aleatória / autoplay / 24/7» — Modos\n"
+            "«Tiffany, o que está tocando / mostra a fila» — Info\n"
+            "«Tiffany, avança/volta `[N]` segundos» — Seek\n"
+            "«Tiffany, `[pergunta]`» — IA pausa a música e responde"
         ), inline=False)
         em.add_field(name="🔧 Slash", value="`/help` · `/queue` · `/stats` · `/player-status` *(admin)*", inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
