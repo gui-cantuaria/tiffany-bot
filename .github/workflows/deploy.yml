@@ -35,7 +35,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=20 \
+            -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \
             root@${{ secrets.VPS_HOST }} "bash /opt/tiffany-bot/scripts/deploy.sh"
