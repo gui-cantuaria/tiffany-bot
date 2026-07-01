@@ -132,6 +132,17 @@ def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
 
+async def _require_voice(ctx: commands.Context) -> bool:
+    """Return False and notify user when VOICE_ENABLED=0."""
+    if _voice_enabled():
+        return True
+    await ctx.send(embed=_embed(
+        "⚠️ Módulo de voz **desativado** (`VOICE_ENABLED=0` no `.env`).\n"
+        "Altere para `VOICE_ENABLED=1` e reinicie o bot."
+    ))
+    return False
+
+
 def _voice_auto_rejoin() -> bool:
     """Reconnect voice after restart/deploy. Off by default — avoids bot joining alone."""
     return os.getenv("VOICE_AUTO_REJOIN", "0").strip() == "1"
@@ -5303,7 +5314,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas")
     async def cmd_pular(ctx: commands.Context, *, args: str = ""):
-        if not _voice_enabled():
+        if not await _require_voice(ctx):
             return
         if not ctx.guild:
             return
@@ -5556,7 +5567,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória (sem repetir na fila/sessão): t!r")
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
-        if not _voice_enabled():
+        if not await _require_voice(ctx):
             return
         if not ctx.guild:
             return
@@ -5611,7 +5622,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not ctx.guild:
             return
-        if not _voice_enabled():
+        if not await _require_voice(ctx):
             return
         if not query or not query.strip():
             await ctx.send(embed=_embed("🎵 Use: `t!p <nome da música ou URL>`"))
@@ -7355,3 +7366,5 @@ def register_voice(bot: commands.Bot) -> None:
                                "📭 Fila encerrada! Adicione músicas com `t!p`.")
 
     log.info("Voice commands registered (/help, t!play, t!shuffle, t!roll, ...)")
+    if not _voice_enabled():
+        log.warning("VOICE_ENABLED=0 — music/voice commands will reject until .env is updated.")
