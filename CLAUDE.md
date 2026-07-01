@@ -47,7 +47,7 @@ systemd (tiffany-bot.service)
 ## Critical Rules
 
 ### Must-follow conventions
-- **Language:** All user-facing strings, AI prompts, and logs in Portuguese (BR)
+- **Language:** Source code (comments, docstrings, logs, internal prompts) in **English**. Only user-facing Discord output (embeds, command replies, help text, errors shown to users) in **Portuguese (BR)**. AI prompts may be English with an explicit “output in Brazilian Portuguese” clause where needed.
 - **Bot prefix:** `t!` (case-insensitive)
 - **AI model:** google/gemini-3.1-flash-lite (via OpenRouter) for ALL AI tasks — no fallback chains
 - **Embeds:** All music/voice messages use pink embeds (TIFFANY_PINK = 0xFF69B4) via `_embed()`

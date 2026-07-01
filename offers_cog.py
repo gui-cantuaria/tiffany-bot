@@ -21,16 +21,16 @@ from dotenv import load_dotenv
 import affiliate_config
 
 # =========================
-# CONFIGURAÇÕES
+# CONFIGURATION
 # =========================
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1512902840908124281"))
-ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))  # legado: marca em TODA oferta (0 = desligado)
-# Cargo marcado SÓ nas "ultra ofertas" (desconto alto). Default = cargo de ofertas do servidor.
+ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))  # legacy: ping on EVERY offer (0 = disabled)
+# Role ping ONLY on "ultra deals" (high discount). Default = server offers role.
 ID_CARGO_ULTRA = int(os.getenv("ID_CARGO_OFERTAS_ULTRA", "1386386059390357575"))
-DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "60"))  # % mínimo para ser "ultra oferta"
+DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "60"))  # minimum % to qualify as "ultra deal"
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
 HORA_INICIO = 8
@@ -38,46 +38,46 @@ HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
-SCAN_INTERVAL_MIN = 30  # ciclo de ofertas a cada 30 min
-POST_SPACING_SEC = 180  # 3 min entre posts
+SCAN_INTERVAL_MIN = 30  # deal cycle every 30 min
+POST_SPACING_SEC = 180  # 3 min between posts
 MAX_POSTS_POR_CICLO = 5
-DESCONTO_MINIMO = 15  # percentual mínimo
+DESCONTO_MINIMO = 15  # minimum discount percentage
 NOTA_MINIMA_ESTRELAS = 4.4
 VENDAS_MINIMAS = 30
-AVALIACOES_MINIMAS = 5  # mínimo de avaliações de usuários (mesmo campo que sales_count)
-# Promobit raramente fornece estrelas/vendas. Para não travar em 0 ofertas, aceita
-# oferta de loja confiável (whitelist) SEM métrica desde que o desconto seja bom.
-DESCONTO_SEM_METRICA = 25  # percentual mínimo quando não há estrelas nem vendas
+AVALIACOES_MINIMAS = 5  # minimum user reviews (same field as sales_count)
+# Promobit rarely provides stars/sales. To avoid zero offers, accept
+# whitelisted trusted stores WITHOUT metrics when discount is strong enough.
+DESCONTO_SEM_METRICA = 25  # minimum discount when no stars or sales data
 
 HISTORY_FILE = "offers_history.json"
 
 # --- Promobit ---
 PROMOBIT_BASE = "https://www.promobit.com.br"
 CATEGORIAS_PROMOBIT = [
-    # === Peças de PC (prioridade máxima) ===
+    # === PC parts (highest priority) ===
     "/promocoes/processador/s/",
     "/promocoes/memoria-ram/s/",
     "/promocoes/placa-mae/s/",
     "/promocoes/gabinete/s/",
-    # === Periféricos ===
+    # === Peripherals ===
     "/promocoes/monitor/s/",
     "/promocoes/teclado/s/",
     "/promocoes/mouse/s/",
     "/promocoes/headset/s/",
     "/promocoes/webcam/s/",
-    # === Hardware geral ===
+    # === General hardware ===
     "/promocoes/hardware-perifericos/s/",
     "/promocoes/pc-gamer/s/",
     "/promocoes/roteador-e-repetidor/s/",
-    # === Outros ===
+    # === Other ===
     "/promocoes/notebooks/s/",
     "/promocoes/notebook-gamer/s/",
-    # Removidos (404 no Promobit desde jun/2026):
+    # Removed (404 on Promobit since Jun/2026):
     # ssd, pasta-termica, mousepad, mesa-digitalizadora,
     # braco-articulado-para-monitor, televisao, tablet, celular
 ]
 
-# Whitelist completa (para quando todos os afiliados estiverem ativos)
+# Full whitelist (for when all affiliate programs are active)
 # LOJAS_WHITELIST_FULL = {
 #     "kabum", "kabum!",
 #     "terabyte", "terabyteshop",
@@ -90,9 +90,9 @@ CATEGORIAS_PROMOBIT = [
 #     "aliexpress",
 # }
 
-# Whitelist ativa: apenas lojas com link de afiliado configurado
-# Lojas com afiliado ativo: Terabyte/ShopInfo (Lomadee), Amazon, Mercado Livre, Shopee, AliExpress
-# Adicionar KaBuM quando Awin aprovar
+# Active whitelist: only stores with configured affiliate links
+# Active affiliates: Terabyte/ShopInfo (Lomadee), Amazon, Mercado Livre, Shopee, AliExpress
+# Add KaBuM when Awin approves
 LOJAS_WHITELIST = {
     "terabyte", "terabyteshop", "terabyte shop",
     "shopinfo", "shopinfo.com.br",
@@ -126,25 +126,25 @@ log.addHandler(_file_handler)
 # =========================
 _bot = None
 http_session: Optional[aiohttp.ClientSession] = None
-# Contador diário de menções ao cargo (máx 3 por dia)
+# Daily role mention counter (max 3 per day)
 _mention_count_ofertas: int = 0
 _mention_date_ofertas: str = ""
-# Dedup intraday: evita o mesmo produto aparecer várias vezes no dia com preços diferentes
+# Intraday dedup: same product at different prices should not repeat within the day
 _posted_title_keys: set = set()
 _posted_title_keys_date: str = ""
 
 # =========================
-# CORES E EMOJIS
+# COLORS AND EMOJIS
 # =========================
 TIFFANY_PINK = 0xFF69B4
-COR_OFERTA = TIFFANY_PINK          # cor padrão (loja sem cor de marca definida)
-COR_OFERTA_ALTA = TIFFANY_PINK     # mantido por compatibilidade
-# Cor da barra do embed pela faixa de desconto — sinaliza o quão boa é a oferta.
-# Quanto maior o desconto, mais "quente" a cor.
-COR_DESCONTO_ULTRA = 0xFF4500   # >= DESCONTO_ULTRA_OFERTA (padrão 40%): vermelho-fogo
-COR_DESCONTO_OTIMA = 0xFF8C00   # 30-39%: laranja
-COR_DESCONTO_BOA = 0xFFD700     # 20-29%: dourado
-# < 20% cai em COR_OFERTA (rosa Tiffany)
+COR_OFERTA = TIFFANY_PINK          # default color (store without brand color)
+COR_OFERTA_ALTA = TIFFANY_PINK     # kept for compatibility
+# Embed bar color by discount tier — signals how good the deal is.
+# Higher discount = "hotter" color.
+COR_DESCONTO_ULTRA = 0xFF4500   # >= DESCONTO_ULTRA_OFERTA (default 40%): fire red
+COR_DESCONTO_OTIMA = 0xFF8C00   # 30-39%: orange
+COR_DESCONTO_BOA = 0xFFD700     # 20-29%: gold
+# < 20% falls back to COR_OFERTA (Tiffany pink)
 EMOJI_FOGO = "🔥"
 
 CATEGORIAS_EMOJI = {
@@ -173,7 +173,7 @@ CATEGORIAS_EMOJI = {
     "Suporte e Acessórios": "🖥️",
 }
 
-# Mapeia slugs de URL para nomes corretos de categoria
+# Maps URL slugs to display category names (PT-BR, user-facing)
 _SLUG_TO_CATEGORY = {
     "hardware-perifericos": "Hardware e periféricos",
     "notebooks": "Notebook",
@@ -200,7 +200,7 @@ _SLUG_TO_CATEGORY = {
     "braco-articulado-para-monitor": "Suporte e Acessórios",
 }
 
-# Prioridade de categoria para ordenação (menor = mais prioritário)
+# Category priority for sorting (lower = higher priority)
 _CATEGORY_PRIORITY = {
     "Processador": 1,
     "Placa de Vídeo": 1,
@@ -226,17 +226,16 @@ _CATEGORY_PRIORITY = {
     "Adaptadores e rede": 5,
 }
 
-# Categoria de rede (adaptadores/roteadores): o Promobit não tem categoria só de
-# "adaptador de rede", então usamos "roteador-e-repetidor" (que agrupa esses itens)
-# e aplicamos filtros PRÓPRIOS, mais rígidos que os gerais (pedido do usuário):
-# nota 4.5+, 100+ vendas e 40%+ de desconto. Sem exceção de "sem métrica": se o
-# Promobit não trouxer estrelas/vendas, o item de rede NÃO é postado.
+# Network category (adapters/routers): Promobit has no dedicated "network adapter"
+# category, so we use "roteador-e-repetidor" (groups those items) with stricter
+# filters than the general rules (user request): 4.5+ rating, 100+ sales, 40%+ discount.
+# No "no metrics" exception — if Promobit lacks stars/sales, network items are skipped.
 CAT_REDE_NOME = "Adaptadores e rede"
 REDE_NOTA_MINIMA = 4.5
 REDE_VENDAS_MINIMAS = 100
 REDE_DESCONTO_MINIMO = 40
-# Palavras que identificam um adaptador de rede mesmo em outra categoria
-# (ex.: um adaptador USB Wi-Fi listado em hardware-perifericos).
+# Keywords that identify a network adapter even in another category
+# (e.g. a USB Wi-Fi adapter listed under hardware-perifericos).
 REDE_KEYWORDS = (
     "adaptador de rede", "adaptador wireless", "adaptador wi-fi", "adaptador wifi",
     "adaptador usb wi", "adaptador usb wireless", "placa de rede", "receptor wifi",
@@ -244,7 +243,7 @@ REDE_KEYWORDS = (
 )
 
 # =========================
-# HISTÓRICO / DEDUP
+# HISTORY / DEDUP
 # =========================
 
 def _load_history() -> dict:
@@ -264,7 +263,7 @@ def _save_history(history: dict) -> None:
             json.dump(history, f, ensure_ascii=False, indent=2)
         os.replace(tmp, HISTORY_FILE)
     except Exception:
-        log.exception("Erro ao salvar histórico de ofertas")
+        log.exception("Failed to save offers history")
         try:
             os.remove(tmp)
         except OSError:
@@ -276,7 +275,7 @@ def _deal_hash(url: str) -> str:
 
 
 def _listing_key(url: str) -> str:
-    """ID estável do anúncio na loja (MLB…, ASIN…) — dedup mesmo produto, URL Promobit diferente."""
+    """Stable store listing ID (MLB…, ASIN…) — dedup same product with different Promobit URLs."""
     if not url:
         return ""
     u = url.lower().split("?")[0].split("#")[0]
@@ -316,7 +315,7 @@ def _is_duplicate(history: dict, url: str) -> bool:
 
 
 def _is_title_key_in_history(history: dict, key: str) -> bool:
-    """Checa se um title_key já existe no histórico persistente (7 dias)."""
+    """Check whether a title_key already exists in persistent history (7 days)."""
     if not key:
         return False
     for v in history.get("deals", {}).values():
@@ -341,7 +340,7 @@ def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listi
         "title": title[:100],
         "ts": time.time(),
     }
-    # Usar a title key ORIGINAL (pré-enriquecimento) para que o dedup cross-ciclo funcione
+    # Use ORIGINAL title key (pre-enrichment) so cross-cycle dedup works
     key = orig_tkey or _title_key(title)
     if key:
         entry["tkey"] = key
@@ -352,18 +351,18 @@ def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listi
 
 
 def _clean_history(history: dict) -> None:
-    """Remove entradas com mais de 7 dias."""
+    """Remove entries older than 7 days."""
     cutoff = time.time() - (7 * 24 * 3600)
     deals = history.get("deals", {})
     to_remove = [k for k, v in deals.items() if v.get("ts", 0) < cutoff]
     for k in to_remove:
         del deals[k]
     if to_remove:
-        log.info(f"Limpeza: {len(to_remove)} ofertas antigas removidas do histórico.")
+        log.info(f"Cleanup: {len(to_remove)} old offers removed from history.")
         _save_history(history)
 
 
-# Palavras genéricas de categoria que não identificam o produto específico
+# Generic category words that do not identify a specific product
 _TITLE_GENERIC = frozenset({
     "notebook", "teclado", "mouse", "headset", "monitor", "processador",
     "memoria", "placa", "ssd", "webcam", "laptop", "desktop", "gamer",
@@ -374,7 +373,7 @@ _TITLE_GENERIC = frozenset({
 
 import html as html_module
 
-# Regex para extrair códigos de modelo/SKU
+# Regex to extract model/SKU codes
 _MODEL_RE = re.compile(
     r'\b(?:'
     r'[A-Za-z]{1,4}\d{2,}[A-Za-z0-9\-]*'  # B450M, RTX4050, H61M2-V2, 24MS500-B
@@ -383,8 +382,8 @@ _MODEL_RE = re.compile(
 )
 
 def _title_key(title: str) -> str:
-    """Gera chave de produto para dedup intraday.
-    Prioriza marca + SKU/modelo para pegar o mesmo item com títulos diferentes."""
+    """Build a product key for intraday dedup.
+    Prioritizes brand + SKU/model to match the same item under different titles."""
     t = unicodedata.normalize("NFD", title.lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     t = re.sub(r"[^\w\s\-]", " ", t)
@@ -400,20 +399,20 @@ def _title_key(title: str) -> str:
     return " ".join(sorted(set(words[:5])))
 
 def _sanitize_title(title: str) -> str:
-    """Remove entidades HTML e escapes do título."""
+    """Strip HTML entities and escapes from the title."""
     t = html_module.unescape(title)
     t = t.replace('\\"', '"')
-    # Colapsar espaços duplicados
+    # Collapse duplicate spaces
     t = re.sub(r'\s+', ' ', t).strip()
-    # Remover palavra duplicada consecutiva (MOUSE MOUSE → MOUSE)
+    # Remove consecutive duplicate word (MOUSE MOUSE → MOUSE)
     t = re.sub(r'\b(\w+)\s+\1\b', r'\1', t, flags=re.IGNORECASE)
     return t
 
 
 def _is_valid_coupon(code: str) -> bool:
-    """Retorna True se o texto parece um código de cupom real.
-    Cupons reais: alfanumérico, sem espaços, 3-25 caracteres.
-    Rejeita textos descritivos como '200 off abaixo do preço'."""
+    """Return True if the text looks like a real coupon code.
+    Real coupons: alphanumeric, no spaces, 3-25 characters.
+    Rejects descriptive text like '200 off abaixo do preço'."""
     if not code:
         return False
     code = code.strip()
@@ -440,21 +439,21 @@ async def _fetch_page(session: aiohttp.ClientSession, url: str, retries: int = 2
                 if resp.status in (429, 503) and attempt < retries:
                     await asyncio.sleep(3 * (attempt + 1))
                     continue
-                log.warning(f"HTTP {resp.status} ao acessar {url}")
+                log.warning(f"HTTP {resp.status} fetching {url}")
         except Exception as e:
             if attempt < retries:
                 await asyncio.sleep(2 * (attempt + 1))
                 continue
-            log.error(f"Erro ao buscar {url}: {e}")
+            log.error(f"Failed to fetch {url}: {e}")
     return None
 
 
 def _parse_deals_from_html(html: str, category_url: str) -> list[dict]:
-    """Extrai ofertas da página de categoria do Promobit usando JSON-LD e HTML."""
+    """Extract deals from a Promobit category page using JSON-LD and HTML."""
     soup = BeautifulSoup(html, "html.parser")
     deals = []
 
-    # Tenta extrair JSON-LD (Schema.org Product data)
+    # Try JSON-LD extraction (Schema.org Product data)
     scripts = soup.find_all("script", type="application/ld+json")
     for script in scripts:
         try:
@@ -476,7 +475,7 @@ def _parse_deals_from_html(html: str, category_url: str) -> list[dict]:
         except (json.JSONDecodeError, TypeError, AttributeError):
             continue
 
-    # Fallback: parse HTML cards se JSON-LD não retornou nada
+    # Fallback: parse HTML cards if JSON-LD returned nothing
     if not deals:
         deals = _parse_deals_from_cards(soup)
 
@@ -484,19 +483,19 @@ def _parse_deals_from_html(html: str, category_url: str) -> list[dict]:
 
 
 def _extract_from_jsonld(product: dict) -> Optional[dict]:
-    """Extrai dados de um produto do JSON-LD do Promobit."""
+    """Extract deal data from a Promobit JSON-LD product entry."""
     title = product.get("name", "").strip()
     image = product.get("image", "")
 
     if isinstance(image, list):
         image = image[0] if image else ""
 
-    # offers pode ser lista ou dict
+    # offers may be a list or dict
     offers_raw = product.get("offers", [])
     if isinstance(offers_raw, list):
         offer = offers_raw[0] if offers_raw else {}
     elif isinstance(offers_raw, dict):
-        # AggregateOffer com sub-offers
+        # AggregateOffer with sub-offers
         inner = offers_raw.get("offers", [])
         if isinstance(inner, list) and inner:
             offer = inner[0]
@@ -529,7 +528,7 @@ def _extract_from_jsonld(product: dict) -> Optional[dict]:
         except (ValueError, TypeError):
             pass
 
-    # Usar resolução maior (600px) em vez do thumbnail (120/268px)
+    # Use higher resolution (600px) instead of thumbnail (120/268px)
     if isinstance(image, str) and "i.promobit.com.br/" in image:
         image = re.sub(r"i\.promobit\.com\.br/\d+/", "i.promobit.com.br/600/", image)
 
@@ -550,13 +549,13 @@ def _extract_from_jsonld(product: dict) -> Optional[dict]:
 
 
 def _parse_deals_from_cards(soup: BeautifulSoup) -> list[dict]:
-    """Fallback: parse de cards HTML do Promobit."""
+    """Fallback: parse Promobit HTML deal cards."""
     deals = []
-    # Promobit usa article ou div com data de oferta
+    # Promobit uses article or div with offer data
     cards = soup.select("article, [data-offer-id], .promotionCard, .offer-card")
     for card in cards:
         try:
-            # Título
+            # Title
             title_el = card.select_one("h2, h3, .offer-title, [class*='title']")
             title = title_el.get_text(strip=True) if title_el else ""
 
@@ -567,13 +566,13 @@ def _parse_deals_from_cards(soup: BeautifulSoup) -> list[dict]:
                 href = link_el.get("href", "")
                 url = href if href.startswith("http") else urljoin(PROMOBIT_BASE, href)
 
-            # Imagem
+            # Image
             img_el = card.select_one("img[src*='promobit'], img[data-src*='promobit']")
             image = ""
             if img_el:
                 image = img_el.get("src") or img_el.get("data-src") or ""
 
-            # Preço
+            # Price
             price_el = card.select_one("[class*='price'], .offer-price, .promo-price")
             price = _parse_price(price_el.get_text() if price_el else "")
 
@@ -598,10 +597,10 @@ def _parse_deals_from_cards(soup: BeautifulSoup) -> list[dict]:
 
 
 def _parse_price(text: str) -> Optional[float]:
-    """Converte texto de preço brasileiro para float."""
+    """Convert Brazilian price text to float."""
     if not text:
         return None
-    # Remove R$, espaços, pontos de milhar, troca vírgula por ponto
+    # Strip R$, spaces, thousands separators; swap comma for dot
     cleaned = re.sub(r"[R$\s]", "", text)
     cleaned = cleaned.replace(".", "").replace(",", ".")
     try:
@@ -611,7 +610,7 @@ def _parse_price(text: str) -> Optional[float]:
 
 
 async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
-    """Busca a página individual da oferta no Promobit e extrai serverOffer (Next.js JSON)."""
+    """Fetch the individual Promobit deal page and extract serverOffer (Next.js JSON)."""
     url = deal.get("url")
     if not url:
         return deal
@@ -621,7 +620,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
 
     soup = BeautifulSoup(html, "html.parser")
 
-    # Promobit usa Next.js — dados completos ficam num <script> JSON inline
+    # Promobit uses Next.js — full data lives in an inline JSON <script>
     server_offer = None
     for script in soup.find_all("script"):
         text = script.string or ""
@@ -638,17 +637,17 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     if not server_offer:
         return deal
 
-    # Status — rejeitar ofertas encerradas/expiradas antes de qualquer processamento
+    # Status — reject expired/closed offers before any further processing
     status = str(server_offer.get("offerStatus") or server_offer.get("status") or "").lower()
     if status in ("expired", "expirada", "encerrada", "inactive", "unavailable", "sold_out"):
         deal["expired"] = True
         return deal
 
-    # Loja
+    # Store
     if server_offer.get("storeName"):
         deal["store"] = server_offer["storeName"]
 
-    # Preço original
+    # Original price
     old_price = server_offer.get("offerOldPrice")
     try:
         if old_price and float(old_price) > 0:
@@ -656,7 +655,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Preço atualizado (pode diferir do listado)
+    # Current price (may differ from listing)
     cur_price = server_offer.get("offerPrice")
     try:
         if cur_price:
@@ -664,9 +663,9 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Desconto — SEMPRE recalcular a partir dos preços reais (original vs atual)
-    # para garantir precisão. O campo offerDiscontPercentage do Promobit pode estar
-    # desatualizado ou incorreto, então só é usado como último fallback.
+    # Discount — ALWAYS recalculate from real prices (original vs current)
+    # for accuracy. Promobit's offerDiscontPercentage may be stale or wrong,
+    # so it is only used as a last fallback.
     try:
         if deal.get("original_price") and deal.get("price") and deal["original_price"] > deal["price"]:
             deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
@@ -677,7 +676,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Menor preço histórico (30 dias) — Promobit expõe em alguns produtos
+    # 30-day historical low — Promobit exposes this on some products
     lowest_raw = (server_offer.get("offerLowestPrice")
                   or server_offer.get("lowestPrice")
                   or server_offer.get("offerMinPrice")
@@ -690,7 +689,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Cupom (pode vir como string, dict ou lista)
+    # Coupon (may come as string, dict, or list)
     coupon = server_offer.get("offerCoupon")
     if coupon:
         if isinstance(coupon, dict):
@@ -702,7 +701,7 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         if isinstance(coupon, str) and _is_valid_coupon(coupon):
             deal["coupon"] = coupon.strip()
 
-    # Imagem (melhor resolução)
+    # Image (higher resolution)
     photo = server_offer.get("offerPhoto")
     if photo:
         if photo.startswith("/"):
@@ -710,15 +709,15 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         elif photo.startswith("http"):
             deal["image"] = photo
 
-    # Link de compra: página canônica da oferta no Promobit (sempre 200).
-    # O antigo /redirect/oferta/{slug}/ foi descontinuado (dava 404) e o botão
-    # real "Ir à loja" é gerado via JS — inacessível pelo servidor. Mandar para
-    # a página da oferta garante link válido (usuário vê cupom + botão da loja).
+    # Buy link: canonical Promobit deal page (always 200).
+    # The old /redirect/oferta/{slug}/ was discontinued (404) and the real
+    # "Go to store" button is JS-generated — unreachable server-side. Sending
+    # users to the deal page guarantees a valid link (coupon + store button).
     offer_slug = server_offer.get("offerSlug", "")
     if offer_slug:
         deal["store_url"] = f"{PROMOBIT_BASE}/oferta/{offer_slug}/"
 
-    # Avaliação do produto na comunidade Promobit
+    # Promobit community product rating
     review_rate = server_offer.get("reviewRate")
     if review_rate is not None:
         try:
@@ -733,11 +732,11 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         except (ValueError, TypeError):
             pass
 
-    # Tags (ex: Frete Grátis)
+    # Tags (e.g. Frete Grátis)
     tags = server_offer.get("offerTags") or []
     deal["tags"] = tags
 
-    # Parcelamento (best effort — chaves variam no Promobit; só exibe se vier).
+    # Installments (best effort — Promobit keys vary; only show when present).
     inst_n = (server_offer.get("offerInstallmentAmount")
               or server_offer.get("offerInstallment")
               or server_offer.get("offerInstallments")
@@ -750,89 +749,89 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
             v = float(inst_v)
             if n >= 2 and v > 0:
                 v_str = f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                sem_juros = server_offer.get("offerInstallmentInterestFree") \
+                interest_free = server_offer.get("offerInstallmentInterestFree") \
                     or server_offer.get("offerInterestFree")
-                deal["installments"] = f"{n}x de {v_str}{' sem juros' if sem_juros else ''}"
+                deal["installments"] = f"{n}x de {v_str}{' sem juros' if interest_free else ''}"
     except (ValueError, TypeError):
         pass
 
-    # Link DIRETO da loja: o Promobit às vezes expõe a URL do produto (aliasUrl).
-    # Quando existir, resolvemos para a loja final (para mandar o usuário direto à
-    # loja com a comissão dele). Ofertas de cupom não têm — aí cai na busca por nome.
+    # DIRECT store link: Promobit sometimes exposes the product URL (aliasUrl).
+    # When present, resolve to the final store (to send the user straight to
+    # the store with affiliate tracking). Coupon-only deals lack this — fall back to search.
     alias = server_offer.get("aliasUrl")
     if isinstance(alias, str) and alias.startswith("http"):
         await _resolve_product_url(session, deal, alias)
 
-    # Título limpo orientado ao comprador — remove dump de specs técnicas
+    # Buyer-oriented clean title — strips technical spec dumps
     deal["title"] = await _ai_clean_title(session, _sanitize_title(deal["title"]), deal.get("category", ""))
 
     return deal
 
 
-_TITLE_SPECS_POR_CATEGORIA = {
+_TITLE_SPECS_BY_CATEGORY = {
     "Memória RAM":
-        "marca + linha (ex: Kingston Fury Beast) | tipo (DDR4/DDR5) • capacidade total (ex: 16GB) • kit (ex: 2x8GB) • frequência (ex: 3200MHz) • latência (ex: CL16) • form factor (DIMM/SO-DIMM)",
+        "brand + line (e.g. Kingston Fury Beast) | type (DDR4/DDR5) • total capacity (e.g. 16GB) • kit (e.g. 2x8GB) • frequency (e.g. 3200MHz) • latency (e.g. CL16) • form factor (DIMM/SO-DIMM)",
     "Placa de Vídeo":
-        "marca + linha + modelo completo (ex: NVIDIA GeForce RTX 4070 Super / AMD Radeon RX 7800 XT) | VRAM (ex: 12GB GDDR6X) • clock boost (ex: 2505MHz) • TDP (ex: 200W) • tamanho (ex: Dual/Triple fan) • versão OC se houver",
+        "brand + line + full model (e.g. NVIDIA GeForce RTX 4070 Super / AMD Radeon RX 7800 XT) | VRAM (e.g. 12GB GDDR6X) • boost clock (e.g. 2505MHz) • TDP (e.g. 200W) • size (e.g. Dual/Triple fan) • OC version if any",
     "SSD":
-        "marca + modelo | capacidade (ex: 512GB) • interface (SATA / M.2 NVMe / PCIe Gen4) • velocidade leitura (ex: 3500MB/s) • velocidade escrita se disponível",
+        "brand + model | capacity (e.g. 512GB) • interface (SATA / M.2 NVMe / PCIe Gen4) • read speed (e.g. 3500MB/s) • write speed if available",
     "Processador":
-        "marca + modelo completo (ex: Ryzen 5 5600X) | socket (AM4/AM5/LGA1700) • núcleos/threads (ex: 6C/12T) • freq. base/boost (ex: 3.7/4.6GHz) • TDP se disponível",
+        "brand + full model (e.g. Ryzen 5 5600X) | socket (AM4/AM5/LGA1700) • cores/threads (e.g. 6C/12T) • base/boost freq (e.g. 3.7/4.6GHz) • TDP if available",
     "Placa-mãe":
-        "marca + modelo | socket (ex: AM5/LGA1700) • chipset (ex: B650/Z790) • form factor (ATX/mATX/ITX) • slots RAM • M.2 slots se disponível",
+        "brand + model | socket (e.g. AM5/LGA1700) • chipset (e.g. B650/Z790) • form factor (ATX/mATX/ITX) • RAM slots • M.2 slots if available",
     "Monitor":
-        "marca + modelo | tamanho (ex: 27'') • resolução (ex: Full HD 1920×1080 / QHD / 4K) • painel (IPS/VA/TN) • taxa (ex: 144Hz) • resposta (ex: 1ms) • curvado/plano • portas (ex: HDMI+DP) • sync (FreeSync/G-Sync) se disponível",
+        "brand + model | size (e.g. 27'') • resolution (e.g. Full HD 1920×1080 / QHD / 4K) • panel (IPS/VA/TN) • refresh (e.g. 144Hz) • response (e.g. 1ms) • curved/flat • ports (e.g. HDMI+DP) • sync (FreeSync/G-Sync) if available",
     "Teclado":
-        "marca + modelo | tipo (Mecânico/Membrana/Silicioso) • layout (60%/TKL/100%/ABNT2/US) • switch (ex: Switch Red/Azul/Brown) se mecânico • conectividade (USB/Sem fio/Bluetooth) • retroiluminação (RGB/Branco/Sem)",
+        "brand + model | type (Mechanical/Membrane/Silicone) • layout (60%/TKL/100%/ABNT2/US) • switch (e.g. Red/Blue/Brown) if mechanical • connectivity (USB/Wireless/Bluetooth) • backlight (RGB/White/None)",
     "Mouse":
-        "marca + modelo | DPI máximo (ex: 25600 DPI) • sensor (óptico/laser) • conectividade (USB/Sem fio/Bluetooth) • botões programáveis • peso se disponível",
+        "brand + model | max DPI (e.g. 25600 DPI) • sensor (optical/laser) • connectivity (USB/Wireless/Bluetooth) • programmable buttons • weight if available",
     "Headset":
-        "marca + modelo | conectividade (USB/P2 3.5mm/Sem fio/Bluetooth) • tipo (Over-ear/On-ear/In-ear) • drivers (ex: 50mm) • microfone (removível/integrado/sem) • impedância se disponível",
+        "brand + model | connectivity (USB/3.5mm P2/Wireless/Bluetooth) • type (Over-ear/On-ear/In-ear) • drivers (e.g. 50mm) • mic (removable/integrated/none) • impedance if available",
     "Webcam":
-        "marca + modelo | resolução (ex: 1080p/4K) • FPS (ex: 30fps/60fps) • autofoco (sim/não) • campo visual (ex: 90°) • conexão (USB-A/USB-C)",
+        "brand + model | resolution (e.g. 1080p/4K) • FPS (e.g. 30fps/60fps) • autofocus (yes/no) • field of view (e.g. 90°) • connection (USB-A/USB-C)",
     "Notebook":
-        "marca + modelo | CPU (ex: Core i5-1335U / Ryzen 7 5825U) • RAM (ex: 16GB DDR5) • armazenamento (ex: 512GB SSD NVMe) • tela (ex: 15.6'' IPS FHD 144Hz) • GPU (ex: RTX 4060 / integrada) • SO (Win 11/Linux) • peso se disponível",
+        "brand + model | CPU (e.g. Core i5-1335U / Ryzen 7 5825U) • RAM (e.g. 16GB DDR5) • storage (e.g. 512GB SSD NVMe) • screen (e.g. 15.6'' IPS FHD 144Hz) • GPU (e.g. RTX 4060 / integrated) • OS (Win 11/Linux) • weight if available",
     "PC Gamer":
-        "CPU (ex: Ryzen 5 5600) • GPU (ex: RTX 4060) • RAM (ex: 16GB DDR4) • armazenamento (ex: 512GB NVMe) • SO (Win 11/Linux)",
+        "CPU (e.g. Ryzen 5 5600) • GPU (e.g. RTX 4060) • RAM (e.g. 16GB DDR4) • storage (e.g. 512GB NVMe) • OS (Win 11/Linux)",
     "Mesa digitalizadora":
-        "marca + modelo | área ativa (ex: A5 152×95mm) • pressão da caneta (ex: 8192 níveis) • resolução (LPI) • conectividade (USB/Bluetooth) • compatibilidade (Windows/Mac/Android)",
+        "brand + model | active area (e.g. A5 152×95mm) • pen pressure (e.g. 8192 levels) • resolution (LPI) • connectivity (USB/Bluetooth) • compatibility (Windows/Mac/Android)",
     "Adaptadores e rede":
-        "marca + modelo | tipo (Roteador/Repetidor/Adaptador USB) • padrão (ex: Wi-Fi 6 AX3000) • bandas (Dual-band/Tri-band) • velocidade (ex: 2400+600Mbps) • portas (ex: 4x Gigabit)",
+        "brand + model | type (Router/Repeater/USB Adapter) • standard (e.g. Wi-Fi 6 AX3000) • bands (Dual-band/Tri-band) • speed (e.g. 2400+600Mbps) • ports (e.g. 4x Gigabit)",
     "Gabinete":
-        "marca + modelo | tipo de torre (Full Tower/Mid Tower/Mini Tower/Mini ITX) • form factor suportado (ATX/mATX/ITX) • janela lateral (vidro temperado/acrílico/sem janela) • gerenciamento de cabos (sim/não) • cor",
+        "brand + model | tower type (Full Tower/Mid Tower/Mini Tower/Mini ITX) • supported form factor (ATX/mATX/ITX) • side panel (tempered glass/acrylic/none) • cable management (yes/no) • color",
 }
 
-_TITLE_SPECS_PADRAO = (
-    "marca + modelo | specs técnicas principais separadas por • "
-    "(capacidade, velocidade, conectividade, dimensões — o que for relevante)"
+_TITLE_SPECS_DEFAULT = (
+    "brand + model | main technical specs separated by • "
+    "(capacity, speed, connectivity, dimensions — whatever is relevant)"
 )
 
 
 async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: str) -> str:
-    """Reescreve o título com specs técnicas no formato 'Marca Modelo | spec • spec • spec'.
-    Só aciona para títulos longos (>70 chars). Custo: ~80 tokens/chamada."""
+    """Rewrite long titles into 'Brand Model | spec • spec • spec' format.
+    Only runs for titles >70 chars. Cost: ~80 tokens/call."""
     if len(title) <= 70:
         return title
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         return title
 
-    specs_guia = _TITLE_SPECS_POR_CATEGORIA.get(category, _TITLE_SPECS_PADRAO)
+    specs_guide = _TITLE_SPECS_BY_CATEGORY.get(category, _TITLE_SPECS_DEFAULT)
     prompt = (
-        f"Produto: {title}\n"
-        f"Categoria: {category}\n\n"
-        "Reescreva como título técnico de oferta em português (máximo 120 caracteres).\n"
-        "Formato obrigatório: Marca Modelo seguido das specs separadas APENAS por espaço.\n"
-        "Exemplo monitor: Samsung Odyssey G5 27 QHD 2560x1440 165Hz 1ms VA HDMI DisplayPort FreeSync\n"
-        "Exemplo RAM: Kingston Fury Beast DDR4 16GB 2x8GB 3200MHz CL16 DIMM\n"
-        "Exemplo notebook: ASUS Vivobook S14 Core Ultra 7 16GB DDR5 512GB NVMe 14 IPS FHD Linux\n"
-        f"Specs a incluir para esta categoria: {specs_guia}\n"
-        "Regras:\n"
-        "- Use APENAS specs presentes no título original\n"
-        "- Sem pontos, vírgulas, barras, traços ou qualquer símbolo separador — apenas espaços\n"
-        "- Sem descrições, adjetivos ou frases (ex: sem 'ideal para', 'excelente', 'perfeito')\n"
-        "- Mantenha unidades técnicas coladas ao valor (ex: 512GB 3200MHz 144Hz 1ms)\n"
-        "- Responda APENAS com o título, sem aspas nem explicações"
+        f"Product: {title}\n"
+        f"Category: {category}\n\n"
+        "Rewrite as a technical deal title in Brazilian Portuguese (max 120 characters).\n"
+        "Required format: Brand Model followed by specs separated ONLY by spaces.\n"
+        "Monitor example: Samsung Odyssey G5 27 QHD 2560x1440 165Hz 1ms VA HDMI DisplayPort FreeSync\n"
+        "RAM example: Kingston Fury Beast DDR4 16GB 2x8GB 3200MHz CL16 DIMM\n"
+        "Notebook example: ASUS Vivobook S14 Core Ultra 7 16GB DDR5 512GB NVMe 14 IPS FHD Linux\n"
+        f"Specs to include for this category: {specs_guide}\n"
+        "Rules:\n"
+        "- Use ONLY specs present in the original title\n"
+        "- No periods, commas, slashes, dashes, or any separator symbols — spaces only\n"
+        "- No descriptions, adjectives, or phrases (e.g. no 'ideal for', 'excellent', 'perfect')\n"
+        "- Keep technical units attached to values (e.g. 512GB 3200MHz 144Hz 1ms)\n"
+        "- Reply with ONLY the title, no quotes or explanations"
     )
     try:
         async with session.post(
@@ -850,14 +849,14 @@ async def _ai_clean_title(session: aiohttp.ClientSession, title: str, category: 
                 data = await resp.json()
                 cleaned = data["choices"][0]["message"]["content"].strip().strip('"').strip("'")
                 if 10 <= len(cleaned) <= 120:
-                    log.debug(f"Título AI: {title[:50]}... → {cleaned}")
+                    log.debug(f"AI title: {title[:50]}... → {cleaned}")
                     return cleaned
     except Exception as e:
-        log.debug(f"AI title cleanup falhou ({e}), mantendo original")
+        log.debug(f"AI title cleanup failed ({e}), keeping original")
     return title
 
 
-# Domínios de loja reconhecidos (para validar se um link aponta para a loja real)
+# Recognized store domains (to validate whether a link points to the real store)
 _STORE_DOMAINS = (
     "mercadolivre.com", "mercadolibre.com", "amazon.com", "terabyteshop.com",
     "shopinfo.com", "kabum.com", "pichau.com", "magazineluiza.com",
@@ -874,9 +873,9 @@ def _is_store_domain(url: str) -> bool:
 
 
 async def _resolve_product_url(session: aiohttp.ClientSession, deal: dict, alias: str) -> None:
-    """Resolve a URL de produto do Promobit (aliasUrl) para a loja final.
-    Se já for um link de loja, usa direto; se for redirect (promoby.me/promobit),
-    segue até a loja. Resultado vai em deal['product_url']."""
+    """Resolve a Promobit product URL (aliasUrl) to the final store page.
+    If already a store link, use directly; if a redirect (promoby.me/promobit),
+    follow to the store. Result stored in deal['product_url']."""
     if _is_store_domain(alias):
         deal["product_url"] = alias
         return
@@ -893,12 +892,12 @@ async def _resolve_product_url(session: aiohttp.ClientSession, deal: dict, alias
             if _is_store_domain(final):
                 deal["product_url"] = final
     except Exception as e:
-        log.debug(f"Falha ao resolver product_url de {alias[:60]}: {e}")
+        log.debug(f"Failed to resolve product_url from {alias[:60]}: {e}")
 
 
 def _store_search_url(store: str, title: str) -> Optional[str]:
-    """Monta URL de busca direta na loja (fallback quando não há link de produto).
-    Garante que o usuário vai DIRETO à loja, nunca ao Promobit."""
+    """Build a direct store search URL (fallback when no product link exists).
+    Ensures the user goes DIRECTLY to the store, never to Promobit."""
     norm = (store or "").lower().strip()
     q = (title or "").strip()
     if not q:
@@ -921,13 +920,13 @@ def _store_search_url(store: str, title: str) -> Optional[str]:
 
 
 async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) -> dict:
-    """Tentativa (B): buscar estrelas/vendas direto na página da loja. Best effort."""
+    """Attempt (B): fetch stars/sales directly from the store page. Best effort."""
     store_url = deal.get("store_url")
     if not store_url:
         return deal
 
     try:
-        # Segue o redirect do Promobit para a loja real
+        # Follow Promobit redirect to the real store
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                           "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -939,13 +938,13 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
         ) as resp:
             if resp.status != 200:
                 return deal
-            # Capturar URL real da loja (pos-redirect do Promobit)
+            # Capture real store URL (post-Promobit redirect)
             deal["real_store_url"] = str(resp.url)
             html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
 
-        # Estrelas — só buscar se o Promobit não forneceu
+        # Stars — only fetch if Promobit did not provide them
         if deal.get("stars") is None:
             for sel in [
                 "[itemprop='ratingValue']", "[data-rating]",
@@ -959,7 +958,7 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
                         deal["stars"] = float(m.group(1).replace(",", "."))
                         break
 
-        # Vendas / reviews — só buscar se o Promobit não forneceu
+        # Sales / reviews — only fetch if Promobit did not provide them
         if deal.get("sales_count") is None:
             for sel in [
                 "[itemprop='reviewCount']", "[class*='review-count']",
@@ -974,13 +973,13 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
                         break
 
     except Exception as e:
-        log.debug(f"Erro ao buscar rating da loja: {e}")
+        log.debug(f"Failed to fetch store rating: {e}")
 
     return deal
 
 
 # =========================
-# FILTROS
+# FILTERS
 # =========================
 
 def _normalize_store(store: str) -> str:
@@ -989,11 +988,11 @@ def _normalize_store(store: str) -> str:
 
 def _store_allowed(store: str) -> bool:
     norm = _normalize_store(store)
-    # Match exato ou por palavra (evita "amazonas" casar com "amazon")
+    # Exact match or word match (avoids "amazonas" matching "amazon")
     if norm in LOJAS_WHITELIST:
         return True
-    # Verificar se alguma loja da whitelist é o início do nome normalizado
-    # Ex: "kabum" casa com "kabum informatica"
+    # Check whether a whitelist store name is a prefix of the normalized name
+    # e.g. "kabum" matches "kabum informatica"
     for allowed in LOJAS_WHITELIST:
         if norm.startswith(allowed):
             return True
@@ -1001,16 +1000,16 @@ def _store_allowed(store: str) -> bool:
 
 
 def _is_rede(deal: dict) -> bool:
-    """True se a oferta é de rede/adaptador (categoria de rede ou título indica adaptador)."""
+    """True if the deal is network/adapter (network category or title indicates adapter)."""
     if (deal.get("category") or "") == CAT_REDE_NOME:
         return True
     title = (deal.get("title") or "").lower()
     return any(k in title for k in REDE_KEYWORDS)
 
 
-# Palavras que indicam produto que NÃO é de informática (eletrodoméstico, cozinha,
-# higiene, brinquedo etc.). O Promobit às vezes lista esses itens dentro de categorias
-# de PC (ex.: "Pipoqueira Disney Mickey Mouse" caiu em /mouse/). Rejeitamos pelo título.
+# Keywords indicating non-IT products (appliances, kitchen, hygiene, toys, etc.).
+# Promobit sometimes lists these inside PC categories
+# (e.g. "Pipoqueira Disney Mickey Mouse" under /mouse/). Reject by title.
 _IRRELEVANT_KEYWORDS = (
     "pipoqueira", "liquidificador", "fritadeira", "air fryer", "airfryer",
     "frigideira", "geladeira", "fogao", "fogão", "microondas", "micro-ondas",
@@ -1029,16 +1028,16 @@ _OBSOLETE_KEYWORDS = (
 )
 
 def _is_spam_title(title: str) -> bool:
-    """True se o título parece spam ou listing genérico."""
+    """True if the title looks like spam or a generic listing."""
     words = title.lower().split()
-    # Palavra duplicada consecutiva (MOUSE MOUSE)
+    # Consecutive duplicate word (MOUSE MOUSE)
     for i in range(len(words) - 1):
         if words[i] == words[i+1] and len(words[i]) >= 3:
             return True
     return False
 
 def _is_irrelevant(deal: dict) -> bool:
-    """True se o título indica produto que não é de informática/PC ou é spam/obsoleto."""
+    """True if the title indicates a non-IT/PC product or spam/obsolete hardware."""
     title = (deal.get("title") or "").lower()
     if any(k in title for k in _IRRELEVANT_KEYWORDS):
         return True
@@ -1055,88 +1054,88 @@ def _is_marketplace(store: str) -> bool:
     return _normalize_store(store) in _MARKETPLACE_STORES
 
 def _passes_filters(deal: dict) -> tuple[bool, str]:
-    """Verifica se a oferta passa nos filtros. Retorna (passed, reason)."""
-    # Oferta encerrada/expirada no Promobit
+    """Check whether the deal passes filters. Returns (passed, reason)."""
+    # Expired/closed on Promobit
     if deal.get("expired"):
-        return False, "oferta expirada/encerrada"
+        return False, "offer expired/closed"
 
-    # Deve ter imagem
+    # Must have an image
     if not deal.get("image"):
-        return False, "sem imagem"
+        return False, "no image"
 
-    # Produto fora do escopo de informática (eletrodoméstico, brinquedo, etc.)
+    # Product outside IT scope (appliance, toy, etc.)
     if _is_irrelevant(deal):
-        return False, "produto irrelevante/spam/obsoleto"
+        return False, "irrelevant/spam/obsolete product"
 
-    # Check de preço 'de' inflado
+    # Inflated "was" price check
     lowest = deal.get("lowest_price_30d")
     orig = deal.get("original_price")
     if lowest and orig and orig > lowest * 3:
-        return False, f"preço 'de' inflado: original R${orig:.0f} > 3× menor_30d R${lowest:.0f}"
+        return False, f"inflated was price: original R${orig:.0f} > 3× 30d_low R${lowest:.0f}"
 
-    # Deve ter desconto >= 15% e <= 100% (rejeita valores absurdos/negativos)
+    # Discount must be >= 15% and <= 100% (reject absurd/negative values)
     disc = deal.get("discount_pct", 0)
     if not disc or disc < DESCONTO_MINIMO or disc > 100:
-        return False, f"desconto {disc}% fora do range ({DESCONTO_MINIMO}-100%)"
+        return False, f"discount {disc}% out of range ({DESCONTO_MINIMO}-100%)"
 
-    # Loja deve estar na whitelist
+    # Store must be on the whitelist
     if not _store_allowed(deal.get("store", "")):
-        return False, f"loja '{deal.get('store')}' não está na whitelist"
+        return False, f"store '{deal.get('store')}' not on whitelist"
 
     stars = deal.get("stars")
     sales = deal.get("sales_count")
 
-    # Rede/adaptadores: filtros próprios e mais rígidos. Exige métricas reais
-    # (4.5+ estrelas E 100+ vendas) e 50%+ de desconto — sem fallback "sem métrica".
+    # Network/adapters: stricter dedicated filters. Requires real metrics
+    # (4.5+ stars AND 100+ sales) and 40%+ discount — no "no metrics" fallback.
     if _is_rede(deal):
         if disc < REDE_DESCONTO_MINIMO:
-            return False, f"[rede] desconto {disc}% < {REDE_DESCONTO_MINIMO}%"
+            return False, f"[network] discount {disc}% < {REDE_DESCONTO_MINIMO}%"
         if stars is None or stars < REDE_NOTA_MINIMA:
-            return False, f"[rede] estrelas {stars} < {REDE_NOTA_MINIMA}"
+            return False, f"[network] stars {stars} < {REDE_NOTA_MINIMA}"
         if sales is None or sales < REDE_VENDAS_MINIMAS:
-            return False, f"[rede] vendas {sales} < {REDE_VENDAS_MINIMAS}"
-        return True, "ok (rede)"
+            return False, f"[network] sales {sales} < {REDE_VENDAS_MINIMAS}"
+        return True, "ok (network)"
 
-    # Verificação de estrelas/vendas (cascata A→B→C)
+    # Stars/sales check (cascade A→B→C)
     if stars is not None and stars < NOTA_MINIMA_ESTRELAS:
-        return False, f"estrelas {stars} < {NOTA_MINIMA_ESTRELAS}"
+        return False, f"stars {stars} < {NOTA_MINIMA_ESTRELAS}"
 
     if sales is not None and sales < VENDAS_MINIMAS:
-        return False, f"vendas {sales} < {VENDAS_MINIMAS}"
+        return False, f"sales {sales} < {VENDAS_MINIMAS}"
 
     if sales is not None and sales < AVALIACOES_MINIMAS:
-        return False, f"avaliações {sales} < {AVALIACOES_MINIMAS}"
+        return False, f"reviews {sales} < {AVALIACOES_MINIMAS}"
 
-    # Sem dados de qualidade (Promobit não trouxe estrelas nem vendas): como a loja
-    # já passou pela whitelist (é confiável), aceita desde que o desconto seja bom.
+    # No quality data (Promobit lacked stars and sales): since the store
+    # already passed the whitelist (trusted), accept when discount is strong enough.
     if stars is None and sales is None:
         max_disc = 50 if _is_marketplace(deal.get("store", "")) else DESCONTO_SEM_METRICA
         if disc > 70:
-            return False, f"desconto {disc}% > 70% sem métricas (suspeito)"
+            return False, f"discount {disc}% > 70% without metrics (suspicious)"
         if disc >= max_disc:
             if _is_marketplace(deal.get("store", "")):
-                return False, f"marketplace sem métrica e desconto {disc}% >= {max_disc}%"
-            return True, "ok (sem métrica, desconto alto)"
-        return False, f"sem métrica e desconto {disc}% < {max_disc}%"
+                return False, f"marketplace without metrics and discount {disc}% >= {max_disc}%"
+            return True, "ok (no metrics, high discount)"
+        return False, f"no metrics and discount {disc}% < {max_disc}%"
 
     return True, "ok"
 
 
 # =========================
-# SCORE E ORDENAÇÃO
+# SCORE AND SORTING
 # =========================
 
 def _deal_score(deal: dict) -> float:
-    """Score composto: desconto × qualidade × log(popularidade).
-    Usado para rankear dentro da mesma prioridade de categoria."""
+    """Composite score: discount × quality × log(popularity).
+    Used to rank within the same category priority."""
     disc = deal.get("discount_pct") or 0
-    stars = deal.get("stars") or 4.0      # neutro se sem dados
-    sales = deal.get("sales_count") or 10  # baixo se sem dados
+    stars = deal.get("stars") or 4.0      # neutral when missing
+    sales = deal.get("sales_count") or 10  # low when missing
     return disc * stars * math.log10(max(sales, 10))
 
 
 def _interleave_by_store(deals: list) -> list:
-    """Reordena para nunca postar duas seguidas da mesma loja."""
+    """Reorder so the same store is never posted back-to-back."""
     result = []
     remaining = list(deals)
     last_store = None
@@ -1147,17 +1146,17 @@ def _interleave_by_store(deals: list) -> list:
                 last_store = _normalize_store(result[-1].get("store", ""))
                 break
         else:
-            # Todas restantes são da mesma loja — postar assim mesmo
+            # All remaining deals are from the same store — post anyway
             result.append(remaining.pop(0))
             last_store = _normalize_store(result[-1].get("store", ""))
     return result
 
 
 def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store: int = 2) -> list:
-    """Seleciona até `limit` ofertas garantindo VARIEDADE de categorias e limitando por loja.
-    Espera `deals` já ordenado por (prioridade de categoria, -score). Faz round-robin:
-    pega a melhor de cada categoria por vez (no máx. `max_per_cat` por categoria),
-    respeitando o limite de `max_per_store` por loja."""
+    """Select up to `limit` deals ensuring category VARIETY and per-store caps.
+    Expects `deals` already sorted by (category priority, -score). Round-robin:
+    picks the best from each category in turn (max `max_per_cat` per category),
+    respecting `max_per_store` per store."""
     from collections import OrderedDict
     by_cat: "OrderedDict[str, list]" = OrderedDict()
     for d in deals:
@@ -1175,7 +1174,7 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
             if counts.get(cat, 0) >= max_per_cat or not items:
                 continue
                 
-            # Procurar o primeiro item desta categoria que não exceda o limite da loja
+            # Find the first item in this category that does not exceed the store cap
             idx_to_pop = -1
             for i, item in enumerate(items):
                 store = _normalize_store(item.get("store", ""))
@@ -1184,7 +1183,7 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
                     break
             
             if idx_to_pop == -1:
-                # Todos os itens restantes desta categoria estouram o limite de loja
+                # All remaining items in this category exceed the store cap
                 continue
                 
             item = items.pop(idx_to_pop)
@@ -1198,11 +1197,11 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
 
 
 # =========================
-# FORMATAÇÃO EMBED
+# EMBED FORMATTING
 # =========================
 
 def _format_price_line(deal: dict) -> str:
-    """Formata a linha de preço com destaque."""
+    """Format the price line with emphasis."""
     price_new = f"R$ {deal['price']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     parts = []
 
@@ -1219,46 +1218,46 @@ def _format_price_line(deal: dict) -> str:
 
 
 def _format_description(deal: dict) -> str:
-    """Monta a descrição do embed focada no que o comprador precisa saber."""
+    """Build embed description focused on what the buyer needs to know."""
     lines = []
 
-    # 1) Preço em destaque
+    # 1) Highlighted price
     lines.append(_format_price_line(deal))
 
-    # 2) Economia — valor em negrito reforça o benefício
+    # 2) Savings — bold amount reinforces the benefit
     if deal.get("original_price") and deal.get("price"):
-        economia = deal["original_price"] - deal["price"]
-        if economia > 0:
-            eco = f"R$ {economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        savings = deal["original_price"] - deal["price"]
+        if savings > 0:
+            eco = f"R$ {savings:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             lines.append(f"Economize **{eco}** nessa compra")
 
-    # 3) Variação de preço histórico (30 dias)
+    # 3) 30-day historical price variation
     lowest = deal.get("lowest_price_30d")
     current = deal.get("price")
     if lowest and current:
         lowest_fmt = f"R$ {lowest:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        if current <= lowest * 1.02:  # dentro de 2% do mínimo = menor preço histórico
+        if current <= lowest * 1.02:  # within 2% of low = historical low
             lines.append(f"🏆 **Menor preço em 30 dias!**")
-        elif current > lowest * 1.1:  # mais de 10% acima do mínimo = já esteve mais barato
+        elif current > lowest * 1.1:  # more than 10% above low = was cheaper before
             lines.append(f"📉 Já esteve mais barato: {lowest_fmt}")
 
-    # 4) Tudo que o comprador precisa antes de clicar
-    detalhes = []
+    # 4) Everything the buyer needs before clicking
+    details = []
 
-    # Cupom (só códigos reais, não textos descritivos)
+    # Coupon (real codes only, not descriptive text)
     if deal.get("coupon"):
-        detalhes.append(f"🏷️ Cupom: `{deal['coupon']}`")
+        details.append(f"🏷️ Cupom: `{deal['coupon']}`")
 
-    # Parcelamento — verbo + condição deixa mais claro
+    # Installments — verb + condition makes it clearer
     if deal.get("installments"):
-        detalhes.append(f"💳 Parcele em {deal['installments']}")
+        details.append(f"💳 Parcele em {deal['installments']}")
 
-    # Validade da oferta
+    # Offer expiration
     if deal.get("expiration"):
-        detalhes.append(f"⏰ Oferta válida até {deal['expiration']}")
+        details.append(f"⏰ Oferta válida até {deal['expiration']}")
 
-    # Tags: destaca Frete Grátis (decisivo pro comprador), descarta "Parcelado"
-    # (já mostrado acima se disponível), exibe o resto como contexto
+    # Tags: highlight free shipping (decisive for buyers), skip "Parcelado"
+    # (already shown above when available), show the rest as context
     tags = deal.get("tags") or []
     tag_names = [
         (t.get("name", "") if isinstance(t, dict) else str(t)).strip()
@@ -1267,46 +1266,46 @@ def _format_description(deal: dict) -> str:
     tag_names = [n for n in tag_names if n]
     has_frete_gratis = any("frete" in n.lower() and "grát" in n.lower() for n in tag_names)
     if has_frete_gratis:
-        detalhes.append("✅ Frete grátis")
-    # Demais tags relevantes
-    _TAGS_IGNORAR = {"app", "nacional", "internacional", "cupom", "promoção", "oferta"}
-    _TAGS_MAPEAR = {
+        details.append("✅ Frete grátis")
+    # Other relevant tags
+    _TAGS_IGNORE = {"app", "nacional", "internacional", "cupom", "promoção", "oferta"}
+    _TAGS_MAP = {
         "app": "📱 Cupom no app da loja",
         "taxa inclusa": "🏷️ Taxa inclusa",
     }
-    outros = []
+    others = []
     for n in tag_names:
         nl = n.lower()
         if "frete" in nl or "parcelado" in nl:
             continue
-        if nl in _TAGS_IGNORAR:
-            mapped = _TAGS_MAPEAR.get(nl)
+        if nl in _TAGS_IGNORE:
+            mapped = _TAGS_MAP.get(nl)
             if mapped:
-                detalhes.append(mapped)
+                details.append(mapped)
             continue
-        outros.append(n)
-    if outros:
-        detalhes.append(" • ".join(outros[:2]))
+        others.append(n)
+    if others:
+        details.append(" • ".join(others[:2]))
 
-    # Avaliação — mostra nota + número de pessoas, linguagem natural
+    # Rating — show score + buyer count in natural language
     stars = deal.get("stars")
     sales = deal.get("sales_count")
     if stars and sales:
         stars_fmt = f"{stars:.1f}".replace(".", ",")
-        detalhes.append(f"⭐ {stars_fmt} de 5 · {sales} compradores avaliaram")
+        details.append(f"⭐ {stars_fmt} de 5 · {sales} compradores avaliaram")
     elif stars:
         stars_fmt = f"{stars:.1f}".replace(".", ",")
-        detalhes.append(f"⭐ Nota {stars_fmt} de 5")
+        details.append(f"⭐ Nota {stars_fmt} de 5")
 
-    if detalhes:
+    if details:
         lines.append("")
-        lines.extend(detalhes)
+        lines.extend(details)
 
     return "\n".join(lines)
 
 
 async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[bytes]:
-    """Baixa imagem e retorna bytes. Retorna None se falhar."""
+    """Download image and return bytes. Returns None on failure."""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -1314,14 +1313,14 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         }
         async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             if resp.status != 200:
-                log.debug(f"Imagem HTTP {resp.status}: {url[:80]}")
+                log.debug(f"Image HTTP {resp.status}: {url[:80]}")
                 return None
             data = await resp.read()
-            if len(data) < 1000:  # imagem muito pequena
+            if len(data) < 1000:  # image too small
                 return None
             return data
     except Exception as e:
-        log.debug(f"Erro ao baixar imagem: {e}")
+        log.debug(f"Failed to download image: {e}")
         return None
 
 
@@ -1337,14 +1336,14 @@ def _load_price_monitors() -> list:
 
 
 def _monitor_matches(keyword: str, title: str) -> bool:
-    """True se todas as palavras do alerta estão no título (case-insensitive)."""
+    """True if every alert keyword word appears in the title (case-insensitive)."""
     kw_words = keyword.lower().split()
     title_l = title.lower()
     return all(w in title_l for w in kw_words)
 
 
 async def _notify_price_alerts(deal: dict, msg) -> None:
-    """Envia DM para usuários que têm alerta de preço matching com esta oferta."""
+    """Send DM to users with a price alert matching this deal."""
     monitors = _load_price_monitors()
     if not monitors:
         return
@@ -1386,22 +1385,22 @@ async def _notify_price_alerts(deal: dict, msg) -> None:
             em.set_footer(text="Use t!alerta list para gerenciar seus alertas")
             await user.send(embed=em)
             notified.add(user_id)
-            log.info(f"  🔔 DM de alerta enviada para user {user_id} (keyword: {keyword})")
+            log.info(f"  🔔 Price alert DM sent to user {user_id} (keyword: {keyword})")
         except Exception as e:
-            log.debug(f"  Falha ao enviar DM de alerta para {user_id}: {e}")
+            log.debug(f"  Failed to send price alert DM to {user_id}: {e}")
 
 
 def _store_destination(deal: dict) -> Optional[str]:
-    """Melhor destino DIRETO na loja (sem afiliado ainda):
-    1) link de produto resolvido do Promobit; 2) busca na loja pelo nome."""
+    """Best DIRECT store destination (no affiliate yet):
+    1) resolved Promobit product link; 2) store search by name."""
     if deal.get("product_url"):
         return deal["product_url"]
     return _store_search_url(deal.get("store", ""), deal.get("title", ""))
 
 
 def _buy_url(deal: dict) -> str:
-    """URL final de compra com afiliado, sempre apontando DIRETO para a loja.
-    Ordem: produto direto → busca na loja → sem link (nunca cai no Promobit)."""
+    """Final buy URL with affiliate, always pointing DIRECTLY to the store.
+    Order: direct product → store search → no link (never falls back to Promobit)."""
     store = deal.get("store", "")
     dest = _store_destination(deal)
     if dest and dest.startswith("http"):
@@ -1410,8 +1409,8 @@ def _buy_url(deal: dict) -> str:
 
 
 def _cor_embed(deal: dict) -> int:
-    """Cor da barra do embed pela faixa de desconto: quanto maior o desconto,
-    mais 'quente' a cor — sinaliza de relance o quão boa é a oferta."""
+    """Embed bar color by discount tier: higher discount = hotter color,
+    signaling at a glance how good the deal is."""
     disc = deal.get("discount_pct") or 0
     if disc >= DESCONTO_ULTRA_OFERTA:
         return COR_DESCONTO_ULTRA
@@ -1423,16 +1422,16 @@ def _cor_embed(deal: dict) -> int:
 
 
 def _build_view(deal: dict) -> Optional[discord.ui.View]:
-    """Botão de compra real do Discord (link). Retorna None se não houver URL válida
-    — nesse caso o embed cai no campo de texto de fallback.
-    Obs.: o Discord renderiza botões de link sempre em cinza (não dá para colorir);
-    o destaque vem do texto (desconto) + da CTA em destaque no corpo do embed."""
+    """Real Discord buy button (link). Returns None when no valid URL exists
+    — embed falls back to a text CTA field.
+    Note: Discord always renders link buttons in gray (cannot be colored);
+    emphasis comes from text (discount) + highlighted CTA in the embed body."""
     buy_url = _buy_url(deal)
     if not buy_url.startswith("http"):
         return None
     disc = deal.get("discount_pct") or 0
     label = f"COMPRAR COM {disc:.0f}% OFF" if disc else "COMPRAR COM DESCONTO"
-    view = discord.ui.View(timeout=None)  # link buttons não disparam interação
+    view = discord.ui.View(timeout=None)  # link buttons do not fire interactions
     view.add_item(discord.ui.Button(
         label=label[:80],
         emoji="🛒",
@@ -1443,19 +1442,19 @@ def _build_view(deal: dict) -> Optional[discord.ui.View]:
 
 
 def _build_embed(deal: dict) -> discord.Embed:
-    """Constrói o embed da oferta."""
+    """Build the deal embed."""
     discount = deal.get("discount_pct", 0)
     cor = _cor_embed(deal)
 
-    # Título: emoji + nome completo do produto (desconto já aparece na descrição)
+    # Title: emoji + full product name (discount already shown in description)
     title = f"{EMOJI_FOGO} {_sanitize_title(deal['title'][:200])}"
 
     desc = _format_description(deal)
-    # URL unificada para título e botão (evita inconsistência)
+    # Unified URL for title and button (avoids inconsistency)
     buy_url = _buy_url(deal)
 
-    # CTA em DESTAQUE dentro do corpo: heading clicável (grande e em negrito).
-    # Reforça o botão (que o Discord só renderiza em cinza) com alta visibilidade.
+    # HIGHLIGHTED CTA in body: clickable heading (large and bold).
+    # Reinforces the button (Discord only renders gray) with high visibility.
     if buy_url.startswith("http"):
         cta_txt = f"COMPRAR COM {discount:.0f}% OFF" if discount else "COMPRAR COM DESCONTO"
         desc += f"\n\n## [{cta_txt}]({buy_url})"
@@ -1483,10 +1482,10 @@ def _build_embed(deal: dict) -> discord.Embed:
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
 
-    # Imagem — definida no momento de postar (_build_embed não seta aqui
-    # para evitar set_image duplo se o download falhar)
-    # CTA: normalmente vira um BOTÃO real (ver _build_view, anexado no envio).
-    # Só usamos campo de texto como fallback quando não há URL utilizável.
+    # Image — set at post time (_build_embed does not set here
+    # to avoid double set_image if download fails)
+    # CTA: normally becomes a real BUTTON (see _build_view, attached on send).
+    # Text field is only a fallback when no usable URL exists.
     if not buy_url.startswith("http"):
         embed.add_field(
             name="",
@@ -1494,23 +1493,23 @@ def _build_embed(deal: dict) -> discord.Embed:
             inline=False,
         )
 
-    # Footer sutil — preço pode mudar a qualquer momento
+    # Subtle footer — price may change at any time
     embed.set_footer(text="Preço sujeito a alterações")
 
     return embed
 
 
 # =========================
-# CICLO PRINCIPAL
+# MAIN CYCLE
 # =========================
 
-_cycle_running = False  # guard contra execuções paralelas
+_cycle_running = False  # guard against parallel runs
 
 async def _run_deals_cycle() -> None:
-    """Executa um ciclo completo de coleta e publicação."""
+    """Run a full collect-and-publish cycle."""
     global http_session, _cycle_running
     if _cycle_running:
-        log.warning("Ciclo anterior ainda rodando, pulando este.")
+        log.warning("Previous cycle still running, skipping this one.")
         return
     _cycle_running = True
     try:
@@ -1519,11 +1518,11 @@ async def _run_deals_cycle() -> None:
         _cycle_running = False
 
 async def _run_deals_cycle_inner() -> None:
-    """Lógica real do ciclo de ofertas."""
+    """Core offers cycle logic."""
     global http_session
 
     if http_session and not http_session.closed:
-        pass  # Reutilizar sessão existente
+        pass  # Reuse existing session
     else:
         if http_session and http_session.closed:
             http_session = None
@@ -1532,11 +1531,11 @@ async def _run_deals_cycle_inner() -> None:
     history = _load_history()
     _clean_history(history)
 
-    log.info("=== Iniciando ciclo de ofertas ===")
+    log.info("=== Starting offers cycle ===")
 
     all_deals: list[dict] = []
 
-    # Coleta de todas as categorias
+    # Collect from all categories
     for cat_path in CATEGORIAS_PROMOBIT:
         url = PROMOBIT_BASE + cat_path
         html = await _fetch_page(http_session, url)
@@ -1544,30 +1543,30 @@ async def _run_deals_cycle_inner() -> None:
             continue
 
         deals = _parse_deals_from_html(html, cat_path)
-        # Extrai nome da categoria do path
+        # Extract category name from path
         cat_slug = cat_path.strip("/").split("/")[-2]
         cat_name = _SLUG_TO_CATEGORY.get(cat_slug, cat_slug.replace("-", " ").title())
         for d in deals:
             d["category"] = cat_name
 
-        log.info(f"  {cat_path}: {len(deals)} ofertas encontradas")
+        log.info(f"  {cat_path}: {len(deals)} deals found")
         all_deals.extend(deals)
 
-        await asyncio.sleep(2)  # Respeitar rate limit do Promobit
+        await asyncio.sleep(2)  # Respect Promobit rate limit
 
-    log.info(f"Total bruto: {len(all_deals)} ofertas coletadas")
+    log.info(f"Raw total: {len(all_deals)} deals collected")
 
-    # Resetar dedup intraday se virou o dia
+    # Reset intraday dedup when the day rolls over
     global _posted_title_keys, _posted_title_keys_date
-    hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
-    if hoje_br != _posted_title_keys_date:
+    today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+    if today_br != _posted_title_keys_date:
         _posted_title_keys = set()
-        _posted_title_keys_date = hoje_br
+        _posted_title_keys_date = today_br
 
-    # Dedup por URL (histórico 7 dias) + intraday por produto (mesmo produto, preço diferente)
+    # Dedup by URL (7-day history) + intraday by product (same product, different price)
     candidates = []
-    _cycle_keys: set[str] = set()  # dedup dentro do mesmo ciclo
-    _cycle_urls: set[str] = set()  # dedup URL dentro do mesmo ciclo (cross-categoria)
+    _cycle_keys: set[str] = set()  # dedup within the same cycle
+    _cycle_urls: set[str] = set()  # URL dedup within cycle (cross-category)
     for deal in all_deals:
         if deal["url"] in _cycle_urls:
             continue
@@ -1576,107 +1575,107 @@ async def _run_deals_cycle_inner() -> None:
             continue
         key = _title_key(deal["title"])
         if key and (key in _posted_title_keys or key in _cycle_keys or _is_title_key_in_history(history, key)):
-            log.debug(f"  Dedup produto similar (intraday ou histórico 7d): {deal['title'][:60]}")
+            log.debug(f"  Dedup similar product (intraday or 7d history): {deal['title'][:60]}")
             continue
         if key:
             _cycle_keys.add(key)
         candidates.append(deal)
 
-    log.info(f"Após dedup: {len(candidates)} candidatas")
+    log.info(f"After dedup: {len(candidates)} candidates")
 
-    # Triagem barata (sem rede) ANTES de enriquecer: descarta lojas já conhecidas
-    # que estão fora da whitelist, para não gastar o orçamento de enriquecimento com
-    # ofertas que seriam rejeitadas de qualquer jeito. Mantém lojas da whitelist e as
-    # de loja ainda desconhecida (que só é revelada no enriquecimento).
+    # Cheap pre-filter (no network) BEFORE enrichment: drop known stores
+    # outside the whitelist to avoid wasting enrichment budget on deals that
+    # would be rejected anyway. Keeps whitelist stores and unknown stores
+    # (store name only revealed during enrichment).
     pre_candidates = []
-    descartadas_loja = 0
+    dropped_store_filter = 0
     for deal in candidates:
         store = deal.get("store") or ""
         if store and not _store_allowed(store):
-            descartadas_loja += 1
+            dropped_store_filter += 1
             continue
         pre_candidates.append(deal)
-    # Prioriza por (1) categoria prioritária — para peças (CPU/GPU/RAM) ganharem vaga no
-    # orçamento de enriquecimento antes de monitor/placa-mãe — e (2) loja já confirmada.
+    # Prioritize by (1) category priority — so parts (CPU/GPU/RAM) get enrichment
+    # slots before monitor/motherboard — and (2) confirmed store.
     pre_candidates.sort(key=lambda d: (
         _CATEGORY_PRIORITY.get(d.get("category", ""), 99),
         0 if (d.get("store") and _store_allowed(d.get("store", ""))) else 1,
     ))
     log.info(
-        f"Triagem de loja: {len(pre_candidates)} a enriquecer "
-        f"({descartadas_loja} descartadas por whitelist antes de enriquecer)"
+        f"Store pre-filter: {len(pre_candidates)} to enrich "
+        f"({dropped_store_filter} dropped by whitelist before enrichment)"
     )
 
-    # Enriquecer cada oferta (buscar detalhes)
+    # Enrich each deal (fetch details)
     enriched = []
-    for deal in pre_candidates[:26]:  # Limitar para não abusar (cobre mais categorias)
+    for deal in pre_candidates[:26]:  # Cap to avoid abuse (covers more categories)
         try:
-            # Salvar title key ORIGINAL antes do enriquecimento mutar o título
+            # Save ORIGINAL title key before enrichment mutates the title
             deal["_orig_tkey"] = _title_key(deal["title"])
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
 
-            # Sempre resolver URL real da loja (necessário para afiliados)
-            # + tenta buscar rating se ainda não tem
+            # Always resolve real store URL (needed for affiliates)
+            # + try to fetch rating if still missing
             if deal.get("store_url") and not deal.get("real_store_url"):
                 deal = await asyncio.wait_for(_try_fetch_store_rating(http_session, deal), timeout=20.0)
                 await asyncio.sleep(1)
             enriched.append(deal)
         except asyncio.TimeoutError:
-            log.warning(f"Timeout ao enriquecer oferta {deal.get('title', '?')[:50]}")
+            log.warning(f"Timeout enriching deal {deal.get('title', '?')[:50]}")
         except Exception as e:
-            log.warning(f"Erro ao enriquecer oferta {deal.get('title', '?')[:50]}: {e}")
+            log.warning(f"Failed to enrich deal {deal.get('title', '?')[:50]}: {e}")
 
-    # Aplicar filtros
+    # Apply filters
     approved = []
-    rejeicoes: dict[str, int] = {}
+    rejections: dict[str, int] = {}
     _seen_listings: set[str] = set()
     for deal in enriched:
         passed, reason = _passes_filters(deal)
         if not passed:
             bucket = re.sub(r"\d+([.,]\d+)?", "N", reason)
-            rejeicoes[bucket] = rejeicoes.get(bucket, 0) + 1
+            rejections[bucket] = rejections.get(bucket, 0) + 1
             continue
         listing = _deal_listing_key(deal)
         if listing and (listing in _seen_listings or _is_listing_in_history(history, listing)):
-            log.debug(f"  Dedup anúncio loja (7d): {deal['title'][:60]}")
+            log.debug(f"  Dedup store listing (7d): {deal['title'][:60]}")
             continue
         if listing:
             _seen_listings.add(listing)
         approved.append(deal)
 
-    log.info(f"Após filtros: {len(approved)} aprovadas")
-    # Diagnóstico: resumo dos motivos de rejeição (visível mesmo com LOG_LEVEL=INFO)
-    if rejeicoes:
-        resumo = " · ".join(
-            f"{n}× {motivo}" for motivo, n in sorted(rejeicoes.items(), key=lambda x: -x[1])
+    log.info(f"After filters: {len(approved)} approved")
+    # Diagnostic: rejection reason summary (visible even at LOG_LEVEL=INFO)
+    if rejections:
+        summary = " · ".join(
+            f"{n}× {reason}" for reason, n in sorted(rejections.items(), key=lambda x: -x[1])
         )
-        log.info(f"Motivos de rejeição ({sum(rejeicoes.values())}): {resumo}")
+        log.info(f"Rejection reasons ({sum(rejections.values())}): {summary}")
 
-    # Ordenar: prioridade de categoria (peças > periféricos > outros) e depois score composto
+    # Sort: category priority (parts > peripherals > other) then composite score
     approved.sort(
         key=lambda d: (
             _CATEGORY_PRIORITY.get(d.get("category", ""), 99),
             -_deal_score(d),
         )
     )
-    # Diversificar por categoria: round-robin, no máx. 2 da mesma categoria por ciclo.
-    # Garante variedade (peças prioritárias têm vez) e evita encher de monitor/placa-mãe.
+    # Diversify by category: round-robin, max 2 from the same category per cycle.
+    # Ensures variety (priority parts get a turn) and avoids monitor/motherboard floods.
     approved = _select_diverse(approved, MAX_POSTS_POR_CICLO, max_per_cat=2)
-    # Variar lojas: evitar back-to-back da mesma loja
+    # Vary stores: avoid back-to-back from the same store
     approved = _interleave_by_store(approved)
 
-    # Postar
+    # Post
     channel = _bot.get_channel(CANAL_OFERTAS_ID)
     if not channel:
-        log.error(f"Canal {CANAL_OFERTAS_ID} não encontrado!")
+        log.error(f"Channel {CANAL_OFERTAS_ID} not found!")
         return
 
     posted = 0
     for deal in approved[:MAX_POSTS_POR_CICLO]:
         embed = _build_embed(deal)
 
-        # Baixar imagem e anexar como arquivo
+        # Download image and attach as file
         file = None
         if deal.get("image"):
             img_data = await _download_image(http_session, deal["image"])
@@ -1684,17 +1683,17 @@ async def _run_deals_cycle_inner() -> None:
                 file = discord.File(io.BytesIO(img_data), filename="oferta.jpg")
                 embed.set_image(url="attachment://oferta.jpg")
             else:
-                # Fallback: tentar URL direto no embed
+                # Fallback: try direct URL in embed
                 embed.set_image(url=deal["image"])
 
         try:
             global _mention_count_ofertas, _mention_date_ofertas
             content = None
             guild = getattr(channel, "guild", None)
-            # Menciona o cargo apenas nas 3 primeiras ULTRA-OFERTAS do dia
-            hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
-            if hoje_br != _mention_date_ofertas:
-                _mention_date_ofertas = hoje_br
+            # Ping role only on the first 3 ULTRA DEALS of the day
+            today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+            if today_br != _mention_date_ofertas:
+                _mention_date_ofertas = today_br
                 _mention_count_ofertas = 0
             
             cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
@@ -1710,26 +1709,26 @@ async def _run_deals_cycle_inner() -> None:
             else:
                 msg = await channel.send(content=content, embed=embed, file=file)
 
-            # Marcar como postado DEPOIS de enviar com sucesso
-            # Usar title key original (pré-enriquecimento) para dedup cross-ciclo consistente
+            # Mark as posted AFTER successful send
+            # Use original title key (pre-enrichment) for consistent cross-cycle dedup
             _orig_tkey = deal.get("_orig_tkey") or _title_key(deal["title"])
             _listing = _deal_listing_key(deal)
             _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey, listing=_listing)
             _posted_title_keys.add(_orig_tkey)
 
-            # Notificar usuários com alerta de preço matching
+            # Notify users with matching price alerts
             await _notify_price_alerts(deal, msg)
 
             posted += 1
-            log.info(f"  🛒 Postada: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
+            log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
 
             if posted < MAX_POSTS_POR_CICLO:
                 await asyncio.sleep(POST_SPACING_SEC)
 
         except Exception as e:
-            log.error(f"  Erro ao postar oferta: {e}")
+            log.error(f"  Failed to post deal: {e}")
 
-    log.info(f"=== Ciclo finalizado: {posted} ofertas postadas ===")
+    log.info(f"=== Cycle finished: {posted} deals posted ===")
 
 
 # =========================
@@ -1744,7 +1743,7 @@ _cog_loaded = False
 
 
 class OffersCog(commands.Cog):
-    """Cog de ofertas — publica promoções automaticamente."""
+    """Offers cog — publishes deals automatically."""
     
     def __init__(self, bot: commands.Bot):
         global _bot
@@ -1757,32 +1756,32 @@ class OffersCog(commands.Cog):
     
     @tasks.loop(minutes=SCAN_INTERVAL_MIN)
     async def deals_loop(self):
-        agora = datetime.now(FUSO_HORARIO_BR)
-        if not (HORA_INICIO <= agora.hour < HORA_FIM):
-            log.info(f"Fora do horário ({agora.hour}h). Pulando ciclo.")
+        now_br = datetime.now(FUSO_HORARIO_BR)
+        if not (HORA_INICIO <= now_br.hour < HORA_FIM):
+            log.info(f"Outside business hours ({now_br.hour}h). Skipping cycle.")
             return
         try:
             await _run_deals_cycle()
         except Exception as e:
-            log.exception(f"Erro no ciclo de ofertas: {e}")
+            log.exception(f"Offers cycle error: {e}")
     
     @deals_loop.before_loop
     async def _before_deals_loop(self):
         await self.bot.wait_until_ready()
-        log.info("Cog de ofertas pronto. Primeiro ciclo será executado imediatamente pelo loop.")
+        log.info("Offers cog ready. First cycle will run immediately via the loop.")
     
     @commands.Cog.listener()
     async def on_ready(self):
-        log.info(f"✅ Offers Cog carregado — bot: {self.bot.user}")
+        log.info(f"✅ Offers Cog loaded — bot: {self.bot.user}")
         progs = affiliate_config.active_programs()
         if progs:
-            log.info(f"💰 Afiliados ativos: {', '.join(progs)}")
+            log.info(f"💰 Active affiliates: {', '.join(progs)}")
         else:
-            log.warning("⚠️ Nenhum programa de afiliado configurado no .env")
+            log.warning("⚠️ No affiliate program configured in .env")
     
     @commands.Cog.listener()
     async def on_disconnect(self):
-        log.warning("⚠️ [Offers] Bot desconectado do Discord.")
+        log.warning("⚠️ [Offers] Bot disconnected from Discord.")
     
     @commands.Cog.listener()
     async def on_close(self):
@@ -1790,12 +1789,12 @@ class OffersCog(commands.Cog):
         if http_session and not http_session.closed:
             await http_session.close()
             http_session = None
-        log.info("🔌 [Offers] Sessão HTTP fechada.")
+        log.info("🔌 [Offers] HTTP session closed.")
 
 async def setup(bot: commands.Bot):
     global _cog_loaded
     if _cog_loaded:
-        log.warning("offers_cog já carregado — ignorando extensão duplicada.")
+        log.warning("offers_cog already loaded — ignoring duplicate extension.")
         return
     _cog_loaded = True
     await bot.add_cog(OffersCog(bot))

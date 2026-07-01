@@ -1,7 +1,7 @@
 """
-Configuracao de links de afiliado por loja.
-Cada loja tem sua propria logica de injecao de tag/parametro.
-Variaveis lidas do .env — se nao existir, o link original e mantido.
+Affiliate link configuration per store.
+Each store has its own tag/parameter injection logic.
+Values are read from .env — if missing, the original URL is kept unchanged.
 """
 
 import os
@@ -10,7 +10,7 @@ from typing import List
 from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 
 # =========================
-# TAGS/IDs DO .env
+# TAGS/IDs FROM .env
 # =========================
 AMAZON_TAG = os.getenv("AMAZON_AFFILIATE_TAG", "")
 MERCADOLIVRE_ID = os.getenv("MERCADOLIVRE_AFFILIATE_ID", "")
@@ -24,14 +24,14 @@ SHOPEE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "")
 LOMADEE_SOURCE_ID = os.getenv("LOMADEE_SOURCE_ID", "")
 LOMADEE_APP_TOKEN = os.getenv("LOMADEE_APP_TOKEN", "")
 
-# Awin advertiser IDs (fixos por loja)
+# Awin advertiser IDs (fixed per store)
 AWIN_ADVERTISER_KABUM = 23202
 AWIN_ADVERTISER_TERABYTE = 22825
 AWIN_ADVERTISER_PICHAU = 25037
 
 
 def _add_param(url: str, key: str, value: str) -> str:
-    """Adiciona ou substitui um query param na URL."""
+    """Add or replace a query parameter on the URL."""
     parsed = urlparse(url)
     params = parse_qs(parsed.query, keep_blank_values=True)
     params[key] = [value]
@@ -40,7 +40,7 @@ def _add_param(url: str, key: str, value: str) -> str:
 
 
 def _awin_deeplink(url: str, advertiser_id: int) -> str:
-    """Gera deeplink da Awin: redireciona via Awin com comissao."""
+    """Build an Awin deeplink that redirects through Awin for commission."""
     if not AWIN_PUBLISHER_ID:
         return url
     from urllib.parse import quote
@@ -53,7 +53,7 @@ def _awin_deeplink(url: str, advertiser_id: int) -> str:
 
 
 def _lomadee_deeplink(url: str) -> str:
-    """Gera deeplink da Lomadee: redireciona via Lomadee com comissao."""
+    """Build a Lomadee deeplink that redirects through Lomadee for commission."""
     if not LOMADEE_SOURCE_ID:
         return url
     from urllib.parse import quote
@@ -65,17 +65,16 @@ def _lomadee_deeplink(url: str) -> str:
 
 
 def _magalu_url(url: str) -> str:
-    """Converte URL do Magalu para a lojinha do Parceiro Magalu."""
+    """Convert a Magalu product URL to the partner storefront URL."""
     if not MAGALU_SLUG:
         return url
-    # Extrair o path do produto e remontar na lojinha
     parsed = urlparse(url)
     path = parsed.path
     return f"https://www.magazinevoce.com.br/{MAGALU_SLUG}{path}"
 
 
 def build_affiliate_url(store_name: str, real_url: str) -> str:
-    """Recebe o nome da loja e a URL real (pos-redirect), retorna URL com afiliado."""
+    """Given store name and real URL (post-redirect), return the affiliate URL."""
     if not real_url:
         return real_url
 
@@ -98,7 +97,7 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if ("magazineluiza" in domain or "magalu" in domain) and MAGALU_SLUG:
         return _magalu_url(real_url)
 
-    # --- Terabyte (Lomadee > Awin > param direto) ---
+    # --- Terabyte (Lomadee > Awin > direct param) ---
     if "terabyte" in domain:
         if LOMADEE_SOURCE_ID:
             return _lomadee_deeplink(real_url)
@@ -111,28 +110,28 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if "pichau" in domain and AWIN_PUBLISHER_ID:
         return _awin_deeplink(real_url, AWIN_ADVERTISER_PICHAU)
 
-    # --- ShopInfo (Lomadee > param direto) ---
+    # --- ShopInfo (Lomadee > direct param) ---
     if "shopinfo" in domain:
         if LOMADEE_SOURCE_ID:
             return _lomadee_deeplink(real_url)
         if SHOPINFO_ID:
             return _add_param(real_url, SHOPINFO_PARAM, SHOPINFO_ID)
 
-    # --- AliExpress (param simples como fallback) ---
+    # --- AliExpress (simple param fallback) ---
     if "aliexpress" in domain and ALIEXPRESS_ID:
         return _add_param(real_url, "aff_fcid", ALIEXPRESS_ID)
 
-    # --- Shopee (redirect com aff_id) ---
+    # --- Shopee (redirect with aff_id) ---
     if "shopee" in domain and SHOPEE_ID:
         from urllib.parse import quote
         return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&aff_id={SHOPEE_ID}"
 
-    # Sem afiliado configurado para essa loja
+    # No affiliate program configured for this store
     return real_url
 
 
 def has_any_affiliate() -> bool:
-    """Retorna True se pelo menos um programa de afiliado esta configurado."""
+    """Return True if at least one affiliate program is configured."""
     return bool(
         AMAZON_TAG or MERCADOLIVRE_ID or AWIN_PUBLISHER_ID
         or MAGALU_SLUG or TERABYTE_ID or SHOPINFO_ID or ALIEXPRESS_ID
@@ -141,7 +140,7 @@ def has_any_affiliate() -> bool:
 
 
 def active_programs() -> List[str]:
-    """Lista nomes dos programas ativos (para log/debug)."""
+    """List active program names (for log/debug)."""
     progs = []
     if AMAZON_TAG:
         progs.append(f"Amazon ({AMAZON_TAG})")

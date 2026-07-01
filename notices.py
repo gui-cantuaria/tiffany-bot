@@ -27,12 +27,12 @@ try:
     _voice_available = True
 except Exception as _ve:
     import logging as _log_tmp
-    _log_tmp.getLogger("tiffany-bot").warning("tiffany_voice não carregou (%s) — comandos de voz desativados.", _ve)
+    _log_tmp.getLogger("tiffany-bot").warning("tiffany_voice failed to load (%s) — voice commands disabled.", _ve)
     tiffany_voice = None
     _voice_available = False
 
 # =========================
-# CONFIGURAÇÕES
+# CONFIGURATION
 # =========================
 load_dotenv()
 
@@ -46,7 +46,7 @@ HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
-INTERVALO_NOTICIAS_MIN = 45  # intervalo entre ciclos de notícias (minutos)
+INTERVALO_NOTICIAS_MIN = 45  # interval between news cycles (minutes)
 
 # --- Pipeline ---
 SCAN_POR_FEED = 5
@@ -57,7 +57,7 @@ IA_COOLDOWN_SEC = 15
 POST_SPACING_SEC = 120
 MAX_POSTS_POR_CICLO = 1
 
-# --- Notas de corte ---
+# --- Score thresholds ---
 NOTA_MIN_APROVACAO = 80
 NOTA_MIN_GAMES = 85
 NOTA_URGENTE = 90
@@ -91,14 +91,14 @@ log.setLevel(logging.INFO)
 log.addHandler(_console_handler)
 log.addHandler(_file_handler)
 
-# Silenciar ruído de bibliotecas externas
+# Silence noise from external libraries
 logging.getLogger("discord.ext.voice_recv.gateway").setLevel(logging.WARNING)
 logging.getLogger("discord.gateway").setLevel(logging.WARNING)
 logging.getLogger("discord.voice_state").setLevel(logging.WARNING)
 logging.getLogger("wavelink").setLevel(logging.WARNING)
 
 # =========================
-# DISCORD + IA CLIENT
+# DISCORD + AI CLIENT
 # =========================
 GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 
@@ -107,7 +107,7 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
-# Comandos de música: não fazer reply (resposta já é óbvia via embed rosa)
+# Music commands: skip reply (response is obvious via pink embed)
 _MUSIC_CMDS = frozenset({
     "p", "play", "s", "skip", "np", "nowplaying",
     "247", "nonstop", "pl", "playlist", "r", "random",
@@ -117,7 +117,7 @@ _MUSIC_CMDS = frozenset({
 })
 
 class _ReplyContext(commands.Context):
-    """Contexto customizado que faz reply automatico na mensagem do usuario (exceto música)."""
+    """Custom context that auto-replies to the user's message (except music commands)."""
     async def send(self, content=None, **kwargs):
         if "reference" not in kwargs:
             cmd_name = self.command.name if self.command else ""
@@ -136,7 +136,7 @@ discord_client = _TiffanyBot(
     command_prefix=commands.when_mentioned_or("t!", "T!"),
     case_insensitive=True,
     intents=intents,
-    help_command=None,  # /help (slash command) fornece a ajuda dos comandos
+    help_command=None,  # /help slash command provides command help
 )
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)
@@ -152,7 +152,7 @@ _feed_cooldown_until: dict[str, float] = {}
 _FEED_COOLDOWN_MAX_ENTRIES = 200
 
 def _set_feed_cooldown(nome_site: str) -> None:
-    # Limpar entradas expiradas se o dict ficou grande
+    # Purge expired entries if dict grew too large
     if len(_feed_cooldown_until) > _FEED_COOLDOWN_MAX_ENTRIES:
         now = time.time()
         expired = [k for k, v in _feed_cooldown_until.items() if now >= v]
@@ -164,7 +164,7 @@ def _feed_em_cooldown(nome_site: str) -> bool:
     return time.time() < _feed_cooldown_until.get(nome_site, 0)
 
 # =========================
-# FONTES RSS
+# RSS SOURCES
 # =========================
 FONTES_RSS = {
     # BR
@@ -177,7 +177,7 @@ FONTES_RSS = {
     "Convergência Digital": "https://convergenciadigital.com.br/feed/",
     "MacMagazine": "https://macmagazine.com.br/feed/",
     "Meio Bit": "https://meiobit.com/feed/",
-    # EN — Geral
+    # EN — General
     "The Verge": "https://www.theverge.com/rss/index.xml",
     "TechCrunch": "https://techcrunch.com/feed/",
     "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
@@ -189,13 +189,13 @@ FONTES_RSS = {
     "The Register": "https://www.theregister.com/headlines.atom",
     "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
     "IEEE Spectrum": "https://spectrum.ieee.org/rss",
-    # EN — Segurança
+    # EN — Security
     "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
     "KrebsOnSecurity": "https://krebsonsecurity.com/feed/",
     "The Hacker News": "https://feeds.feedburner.com/TheHackersNews",
     "Dark Reading": "https://www.darkreading.com/rss.xml",
     "Socket": "https://socket.dev/blog/rss.xml",
-    # EN — IA / Dev
+    # EN — AI / Dev
     "MIT Technology Review": "https://www.technologyreview.com/feed/",
     "OpenAI Blog": "https://openai.com/blog/rss.xml",
     "Anthropic Blog": "https://www.anthropic.com/rss/index.xml",
@@ -214,7 +214,7 @@ FONTES_INGLES = {
 }
 
 # =========================
-# CATEGORIAS
+# CATEGORIES
 # =========================
 TIFFANY_PINK = 0xFF69B4
 CORES_CATEGORIA = {
@@ -259,10 +259,10 @@ EMOJIS_CATEGORIA = {
 }
 
 # =========================
-# PRÉ-FILTRO POR KEYWORDS
+# KEYWORD PRE-FILTER
 # =========================
 KEYWORDS_TECH = {
-    # IA / ML
+    # AI / ML
     "inteligência artificial", "inteligencia artificial", "machine learning",
     "deep learning", "llm", "chatgpt", "openai", "gemini", "copilot",
     "anthropic", "claude", "midjourney", "stable diffusion", "neural",
@@ -271,7 +271,7 @@ KEYWORDS_TECH = {
     "nvidia", "amd", "intel", "gpu", "cpu", "processador", "placa de vídeo",
     "placa de video", "rtx", "radeon", "ryzen", "chip", "semicondutor",
     "semiconductor", "tsmc", "qualcomm", "snapdragon", "apple silicon",
-    # Segurança
+    # Security (keyword matching)
     "cibersegurança", "ciberseguranca", "cybersecurity", "ransomware",
     "malware", "phishing", "vulnerabilidade", "vulnerability", "cve",
     "zero-day", "0-day", "exploit", "data breach", "vazamento de dados",
@@ -279,10 +279,10 @@ KEYWORDS_TECH = {
     # Cloud / DevOps
     "kubernetes", "docker", "aws", "azure", "google cloud", "cloud computing",
     "devops", "ci/cd", "microservices", "serverless", "terraform",
-    # Sistemas Operacionais
+    # Operating systems
     "windows 11", "windows 12", "linux", "macos", "android", "ios",
     "ubuntu", "kernel", "atualização de segurança", "security update",
-    # Programação
+    # Programming
     "python", "javascript", "typescript", "rust", "golang", "github",
     "gitlab", "api", "framework", "open source", "código aberto",
     "developer", "desenvolvedor", "programming", "programação",
@@ -292,7 +292,7 @@ KEYWORDS_TECH = {
     "samsung", "sony", "nintendo", "valve", "steam",
     # Mobile (flagships)
     "iphone", "galaxy s", "pixel", "ipad",
-    # Geral
+    # General
     "startup", "big tech", "algoritmo", "blockchain", "web3",
     "5g", "6g", "wi-fi", "fibra óptica", "satélite", "starlink",
     "realidade virtual", "realidade aumentada", "vr", "ar", "metaverso",
@@ -300,44 +300,44 @@ KEYWORDS_TECH = {
 }
 
 KEYWORDS_BLOCK = {
-    # Ofertas / Compras
+    # Deals / shopping
     "oferta", "desconto", "cupom", "coupon", "promoção", "promocao",
     "black friday", "prime day", "compre", "barato", "menor preço",
     "menor preco", "cashback", "afiliado", "affiliate",
-    # Entretenimento genérico
+    # Generic entertainment
     "horóscopo", "horoscopo", "futebol", "soccer", "nba", "nfl",
     "novela", "big brother", "reality show", "celebridade", "celebrity",
     "fofoca", "gossip", "tiktok trend", "meme",
-    # Ciência genérica (fora de escopo)
+    # Generic science (out of scope)
     "paleontologia", "arqueologia", "fóssil", "fossil",
     "dinossauro", "dinosaur",
-    # Reviews / Guias de compra
+    # Reviews / buying guides
     "análise de produto", "guia de compra", "buying guide",
     "melhor custo-benefício", "vale a pena comprar",
     "unboxing",
 }
 
 def prefiltro_keywords(titulo: str, texto: str) -> bool:
-    """Retorna True se o artigo PASSA no filtro (é potencialmente tech).
-    Retorna False se deve ser rejeitado antes da IA."""
+    """Return True if the article PASSES the filter (potentially tech).
+    Return False if it should be rejected before AI analysis."""
     blob = f"{titulo} {texto}".lower()
 
-    # Rejeitar se contém keyword bloqueada
+    # Reject if blocked keyword found
     for kw in KEYWORDS_BLOCK:
         if kw in blob:
             return False
-    # Keywords bloqueadas com word boundary (evitar falsos positivos com substrings)
+    # Blocked keywords with word boundary (avoid false positives from substrings)
     _BLOCK_WORD_BOUNDARY = ("review", "comparativo")
     for kw in _BLOCK_WORD_BOUNDARY:
         if re.search(rf"\b{kw}\b", blob):
             return False
 
-    # Aceitar se contém keyword tech
+    # Accept if tech keyword found
     for kw in KEYWORDS_TECH:
         if kw in blob:
             return True
 
-    # Se não contém nenhuma keyword tech, rejeitar
+    # No tech keyword found — reject
     return False
 
 # =========================
@@ -396,7 +396,7 @@ def _hamming(a: int, b: int) -> int:
     return (a ^ b).bit_count()
 
 # =========================
-# HISTÓRICO (PERSISTÊNCIA)
+# HISTORY (PERSISTENCE)
 # =========================
 def _hist_key_link(link_norm: str) -> str:
     return f"L:{link_norm}"
@@ -412,14 +412,14 @@ def load_history() -> dict:
             data = json.load(f)
             return data if isinstance(data, dict) else {}
     except Exception as e:
-        log.warning(f"Erro ao carregar histórico: {e}")
+        log.warning(f"Failed to load history: {e}")
         return {}
 
 def save_history(h: dict) -> None:
-    # Limpar entradas com mais de 7 dias
+    # Remove entries older than 7 days
     cutoff = int(time.time()) - (7 * 86400)
     novo = {}
-    # Preservar índices internos (com pruning para não crescerem sem limite)
+    # Preserve internal indexes (with pruning to prevent unbounded growth)
     if "_simhash_idx" in h:
         novo["_simhash_idx"] = _simhash_prune(h["_simhash_idx"])
     if "_title_idx" in h:
@@ -433,7 +433,7 @@ def save_history(h: dict) -> None:
             if v["ts"] > cutoff:
                 novo[k] = v
         elif isinstance(v, dict) and "data" in v:
-            # Backward-compat com V16 (campo "data" em ISO)
+            # Backward-compat with V16 ("data" field in ISO format)
             try:
                 dt = datetime.fromisoformat(v["data"])
                 if dt.timestamp() > cutoff:
@@ -448,14 +448,14 @@ def save_history(h: dict) -> None:
             json.dump(novo, f, ensure_ascii=False, indent=2)
         os.replace(tmp, HISTORY_FILE)
     except Exception:
-        log.exception("Erro ao salvar histórico")
+        log.exception("Failed to save history")
         try:
             os.remove(tmp)
         except OSError:
             pass
 
 # =========================
-# MÉTRICAS PERSISTENTES
+# PERSISTENT METRICS
 # =========================
 def load_metrics() -> dict:
     if not os.path.exists(METRICS_FILE):
@@ -473,7 +473,7 @@ def save_metrics(m: dict) -> None:
             json.dump(m, f, ensure_ascii=False, indent=2)
         os.replace(tmp, METRICS_FILE)
     except Exception as e:
-        log.error(f"Erro ao salvar métricas: {e}")
+        log.error(f"Failed to save metrics: {e}")
         try:
             os.remove(tmp)
         except OSError:
@@ -482,7 +482,7 @@ def save_metrics(m: dict) -> None:
 def metric_inc(m: dict, key: str, amount: int = 1) -> None:
     hoje = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
     if "_date" not in m or m["_date"] != hoje:
-        # Novo dia: resetar contadores diários, preservar totais
+        # New day: reset daily counters, preserve totals
         m["_date"] = hoje
         for k in ("posts_hoje", "ia_aprovadas_hoje", "ia_rejeitadas_hoje", "ia_calls_hoje"):
             m[k] = 0
@@ -492,7 +492,7 @@ def metric_inc(m: dict, key: str, amount: int = 1) -> None:
         m[total_key] = m.get(total_key, 0) + amount
 
 # =========================
-# FILA DE APROVADOS (persistência entre ciclos)
+# APPROVED QUEUE (persistence between cycles)
 # =========================
 def load_queue() -> list:
     if not os.path.exists(QUEUE_FILE):
@@ -511,7 +511,7 @@ def save_queue(q: list) -> None:
             json.dump(q, f, ensure_ascii=False, indent=2)
         os.replace(tmp, QUEUE_FILE)
     except Exception as e:
-        log.error(f"Erro ao salvar fila: {e}")
+        log.error(f"Failed to save queue: {e}")
         try:
             os.remove(tmp)
         except OSError:
@@ -524,13 +524,13 @@ def _hist_payload(status: str, extra: Optional[dict] = None) -> dict:
     return payload
 
 def historico_check(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool:
-    """Retorna True se já foi processado (dedup por URL ou hash)."""
-    # Checar formato V17 (L: / H:)
+    """Return True if already processed (dedup by URL or hash)."""
+    # Check V17 format (L: / H:)
     if _hist_key_link(link_norm) in h:
         return True
     if dedupe_hash and _hist_key_hash(dedupe_hash) in h:
         return True
-    # Backward-compat: checar URL bare (formato V16)
+    # Backward-compat: check bare URL (V16 format)
     if link_norm in h:
         return True
     return False
@@ -542,12 +542,12 @@ def historico_set(h: dict, link_norm: str, dedupe_hash: Optional[str], status: s
         h[_hist_key_hash(dedupe_hash)] = payload
 
 def make_dedupe_hash(titulo: str, published_ts: int) -> str:
-    # Sem bucket de hora — mesmo título = mesmo hash independente de quando foi publicado
+    # No hour bucket — same title = same hash regardless of publish time
     raw = f"GLOBAL|{_normalizar_titulo(titulo)}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 # =========================
-# NORMALIZAÇÃO DE TÍTULO
+# TITLE NORMALIZATION
 # =========================
 _STOPWORDS = {
     "o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "dos",
@@ -559,7 +559,7 @@ _STOPWORDS = {
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
 def _normalizar_titulo(titulo: str) -> str:
-    """Normaliza título removendo stopwords, pontuação e espaços extras.
+    """Normalize title by removing stopwords, punctuation, and extra spaces.
     'Microsoft lança atualização do Windows 11' → 'microsoft lança atualização windows 11'"""
     t = (titulo or "").lower().strip()
     t = _PUNCT_RE.sub(" ", t)
@@ -567,14 +567,14 @@ def _normalizar_titulo(titulo: str) -> str:
     return " ".join(palavras)
 
 def _title_fingerprint(titulo: str) -> str:
-    """Hash curto do título normalizado para dedup cross-site."""
+    """Short hash of normalized title for cross-site dedup."""
     norm = _normalizar_titulo(titulo)
     return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
 # =========================
-# DEDUP POR TEMA/ASSUNTO
+# TOPIC/SUBJECT DEDUP
 # =========================
-# Palavras genéricas demais para serem entidades-chave (além das stopwords)
+# Words too generic to be key entities (in addition to stopwords)
 _TOPIC_NOISE = {
     "novo", "nova", "novos", "novas", "lança", "lançar", "lançou", "lançamento",
     "anuncia", "anunciar", "anunciou", "revela", "revelar", "revelou", "alerta",
@@ -590,34 +590,34 @@ _TOPIC_NOISE = {
 }
 
 def _extract_topic_keys(titulo: str) -> frozenset[str]:
-    """Extrai palavras-chave temáticas do título (entidades, nomes próprios, termos técnicos).
-    Retorna set de 2-4 palavras mais significativas para representar o assunto."""
+    """Extract thematic keywords from the title (entities, proper nouns, technical terms).
+    Returns a set of the 2-4 most significant words representing the subject."""
     norm = (titulo or "").lower().strip()
     norm = _PUNCT_RE.sub(" ", norm)
     all_noise = _STOPWORDS | _TOPIC_NOISE
     palavras = [p for p in norm.split() if p not in all_noise and len(p) > 2]
-    # Priorizar: palavras capitalizadas no original (nomes próprios)
+    # Prioritize: capitalized words in the original (proper nouns)
     original_words = (titulo or "").split()
     capitalized = set()
     for w in original_words:
         wl = _PUNCT_RE.sub("", w).lower()
         if w and w[0].isupper() and len(wl) > 2 and wl not in all_noise:
             capitalized.add(wl)
-    # Combinar: nomes próprios primeiro, depois outras palavras significativas
+    # Combine: proper nouns first, then other significant words
     ordered = [p for p in palavras if p in capitalized]
     ordered += [p for p in palavras if p not in capitalized]
-    # Pegar as 8 palavras mais significativas (mais cobertura para overlap de temas similares)
+    # Take the 8 most significant words (more coverage for similar topic overlap)
     keys = ordered[:8]
     if len(keys) < 2:
-        return frozenset()  # Muito genérico, não dá pra deduplicar por tema
+        return frozenset()  # Too generic for topic dedup
     return frozenset(keys)
 
-# ---- Entity-overlap dedup (substitui exact-match de fingerprint) ----
-# Armazena grupos de entidades por artigo; dedup se 2+ entidades coincidem
-_ENTITY_OVERLAP_MIN = 2  # mínimo de entidades em comum para considerar duplicata
+# ---- Entity-overlap dedup (replaces exact fingerprint match) ----
+# Stores entity groups per article; dedup when 2+ entities match
+_ENTITY_OVERLAP_MIN = 2  # minimum shared entities to consider duplicate
 
 def _get_entity_groups(h: dict) -> list:
-    """Retorna lista de {keys: [str], ts: int} de artigos recentes."""
+    """Return list of {keys: [str], ts: int} from recent articles."""
     g = h.get("_entity_groups")
     return g if isinstance(g, list) else []
 
@@ -639,7 +639,7 @@ def _ensure_entity_pruned(h: dict) -> list:
     return groups
 
 def topic_is_dup(h: dict, titulo: str) -> bool:
-    """Verifica se o tema/assunto já foi coberto (overlap de 2+ entidades)."""
+    """Check if the topic/subject was already covered (2+ entity overlap)."""
     keys = _extract_topic_keys(titulo)
     if len(keys) < _ENTITY_OVERLAP_MIN:
         return False
@@ -651,7 +651,7 @@ def topic_is_dup(h: dict, titulo: str) -> bool:
     return False
 
 def topic_add(h: dict, titulo: str) -> None:
-    """Registra as entidades do artigo para dedup futuro."""
+    """Register article entities for future dedup."""
     keys = _extract_topic_keys(titulo)
     if len(keys) < 2:
         return
@@ -659,7 +659,7 @@ def topic_add(h: dict, titulo: str) -> None:
     groups.append({"keys": sorted(keys), "ts": int(time.time())})
     h["_entity_groups"] = groups
 
-# SimHash index no histórico
+# SimHash index in history
 def _get_simhash_index(h: dict) -> dict[str, int]:
     idx = h.get("_simhash_idx")
     return idx if isinstance(idx, dict) else {}
@@ -669,7 +669,7 @@ MAX_SIMHASH_INDEX = 500
 def _simhash_prune(idx: dict[str, int]) -> dict[str, int]:
     cutoff = int(time.time()) - (SIMHASH_TTL_HORAS * 3600)
     pruned = {k: ts for k, ts in idx.items() if ts >= cutoff}
-    # Limitar tamanho: manter apenas os mais recentes
+    # Limit size: keep only the most recent
     if len(pruned) > MAX_SIMHASH_INDEX:
         sorted_items = sorted(pruned.items(), key=lambda x: x[1], reverse=True)
         pruned = dict(sorted_items[:MAX_SIMHASH_INDEX])
@@ -678,7 +678,7 @@ def _simhash_prune(idx: dict[str, int]) -> dict[str, int]:
 _simhash_pruned_this_cycle = False
 
 def _ensure_simhash_pruned(h: dict) -> dict[str, int]:
-    """Prune o índice apenas uma vez por ciclo."""
+    """Prune the index only once per cycle."""
     global _simhash_pruned_this_cycle
     idx = _get_simhash_index(h)
     if not _simhash_pruned_this_cycle:
@@ -707,7 +707,7 @@ def simhash_add(h: dict, sh: int) -> None:
     h["_simhash_idx"] = idx
 
 # =========================
-# ÍNDICE DE TÍTULOS (cross-site dedup)
+# TITLE INDEX (cross-site dedup)
 # =========================
 def _get_title_index(h: dict) -> dict[str, int]:
     idx = h.get("_title_idx")
@@ -718,7 +718,7 @@ MAX_TITLE_INDEX = 500
 def _title_idx_prune(idx: dict[str, int]) -> dict[str, int]:
     cutoff = int(time.time()) - (TITLE_IDX_TTL_HORAS * 3600)
     pruned = {k: ts for k, ts in idx.items() if ts >= cutoff}
-    # Limitar tamanho: manter apenas os mais recentes
+    # Limit size: keep only the most recent
     if len(pruned) > MAX_TITLE_INDEX:
         sorted_items = sorted(pruned.items(), key=lambda x: x[1], reverse=True)
         pruned = dict(sorted_items[:MAX_TITLE_INDEX])
@@ -727,7 +727,7 @@ def _title_idx_prune(idx: dict[str, int]) -> dict[str, int]:
 _title_pruned_this_cycle = False
 
 def _ensure_title_pruned(h: dict) -> dict[str, int]:
-    """Prune o índice apenas uma vez por ciclo."""
+    """Prune the index only once per cycle."""
     global _title_pruned_this_cycle
     idx = _get_title_index(h)
     if not _title_pruned_this_cycle:
@@ -737,20 +737,20 @@ def _ensure_title_pruned(h: dict) -> dict[str, int]:
     return idx
 
 def title_is_dup(h: dict, titulo: str) -> bool:
-    """Checa se um título normalizado já foi processado (qualquer site)."""
+    """Check if a normalized title was already processed (any site)."""
     fp = _title_fingerprint(titulo)
     idx = _ensure_title_pruned(h)
     return fp in idx
 
 def title_add(h: dict, titulo: str) -> None:
-    """Registra título no índice para dedup futuro."""
+    """Register title in the index for future dedup."""
     fp = _title_fingerprint(titulo)
     idx = _ensure_title_pruned(h)
     idx[fp] = int(time.time())
     h["_title_idx"] = idx
 
 # =========================
-# EXTRAÇÃO DE IMAGEM
+# IMAGE EXTRACTION
 # =========================
 IMG_EXT_RE = re.compile(r"\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)", re.IGNORECASE)
 IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
@@ -769,7 +769,7 @@ def _norm_img_url(img: str, base: Optional[str] = None) -> Optional[str]:
     u = img.strip()
     if u.startswith("//"):
         u = "https:" + u
-    # Converte HTTP para HTTPS (muitos sites bloqueiam HTTP ou redirecionam)
+    # Convert HTTP to HTTPS (many sites block HTTP or redirect)
     if u.startswith("http://"):
         u = "https://" + u[7:]
     if base and u.startswith("/"):
@@ -780,7 +780,7 @@ def _norm_img_url(img: str, base: Optional[str] = None) -> Optional[str]:
     return u
 
 def extrair_imagem_rss(entry, feed_url: str) -> Optional[str]:
-    """Extrai URL de imagem do entry RSS (sem HTTP)."""
+    """Extract image URL from RSS entry (no HTTP)."""
     img = None
     try:
         if "media_content" in entry and entry.media_content and len(entry.media_content) > 0:
@@ -801,11 +801,11 @@ def extrair_imagem_rss(entry, feed_url: str) -> Optional[str]:
             if m:
                 img = _norm_img_url(m.group(1), feed_url)
     except Exception as e:
-        log.debug(f"Erro extraindo imagem RSS: {e}")
+        log.debug(f"Error extracting RSS image: {e}")
     return img
 
 async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
-    """Busca og:image da página como fallback, com retry."""
+    """Fetch og:image from the page as fallback, with retry."""
     if not http_session:
         return None
     headers = {
@@ -816,7 +816,7 @@ async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
         try:
             async with http_session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as r:
                 if r.status >= 500:
-                    continue  # retry em 5xx
+                    continue  # retry on 5xx
                 if r.status != 200:
                     return None
                 raw = await r.content.read(1_000_000)  # max 1MB
@@ -826,7 +826,7 @@ async def fetch_og_image(url: str, retries: int = 2) -> Optional[str]:
                     return _norm_img_url(m.group(1), url)
                 return None
         except Exception as e:
-            log.debug(f"og:image tentativa {attempt+1}/{retries} falhou para {url}: {e}")
+            log.debug(f"og:image attempt {attempt+1}/{retries} failed for {url}: {e}")
             if attempt < retries - 1:
                 await asyncio.sleep(1)
     return None
@@ -835,7 +835,7 @@ MIN_IMG_WIDTH = 400
 MIN_IMG_HEIGHT = 200
 
 def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
-    """Extrai (width, height) dos headers de PNG, JPEG ou GIF sem lib externa."""
+    """Extract (width, height) from PNG, JPEG, or GIF headers without external libs."""
     if len(data) < 24:
         return None
     # PNG
@@ -853,7 +853,7 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
     if data[:2] == b"\xff\xd8":
         idx = 2
         while idx < len(data) - 9:
-            # Pular bytes de padding 0xFF
+            # Skip 0xFF padding bytes
             while idx < len(data) - 1 and data[idx] == 0xFF and data[idx + 1] == 0xFF:
                 idx += 1
             if idx >= len(data) - 9 or data[idx] != 0xFF:
@@ -865,7 +865,7 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
                 return w, h
             seg_len = struct.unpack(">H", data[idx + 2 : idx + 4])[0]
             if seg_len < 2:
-                break  # segmento malformado
+                break  # malformed segment
             idx += 2 + seg_len
     # WebP
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
@@ -878,7 +878,7 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
             w = (bits & 0x3FFF) + 1
             h = ((bits >> 14) & 0x3FFF) + 1
             return w, h
-        # VP8X (extended WebP — formato mais comum moderno)
+        # VP8X (extended WebP — most common modern format)
         if data[12:16] == b"VP8X" and len(data) >= 30:
             w = (data[24] | (data[25] << 8) | (data[26] << 16)) + 1
             h = (data[27] | (data[28] << 8) | (data[29] << 16)) + 1
@@ -886,7 +886,7 @@ def _img_dimensions_from_bytes(data: bytes) -> Optional[Tuple[int, int]]:
     return None
 
 async def validar_imagem(url: str) -> bool:
-    """Verifica se URL e imagem valida (>5KB, status 200/206, dimensoes minimas)."""
+    """Check if URL is a valid image (>5KB, status 200/206, minimum dimensions)."""
     if not url:
         return False
     if not http_session:
@@ -903,7 +903,7 @@ async def validar_imagem(url: str) -> bool:
             ct = r.headers.get("Content-Type", "").lower()
             if "image/" not in ct:
                 return False
-            # Verificar tamanho total
+            # Check total size
             cr = r.headers.get("Content-Range", "")
             if cr and "/" in cr:
                 total = cr.rsplit("/", 1)[-1]
@@ -913,51 +913,51 @@ async def validar_imagem(url: str) -> bool:
                 cl = r.headers.get("Content-Length", "")
                 if cl.isdigit() and int(cl) < 5000:
                     return False
-            # Ler bytes iniciais para checar dimensoes
+            # Read initial bytes to check dimensions
             chunk = await r.content.read(32768)
             dims = _img_dimensions_from_bytes(chunk)
             if dims:
                 w, h = dims
                 if w < MIN_IMG_WIDTH or h < MIN_IMG_HEIGHT:
-                    log.info(f"Imagem rejeitada por dimensao: {w}x{h} ({url[:80]})")
+                    log.info(f"Image rejected by dimensions: {w}x{h} ({url[:80]})")
                     return False
-                # Rejeitar aspect ratio extremo (banners, imagens cortadas)
+                # Reject extreme aspect ratio (banners, cropped images)
                 ratio = w / h if h > 0 else 0
                 if ratio > 4.0 or ratio < 0.3:
-                    log.info(f"Imagem rejeitada por aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
+                    log.info(f"Image rejected by aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
                     return False
             return True
     except Exception as e:
-        log.debug(f"Erro validando imagem {url}: {e}")
+        log.debug(f"Error validating image {url}: {e}")
     return False
 
 async def extrair_imagem_completa(entry, feed_url: str) -> Optional[str]:
-    """Pipeline completo: RSS → validação HTTP → fallback og:image obrigatório."""
+    """Full pipeline: RSS → HTTP validation → mandatory og:image fallback."""
     img = extrair_imagem_rss(entry, feed_url)
-    # Se imagem RSS válida, retorna
+    # If RSS image is valid, return it
     if img and await validar_imagem(img):
-        log.debug(f"Imagem extraída via RSS: {img[:80]}")
+        log.debug(f"Image extracted via RSS: {img[:80]}")
         return img
     
-    # Fallback OBRIGATÓRIO: og:image da página (mesmo se RSS retornou algo inválido)
+    # MANDATORY fallback: page og:image (even if RSS returned something invalid)
     link = entry.get("link")
     if link:
-        log.debug(f"RSS falhou, buscando og:image para: {link[:80]}")
+        log.debug(f"RSS failed, fetching og:image for: {link[:80]}")
         og = await fetch_og_image(link)
         if og and await validar_imagem(og):
-            log.info(f"Imagem recuperada via og:image: {og[:80]}")
+            log.info(f"Image recovered via og:image: {og[:80]}")
             return og
         elif og:
-            log.warning(f"og:image encontrado mas inválido: {og[:80]}")
+            log.warning(f"og:image found but invalid: {og[:80]}")
     
-    log.warning(f"Nenhuma imagem válida encontrada para: {entry.get('title', '?')[:60]}")
+    log.warning(f"No valid image found for: {entry.get('title', '?')[:60]}")
     return None
 
 
 async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
-    """Usa IA de visão para verificar se a imagem combina com o título."""
+    """Use vision AI to verify the image matches the title."""
     if not ai_client or not img_url or not titulo:
-        return True  # Se não tem IA, assume válida (não bloqueia)
+        return True  # No AI available — assume valid (do not block)
     try:
         resp = await ai_client.chat.completions.create(
             model="google/gemini-3.1-flash-lite",
@@ -965,19 +965,19 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
                 {
                     "role": "system",
                     "content": (
-                        "Você é um validador de imagens para um bot de notícias de tecnologia. "
-                        "Analise se a imagem tem relação com o título da notícia. "
-                        "Responda APENAS 'SIM' se a imagem é relevante ao tema da notícia, "
-                        "ou 'NAO' se a imagem é completamente irrelevante (ex: anúncio, produto aleatório, "
-                        "logo genérico, cortador de grama em notícia de cibersegurança, etc). "
-                        "Imagens genéricas de tecnologia (teclados, telas, servidores) são aceitáveis "
-                        "para notícias de tech. Responda apenas SIM ou NAO, nada mais."
+                        "You are an image validator for a tech news bot. "
+                        "Analyze whether the image relates to the news title. "
+                        "Reply ONLY 'SIM' if the image is relevant to the news topic, "
+                        "or 'NAO' if the image is completely irrelevant (e.g. ad, random product, "
+                        "generic logo, lawn mower in a cybersecurity story, etc). "
+                        "Generic tech images (keyboards, screens, servers) are acceptable "
+                        "for tech news. Reply only SIM or NAO, nothing else."
                     ),
                 },
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"Título da notícia: {titulo}"},
+                        {"type": "text", "text": f"News title: {titulo}"},
                         {"type": "image_url", "image_url": {"url": img_url}},
                     ],
                 },
@@ -989,17 +989,17 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
         answer = resp.choices[0].message.content.strip().upper()
         relevante = "SIM" in answer
         if not relevante:
-            log.info(f"IA rejeitou imagem por irrelevância: {img_url[:80]} | título: {titulo[:60]}")
+            log.info(f"AI rejected image as irrelevant: {img_url[:80]} | title: {titulo[:60]}")
         return relevante
     except Exception as e:
-        log.debug(f"Erro na validação IA de imagem: {e}")
-        return True  # Em caso de erro, não bloqueia
+        log.debug(f"Error in AI image validation: {e}")
+        return True  # On error, do not block
 
 # =========================
-# ANÁLISE IA (OpenRouter)
+# AI ANALYSIS (OpenRouter)
 # =========================
 def _fix_sentence_case(text: str) -> str:
-    """Converte Title Case para sentence case quando detectado."""
+    """Convert Title Case to sentence case when detected."""
     words = text.split()
     if not words:
         return text
@@ -1008,8 +1008,8 @@ def _fix_sentence_case(text: str) -> str:
         return text
     capitalized_ratio = sum(1 for w in long_words if w[0].isupper()) / len(long_words)
     if capitalized_ratio < 0.6:
-        return text  # Não é Title Case, não mexe
-    # Converte para sentence case: minúsculas, depois capitaliza após pontuação de fim de frase
+        return text  # Not Title Case — leave unchanged
+    # Convert to sentence case: lowercase, then capitalize after sentence-ending punctuation
     result = text.lower()
     result = result[0].upper() + result[1:] if result else result
     for punct in [". ", "! ", "? "]:
@@ -1019,25 +1019,25 @@ def _fix_sentence_case(text: str) -> str:
 
 
 def _normalize_news_title(title: str) -> str:
-    """Padroniza títulos para formato jornalístico direto (max 90 chars, sentence case)."""
+    """Standardize titles to direct journalistic format (max 90 chars, sentence case)."""
     t = re.sub(r"\s+", " ", (title or "").strip())
     if not t:
         return t
-    # Remove emoji/símbolos no começo para evitar duplicar marcador de urgência no embed.
+    # Remove leading emoji/symbols to avoid duplicating urgency marker in embed.
     t = re.sub(r"^[^\wÀ-ÿ]+", "", t).strip()
-    # Remove aspas e pontuação soltas no início/fim.
+    # Remove stray quotes and punctuation at start/end.
     t = t.strip(" -:;,.!?\"'`")
-    # Limpa padrões comuns de clickbait.
+    # Strip common clickbait patterns.
     t = re.sub(r"(?i)\b(voc[eê] n[aã]o vai acreditar|imperd[ií]vel|chocante|surpreendente)\b", "", t)
     t = re.sub(r"\s+", " ", t).strip()
     t = _fix_sentence_case(t)
     
-    # Mantém siglas comuns em caixa alta após normalização
+    # Keep common acronyms uppercase after normalization
     acronyms = ("IA", "EUA", "UE", "UK", "API", "CVE", "CEO", "GPU", "CPU", "AI")
     for ac in acronyms:
         t = re.sub(rf"\b{ac.lower()}\b", ac, t, flags=re.IGNORECASE)
     
-    # Nomes próprios que devem ser TRADUZIDOS ou capitalizados
+    # Proper names to translate or capitalize (user-facing PT-BR output)
     proper_names = {
         "xbox": "Xbox",
         "windows": "Windows",
@@ -1073,7 +1073,7 @@ def _normalize_news_title(title: str) -> str:
         "tiktok": "TikTok",
         "snapchat": "Snapchat",
         "pinterest": "Pinterest",
-        # Nomes de jogos/personagens (traduzir)
+        # Game/character names (translate for user-facing output)
         "mr. karate": "Senhor Karatê",
         "mr.karate": "Senhor Karatê",
         "fatal fury": "Fatal Fury",
@@ -1083,7 +1083,7 @@ def _normalize_news_title(title: str) -> str:
         "phantom blade zero": "Phantom Blade Zero",
         "gamescom": "Gamescom",
     }
-    # Nomes próprios compostos (multi-palavra) — aplicar primeiro
+    # Multi-word proper names — apply first
     multi_proper = {
         "estados unidos": "Estados Unidos",
         "reino unido": "Reino Unido",
@@ -1109,24 +1109,24 @@ def _normalize_news_title(title: str) -> str:
     for lower_name, correct_name in proper_names.items():
         t = re.sub(rf"\b{re.escape(lower_name)}\b", correct_name, t, flags=re.IGNORECASE)
     
-    # Garante pelo menos 6 palavras (se o original tiver)
+    # Ensure at least 6 words (when original has them)
     words = t.split()
     min_words = 6
     if len(words) < min_words and len(t) <= 130:
-        # Título curto, manter original se não for muito longo
+        # Short title — keep original if not too long
         pass
     else:
-        # Limita tamanho para no máx ~3 linhas (130 caracteres) preservando palavras
+        # Limit length to ~3 lines max (130 chars) while preserving words
         max_len = 130
         if len(t) > max_len:
             cut = t[:max_len]
-            # Corta no último espaço para não quebrar palavra
+            # Cut at last space to avoid breaking a word
             last_space = cut.rfind(" ")
-            if last_space >= 55:  # pelo menos 55 chars para caber 6 palavras
+            if last_space >= 55:  # at least 55 chars to fit 6 words
                 cut = cut[:last_space]
-            # Se após corte ficou com menos de 6 palavras, tenta recuperar
+            # If cut has fewer than 6 words, try to recover
             if len(words) >= min_words and len(cut.split()) < min_words:
-                # Recua até o 8º espaço
+                # Back up to the 6th space
                 space_count = 0
                 pos = 0
                 for i, ch in enumerate(t):
@@ -1139,7 +1139,7 @@ def _normalize_news_title(title: str) -> str:
                     cut = t[:pos].rstrip(" ,;:-")
             t = cut.rstrip(" ,;:-") + ("" if len(t) <= max_len else "...")
         else:
-            t = t  # mantém original se <= max_len
+            t = t  # keep original if <= max_len
     if t:
         t = t[0].upper() + t[1:]
     return t
@@ -1170,7 +1170,7 @@ def _corrigir_prefixos_estranhos(frase: str) -> str:
     if not s:
         return ""
 
-    # Evita construções semânticas ruins como "A empresa governo federal".
+    # Avoid bad semantic constructions like "A empresa governo federal".
     if re.match(rf"(?i)^a empresa\s+(?:{'|'.join(_INSTITUTION_NOUNS)})\b", s):
         s = re.sub(r"(?i)^a empresa\s+", "O ", s, count=1)
     if re.match(rf"(?i)^a startup\s+(?:{'|'.join(_INSTITUTION_NOUNS)})\b", s):
@@ -1188,18 +1188,18 @@ def _limitar_palavras(frase: str, max_palavras: int = 35) -> str:
 
 def _normalizar_resumo_final(texto: str) -> str:
     """
-    Processa o resumo para garantir formato correto e limite de 1000 caracteres.
-    Remove construções semânticas estranhas e garante fluxo natural.
+    Process summary to ensure correct format and 1000-char limit.
+    Remove odd semantic constructions and ensure natural flow.
     """
     bruto = re.sub(r"\s+", " ", (texto or "").strip())
     if not bruto:
         return ""
 
-    # Garante que termina com pontuação
+    # Ensure trailing punctuation
     if not bruto[-1] in ".!?":
         bruto += "."
 
-    # Limita a 1000 caracteres, cortando graciosamente no último ponto
+    # Limit to 1000 chars, cutting gracefully at last sentence end
     if len(bruto) > 1000:
         corte = bruto[:1000]
         ultimo_ponto = max(corte.rfind(". "), corte.rfind("! "), corte.rfind("? "))
@@ -1208,7 +1208,7 @@ def _normalizar_resumo_final(texto: str) -> str:
         else:
             bruto = corte.rstrip() + "..."
     
-    # Corrige formatação de sentence case
+    # Fix sentence case formatting
     frases = []
     for parte in re.split(r"[.!?]+", bruto):
         parte = parte.strip()
@@ -1225,7 +1225,7 @@ def _normalizar_resumo_final(texto: str) -> str:
         frases.append(parte)
     
     resultado = " ".join(frases)
-    log.info(f"Resumo final: {len(resultado)} caracteres")
+    log.info(f"Final summary: {len(resultado)} characters")
     
     return resultado if len(resultado) >= 50 else ""
 
@@ -1240,93 +1240,96 @@ async def gerar_analise_ia(texto_base: str, titulo_original: str, nome_site: str
     if not ai_client:
         return None
 
-    # Cooldown entre chamadas
+    # Cooldown between calls
     now = time.monotonic()
     wait = (_last_ai_call + IA_COOLDOWN_SEC) - now
     if wait > 0:
         await asyncio.sleep(wait)
-    # Atualizar timestamp ANTES da chamada (protege contra exceções)
+    # Update timestamp BEFORE the call (protects against exceptions)
     _last_ai_call = time.monotonic()
 
-    prompt = f"""Analise a notícia abaixo e responda APENAS com JSON válido, sem markdown.
+    prompt = f"""Analyze the news article below and reply ONLY with valid JSON, no markdown.
 
-REGRAS RÍGIDAS PARA O TÍTULO (NÃO NEGOCIÁVEL):
-- O CAMPO "titulo" DEVE TER ENTRE 6 E 11 PALAVRAS OBRIGATORIAMENTE.
-- CURTO E DIRETO: jamais pode ocupar mais de 3 linhas na tela.
-- TÍTULO MUITO CURTO (< 6) = REJEIÇÃO. Mínimo: 6 palavras. Máximo: 11.
-- Se o título original tiver menos de 6 palavras, EXPENDA-O adicionando contexto jornalístico.
-- Exemplos:
-  ✗ "Meta processada" (2 palavras - REJEITADO)
-  ✗ "OpenAI lança GPT-5" (4 palavras - REJEITADO)
-  ✓ "Meta enfrenta processo milionário por uso indevido de livros" (9 palavras - ACEITO)
-  ✓ "ChatGPT reduz alucinações em aplicações médicas e jurídicas" (8 palavras - ACEITO)
+OUTPUT LANGUAGE: Write "titulo", "resumo", and "categoria" in Brazilian Portuguese (PT-BR).
+Keep JSON keys exactly as shown. The "reason" field (when rejecting) may be in English.
 
-RESPONDA EM UM DOS DOIS FORMATOS:
-1. SE REJEITAR: {{"pular": true, "reason": "motivo curto"}}
-2. SE APROVAR: {{"pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..."}}
+STRICT TITLE RULES (NON-NEGOTIABLE):
+- The "titulo" field MUST have BETWEEN 6 AND 11 WORDS.
+- SHORT AND DIRECT: must never exceed 3 lines on screen.
+- TITLE TOO SHORT (< 6 words) = REJECTION. Minimum: 6 words. Maximum: 11.
+- If the original title has fewer than 6 words, EXPAND it with journalistic context.
+- Examples:
+  ✗ "Meta processada" (2 words - REJECTED)
+  ✗ "OpenAI lança GPT-5" (4 words - REJECTED)
+  ✓ "Meta enfrenta processo milionário por uso indevido de livros" (9 words - ACCEPTED)
+  ✓ "ChatGPT reduz alucinações em aplicações médicas e jurídicas" (8 words - ACCEPTED)
 
-═══ REGRAS DE BLOQUEIO IMEDIATO (pular=true) ═══
-- Promoção, oferta, cupom, desconto, preço, cashback, afiliado, guia de compra, "vale a pena comprar".
-- Review, análise de produto, comparativo, unboxing, "melhor custo-benefício".
-- Fofoca, treta, política não-tech, celebridade, esporte, horóscopo, entretenimento genérico.
-- Ciência genérica sem relação com tech (biologia, paleontologia, arqueologia, astronomia pura).
-- Conteúdo vago, clickbait sem substância, rumor sem fonte, notícia repetitiva.
-- Smartphones intermediários/entrada: Galaxy A/M, Moto G/E, Redmi Note, POCO básico, "chegou ao Brasil" sem inovação.
-- Games: reviews, skins, cosméticos, patch notes menores, eventos semanais, item shop, preços, promoções de jogos.
+REPLY IN ONE OF TWO FORMATS:
+1. IF REJECTING: {{"pular": true, "reason": "short reason"}}
+2. IF APPROVING: {{"pular": false, "titulo": "...", "nota": 85, "categoria": "...", "resumo": "..."}}
 
-═══ CATEGORIAS (use exatamente uma destas) ═══
+═══ IMMEDIATE BLOCK RULES (pular=true) ═══
+- Promotion, deal, coupon, discount, price, cashback, affiliate, buying guide, "worth buying".
+- Review, product analysis, comparison, unboxing, "best value for money".
+- Gossip, drama, non-tech politics, celebrity, sports, horoscope, generic entertainment.
+- Generic science unrelated to tech (biology, paleontology, archaeology, pure astronomy).
+- Vague content, substance-free clickbait, unsourced rumor, repetitive news.
+- Mid-range/budget smartphones: Galaxy A/M, Moto G/E, Redmi Note, basic POCO, "arrived in Brazil" without innovation.
+- Games: reviews, skins, cosmetics, minor patch notes, weekly events, item shop, prices, game promotions.
+
+═══ CATEGORIES (use exactly one of these, in PT-BR) ═══
 Hardware | Inteligência Artificial | Games | Cibersegurança | Sistemas Operacionais | Smartphones | Big Techs | Ciência & Espaço | Software & Apps | Cloud & DevOps | Programação & Dev | Internet & Redes | Mídia & Streaming | Curiosidade Tech | Outros
 
-═══ ESCALA DE NOTAS (seja rigoroso) ═══
-- 95-100: CATÁSTROFE ou MARCO MUNDIAL. Queda global de serviço, hack massivo, lançamento de nova geração (iPhone, Windows, GPT novo).
-- 85-94: ALTA RELEVÂNCIA. Grandes novidades confirmadas, vulnerabilidade crítica (CVE alto), aquisição bilionária, demissão em massa.
-- 75-84: RELEVANTE. Interessante para entusiastas de tech, atualização significativa, nova feature de grande plataforma.
-- <75: IRRELEVANTE — marque pular=true.
+═══ SCORE SCALE (be strict) ═══
+- 95-100: CATASTROPHE or GLOBAL MILESTONE. Global service outage, massive hack, new-generation launch (iPhone, Windows, new GPT).
+- 85-94: HIGH RELEVANCE. Major confirmed news, critical vulnerability (high CVE), billion-dollar acquisition, mass layoffs.
+- 75-84: RELEVANT. Interesting for tech enthusiasts, significant update, major platform feature.
+- <75: IRRELEVANT — set pular=true.
 
-═══ TÍTULO ═══
-- OBRIGATÓRIO: EXATAMENTE ENTRE 6 E 11 PALAVRAS. NUNCA MENOS QUE 6.
-- CURTO E DIRETO: jamais pode ocupar mais de 3 linhas na tela. Prefira sempre a forma mais enxuta que ainda explique o fato.
-- Claro, jornalístico, autoexplicativo. Quem lê o título entende o fato sem precisar clicar.
-- Em PT-BR. Jargões tech comuns podem ser mantidos em inglês: "phishing", "ransomware", "zero-day", "malware", "exploit", "hacker", "Windows", "iPhone", "ChatGPT", "Google", "Android", "API", "Linux", "Wi-Fi", "Bluetooth", etc.
-- MAS o título deve ser CLARO e LEGÍVEL para qualquer entusiasta de tech. Proibido:
-  ✗ Aportuguesar verbos ingleses: "hijacka", "bypassa", "patcha" — use equivalentes: "sequestra", "burla", "corrige".
-  ✗ Acumular jargões sem contexto: "Kit de phishing Tycoon2FA hijacka contas via device-code phishing" — incompreensível.
-  ✗ Nomes de ferramentas/malwares obscuros no título: mova para o resumo. Ex: "Tycoon2FA" → resumo.
-  ✓ BOM: "Novo golpe de phishing rouba contas do Microsoft 365"
-  ✓ BOM: "Falha zero-day no Chrome permite execução de código remoto"
-  ✓ BOM: "Ransomware ataca hospitais nos EUA e paralisa sistemas"
-- Sem clickbait. Sentence case: só primeira palavra e nomes próprios em maiúscula.
-- Entre 50 e 110 caracteres. Conta as palavras ANTES de enviar.
-- EXEMPLOS DE TÍTULOS BONS (curtos):
+═══ TITLE (titulo field, PT-BR) ═══
+- REQUIRED: EXACTLY 6 TO 11 WORDS. NEVER FEWER THAN 6.
+- SHORT AND DIRECT: must never exceed 3 lines on screen. Prefer the most concise form that still explains the fact.
+- Clear, journalistic, self-explanatory. Reader understands the fact without clicking.
+- In PT-BR. Common tech jargon may stay in English: "phishing", "ransomware", "zero-day", "malware", "exploit", "hacker", "Windows", "iPhone", "ChatGPT", "Google", "Android", "API", "Linux", "Wi-Fi", "Bluetooth", etc.
+- BUT the title must be CLEAR and READABLE for any tech enthusiast. Forbidden:
+  ✗ Portuguese-ing verbs from English: "hijacka", "bypassa", "patcha" — use: "sequestra", "burla", "corrige".
+  ✗ Stacking jargon without context: "Kit de phishing Tycoon2FA hijacka contas via device-code phishing" — incomprehensible.
+  ✗ Obscure tool/malware names in title: move to resumo. Ex: "Tycoon2FA" → resumo.
+  ✓ GOOD: "Novo golpe de phishing rouba contas do Microsoft 365"
+  ✓ GOOD: "Falha zero-day no Chrome permite execução de código remoto"
+  ✓ GOOD: "Ransomware ataca hospitais nos EUA e paralisa sistemas"
+- No clickbait. Sentence case: only first word and proper nouns capitalized.
+- Between 50 and 110 characters. Count words BEFORE sending.
+- GOOD TITLE EXAMPLES (short):
   ✓ "Meta enfrenta processo milionário por uso indevido de livros"
   ✓ "ChatGPT reduz erros em aplicações médicas e jurídicas"
   ✓ "Novo golpe de phishing rouba contas do Microsoft 365"
-  ✗ "Meta processada" (RUIM: apenas 2 palavras)
-  ✗ "Kit de phishing Tycoon2FA hijacka contas via device-code" (RUIM: verbos aportuguesados + jargões obscuros acumulados)
+  ✗ "Meta processada" (BAD: only 2 words)
+  ✗ "Kit de phishing Tycoon2FA hijacka contas via device-code" (BAD: Portuguese-ing verbs + obscure jargon)
 
-═══ RESUMO ═══
-- Um único parágrafo contínuo, 4 a 6 frases. Sem bullet points, sem quebras de linha.
-- Estilo Filipe Deschamps: engajante, contextualizado, explica o fato, o porquê e o impacto real.
-- Estrutura: CONTEXTO/GANCHO → FATO PRINCIPAL → DETALHE RELEVANTE → IMPACTO ou REAÇÃO.
-- Linguagem jornalística mas acessível: não seco, não acadêmico, não telegráfico. Faz o leitor entender por que isso importa.
-- NÃO REPITA a mesma ideia com palavras diferentes. Cada frase deve trazer informação NOVA.
-- PROIBIDO frases genéricas de enchimento como:
+═══ SUMMARY (resumo field, PT-BR) ═══
+- One continuous paragraph, 4 to 6 sentences. No bullet points, no line breaks.
+- Engaging tech-journalism style: contextualized, explains the fact, why it matters, and real impact.
+- Structure: CONTEXT/HOOK → MAIN FACT → RELEVANT DETAIL → IMPACT or REACTION.
+- Journalistic but accessible: not dry, not academic, not telegraphic. Help the reader understand why it matters.
+- DO NOT repeat the same idea with different words. Each sentence must add NEW information.
+- FORBIDDEN filler phrases such as:
   ✗ "pode ter implicações significativas" / "o que pode ser um grande diferencial"
   ✗ "além disso, essa novidade pode influenciar..." / "isso pode impactar o mercado"
   ✗ "a comunidade aguarda com expectativa" / "destaca a importância de..."
-  ✗ Qualquer frase que poderia ser colada em QUALQUER notícia sem mudar nada. Cada frase deve conter FATOS CONCRETOS da notícia.
-- PROIBIDO inventar informações ou confundir empresas/produtos. Se a notícia não menciona um dado, NÃO invente.
-- Em PT-BR com gramática impecável.
-- LIMITE: entre 600 e 1000 caracteres. Não ultrapasse 1000.
+  ✗ Any sentence that could be pasted into ANY news without changing anything. Each sentence must contain CONCRETE FACTS from the article.
+- FORBIDDEN to invent information or confuse companies/products. If the article does not mention a fact, DO NOT invent it.
+- In PT-BR with impeccable grammar.
+- LIMIT: between 600 and 1000 characters. Do not exceed 1000.
 
-═══ FILTROS ESPECIAIS ═══
-SMARTPHONES: Aceitar APENAS flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) ou inovação real.
-GAMES: Aceitar APENAS grandes lançamentos AAA confirmados, grandes eventos (TGA, E3, Nintendo Direct), aquisições de estúdios ou demissões em massa (100+ funcionários). Rejeitar: sindicatos, direitos trabalhistas, greves, negociações coletivas, vazamentos de código-fonte de jogos antigos, mods, hacks de console, cheats, patches de balanceamento, temporadas de battle pass, polêmicas internas de estúdio.
-CIBERSEGURANÇA: Priorizar CVE crítico, ransomware, vazamento de dados, zero-day. Nota ≥85.
+═══ SPECIAL FILTERS ═══
+SMARTPHONES: Accept ONLY flagships (iPhone, Galaxy S/Z, Pixel Pro, Xiaomi Ultra) or real innovation.
+GAMES: Accept ONLY major confirmed AAA launches, major events (TGA, E3, Nintendo Direct), studio acquisitions, or mass layoffs (100+ employees). Reject: unions, labor rights, strikes, collective bargaining, old game source leaks, mods, console hacks, cheats, balance patches, battle pass seasons, internal studio drama.
+CYBERSECURITY: Prioritize critical CVE, ransomware, data breach, zero-day. Score ≥85.
 
-Fonte: {nome_site}
-Título Original: {titulo_original}
-Texto da Notícia: {texto_base[:8000]}
+Source: {nome_site}
+Original Title: {titulo_original}
+Article Text: {texto_base[:8000]}
 """
 
     modelo_principal = "google/gemini-3.1-flash-lite"
@@ -1334,23 +1337,23 @@ Texto da Notícia: {texto_base[:8000]}
 
     for attempt in range(3):
         modelo = modelo_principal if attempt == 0 else modelo_fallback
-        log.info(f"IA tentativa {attempt+1}/3 usando modelo: {modelo}")
+        log.info(f"AI attempt {attempt+1}/3 using model: {modelo}")
         try:
             response = await ai_client.chat.completions.create(
                 model=modelo,
                 messages=[
-                    {"role": "system", "content": "Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. REGRAS CRÍTICAS: 1) Título claro e legível em PT-BR — jargões tech comuns OK, mas nunca aportuguesar verbos ingleses nem acumular termos obscuros. 2) Resumo: parágrafo denso com 4-6 frases, entre 600 e 1000 caracteres. Cada frase deve trazer FATOS CONCRETOS — PROIBIDO frases genéricas de enchimento como 'pode ter implicações significativas' ou 'destaca a importância'. 3) NUNCA invente informações que não estão na notícia."},
+                    {"role": "system", "content": "Reply ONLY with valid JSON, no markdown, no text outside JSON. CRITICAL RULES: 1) Output titulo, resumo, and categoria in Brazilian Portuguese — clear and readable; common tech jargon OK, but never Portuguese-ing English verbs or stacking obscure terms. 2) Resumo: dense paragraph with 4-6 sentences, 600-1000 characters. Each sentence must bring CONCRETE FACTS — FORBIDDEN generic filler like 'pode ter implicações significativas' or 'destaca a importância'. 3) NEVER invent information not in the article."},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
                 timeout=60.0,
             )
             resp = response.choices[0].message.content.strip()
-            # Descartar respostas absurdamente grandes (evita hang no parsing)
+            # Discard absurdly large responses (avoids hang during parsing)
             if len(resp) > 50_000:
-                log.error("Resposta da IA muito grande (%d chars), descartando", len(resp))
+                log.error("AI response too large (%d chars), discarding", len(resp))
                 continue
-            # Extrair JSON: tenta achar o primeiro objeto JSON válido
+            # Extract JSON: find the first valid JSON object
             json_start = resp.find("{")
             data = None
             if json_start >= 0:
@@ -1373,16 +1376,16 @@ Texto da Notícia: {texto_base[:8000]}
                 if isinstance(data.get("resumo"), str):
                     data["resumo"] = _normalizar_resumo_final(data["resumo"])
                     if not data["resumo"]:
-                        log.warning("Resumo vazio após normalização, rejeitando")
+                        log.warning("Empty summary after normalization, rejecting")
                         return None
                 if isinstance(data.get("titulo"), str):
                     data["titulo"] = _normalize_news_title(data["titulo"])
                 return data
         except Exception as e:
-            log.warning(f"IA tentativa {attempt+1}/3 falhou ({modelo}): {e}")
+            log.warning(f"AI attempt {attempt+1}/3 failed ({modelo}): {e}")
             if attempt < 2:
                 backoff = 2 ** (attempt + 1)
-                log.info(f"Aguardando {backoff}s antes da próxima tentativa...")
+                log.info(f"Waiting {backoff}s before next attempt...")
                 await asyncio.sleep(backoff)
     return None
 
@@ -1399,17 +1402,17 @@ def entry_datetime_utc(entry) -> Optional[datetime]:
         return None
 
 def noticia_eh_recente(entry_dt: Optional[datetime]) -> bool:
-    """Retorna True apenas se a notícia tem data e é recente. Sem data = rejeitar."""
+    """Return True only if the news has a date and is recent. No date = reject."""
     if not entry_dt:
         return False
     return entry_dt >= datetime.now(timezone.utc) - timedelta(hours=MAX_IDADE_HORAS)
 
 # =========================
-# POSTAR NOTÍCIA (extraído para reuso)
+# POST NEWS (extracted for reuse)
 # =========================
 async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, str]]:
-    """Baixa a imagem e retorna (bytes, extensão). Retry em caso de falha.
-    Valida dimensões mínimas e aspect ratio para evitar imagens cortadas/banners."""
+    """Download image and return (bytes, extension). Retries on failure.
+    Validates minimum dimensions and aspect ratio to avoid cropped images/banners."""
     if not http_session or not url:
         return None
     for attempt in range(retries):
@@ -1421,63 +1424,63 @@ async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, st
                 allow_redirects=True,
             ) as r:
                 if r.status not in (200, 206):
-                    log.debug(f"Imagem HTTP {r.status}: {url[:80]} (tentativa {attempt+1})")
+                    log.debug(f"Image HTTP {r.status}: {url[:80]} (attempt {attempt+1})")
                     if attempt < retries - 1:
                         await asyncio.sleep(2)
                     continue
                 ct = r.headers.get("Content-Type", "").lower()
                 if "image/" not in ct:
-                    log.debug(f"Imagem Content-Type inválido ({ct}): {url[:80]}")
+                    log.debug(f"Image invalid Content-Type ({ct}): {url[:80]}")
                     return None
-                # Verificar Content-Length antes de baixar (rejeitar > 10MB)
+                # Check Content-Length before download (reject > 10MB)
                 cl_header = r.headers.get("Content-Length", "")
                 expected_size = int(cl_header) if cl_header.isdigit() else 0
                 if expected_size > 10 * 1024 * 1024:
-                    log.debug(f"Imagem grande demais ({expected_size} bytes): {url[:80]}")
+                    log.debug(f"Image too large ({expected_size} bytes): {url[:80]}")
                     return None
-                data = await r.read()  # lê resposta completa (não trunca)
+                data = await r.read()  # read full response (no truncation)
                 if len(data) > 10 * 1024 * 1024:
-                    log.debug(f"Imagem grande demais ({len(data)} bytes): {url[:80]}")
+                    log.debug(f"Image too large ({len(data)} bytes): {url[:80]}")
                     return None
                 if len(data) < 5000:
-                    log.debug(f"Imagem muito pequena ({len(data)} bytes): {url[:80]}")
+                    log.debug(f"Image too small ({len(data)} bytes): {url[:80]}")
                     return None
-                # Verificar integridade: Content-Length vs bytes recebidos
+                # Verify integrity: Content-Length vs bytes received
                 if expected_size and len(data) < expected_size:
-                    log.warning(f"Imagem incompleta ({len(data)}/{expected_size} bytes): {url[:80]}")
+                    log.warning(f"Incomplete image ({len(data)}/{expected_size} bytes): {url[:80]}")
                     if attempt < retries - 1:
                         await asyncio.sleep(2)
                     continue
-                # Validar dimensões da imagem completa (evita imagens cortadas/corrompidas)
+                # Validate full image dimensions (avoids cropped/corrupted images)
                 dims = _img_dimensions_from_bytes(data)
                 if dims:
                     w, h = dims
                     if w < MIN_IMG_WIDTH or h < MIN_IMG_HEIGHT:
-                        log.warning(f"Imagem download rejeitada: {w}x{h} < {MIN_IMG_WIDTH}x{MIN_IMG_HEIGHT} ({url[:80]})")
+                        log.warning(f"Downloaded image rejected: {w}x{h} < {MIN_IMG_WIDTH}x{MIN_IMG_HEIGHT} ({url[:80]})")
                         return None
-                    # Rejeitar aspect ratio extremo (banners finos, imagens muito altas)
+                    # Reject extreme aspect ratio (thin banners, very tall images)
                     ratio = w / h if h > 0 else 0
                     if ratio > 4.0 or ratio < 0.3:
-                        log.warning(f"Imagem rejeitada por aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
+                        log.warning(f"Image rejected by aspect ratio ({ratio:.2f}): {w}x{h} ({url[:80]})")
                         return None
                 else:
-                    # Se não conseguiu extrair dimensões, rejeitar (imagem possivelmente corrompida)
-                    log.warning(f"Imagem rejeitada: impossível extrair dimensões ({url[:80]})")
+                    # Could not extract dimensions — reject (possibly corrupted image)
+                    log.warning(f"Image rejected: cannot extract dimensions ({url[:80]})")
                     return None
-                # Validar magic bytes e integridade do EOF
+                # Validate magic bytes and EOF integrity
                 if data[:2] == b'\xff\xd8':
                     ext = "jpg"
-                    # JPEG deve terminar com FFD9 (End of Image)
+                    # JPEG must end with FFD9 (End of Image)
                     if data[-2:] != b'\xff\xd9':
-                        log.warning(f"JPEG truncado (sem EOF marker): {url[:80]}")
+                        log.warning(f"Truncated JPEG (no EOF marker): {url[:80]}")
                         if attempt < retries - 1:
                             await asyncio.sleep(2)
                         continue
                 elif data[:4] == b'\x89PNG':
                     ext = "png"
-                    # PNG deve terminar com IEND chunk
+                    # PNG must end with IEND chunk
                     if b'IEND' not in data[-20:]:
-                        log.warning(f"PNG truncado (sem IEND): {url[:80]}")
+                        log.warning(f"Truncated PNG (no IEND): {url[:80]}")
                         if attempt < retries - 1:
                             await asyncio.sleep(2)
                         continue
@@ -1486,7 +1489,7 @@ async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, st
                 elif data[:4] == b'GIF8':
                     ext = "gif"
                 else:
-                    # Fallback pelo content-type
+                    # Fallback from content-type
                     ext = "jpg"
                     if "png" in ct:
                         ext = "png"
@@ -1496,24 +1499,24 @@ async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, st
                         ext = "gif"
                 return data, ext
         except Exception as e:
-            log.debug(f"Erro ao baixar imagem {url[:80]} (tentativa {attempt+1}): {e}")
+            log.debug(f"Error downloading image {url[:80]} (attempt {attempt+1}): {e}")
             if attempt < retries - 1:
                 await asyncio.sleep(2)
     return None
 
 
 async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
-    """Posta uma notícia no canal. Retorna True se postou com sucesso."""
-    # Trava de segurança: nunca postar sem imagem
+    """Post a news item to the channel. Returns True if posted successfully."""
+    # Safety lock: never post without image
     img_url = noticia.get("imagem")
     if not img_url:
-        log.error(f"Tentativa de postar sem imagem, abortando: {noticia.get('titulo', '')[:60]}")
+        log.error(f"Attempt to post without image, aborting: {noticia.get('titulo', '')[:60]}")
         return False
 
-    # Baixar imagem para anexar (evita hotlink protection / URLs que Discord não carrega)
+    # Download image for attachment (avoids hotlink protection / URLs Discord won't load)
     img_data = await _baixar_imagem(img_url)
     if not img_data:
-        log.warning(f"Falha ao baixar imagem, abortando post: {noticia.get('titulo', '')[:60]}")
+        log.warning(f"Failed to download image, aborting post: {noticia.get('titulo', '')[:60]}")
         return False
 
     img_bytes, img_ext = img_data
@@ -1553,7 +1556,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
     embed.set_footer(text=texto_rodape)
 
     global _daily_mention_news, _daily_mention_news_date
-    # Menciona cargo só para notícias urgentes (nota >= 90) e máx 3 por dia
+    # Mention role only for urgent news (score >= 90), max 3 per day
     hoje_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
     if hoje_br != _daily_mention_news_date:
         _daily_mention_news_date = hoje_br
@@ -1578,40 +1581,40 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
                 auto_archive_duration=1440,
             )
         except Exception as e:
-            log.warning(f"Erro ao criar thread: {e}")
+            log.warning(f"Error creating thread: {e}")
 
         historico_set(history, noticia["link_norm"], noticia["dedupe"], "posted")
         metric_inc(metrics, "posts_hoje")
         if mention:
             _daily_mention_news += 1
-        log.info(f"  📨 Postado: {noticia['titulo'][:60]}")
+        log.info(f"  📨 Posted: {noticia['titulo'][:60]}")
         return True
     except Exception as e:
-        log.error(f"  Erro ao postar: {e}")
+        log.error(f"  Error posting: {e}")
         return False
 
 # =========================
-# PIPELINE PRINCIPAL
+# MAIN PIPELINE
 # =========================
-# Estado global para /status
+# Global state for /status
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
-_last_run_ts: Optional[float] = None  # epoch do último ciclo executado
-# Contador diário de menções ao cargo de notícias (máx 3 por dia)
+_last_run_ts: Optional[float] = None  # epoch of last executed cycle
+# Daily counter for news role mentions (max 3 per day)
 _daily_mention_news: int = 0
 _daily_mention_news_date: str = ""
 
 def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
-    """Permite coleta no horário comercial e no pré-aquecimento antes das 8h."""
+    """Allow collection during business hours and pre-warm before 8am."""
     if HORA_INICIO <= agora.hour < HORA_FIM:
         return True
     return agora.hour == (HORA_INICIO - 1) and agora.minute >= MINUTO_PRE_AQUECIMENTO
 
 
 def _deve_rodar_slot(agora: datetime) -> bool:
-    """Roda a cada INTERVALO_NOTICIAS_MIN minutos (controle por tempo decorrido).
-    Só consome o intervalo quando já estamos na janela ativa (a checagem de janela
-    acontece ANTES desta), para o primeiro ciclo do dia disparar assim que abrir."""
+    """Run every INTERVALO_NOTICIAS_MIN minutes (elapsed-time control).
+    Only consumes the interval when already in the active window (window check
+    happens BEFORE this), so the first cycle of the day fires as soon as it opens."""
     global _last_run_ts
     now = agora.timestamp()
     if _last_run_ts is not None and (now - _last_run_ts) < INTERVALO_NOTICIAS_MIN * 60:
@@ -1625,7 +1628,7 @@ async def verificar_feeds():
     try:
         await _verificar_feeds_inner()
     except Exception as e:
-        log.exception(f"Erro fatal no ciclo de notícias: {e}")
+        log.exception(f"Fatal error in news cycle: {e}")
 
 async def _verificar_feeds_inner():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
@@ -1633,15 +1636,15 @@ async def _verificar_feeds_inner():
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
-    # Janela primeiro: fora dela não consumimos o intervalo (mantém o primeiro
-    # ciclo do dia disparando assim que a janela abre).
+    # Window first: outside it we do not consume the interval (keeps the first
+    # cycle of the day firing when the window opens).
     if not _janela_ativa_ou_pre_aquecimento(agora):
         return
 
     if not _deve_rodar_slot(agora):
         return
 
-    # Resetar flags de prune para este ciclo
+    # Reset prune flags for this cycle
     _simhash_pruned_this_cycle = False
     _title_pruned_this_cycle = False
     _entity_pruned_this_cycle = False
@@ -1655,7 +1658,7 @@ async def _verificar_feeds_inner():
         try:
             channel = await discord_client.fetch_channel(CANAL_NOTICIAS_ID)
         except Exception as e:
-            log.error(f"Canal de notícias não encontrado: {e}")
+            log.error(f"News channel not found: {e}")
             return
     if not channel:
         return
@@ -1665,46 +1668,46 @@ async def _verificar_feeds_inner():
     history = load_history()
     metrics = load_metrics()
 
-    # ===== FASE 0: Postar da fila de ciclos anteriores (apenas em horário ativo) =====
+    # ===== PHASE 0: Post from previous cycles' queue (active hours only) =====
     queue = load_queue()
     posts_feitos = 0
     em_horario_ativo = HORA_INICIO <= agora.hour < HORA_FIM
     if queue and em_horario_ativo:
-        log.info(f"═══ FASE 0: Postando {len(queue)} da fila ═══")
+        log.info(f"═══ PHASE 0: Posting {len(queue)} from queue ═══")
         queue_restante = queue.copy()
         for item in queue:
             if posts_feitos >= MAX_POSTS_POR_CICLO:
                 break
             img = item.get("imagem")
             if not img:
-                log.warning(f"  ✗ Item da fila sem imagem, descartando: {item.get('titulo', '?')[:60]}")
+                log.warning(f"  ✗ Queue item without image, discarding: {item.get('titulo', '?')[:60]}")
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
             
-            # Revalidar imagem da fila (URLs podem ter morrido)
+            # Revalidate queue image (URLs may have expired)
             if not await validar_imagem(img):
-                log.warning(f"  ✗ Imagem inválida na fila, descartando: {item.get('titulo', '?')[:60]}")
+                log.warning(f"  ✗ Invalid image in queue, discarding: {item.get('titulo', '?')[:60]}")
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
 
-            # Dedup: verificar se artigo similar já foi postado (pode ter sido postado
-            # no ciclo anterior ou por outro item da fila neste mesmo ciclo)
+            # Dedup: check if similar article was already posted (may have been posted
+            # in previous cycle or by another queue item in this same cycle)
             titulo_item = item.get("titulo", "")
             if title_is_dup(history, titulo_item):
-                log.info(f"  ✗ Dedup fila (título): {titulo_item[:60]}")
+                log.info(f"  ✗ Queue dedup (title): {titulo_item[:60]}")
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
             sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
             if simhash_is_dup(history, sh_item):
-                log.info(f"  ✗ Dedup fila (simhash): {titulo_item[:60]}")
+                log.info(f"  ✗ Queue dedup (simhash): {titulo_item[:60]}")
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
             if topic_is_dup(history, titulo_item):
-                log.info(f"  ✗ Dedup fila (tema): {titulo_item[:60]}")
+                log.info(f"  ✗ Queue dedup (topic): {titulo_item[:60]}")
                 queue_restante.remove(item)
                 save_queue(queue_restante)
                 continue
@@ -1721,18 +1724,18 @@ async def _verificar_feeds_inner():
                 if posts_feitos < MAX_POSTS_POR_CICLO:
                     await asyncio.sleep(POST_SPACING_SEC)
             else:
-                pass # Permanece na fila
+                pass  # Remains in queue
         
         if posts_feitos >= MAX_POSTS_POR_CICLO:
             _last_cycle_time = agora.strftime("%H:%M:%S")
             _last_cycle_stats = {"posts": posts_feitos, "fonte": "fila"}
-            log.info(f"Limite de posts atingido via fila. Coleta adiada para próximo ciclo.")
+            log.info(f"Post limit reached via queue. Collection deferred to next cycle.")
             return
 
-    # ===== FASE 1: Coleta paralela + Pré-filtro (sem IA) =====
-    log.info("═══ FASE 1: Coleta + Pré-filtro ═══")
+    # ===== PHASE 1: Parallel collection + pre-filter (no AI) =====
+    log.info("═══ PHASE 1: Collection + pre-filter ═══")
 
-    # Buscar todos os feeds em paralelo
+    # Fetch all feeds in parallel
     async def _fetch_feed(nome_site: str, url_feed: str):
         if _feed_em_cooldown(nome_site):
             return nome_site, None
@@ -1746,7 +1749,7 @@ async def _verificar_feeds_inner():
             )
             return nome_site, feed
         except Exception as e:
-            log.warning(f"Feed timeout/erro: {nome_site} — {e}")
+            log.warning(f"Feed timeout/error: {nome_site} — {e}")
             _set_feed_cooldown(nome_site)
             return nome_site, None
 
@@ -1754,20 +1757,20 @@ async def _verificar_feeds_inner():
         *[_fetch_feed(n, u) for n, u in FONTES_RSS.items()],
         return_exceptions=True,
     )
-    # Filtrar exceções inesperadas do gather
+    # Filter unexpected gather exceptions
     resultados_feeds = [
         r for r in resultados_feeds
         if not isinstance(r, BaseException)
     ]
 
-    # Filtrar candidatos (sem validação de imagem ainda)
+    # Filter candidates (no image validation yet)
     pre_candidatos = []
     total_examinados = 0
     total_prefiltrados = 0
     total_dedup = 0
     total_antigas = 0
     contagem_por_fonte: dict[str, int] = {}
-    # Sets de dedup in-cycle (não poluem o histórico persistente)
+    # In-cycle dedup sets (do not pollute persistent history)
     _cycle_titles: set[str] = set()
     _cycle_simhashes: set[int] = set()
     _cycle_topic_groups: list[frozenset[str]] = []  # entity overlap dedup in-cycle
@@ -1790,7 +1793,7 @@ async def _verificar_feeds_inner():
 
             total_examinados += 1
 
-            # Verificar idade PRIMEIRO (rejeitar velhas antes de qualquer processamento)
+            # Check age FIRST (reject old items before any processing)
             dt = entry_datetime_utc(entry)
             if not noticia_eh_recente(dt):
                 total_antigas += 1
@@ -1798,20 +1801,20 @@ async def _verificar_feeds_inner():
 
             link_norm = normalizar_url(link)
 
-            # Dedup por URL e hash
+            # Dedup by URL and hash
             dedupe = make_dedupe_hash(title, int(dt.timestamp()) if dt else int(time.time()))
             if historico_check(history, link_norm, dedupe):
                 total_dedup += 1
                 continue
 
-            # Dedup por título normalizado (cross-site: mesma notícia em sites diferentes)
+            # Dedup by normalized title (cross-site: same story on different sites)
             _tfp = _title_fingerprint(title)
             if title_is_dup(history, title) or _tfp in _cycle_titles:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_titulo"})
                 total_dedup += 1
                 continue
 
-            # SimHash dedup (conteúdo similar mesmo com títulos diferentes)
+            # SimHash dedup (similar content even with different titles)
             texto_raw = limpar_html(str(entry.get("summary") or entry.get("description") or title))
             sh = _simhash64(f"{title} {texto_raw[:600]}")
             if simhash_is_dup(history, sh) or sh in _cycle_simhashes:
@@ -1819,7 +1822,7 @@ async def _verificar_feeds_inner():
                 total_dedup += 1
                 continue
 
-            # Dedup por TEMA/ASSUNTO (entity overlap — 2+ entidades em comum = duplicata)
+            # Topic dedup (entity overlap — 2+ shared entities = duplicate)
             _topic_keys = _extract_topic_keys(title)
             _cycle_topic_dup = any(
                 len(_topic_keys & past) >= _ENTITY_OVERLAP_MIN
@@ -1828,34 +1831,34 @@ async def _verificar_feeds_inner():
             if _topic_keys and (topic_is_dup(history, title) or _cycle_topic_dup):
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "dup_topico"})
                 total_dedup += 1
-                log.info(f"  ✗ Tema repetido: [{nome_site}] {title[:60]}")
+                log.info(f"  ✗ Repeated topic: [{nome_site}] {title[:60]}")
                 continue
 
-            # PRÉ-FILTRO POR KEYWORDS (custo zero — antes da IA)
+            # KEYWORD PRE-FILTER (zero cost — before AI)
             if not prefiltro_keywords(title, texto_raw):
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "prefiltro_keywords"})
                 total_prefiltrados += 1
-                log.info(f"  ✗ Prefiltro rejeitou: [{nome_site}] {title[:60]}")
+                log.info(f"  ✗ Pre-filter rejected: [{nome_site}] {title[:60]}")
                 continue
             
-            # PRÉ-FILTRO: Título muito curto/vago (antes da IA para economizar calls)
+            # PRE-FILTER: title too short/vague (before AI to save calls)
             palavras_titulo = [p for p in title.split() if p]
             if len(palavras_titulo) < 8:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "titulo_curto_prefiltro"})
                 total_prefiltrados += 1
-                log.info(f"  ✗ Título curto pré-filtro ({len(palavras_titulo)} palavras): [{nome_site}] {title[:60]}")
+                log.info(f"  ✗ Short title pre-filter ({len(palavras_titulo)} words): [{nome_site}] {title[:60]}")
                 continue
             
-            # PRÉ-FILTRO: Título muito vago (genérico demais)
+            # PRE-FILTER: title too vague (too generic)
             titulo_lower = title.lower()
             titulos_vagos = ["meta processada", "meta processa", "openai lança", "google lança"]
             if any(vago in titulo_lower for vago in titulos_vagos):
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "titulo_vago"})
                 total_prefiltrados += 1
-                log.info(f"  ✗ Título vago: [{nome_site}] {title[:60]}")
+                log.info(f"  ✗ Vague title: [{nome_site}] {title[:60]}")
                 continue
 
-            # Limite de candidatos por fonte (diversidade)
+            # Per-source candidate limit (diversity)
             if contagem_por_fonte.get(nome_site, 0) >= MAX_CANDIDATOS_POR_FONTE:
                 continue
 
@@ -1871,7 +1874,7 @@ async def _verificar_feeds_inner():
                 "simhash": sh,
                 "feed_url": FONTES_RSS.get(nome_site, ""),
             })
-            # Dedup cross-site no mesmo ciclo: usar set em memória (não polui o histórico persistente)
+            # Cross-site in-cycle dedup: in-memory set (does not pollute persistent history)
             _cycle_titles.add(_title_fingerprint(title))
             _cycle_simhashes.add(sh)
             if len(_topic_keys) >= 2:
@@ -1879,7 +1882,7 @@ async def _verificar_feeds_inner():
             aceitos_fonte += 1
             contagem_por_fonte[nome_site] = contagem_por_fonte.get(nome_site, 0) + 1
 
-    # ===== Validação de imagem em batch (paralelo com semáforo) =====
+    # ===== Batch image validation (parallel with semaphore) =====
     total_sem_imagem = 0
     total_img_ia_rejeitada = 0
     candidatos = []
@@ -1898,19 +1901,19 @@ async def _verificar_feeds_inner():
         )
         for result in resultados_img:
             if isinstance(result, Exception):
-                log.warning("Erro na validação de imagem: %s", result)
+                log.warning("Image validation error: %s", result)
                 continue
             cand, img = result
             if not img:
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem"})
                 total_sem_imagem += 1
                 continue
-            # Validação IA: verificar se imagem combina com o título (com budget)
+            # AI validation: verify image matches title (with budget)
             titulo_cand = cand.get("title", "")
             if _vision_calls_this_cycle < MAX_VISION_CALLS_POR_CICLO:
                 _vision_calls_this_cycle += 1
                 if not await validar_imagem_ia(img, titulo_cand):
-                    log.info(f"  ✗ Imagem irrelevante (IA): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
+                    log.info(f"  ✗ Irrelevant image (AI): [{cand.get('nome_site', '?')}] {titulo_cand[:60]}")
                     historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "imagem_irrelevante_ia"})
                     total_img_ia_rejeitada += 1
                     continue
@@ -1918,30 +1921,30 @@ async def _verificar_feeds_inner():
             candidatos.append(cand)
 
     log.info(
-        f"Fase 1 concluída: {total_examinados} examinados, "
-        f"{total_antigas} antigas, {total_dedup} dedup, {total_prefiltrados} prefiltrados, "
-        f"{total_sem_imagem} sem imagem, {total_img_ia_rejeitada} imagem irrelevante (IA) "
-        f"→ {len(candidatos)} candidatos para IA"
+        f"Phase 1 complete: {total_examinados} scanned, "
+        f"{total_antigas} old, {total_dedup} dedup, {total_prefiltrados} pre-filtered, "
+        f"{total_sem_imagem} no image, {total_img_ia_rejeitada} irrelevant image (AI) "
+        f"→ {len(candidatos)} AI candidates"
     )
 
     if not candidatos:
         save_history(history)
         return
 
-    # ===== FASE 2: Análise IA (budget-limited) =====
-    log.info(f"═══ FASE 2: Análise IA (budget: {MAX_IA_CALLS_POR_CICLO}) ═══")
+    # ===== PHASE 2: AI analysis (budget-limited) =====
+    log.info(f"═══ PHASE 2: AI analysis (budget: {MAX_IA_CALLS_POR_CICLO}) ═══")
     aprovados = []
 
     for cand in candidatos:
         if _ai_calls_this_cycle >= MAX_IA_CALLS_POR_CICLO:
-            log.info(f"Budget de IA esgotado ({MAX_IA_CALLS_POR_CICLO} chamadas).")
+            log.info(f"AI budget exhausted ({MAX_IA_CALLS_POR_CICLO} calls).")
             break
 
-        # Dedup extra: verificar se assunto já foi aprovado neste ciclo
+        # Extra dedup: check if topic was already approved this cycle
         titulo_lower = cand["title"].lower()
         assunto_keywords = set()
         for palavra in [
-            # Big techs & pessoas
+            # Big techs & people
             "meta", "openai", "google", "microsoft", "apple", "amazon", "facebook",
             "musk", "altman", "zuckerberg", "spacex", "tesla",
             # IA
@@ -1955,14 +1958,14 @@ async def _verificar_feeds_inner():
             "the sims", "project rene",
             # Software & OS
             "windows", "android", "iphone", "pixel", "chrome", "firefox",
-            # Espaço & ciência
+            # Space & science
             "jwst", "james webb", "nasa", "shenzhou", "tiangong", "artemis",
             "spacex", "starship", "starlink",
-            # Segurança
+            # Security
             "ransomware", "phishing", "malware", "cve-",
-            # Brasil & telecom
+            # Brazil & telecom
             "anatel", "5g", "starlink",
-            # Veículos & hardware específico
+            # Vehicles & specific hardware
             "ddr5", "nand", "ssd", "gpu", "cpu",
         ]:
             if palavra in titulo_lower:
@@ -1980,7 +1983,7 @@ async def _verificar_feeds_inner():
                     break
             if ja_tem_assunto:
                 historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"assunto_repetido_{list(assunto_keywords)[0]}"})
-                log.info(f"  ✗ Assunto repetido ({list(assunto_keywords)[0]}): [{cand['nome_site']}] {cand['title'][:60]}")
+                log.info(f"  ✗ Repeated topic ({list(assunto_keywords)[0]}): [{cand['nome_site']}] {cand['title'][:60]}")
                 continue
 
         _ai_calls_this_cycle += 1
@@ -1990,13 +1993,13 @@ async def _verificar_feeds_inner():
         if not isinstance(res, dict) or res.get("pular"):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "ia_rejeitou"})
             metric_inc(metrics, "ia_rejeitadas_hoje")
-            log.info(f"  ✗ IA rejeitou: [{cand['nome_site']}] {cand['title'][:60]}")
+            log.info(f"  ✗ AI rejected: [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
-        # Validar campos obrigatórios da resposta da IA
+        # Validate required fields in AI response
         if not res.get("titulo") or not res.get("resumo"):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "ia_campos_faltando"})
-            log.warning(f"  ✗ IA retornou sem titulo/resumo: [{cand['nome_site']}] {cand['title'][:60]}")
+            log.warning(f"  ✗ AI returned without titulo/resumo: [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
         try:
@@ -2005,15 +2008,15 @@ async def _verificar_feeds_inner():
             nota = 0
         categoria = res.get("categoria", "Outros")
 
-        # Threshold de nota
+        # Score threshold
         min_nota = NOTA_MIN_GAMES if categoria == "Games" else NOTA_MIN_APROVACAO
         if nota < min_nota:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"nota_baixa_{nota}"})
             metric_inc(metrics, "ia_rejeitadas_hoje")
-            log.info(f"  ✗ Nota baixa ({nota}): [{cand['nome_site']}] {cand['title'][:60]}")
+            log.info(f"  ✗ Low score ({nota}): [{cand['nome_site']}] {cand['title'][:60]}")
             continue
 
-        # SimHash pós-IA (título + resumo gerados)
+        # Post-AI SimHash (generated title + summary)
         sh_post = _simhash64(f"{res.get('titulo', '')} {res.get('resumo', '')}")
         if simhash_is_dup(history, sh_post):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "dup_simhash_pos"})
@@ -2021,44 +2024,44 @@ async def _verificar_feeds_inner():
 
         simhash_add(history, sh_post)
         simhash_add(history, cand["simhash"])
-        # Registrar título original E traduzido no índice
+        # Register original AND translated title in index
         title_add(history, cand["title"])
         title_add(history, res.get("titulo", ""))
-        # Registrar tema/assunto (suprime mesma pauta de outras fontes nas próximas horas)
+        # Register topic/subject (suppress same story from other sources for hours)
         topic_add(history, cand["title"])
         topic_add(history, res.get("titulo", ""))
 
-        # TRAVA: sem imagem = não aprovar jamais
+        # LOCK: no image = never approve
         if not cand.get("img"):
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "sem_imagem_fase2"})
-            log.info(f"  ✗ Sem imagem (Fase 2): [{cand['nome_site']}] {cand['title'][:60]}")
+            log.info(f"  ✗ No image (Phase 2): [{cand['nome_site']}] {cand['title'][:60]}")
             continue
         
-        # TRAVA: título deve ter pelo menos 5 palavras reais (contagem real)
+        # LOCK: title must have at least 5 real words
         titulo_final = res.get("titulo", "").strip()
-        # Remove emojis e pontuação para contar palavras reais
+        # Remove emojis and punctuation to count real words
         titulo_limpo = re.sub(r'[^\w\s]', ' ', titulo_final)
-        palavras_titulo = [p for p in titulo_limpo.split() if len(p) > 2]  # palavras com mais de 2 letras
+        palavras_titulo = [p for p in titulo_limpo.split() if len(p) > 2]  # words with more than 2 letters
         if len(palavras_titulo) < 5:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_curto_{len(palavras_titulo)}palavras"})
-            log.info(f"  ✗ Título muito curto ({len(palavras_titulo)} palavras): {titulo_final[:60]}")
+            log.info(f"  ✗ Title too short ({len(palavras_titulo)} words): {titulo_final[:60]}")
             continue
         
-        # TRAVA: título muito vago (menos de 40 caracteres após normalização)
+        # LOCK: title too vague (fewer than 40 chars after normalization)
         if len(titulo_final) < 40:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "titulo_vago_curto"})
-            log.info(f"  ✗ Título muito vago/curto: {titulo_final[:60]}")
+            log.info(f"  ✗ Title too vague/short: {titulo_final[:60]}")
             continue
         
-        # TRAVA EXTRA: Rejeitar títulos que são apenas 2-3 palavras mesmo após processamento
+        # EXTRA LOCK: reject titles with only 2-3 words even after processing
         if len(titulo_final.split()) < 6:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": f"titulo_palavras_insuf_{len(titulo_final.split())}"})
-            log.info(f"  ✗ Título com poucas palavras: {titulo_final[:60]}")
+            log.info(f"  ✗ Title with too few words: {titulo_final[:60]}")
             continue
 
         metric_inc(metrics, "ia_aprovadas_hoje")
         aprovados.append({
-            "titulo": res.get("titulo", cand["title"]),  # já normalizado em gerar_analise_ia()
+            "titulo": res.get("titulo", cand["title"]),  # already normalized in gerar_analise_ia()
             "resumo": res.get("resumo", ""),
             "nota": nota,
             "categoria": categoria,
@@ -2070,43 +2073,43 @@ async def _verificar_feeds_inner():
             "is_eng": cand["is_eng"],
         })
         historico_set(history, cand["link_norm"], cand["dedupe"], "queued")
-        log.info(f"  ✓ Aprovado (nota {nota}): [{cand['nome_site']}] {res.get('titulo', '')[:60]}")
+        log.info(f"  ✓ Approved (score {nota}): [{cand['nome_site']}] {res.get('titulo', '')[:60]}")
 
-    log.info(f"Fase 2 concluída: {_ai_calls_this_cycle} chamadas IA → {len(aprovados)} aprovados")
+    log.info(f"Phase 2 complete: {_ai_calls_this_cycle} AI calls → {len(aprovados)} approved")
     save_history(history)
 
     if not aprovados:
         save_metrics(metrics)
         return
 
-    # ===== FASE 3: Postar as melhores + enfileirar restantes =====
-    log.info("═══ FASE 3: Postando melhores notícias ═══")
+    # ===== PHASE 3: Post best items + queue the rest =====
+    log.info("═══ PHASE 3: Posting best news items ═══")
 
-    # Ordenar por nota (maior primeiro)
+    # Sort by score (highest first)
     aprovados.sort(key=lambda x: x["nota"], reverse=True)
 
-    # Filtrar sem imagem
+    # Filter items without image
     com_imagem = [a for a in aprovados if a.get("imagem")]
     if not com_imagem:
-        log.warning("Nenhuma notícia aprovada possui imagem válida. Nada será postado.")
+        log.warning("No approved news has a valid image. Nothing will be posted.")
         save_history(history)
         save_metrics(metrics)
         return
 
-    # Postar até o limite (somente horário ativo), enfileirar o restante
+    # Post up to limit (active hours only), queue the rest
     posts_restantes = MAX_POSTS_POR_CICLO - posts_feitos
     para_postar = com_imagem[:posts_restantes] if em_horario_ativo else []
     para_fila = com_imagem[posts_restantes:] if em_horario_ativo else com_imagem
 
     posts_fase3 = 0
     
-    # Enfileirar restantes para próximo ciclo ANTES de postar (segurança contra crash)
+    # Queue remainder for next cycle BEFORE posting (crash safety)
     if para_fila:
         queue_atual = load_queue()
-        # Validar campos obrigatórios antes de enfileirar
+        # Validate required fields before enqueueing
         _campos_obrigatorios = ("titulo", "imagem", "link", "nota")
         para_fila = [n for n in para_fila if all(n.get(c) for c in _campos_obrigatorios)]
-        # Dedup: não enfileirar se já existe item similar na fila
+        # Dedup: do not enqueue if similar item already in queue
         _queue_titles = {_title_fingerprint(q.get("titulo", "")) for q in queue_atual if q.get("titulo")}
         para_fila_dedup = []
         for item_fila in para_fila:
@@ -2115,22 +2118,22 @@ async def _verificar_feeds_inner():
                 para_fila_dedup.append(item_fila)
                 _queue_titles.add(fp)
             else:
-                log.info(f"  ✗ Dedup fila (já enfileirado): {item_fila.get('titulo', '?')[:60]}")
+                log.info(f"  ✗ Queue dedup (already enqueued): {item_fila.get('titulo', '?')[:60]}")
         queue_atual.extend(para_fila_dedup)
-        # Limitar fila a 10 itens (evitar acúmulo infinito)
+        # Limit queue to 10 items (avoid infinite accumulation)
         queue_atual = sorted(queue_atual, key=lambda x: x.get("nota", 0), reverse=True)[:10]
         save_queue(queue_atual)
-        log.info(f"  📋 {len(para_fila)} notícias enfileiradas para próximo ciclo (fila total: {len(queue_atual)})")
+        log.info(f"  📋 {len(para_fila)} news items queued for next cycle (queue total: {len(queue_atual)})")
 
     for i, noticia in enumerate(para_postar):
-        # Revalidar imagem no momento do post (URLs podem ter morrido)
+        # Revalidate image at post time (URLs may have expired)
         img = noticia.get("imagem")
         if not img or not await validar_imagem(img):
-            log.warning(f"  ✗ Imagem inválida ao postar, descartando: {noticia.get('titulo', '?')[:60]}")
+            log.warning(f"  ✗ Invalid image when posting, discarding: {noticia.get('titulo', '?')[:60]}")
             historico_set(history, noticia["link_norm"], noticia["dedupe"], "skipped", {"reason": "sem_imagem_post"})
             save_history(history)
             continue
-        log.info(f"  🏆 Postando (nota {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
+        log.info(f"  🏆 Posting (score {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
         if await _postar_noticia(channel, noticia, history, metrics):
             posts_fase3 += 1
             save_metrics(metrics)
@@ -2147,7 +2150,7 @@ async def _verificar_feeds_inner():
         "posts": posts_feitos + posts_fase3,
         "fila": len(load_queue()),
     }
-    log.info("Ciclo concluído.")
+    log.info("Cycle complete.")
 
 
 _CMD_NAMES = (
@@ -2162,7 +2165,7 @@ _CMD_NAMES = (
 
 @discord_client.event
 async def on_message(message: discord.Message):
-    """Normaliza comandos sem espaço (ex: t!phttps://... → t!p https://...)."""
+    """Normalize commands without space (e.g. t!phttps://... → t!p https://...)."""
     try:
         if message.author.bot:
             return
@@ -2173,48 +2176,54 @@ async def on_message(message: discord.Message):
         if lower.startswith("t!"):
             after_prefix = content[2:]
             matched = False
-            # Tenta casar com comandos conhecidos (maior primeiro para np/pa/re/cl/pl/su)
+            # Try to match known commands (longest first for np/pa/re/cl/pl/su)
             for cmd in sorted(_CMD_NAMES, key=len, reverse=True):
                 if after_prefix.lower().startswith(cmd):
                     if len(after_prefix) == len(cmd) or after_prefix[len(cmd)] == " ":
-                        # Comando já formatado corretamente (exato ou com espaço)
+                        # Command already formatted correctly (exact or with space)
                         break
-                    # Insere espaço entre comando e argumento
+                    # Insert space between command and argument
                     message.content = f"t!{cmd} {after_prefix[len(cmd):]}"
                     matched = True
                     break
-            # Normaliza prefixo para minúsculo (T! → t!)
+            # Normalize prefix to lowercase (T! → t!)
             if not matched and content[:2] != "t!":
                 message.content = f"t!{content[2:]}"
         await discord_client.process_commands(message)
     except Exception:
-        log.exception("Erro no on_message")
+        log.exception("Error in on_message")
 
 
 @discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
-    # Sync slash commands: limpar guild-specific antigos + sync global
+    # Load offers Cog before syncing slash commands
+    if not discord_client.get_cog("OffersCog"):
+        try:
+            await discord_client.load_extension("offers_cog")
+            log.info("🛒 Offers Cog loaded successfully.")
+        except Exception as e:
+            log.error(f"❌ Failed to load Offers Cog: {e}")
+    # Sync slash commands (Discord builds the profile "Commands" tab from these)
     try:
-        # Remover comandos guild-specific duplicados (legado)
+        # Remove legacy guild-specific duplicates
         for g in discord_client.guilds:
             try:
                 discord_client.tree.clear_commands(guild=g)
                 await discord_client.tree.sync(guild=g)
             except Exception:
                 pass
-        # Sync global (funciona em todos os servidores)
-        await discord_client.tree.sync()
-        log.info("Slash commands sincronizados (global, %d guilds limpos).", len(discord_client.guilds))
+        synced = await discord_client.tree.sync()
+        log.info("Slash commands synced globally (%d commands).", len(synced))
+        # Instant sync on home guild (optional — global can take up to ~1h)
+        guild_id = os.getenv("GUILD_ID")
+        if guild_id:
+            guild_obj = discord.Object(id=int(guild_id))
+            discord_client.tree.copy_global_to(guild=guild_obj)
+            guild_synced = await discord_client.tree.sync(guild=guild_obj)
+            log.info("Slash commands synced to GUILD_ID (%d commands).", len(guild_synced))
     except Exception as e:
-        log.warning(f"Erro ao sincronizar slash commands: {e}")
-    # Carregar Cog de ofertas (antes era um processo separado)
-    if not discord_client.get_cog("OffersCog"):
-        try:
-            await discord_client.load_extension("offers_cog")
-            log.info("🛒 Cog de ofertas carregado com sucesso.")
-        except Exception as e:
-            log.error(f"❌ Falha ao carregar Cog de ofertas: {e}")
+        log.warning(f"Error syncing slash commands: {e}")
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 
@@ -2224,7 +2233,7 @@ async def on_close():
     if http_session:
         await http_session.close()
         http_session = None
-    log.info("🔌 Sessão HTTP fechada. Bot desligando.")
+    log.info("🔌 HTTP session closed. Bot shutting down.")
 
 
 # =========================
@@ -2232,16 +2241,16 @@ async def on_close():
 # =========================
 @discord_client.tree.command(name="status", description="Mostra se a Tiffany está funcionando normalmente")
 async def cmd_status(interaction: discord.Interaction):
-    """Status simples e amigável: diz se está tudo normal ou com instabilidades.
-    Liberado para todos os usuários. Admins veem detalhes técnicos extras."""
+    """Simple friendly status: reports normal operation or instability.
+    Available to all users. Admins see extra technical details."""
     agora = datetime.now(FUSO_HORARIO_BR)
     em_horario = HORA_INICIO <= agora.hour < HORA_FIM
 
-    # Saúde da conexão com o Discord (latência do gateway, em ms)
-    lat = discord_client.latency  # segundos; pode ser nan logo após o boot
+    # Discord connection health (gateway latency in ms)
+    lat = discord_client.latency  # seconds; may be nan right after boot
     lat_ms = int(lat * 1000) if (lat == lat and lat not in (float("inf"), float("-inf"))) else None
 
-    # Fontes de notícia temporariamente indisponíveis
+    # Temporarily unavailable news sources
     feeds_cooldown = [nome for nome in FONTES_RSS if _feed_em_cooldown(nome)]
     frac_cooldown = len(feeds_cooldown) / (len(FONTES_RSS) or 1)
 
@@ -2281,7 +2290,7 @@ async def cmd_status(interaction: discord.Interaction):
         inline=True,
     )
 
-    # Detalhes técnicos só para admins (não polui a visão do usuário comum)
+    # Technical details for admins only (does not clutter regular user view)
     is_admin = bool(
         interaction.guild
         and isinstance(interaction.user, discord.Member)
@@ -2313,15 +2322,15 @@ async def cmd_status(interaction: discord.Interaction):
 
 
 async def _shutdown_cleanup():
-    """Cleanup garantido para http_session em qualquer cenário de shutdown."""
+    """Guaranteed http_session cleanup in any shutdown scenario."""
     global http_session
     if http_session:
         await http_session.close()
         http_session = None
-        log.info("🔌 Sessão HTTP fechada no shutdown.")
+        log.info("🔌 HTTP session closed on shutdown.")
 
 def _sync_cleanup():
-    """Cleanup síncrono de emergência via atexit."""
+    """Emergency synchronous cleanup via atexit."""
     global http_session
     if http_session and not http_session.closed:
         try:
@@ -2337,7 +2346,7 @@ def _sync_cleanup():
                 loop.close()
         except Exception:
             pass
-        log.warning("⚠️ http_session fechada via atexit (shutdown forçado).")
+        log.warning("⚠️ http_session closed via atexit (forced shutdown).")
 
 atexit.register(_sync_cleanup)
 
