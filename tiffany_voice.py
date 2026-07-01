@@ -2969,6 +2969,25 @@ def _format_status_embed(
     return em
 
 
+async def _clear_stale_voice_state(guild: discord.Guild) -> bool:
+    """Drop ghost voice state after restart (Discord UI shows bot in call, client has no vc)."""
+    me = guild.me
+    if not me or not me.voice or not me.voice.channel:
+        return False
+    vc = guild.voice_client
+    if vc and vc.is_connected():
+        return False
+    ch = me.voice.channel.name
+    log.warning("Clearing stale voice ghost guild=%s channel=%s", guild.id, ch)
+    try:
+        await guild.change_voice_state(channel=None)
+        await asyncio.sleep(0.6)
+        return True
+    except Exception as e:
+        log.warning("Failed to clear stale voice guild=%s: %s", guild.id, e)
+        return False
+
+
 async def _slash_reply(
     interaction: discord.Interaction,
     content: str | discord.Embed,
@@ -5069,6 +5088,46 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             log.debug("Failed to revive workers guild=%s", gid, exc_info=True)
 
+    def _recreate_voice_session(
+        guild_id: int,
+        vc,
+        text_channel_id: int,
+    ) -> _GuildVoiceSession:
+        """Rebuild in-memory session when voice_client exists but _sessions entry was lost."""
+        session = _GuildVoiceSession(text_channel_id=text_channel_id)
+        if not _is_wavelink_player(vc):
+            session.music_task = asyncio.create_task(
+                _play_worker(guild_id, vc, bot),
+                name=f"tiffany-music-{guild_id}",
+            )
+        session.question_task = asyncio.create_task(
+            _question_worker(guild_id, vc, bot),
+            name=f"tiffany-question-{guild_id}",
+        )
+        _sessions[guild_id] = session
+        log.info("Voice session recreated guild=%s", guild_id)
+        return session
+
+    async def _resolve_guild_voice(
+        guild: discord.Guild,
+        *,
+        text_channel_id: int = 0,
+    ) -> tuple[Optional[_GuildVoiceSession], Optional[Any]]:
+        """Return (session, voice_client), recovering from post-restart desync when possible."""
+        if not guild:
+            return None, None
+        sess = _sessions.get(guild.id)
+        vc = guild.voice_client
+        if sess and vc and vc.is_connected():
+            return sess, vc
+        if vc and vc.is_connected() and not sess:
+            tc = text_channel_id or 0
+            sess = _recreate_voice_session(guild.id, vc, tc)
+            return sess, vc
+        if guild.me and guild.me.voice and guild.me.voice.channel and (not vc or not vc.is_connected()):
+            await _clear_stale_voice_state(guild)
+        return _sessions.get(guild.id), guild.voice_client
+
     async def _ensure_connected(ctx: commands.Context, specific_channel: Optional[discord.VoiceChannel] = None) -> tuple:
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
             await ctx.send(embed=_embed("⚠️ Esse comando só funciona em um servidor."))
@@ -5106,18 +5165,8 @@ def register_voice(bot: commands.Bot) -> None:
 
         # Bot connected but session lost -> recreate without reconnecting
         if vc and vc.is_connected() and not sess:
-            log.info("Session lost but vc active — recreating session guild=%s", gid)
-            session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
-            session.music_task = asyncio.create_task(
-                _play_worker(gid, vc, bot),
-                name=f"tiffany-music-{gid}",
-            )
-            session.question_task = asyncio.create_task(
-                _question_worker(gid, vc, bot),
-                name=f"tiffany-question-{gid}",
-            )
-            _sessions[gid] = session
-            return session, vc
+            sess = _recreate_voice_session(gid, vc, ctx.channel.id)
+            return sess, vc
 
         # Concurrent session limit (protects VPS resources)
         _MAX_VOICE_SESSIONS = 5
@@ -5141,6 +5190,11 @@ def register_voice(bot: commands.Bot) -> None:
             if not perms.connect or not perms.speak:
                 await ctx.send(embed=_embed("⚠️ Não tenho permissão para entrar ou falar neste canal de voz."))
                 return None, None
+
+        # Clear ghost voice state (UI shows bot in call after container restart)
+        if (not vc or not vc.is_connected()) and guild.me and guild.me.voice and guild.me.voice.channel:
+            await _clear_stale_voice_state(guild)
+            vc = guild.voice_client
 
         # Clear ghost connection before connecting
         existing_vc = guild.voice_client
@@ -5549,6 +5603,7 @@ def register_voice(bot: commands.Bot) -> None:
             sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
             await sess.music_queue.put(song)
 
+        _revive_workers(ctx.guild.id, vc, sess)
         await ctx.send(embed=_embed(f"🎲 Música aleatória na fila{tag}: **{display}**"))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t!p / t!play <nome ou URL>")
@@ -6824,6 +6879,12 @@ def register_voice(bot: commands.Bot) -> None:
         """Automatically reconnect to voice channels after restart."""
         await asyncio.sleep(4)  # wait for guilds to load fully
 
+        for guild in bot.guilds:
+            try:
+                await _clear_stale_voice_state(guild)
+            except Exception:
+                log.debug("Stale voice cleanup failed guild=%s", guild.id, exc_info=True)
+
         # Connect to Lavalink only if explicitly enabled (LAVALINK_ENABLED=1).
         if _lavalink_enabled() and _WAVELINK_AVAILABLE:
             lava_host = os.getenv("LAVALINK_HOST", "localhost")
@@ -7104,14 +7165,33 @@ def register_voice(bot: commands.Bot) -> None:
         if not interaction.guild:
             await _slash_reply(interaction, "⚠️ Use em um servidor.")
             return
-        session = _sessions.get(interaction.guild.id)
-        vc = interaction.guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await _slash_reply(interaction, "⚠️ Não estou em nenhum canal de voz.\nUse `t!p` para eu entrar na call.")
+        session, vc = await _resolve_guild_voice(
+            interaction.guild, text_channel_id=interaction.channel_id or 0,
+        )
+        if session and vc and vc.is_connected():
+            _revive_workers(interaction.guild.id, vc, session)
+        if not vc or not vc.is_connected():
+            if interaction.guild.me and interaction.guild.me.voice and interaction.guild.me.voice.channel:
+                await _slash_reply(
+                    interaction,
+                    "⚠️ Conexão de voz dessincronizada após restart.\n"
+                    "Use `t!cl` ou `/leave` e depois `t!p` ou `/play` para reconectar.",
+                )
+            else:
+                await _slash_reply(
+                    interaction,
+                    "⚠️ Não estou em nenhum canal de voz.\nUse `t!p` ou `/play` para eu entrar na call.",
+                )
+            return
+        if not session:
+            await _slash_reply(
+                interaction,
+                "⚠️ Sessão de música não iniciada.\nUse `t!p` ou `/play` para começar.",
+            )
             return
         q_em = _format_queue_embed(session)
         if not q_em:
-            await _slash_reply(interaction, "📭 Fila vazia.\nUse `t!p` para adicionar músicas.")
+            await _slash_reply(interaction, "📭 Fila vazia.\nUse `t!p` ou `/play` para adicionar músicas.")
             return
         await _slash_reply(interaction, q_em)
 
