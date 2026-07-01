@@ -127,6 +127,13 @@ class _ReplyContext(commands.Context):
         return await super().send(content, **kwargs)
 
 
+class _TiffanyCommandTree(discord.app_commands.CommandTree):
+    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+        if _voice_available and tiffany_voice:
+            return await tiffany_voice.slash_rate_limit_check(interaction)
+        return True
+
+
 class _TiffanyBot(commands.Bot):
     async def get_context(self, message, *, cls=_ReplyContext):
         return await super().get_context(message, cls=cls)
@@ -137,6 +144,7 @@ discord_client = _TiffanyBot(
     case_insensitive=True,
     intents=intents,
     help_command=None,  # /help slash command provides command help
+    tree_cls=_TiffanyCommandTree,
 )
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)

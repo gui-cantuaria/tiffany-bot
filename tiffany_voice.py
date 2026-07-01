@@ -864,6 +864,22 @@ def _check_cmd_rate_limit(user_id: int, cmd_name: str) -> tuple[bool, float]:
     return True, 0.0
 
 
+async def slash_rate_limit_check(interaction: discord.Interaction) -> bool:
+    """Global slash rate limit — use via CommandTree.interaction_check override (discord.py 2.5+)."""
+    if interaction.user.bot or not interaction.command:
+        return True
+    name = interaction.command.name
+    ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
+    if not ok:
+        em = _embed(f"⏳ Calma! Espera **{wait:.0f}s** antes de usar `/{name}` de novo.")
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=em, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=em, ephemeral=True)
+        return False
+    return True
+
+
 def _check_cooldown(user_id: int) -> tuple[bool, int]:
     """Return (allowed, seconds_remaining). Uses sliding window and abuse blocking."""
     now = time.monotonic()
@@ -4753,21 +4769,6 @@ def register_voice(bot: commands.Bot) -> None:
         ok, wait = _check_cmd_rate_limit(ctx.author.id, ctx.command.name)
         if not ok:
             raise TiffanyRateLimited(wait, ctx.command.name)
-        return True
-
-    @bot.tree.interaction_check
-    async def _slash_cmd_rate_limit(interaction: discord.Interaction) -> bool:
-        if interaction.user.bot or not interaction.command:
-            return True
-        name = interaction.command.name
-        ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
-        if not ok:
-            em = _embed(f"⏳ Calma! Espera **{wait:.0f}s** antes de usar `/{name}` de novo.")
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=em, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=em, ephemeral=True)
-            return False
         return True
 
     from random_songs import RANDOM_SONGS as _RANDOM_SONGS
