@@ -132,6 +132,37 @@ def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
 
+_KICKED_FROM_VC_MSGS: tuple[str, ...] = (
+    "Fui expulsa do canal de voz :(",
+    "Alguém me tirou da call… tudo bem, eu saio :(",
+    "Me removeram do canal de voz — chama de novo quando quiser!",
+    "Eita, fui kickada da call :(",
+    "Não fui eu que saí — me expulsaram do canal de voz :(",
+    "Alguém me botou pra fora da call. Volto quando chamarem!",
+    "Fui desconectada da call contra a minha vontade :(",
+    "Me tiraram do canal de voz… snif. Chama a Tiffany de volta?",
+)
+
+_voluntary_leave_guilds: set[int] = set()
+
+
+def _mark_voluntary_leave(guild_id: int) -> None:
+    """Skip kick notification when the bot left on its own (t!cl, idle, reconnect)."""
+    _voluntary_leave_guilds.add(guild_id)
+
+
+def _consume_voluntary_leave(guild_id: int) -> bool:
+    if guild_id in _voluntary_leave_guilds:
+        _voluntary_leave_guilds.discard(guild_id)
+        return True
+    return False
+
+
+def _pick_kicked_msg() -> str:
+    import random
+    return random.choice(_KICKED_FROM_VC_MSGS)
+
+
 async def _require_voice(ctx: commands.Context) -> bool:
     """Return False and notify user when VOICE_ENABLED=0."""
     if _voice_enabled():
@@ -175,7 +206,87 @@ VOICE_OVER_MUSIC_PEAK = 3000
 VOICE_OVER_MUSIC_WAIT_SEC = 2.0
 # Clip: 30s stereo 48kHz 16-bit audio = ~5.76MB
 CLIP_DURATION_SEC = 30
-CLIP_MAX_BYTES = 48000 * 2 * 2 * CLIP_DURATION_SEC  # stereo 48kHz 16-bit (2ch × 2bytes)
+CLIP_FRAME_BYTES = 3840  # 20ms Opus frame — stereo 48kHz 16-bit
+CLIP_FRAME_INTERVAL = 0.02
+CLIP_SLOT_COUNT = CLIP_DURATION_SEC * 50  # 50 frames/s × 30s
+CLIP_MAX_BYTES = CLIP_FRAME_BYTES * CLIP_SLOT_COUNT
+
+
+class _ClipRingMixer:
+    """Time-aligned ring buffer that mixes all speakers into one timeline."""
+
+    __slots__ = ("_frames", "_slot_tag", "_lock")
+
+    def __init__(self) -> None:
+        self._frames = [bytearray(CLIP_FRAME_BYTES) for _ in range(CLIP_SLOT_COUNT)]
+        self._slot_tag = [-1] * CLIP_SLOT_COUNT
+        self._lock = threading.Lock()
+
+    def push(self, pcm: bytes) -> None:
+        if not pcm or len(pcm) < CLIP_FRAME_BYTES:
+            return
+        if pcm[:CLIP_FRAME_BYTES] == b"\x00" * CLIP_FRAME_BYTES and len(pcm) == CLIP_FRAME_BYTES:
+            return
+        import struct
+
+        for offset in range(0, len(pcm) - CLIP_FRAME_BYTES + 1, CLIP_FRAME_BYTES):
+            chunk = pcm[offset : offset + CLIP_FRAME_BYTES]
+            if chunk == b"\x00" * CLIP_FRAME_BYTES:
+                continue
+            slot = int(time.monotonic() / CLIP_FRAME_INTERVAL)
+            idx = slot % CLIP_SLOT_COUNT
+            with self._lock:
+                if self._slot_tag[idx] != slot:
+                    self._frames[idx] = bytearray(CLIP_FRAME_BYTES)
+                    self._slot_tag[idx] = slot
+                dst = self._frames[idx]
+                for i in range(0, CLIP_FRAME_BYTES, 2):
+                    s = struct.unpack_from("<h", chunk, i)[0]
+                    d = struct.unpack_from("<h", dst, i)[0]
+                    mixed = d + s
+                    if mixed > 32767:
+                        mixed = 32767
+                    elif mixed < -32768:
+                        mixed = -32768
+                    struct.pack_into("<h", dst, i, mixed)
+
+    def export_pcm(self) -> bytes:
+        import struct
+
+        now_slot = int(time.monotonic() / CLIP_FRAME_INTERVAL)
+        start_slot = now_slot - CLIP_SLOT_COUNT + 1
+        parts: list[bytes] = []
+        with self._lock:
+            for slot in range(start_slot, now_slot + 1):
+                idx = slot % CLIP_SLOT_COUNT
+                if self._slot_tag[idx] != slot:
+                    parts.append(b"\x00" * CLIP_FRAME_BYTES)
+                else:
+                    parts.append(bytes(self._frames[idx]))
+        pcm = b"".join(parts)
+        pcm = _normalize_pcm_stereo(pcm)
+        # Trim leading/trailing silence so short clips are not padded to 30s
+        frame = CLIP_FRAME_BYTES
+        nframes = len(pcm) // frame
+        first = 0
+        last = nframes - 1
+        for i in range(nframes):
+            chunk = pcm[i * frame : (i + 1) * frame]
+            if chunk != b"\x00" * frame:
+                samples = struct.unpack(f"<{frame // 2}h", chunk)
+                if max((abs(s) for s in samples), default=0) >= 80:
+                    first = i
+                    break
+        for i in range(nframes - 1, -1, -1):
+            chunk = pcm[i * frame : (i + 1) * frame]
+            if chunk != b"\x00" * frame:
+                samples = struct.unpack(f"<{frame // 2}h", chunk)
+                if max((abs(s) for s in samples), default=0) >= 80:
+                    last = i
+                    break
+        if last < first:
+            return b""
+        return pcm[first * frame : (last + 1) * frame]
 
 QUEUE_MAX = 30  # maximum songs in queue
 _QUEUE_EMPTY_LEAVE_SEC = 180  # leave call 3 min after queue ends (without t!247)
@@ -557,6 +668,37 @@ async def _should_block_media(title: str, source_query: str = "") -> bool:
     return False
 
 
+async def _playlist_is_blocked(
+    *,
+    title: str,
+    tracks: list[dict],
+    source_url: str = "",
+    max_ai_checks: int = 25,
+) -> bool:
+    """True if playlist title or any track should be blocked (literal + AI on risky titles)."""
+    pl_title = (title or "").strip()
+    if pl_title and await _should_block_media(pl_title, source_url):
+        return True
+    ai_checks = 0
+    for track in tracks:
+        display = (track.get("display") or track.get("query") or "").strip()
+        if not display:
+            continue
+        display = re.sub(r"^ytsearch\d*:", "", display).strip()
+        if _contains_blocked_content(display):
+            return True
+        track_url = track.get("query") or source_url
+        if _title_is_risky(display):
+            if track_url and await _should_block_media(display, track_url):
+                return True
+            ai_checks += 1
+            if ai_checks > max_ai_checks:
+                continue
+            if await _should_block_content(display):
+                return True
+    return False
+
+
 async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None:
     """Background AI check (does not block playback start).
     Only spends AI on risky titles — the rest already passed the literal list.
@@ -579,19 +721,48 @@ async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None
             vc.stop()  # triggers _after -> worker advances to next
         except Exception:
             pass
-        await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+        await _notify(bot, session.text_channel_id, _pick_blocked_reply())
     except Exception:
         log.debug("Background moderation guard failed", exc_info=True)
 
 
-_BLOCKED_REPLY = (
-    "🚫 **Não vou reproduzir nem falar sobre esse tipo de conteúdo.**\n\n"
-    "**Motivo:** envolve ditadores, regimes totalitários, ideologias de ódio "
-    "ou temas que fazem apologia à violência, ao genocídio e à opressão. "
-    "Esse tipo de conteúdo é ofensivo, causa dano e vai contra as minhas diretrizes — "
-    "por isso eu bloqueio sempre, sem exceção.\n\n"
-    "Pode me pedir outra coisa que eu fico feliz em ajudar! 💖"
+_BLOCKED_REPLIES: tuple[str, ...] = (
+    (
+        "🚫 **Não vou reproduzir nem falar sobre esse tipo de conteúdo.**\n\n"
+        "**Motivo:** envolve ditadores, regimes totalitários, ideologias de ódio "
+        "ou temas que fazem apologia à violência, ao genocídio e à opressão. "
+        "Esse tipo de conteúdo é ofensivo, causa dano e vai contra as minhas diretrizes — "
+        "por isso eu bloqueio sempre, sem exceção.\n\n"
+        "Pode me pedir outra coisa que eu fico feliz em ajudar! 💖"
+    ),
+    (
+        "🚫 **Pedido recusado.** Não busco letra, não toco e não cito conteúdo sobre "
+        "ditaduras, nazismo, fascismo, genocídio ou apologia à violência — **link ou meme incluso**.\n\n"
+        "Manda outra música que eu ajudo! 💖"
+    ),
+    (
+        "🚫 **Esse conteúdo está fora dos meus limites.**\n\n"
+        "Não importa se veio como URL, nome da faixa ou piada: ditadores, regimes "
+        "totalitários e ideologias de ódio são bloqueados **sempre**.\n\n"
+        "Escolhe outra coisa que eu fico feliz em ajudar! 💖"
+    ),
+    (
+        "🚫 **Não rola.** Eu bloqueio automaticamente pedidos que envolvam figuras "
+        "ditatoriais, nazismo/fascismo, genocídio ou incitação ao ódio.\n\n"
+        "Pode tentar outra música ou pergunta — estou aqui pra isso! 💖"
+    ),
+    (
+        "🚫 **Bloqueado.** Esse tema faz apologia ou normaliza violência, opressão "
+        "ou regimes totalitários — e isso não passa por aqui.\n\n"
+        "Sem exceção. Me pede outra coisa! 💖"
+    ),
 )
+
+
+def _pick_blocked_reply() -> str:
+    import random
+    return random.choice(_BLOCKED_REPLIES)
+
 
 YDL_OPTS: dict[str, Any] = {
     "format": "bestaudio/best",
@@ -680,9 +851,8 @@ class _GuildVoiceSession:
     stay_24_7: bool = False  # 24/7 mode: do not disconnect on inactivity
     # Restore seek (playback position to restore after restart)
     restore_seek_sec: float = 0.0
-    # Clip — circular buffer with last 30s of call audio (all users mixed)
-    clip_buffer: bytearray = field(default_factory=bytearray)
-    clip_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Clip — last 30s of call audio (all users, time-aligned mix)
+    clip_mixer: _ClipRingMixer = field(default_factory=_ClipRingMixer)
     # Songs that failed download — sent as summary when queue ends
     _failed_songs: list = field(default_factory=list)
     # Flag to cancel in-progress download (set by t!cl)
@@ -2576,11 +2746,8 @@ class _PCMBufferSink(_AudioSinkBase):
                 elif len(buf) > MAX_PCM_BYTES:
                     del buf[: len(buf) - MAX_PCM_BYTES]
                 self._session.last_audio_ts[uid] = time.monotonic()
-            # Clip buffer — record all users' audio (circular, last 30s)
-            with self._session.clip_lock:
-                self._session.clip_buffer.extend(pcm)
-                if len(self._session.clip_buffer) > CLIP_MAX_BYTES:
-                    del self._session.clip_buffer[: len(self._session.clip_buffer) - CLIP_MAX_BYTES]
+            # Clip — time-aligned mix of all users (last 30s)
+            self._session.clip_mixer.push(pcm)
         except Exception as e:
             log.error("Error processing user audio %s: %s", user.name if user else "?", e)
 
@@ -3211,6 +3378,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     and not vc.is_paused()
                 ):
                     session._queue_empty_since = 0.0
+                    _mark_voluntary_leave(guild_id)
                     _sessions.pop(guild_id, None)
                     for t in (session.music_task, session.listen_task, session.question_task):
                         if t:
@@ -3317,7 +3485,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         log.info("Blocked content detected, skipping: %s", display_name[:80])
                         session.current_song = ""
                         source.cleanup()
-                        await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                        await _notify(bot, session.text_channel_id, _pick_blocked_reply())
                         continue
                     # Background AI guard (does not block playback).
                     asyncio.create_task(_bg_moderation_guard(session, vc, bot, display_name, query))
@@ -3545,6 +3713,7 @@ async def _voice_listen_loop(
                             if sess.question_task:
                                 sess.question_task.cancel()
                         if vc and vc.is_connected():
+                            _mark_voluntary_leave(guild_id)
                             await vc.disconnect(force=True)
                         _clear_voice_state(guild_id)
                         return
@@ -3799,6 +3968,7 @@ async def _voice_listen_loop(
                     if sess.question_task:
                         sess.question_task.cancel()
                 if vc and vc.is_connected():
+                    _mark_voluntary_leave(guild_id)
                     await vc.disconnect(force=True)
                 await _notify(bot, text_ch_id, "👋 **Tiffany saiu** do canal de voz.")
                 return
@@ -3941,7 +4111,7 @@ async def _voice_listen_loop(
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Desculpa, não falo sobre isso."))
-                    await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                    await _notify(bot, session.text_channel_id, _pick_blocked_reply())
                     continue
                 allowed, remaining = _check_cooldown(speaker_uid)
                 if not allowed:
@@ -3966,7 +4136,7 @@ async def _voice_listen_loop(
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Essa eu não toco."))
-                    await _notify(bot, session.text_channel_id, _BLOCKED_REPLY)
+                    await _notify(bot, session.text_channel_id, _pick_blocked_reply())
                     continue
                 # Check queue limit
                 fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
@@ -4045,6 +4215,7 @@ async def _join_voice_recv_client(
         # Clear any existing connection (connected or zombie)
         if vc_existing:
             try:
+                _mark_voluntary_leave(channel.guild.id)
                 await vc_existing.disconnect(force=True)
             except Exception:
                 pass
@@ -4058,6 +4229,7 @@ async def _join_voice_recv_client(
             return vc_existing
         if vc_existing:
             try:
+                _mark_voluntary_leave(channel.guild.id)
                 await vc_existing.disconnect(force=True)
             except Exception:
                 pass
@@ -4975,7 +5147,7 @@ def register_voice(bot: commands.Bot) -> None:
             # Filter AI RESPONSE — blocks bypass via encoding (morse, base64, etc.)
             # where input has no blocked words but AI decodes and repeats content.
             if _contains_blocked_content(answer):
-                return _BLOCKED_REPLY
+                return _pick_blocked_reply()
 
             # Save to context for follow-up questions
             if _ctx_id:
@@ -5212,6 +5384,7 @@ def register_voice(bot: commands.Bot) -> None:
         existing_vc = guild.voice_client
         if existing_vc:
             try:
+                _mark_voluntary_leave(guild.id)
                 await existing_vc.disconnect(force=True)
             except Exception:
                 pass
@@ -5488,6 +5661,9 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(embed=_embed(f"⚠️ Playlist **{name}** não encontrada."))
                 return
             total = len(songs)
+            if await _playlist_is_blocked(title=name, tracks=songs):
+                await ctx.reply(embed=_embed(_pick_blocked_reply()))
+                return
             sess, vc = await _ensure_connected(ctx)
             if not sess:
                 return
@@ -5633,7 +5809,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Early block (instant, literal): catches typed text. AI runs later
         # in background on worker — does not delay playback.
         if not re.match(r"^https?://", query) and _contains_blocked_content(query):
-            await ctx.send(embed=_embed(_BLOCKED_REPLY))
+            await ctx.send(embed=_embed(_pick_blocked_reply()))
             return
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
@@ -5675,6 +5851,13 @@ def register_voice(bot: commands.Bot) -> None:
             tracks = pl_data.get("tracks") or []
             if not tracks:
                 await status.edit(embed=_embed("❌ Não consegui extrair músicas dessa playlist. Verifique se é pública."))
+                return
+            if await _playlist_is_blocked(
+                title=pl_data.get("title") or "Playlist",
+                tracks=tracks,
+                source_url=query,
+            ):
+                await status.edit(embed=_embed(_pick_blocked_reply()))
                 return
             vagas = QUEUE_MAX - fila_atual
             added = 0
@@ -5794,7 +5977,7 @@ def register_voice(bot: commands.Bot) -> None:
             # Post-resolution block: real title may reveal prohibited content.
             _lv_src = getattr(track, "uri", "") or query
             if await _should_block_media(track_display, _lv_src):
-                await status.edit(embed=_embed(_BLOCKED_REPLY))
+                await status.edit(embed=_embed(_pick_blocked_reply()))
                 return
             # Dedup
             def _normalize_for_dup(s: str) -> str:
@@ -5957,7 +6140,7 @@ def register_voice(bot: commands.Bot) -> None:
         # content. AI moderation (text + thumbnail) runs in background on worker,
         # without delaying playback start.
         if _contains_blocked_content(display) or _contains_blocked_content(probe_title or ""):
-            await status.edit(embed=_embed(_BLOCKED_REPLY))
+            await status.edit(embed=_embed(_pick_blocked_reply()))
             return
 
         # Duplicate detection: check if song already playing or in queue
@@ -6050,7 +6233,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         question = question.strip() if question else ""
         if question and await _should_block_content(question):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            await ctx.reply(embed=_embed(_pick_blocked_reply()))
             return
 
         thinking = await ctx.reply(embed=_embed("🧠 Pensando..."), mention_author=False)
@@ -6179,6 +6362,7 @@ def register_voice(bot: commands.Bot) -> None:
             if sess.question_task:
                 sess.question_task.cancel()
         _clear_voice_state(gid)
+        _mark_voluntary_leave(gid)
         try:
             await vc.disconnect(force=True)
         except Exception:
@@ -6343,20 +6527,34 @@ def register_voice(bot: commands.Bot) -> None:
         if not search_term:
             await ctx.send(embed=_embed("⚠️ Nada tocando. Use: `t!ly <nome da música>`"))
             return
-        # Check blocked content in search
-        if _contains_blocked_content(search_term):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
-            return
         _touch_activity(ctx.guild.id)
+
+        source_url = ""
+        raw_query = query.strip()
+        if re.match(r"^https?://", search_term):
+            source_url = _normalize_music_url(search_term)
+            try:
+                _, probe_title = await asyncio.wait_for(
+                    asyncio.to_thread(_blocking_ytdl_probe, source_url), timeout=25.0
+                )
+            except asyncio.TimeoutError:
+                probe_title = ""
+            if probe_title:
+                search_term = probe_title
+
         search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
+
+        if await _should_block_media(search_term, source_url or raw_query):
+            await ctx.reply(embed=_embed(_pick_blocked_reply()))
+            return
+
         status = await ctx.reply(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."), mention_author=False)
         lyrics = await _fetch_lyrics(search_term)
         if not lyrics:
             await status.edit(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
             return
-        # Check blocked content in returned lyrics
-        if _contains_blocked_content(lyrics):
-            await status.edit(embed=_embed(_BLOCKED_REPLY))
+        if await _should_block_content(lyrics):
+            await status.edit(embed=_embed(_pick_blocked_reply()))
             return
         # Truncate to fit embed (4096 chars)
         if len(lyrics) > 3800:
@@ -6405,7 +6603,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Uso: `t!alert <produto>` — ex: `t!alert RTX 5060`"), delete_after=10)
             return
         if _contains_blocked_content(args):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            await ctx.reply(embed=_embed(_pick_blocked_reply()))
             return
         user_mons = [m for m in monitors if m["user_id"] == user_id]
         if len(user_mons) >= 10:
@@ -6592,7 +6790,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Uso: `t!su <URL>` — precisa ser um link completo (https://...)"))
             return
         if _contains_blocked_content(url):
-            await ctx.reply(embed=_embed(_BLOCKED_REPLY))
+            await ctx.reply(embed=_embed(_pick_blocked_reply()))
             return
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
@@ -6614,7 +6812,7 @@ def register_voice(bot: commands.Bot) -> None:
         summary = await _summarize_url(url, api_key)
         # Check blocked content in response
         if _contains_blocked_content(summary):
-            await status.edit(embed=_embed(_BLOCKED_REPLY))
+            await status.edit(embed=_embed(_pick_blocked_reply()))
             return
         await status.edit(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
         # Save to user context for future t!c reference
@@ -6635,10 +6833,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         _touch_activity(ctx.guild.id)
 
-        with sess.clip_lock:
-            raw = bytes(sess.clip_buffer)
+        raw = sess.clip_mixer.export_pcm()
 
-        if len(raw) < 48000 * 2:  # less than 0.5s
+        if len(raw) < 48000 * 2:  # less than 0.5s mono equivalent
             await ctx.send(embed=_embed("⚠️ Pouco áudio capturado. Fale na call e tente novamente."))
             return
 
@@ -6728,9 +6925,14 @@ def register_voice(bot: commands.Bot) -> None:
         if member.id == bot.user.id:
             gid = member.guild.id
             if before.channel and not after.channel:
-                # Bot was disconnected (kicked from call)
-                log.info("Bot disconnected from call by admin guild=%s", gid)
+                # Bot was disconnected (kicked or server disconnect)
+                voluntary = _consume_voluntary_leave(gid)
                 sess = _sessions.pop(gid, None)
+                text_ch_id = sess.text_channel_id if sess else 0
+                log.info(
+                    "Bot disconnected from call guild=%s (voluntary=%s)",
+                    gid, voluntary,
+                )
                 if sess:
                     if sess.listen_task:
                         sess.listen_task.cancel()
@@ -6739,6 +6941,13 @@ def register_voice(bot: commands.Bot) -> None:
                     if sess.question_task:
                         sess.question_task.cancel()
                 _clear_voice_state(gid)
+                if not voluntary and text_ch_id:
+                    text_ch = bot.get_channel(text_ch_id)
+                    if text_ch and hasattr(text_ch, "send"):
+                        try:
+                            await text_ch.send(embed=_embed(_pick_kicked_msg()))
+                        except Exception:
+                            pass
             elif before.channel and after.channel and before.channel.id != after.channel.id:
                 # Bot was moved to another channel — update voice_state
                 sess = _sessions.get(gid)
@@ -6797,6 +7006,7 @@ def register_voice(bot: commands.Bot) -> None:
                 except Exception:
                     pass
         _clear_voice_state(gid)
+        _mark_voluntary_leave(gid)
         try:
             await vc.disconnect(force=True)
         except Exception:
@@ -6820,6 +7030,7 @@ def register_voice(bot: commands.Bot) -> None:
                 except Exception:
                     pass
         _clear_voice_state(gid)
+        _mark_voluntary_leave(gid)
         try:
             await vc.disconnect(force=True)
         except Exception:
