@@ -7,6 +7,21 @@ set -e
 
 echo "=== Tiffany Bot - VPS Setup ==="
 
+# 0. Install & configure Cloudflare WARP (SOCKS5 proxy for yt-dlp/YouTube).
+#    Required in BOTH systemd and Docker (host network) modes.
+echo "[0/4] Setting up Cloudflare WARP proxy..."
+apt-get update
+bash "$(dirname "$0")/warp-setup.sh"
+
+# Enable the WARP healthcheck timer (auto-reconnect if the proxy drops).
+if [ -f "$(dirname "$0")/tiffany-warp-healthcheck.timer" ]; then
+    echo "[0/4] Installing WARP healthcheck timer..."
+    cp -f "$(dirname "$0")/tiffany-warp-healthcheck.service" /etc/systemd/system/
+    cp -f "$(dirname "$0")/tiffany-warp-healthcheck.timer" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now tiffany-warp-healthcheck.timer
+fi
+
 # 1. Install Docker
 if ! command -v docker &> /dev/null; then
     echo "[1/4] Installing Docker..."

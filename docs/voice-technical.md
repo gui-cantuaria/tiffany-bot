@@ -67,6 +67,25 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - Docker infra ready: `Dockerfile`, `docker-compose.yml`, `lavalink/application.yml`
 - `VOICE_AUTO_REJOIN=0` (default) — bot does NOT auto-rejoin after restart
 
+## WARP proxy (required for YouTube on the VPS)
+YouTube blocks datacenter IPs, so yt-dlp routes through a Cloudflare WARP SOCKS5
+proxy at `127.0.0.1:40000` (hardcoded in `YDL_OPTS["proxy"]`). Without it, ALL
+music/playlist commands fail with "Não consegui extrair músicas".
+
+- **Install/config:** `bash scripts/warp-setup.sh` (idempotent; forces proxy mode
+  BEFORE connect so it never tunnels SSH and locks you out of the VPS).
+- **Auto-recovery:** `scripts/warp-healthcheck.sh` + `tiffany-warp-healthcheck.timer`
+  run every 3 min and reconnect WARP if the proxy drops.
+- **systemd dependency:** `tiffany-bot.service` has `After/Wants=warp-svc.service`
+  (soft dependency — news/offers still start if WARP is down).
+- **Verify:** `curl -x socks5h://127.0.0.1:40000 https://cloudflare.com/cdn-cgi/trace`
+  should print `warp=on`.
+
+## Python version
+- Ubuntu 22.04 ships Python 3.10; yt-dlp now warns 3.10 is deprecated.
+- Migration plan lives in `docs/python-migration.md`. Not urgent, but plan it
+  before yt-dlp drops 3.10 support.
+
 ## Known Issues
 - Opus decoder may throw `OpusError: corrupted stream` — monkey-patched to return silence frames
-- VPS YouTube blocking — resolved via Cloudflare WARP SOCKS5 proxy at 127.0.0.1:40000
+- VPS YouTube blocking — resolved via Cloudflare WARP SOCKS5 proxy at 127.0.0.1:40000 (see WARP section)

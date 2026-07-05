@@ -1,14 +1,18 @@
 [Unit]
 Description=Tiffany Bot (Discord)
-After=network-online.target
+After=network-online.target warp-svc.service
 Wants=network-online.target
+# WARP provides the SOCKS5 proxy (127.0.0.1:40000) that yt-dlp needs for YouTube.
+# Not a hard Requires= so the bot still starts (news/offers work) if WARP is down.
+Wants=warp-svc.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/tiffany-bot
 ExecStartPre=/bin/bash -c '/usr/bin/pkill -9 -f "/opt/tiffany-bot/[l]auncher.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/[n]otices.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/[o]ffers.py" 2>/dev/null; sleep 2; rm -f /tmp/tiffany_launcher.lock; exit 0'
-ExecStart=/usr/bin/python3 -u launcher.py
+# run.sh prefers the venv (Python 3.11+) and falls back to system python3.
+ExecStart=/bin/bash /opt/tiffany-bot/scripts/run.sh
 Restart=on-failure
 RestartSec=10
 

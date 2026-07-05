@@ -1,0 +1,8 @@
+[Unit]
+Description=Tiffany WARP proxy healthcheck (reconnects if the SOCKS5 proxy drops)
+After=warp-svc.service
+Wants=warp-svc.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/tiffany-bot/scripts/warp-healthcheck.sh

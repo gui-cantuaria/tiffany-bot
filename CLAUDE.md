@@ -72,6 +72,11 @@ systemd (tiffany-bot.service)
 
 ## VPS Deploy
 
+### WARP proxy (critical dependency)
+Music/yt-dlp requires a Cloudflare WARP SOCKS5 proxy at `127.0.0.1:40000`. On a new
+VPS, run `bash scripts/warp-setup.sh` once. A healthcheck timer
+(`tiffany-warp-healthcheck.timer`) auto-reconnects it. See `docs/voice-technical.md`.
+
 ### Automated (GitHub Actions)
 Push to `main` triggers `.github/workflows/deploy.yml` → SSH → `scripts/deploy.sh` → restart
 

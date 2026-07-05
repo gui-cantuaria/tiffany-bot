@@ -19,7 +19,10 @@ git checkout origin/main -- \
   launcher.py notices.py tiffany_voice.py offers.py offers_cog.py \
   affiliate_config.py random_songs.py requirements.txt \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
-git checkout origin/main -- scripts/deploy.sh scripts/tiffany-bot.service CLAUDE.md 2>/dev/null || true
+git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service \
+  scripts/warp-setup.sh scripts/warp-healthcheck.sh \
+  scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
+  CLAUDE.md docs/voice-technical.md docs/python-migration.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
@@ -120,8 +123,17 @@ echo "[deploy] Modo systemd..."
 cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
 systemctl daemon-reload
 
+# Prefer the project venv (Python 3.11+); create it if missing.
+VENV="/opt/tiffany-bot/.venv"
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "[deploy] Criando venv..."
+    (python3.11 -m venv "$VENV" 2>/dev/null) || python3 -m venv "$VENV"
+fi
+PIP="$VENV/bin/pip"
+
 echo "[deploy] Instalando dependências novas..."
-pip3 install -q -r requirements.txt
+"$PIP" install -q --upgrade pip
+"$PIP" install -q -r requirements.txt
 
 _stop_systemd
 
