@@ -2987,6 +2987,26 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
     return "YouTube"
 
 
+# Platform label -> domain used by Google's favicon service (reliable, no hosting).
+_PLATFORM_ICON_DOMAINS: dict[str, str] = {
+    "YouTube": "youtube.com",
+    "Spotify": "open.spotify.com",
+    "Deezer": "deezer.com",
+    "Apple Music": "music.apple.com",
+    "Amazon Music": "music.amazon.com",
+    "SoundCloud": "soundcloud.com",
+}
+
+
+def _platform_icon_url(label: str) -> str:
+    """Return a small logo/symbol URL for the streaming platform, or '' if unknown.
+    Uses Google's favicon endpoint so we don't have to host any image."""
+    domain = _PLATFORM_ICON_DOMAINS.get(label or "")
+    if not domain:
+        return ""
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+
+
 def _format_track_display(title: str) -> str:
     """Format YouTube title as 'Artist - Song'.
     If separator (-, –, |, :) exists, keep it. Otherwise try to extract from title."""
@@ -3112,8 +3132,12 @@ def _embed_music_added(
     eta_sec: float = 0,
     track_count: int = 0,
     playlist_duration_sec: float = 0,
+    source_label: str = "",
 ) -> discord.Embed:
     em = discord.Embed(color=TIFFANY_PINK)
+    _icon = _platform_icon_url(source_label)
+    if _icon:
+        em.set_author(name=source_label, icon_url=_icon)
     if kind == "playlist":
         em.title = "📋 Playlist adicionada"
         em.description = f"**{title[:200]}**"
@@ -3186,6 +3210,14 @@ def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed
     if not lines:
         return None
     em = discord.Embed(title="📋 Fila de músicas", description="\n".join(lines), color=TIFFANY_PINK)
+    if session.current_song:
+        cur_src = _track_source_label(
+            session.current_query,
+            resolved_platform=bool(_detect_music_platform(session.current_query)),
+        )
+        _icon = _platform_icon_url(cur_src)
+        if _icon:
+            em.set_author(name=cur_src, icon_url=_icon)
     extras: list[str] = []
     if session.loop_enabled:
         extras.append("🔁 Loop")
@@ -3225,7 +3257,13 @@ def _format_status_embed(
             song_line += f"\n⏱️ {m:02d}:{s:02d} / {dm:02d}:{ds:02d}\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
         else:
             song_line += f"\n⏱️ {m:02d}:{s:02d}"
-        src = _track_source_label(session.current_query)
+        src = _track_source_label(
+            session.current_query,
+            resolved_platform=bool(_detect_music_platform(session.current_query)),
+        )
+        _icon = _platform_icon_url(src)
+        if _icon:
+            em.set_author(name=src, icon_url=_icon)
         em.add_field(name=f"▶️ Tocando ({src})", value=song_line, inline=False)
     else:
         em.add_field(name="▶️ Tocando", value="Nada no momento", inline=False)
@@ -3298,6 +3336,8 @@ async def _notify(
     content: str,
     *,
     return_message: bool = False,
+    author: str = "",
+    icon_url: str = "",
 ) -> Optional[discord.Message]:
     ch = bot.get_channel(channel_id)
     if ch and hasattr(ch, "send"):
@@ -3309,7 +3349,10 @@ async def _notify(
         try:
             if len(content) > 4000:
                 content = content[:4000] + "..."
-            msg = await ch.send(embed=_embed(content))
+            em = _embed(content)
+            if author or icon_url:
+                em.set_author(name=author or "\u200b", icon_url=icon_url or None)
+            msg = await ch.send(embed=em)
             return msg if return_message else None
         except discord.HTTPException:
             log.warning("Failed to send message in channel %s", channel_id)
@@ -3642,7 +3685,9 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     asyncio.create_task(_notify(
                         bot,
                         session.text_channel_id,
-                        f"▶️  **{src}** — **Tocando agora:**  {display_name[:100]}",
+                        f"▶️ **Tocando agora:** {display_name[:100]}",
+                        author=src,
+                        icon_url=_platform_icon_url(src),
                     ))
                     # Watchdog: timeout proportional to duration (min 10 min, max duration + 2 min)
                     watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
@@ -6028,6 +6073,7 @@ def register_voice(bot: commands.Bot) -> None:
                 thumbnail=pl_data.get("thumbnail") or "",
                 track_count=added,
                 playlist_duration_sec=added_dur or pl_data.get("duration") or 0,
+                source_label=_track_source_label(query, resolved_platform=bool(_detect_music_platform(query))),
             )
             if skipped > 0:
                 em.description = (em.description or "") + f"\n\n⚠️ {skipped} faixa(s) ignorada(s) — fila cheia."
@@ -6178,10 +6224,12 @@ def register_voice(bot: commands.Bot) -> None:
                 req = ctx.author.display_name or str(ctx.author)
                 pos = len(sess.queue_display) + (1 if sess.current_song else 0)
                 eta = _queue_eta_sec(sess)
+                _lbl_q = getattr(track, "uri", "") or query
                 await status.edit(embed=_embed_music_added(
                     kind="track", title=track_display, requester=req,
                     duration_sec=track_dur_sec, position=pos,
                     queue_total=pos, eta_sec=eta,
+                    source_label=_track_source_label(_lbl_q, resolved_platform=bool(_detect_music_platform(_lbl_q))),
                 ))
             return
 
@@ -6356,6 +6404,7 @@ def register_voice(bot: commands.Bot) -> None:
                 position=pos,
                 queue_total=len(sess.queue_display) + (1 if sess.current_song else 0),
                 eta_sec=eta,
+                source_label=_track_source_label(query, resolved_platform=bool(_detect_music_platform(query))),
             )
         )
 
@@ -7681,11 +7730,13 @@ def register_voice(bot: commands.Bot) -> None:
             session.current_duration = (track.length or 0) / 1000.0
             session.song_start_time = time.monotonic()
             log.info("Lavalink playing: %s (%.0fs)", track.title, session.current_duration)
-            src = _track_source_label(uri) if uri else "🎵"
+            src = _track_source_label(uri) if uri else "YouTube"
             asyncio.create_task(_notify(
                 bot,
                 session.text_channel_id,
-                f"▶️  **{src}** — **Tocando agora:**  {(track.title or 'Desconhecido')[:100]}",
+                f"▶️ **Tocando agora:** {(track.title or 'Desconhecido')[:100]}",
+                author=src,
+                icon_url=_platform_icon_url(src),
             ))
 
         @bot.listen("on_wavelink_track_end")
