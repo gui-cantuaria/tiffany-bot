@@ -1636,11 +1636,6 @@ def _build_embed(deal: dict) -> discord.Embed:
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
 
-    embed.add_field(name="Loja", value=store, inline=True)
-    embed.add_field(name="Categoria", value=category, inline=True)
-    if discount:
-        embed.add_field(name="Desconto", value=f"**{discount:.0f}%**", inline=True)
-
     # Image — set at post time (_build_embed does not set here
     # to avoid double set_image if download fails)
     # CTA: normally becomes a real BUTTON (see _build_view, attached on send).

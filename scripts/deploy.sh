@@ -19,7 +19,7 @@ git fetch origin main
 
 echo "[deploy] Aplicando arquivos atualizados..."
 git checkout origin/main -- \
-  launcher.py notices.py tiffany_voice.py offers_cog.py \
+  launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py \
   affiliate_config.py random_songs.py requirements.txt \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service \
