@@ -2213,7 +2213,10 @@ async def on_guild_join(guild: discord.Guild):
 @discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
-    await tiffany_voice.start_presence_rotation(discord_client)
+    if _voice_available and tiffany_voice:
+        await tiffany_voice.start_presence_rotation(discord_client)
+    else:
+        log.warning("Voice module unavailable — presence rotation skipped.")
     # Load offers Cog before syncing slash commands
     if not discord_client.get_cog("OffersCog"):
         try:
@@ -2241,6 +2244,8 @@ async def on_ready():
             log.info("Slash commands synced to GUILD_ID (%d commands).", len(guild_synced))
     except Exception as e:
         log.warning(f"Error syncing slash commands: {e}")
+    if _voice_available and tiffany_voice:
+        await tiffany_voice.start_presence_rotation(discord_client)
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 

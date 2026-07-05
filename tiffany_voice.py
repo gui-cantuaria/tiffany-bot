@@ -3289,33 +3289,43 @@ def invite_link_view(invite_url: str) -> discord.ui.View | None:
 
 _presence_rotation_task: asyncio.Task | None = None
 
+PRESENCE_LINES: tuple[str, ...] = (
+    "/help · mapa de comandos",
+    "t!p · som na call",
+    "t!c · perguntas e respostas",
+    "t!g · caça-jogos Steam/Epic",
+    "t!r · roleta musical",
+    "/about · quem sou eu",
+)
+
+
+async def _set_playing_presence(client: discord.Client, name: str) -> bool:
+    """Set bot activity to 'Playing …' (Jogando … in PT clients)."""
+    label = (name or "t!help")[:128]
+    try:
+        await client.change_presence(
+            activity=discord.Activity(type=discord.ActivityType.playing, name=label),
+            status=discord.Status.online,
+        )
+        return True
+    except Exception:
+        log.warning("Presence update failed (%r)", label, exc_info=True)
+        return False
+
 
 async def start_presence_rotation(client: discord.Client) -> None:
     """Rotate playing status to showcase features on the bot profile."""
     global _presence_rotation_task
+    # Always refresh on reconnect; only skip spawning a second loop task.
+    await _set_playing_presence(client, PRESENCE_LINES[0])
     if _presence_rotation_task and not _presence_rotation_task.done():
         return
 
     async def _loop() -> None:
-        # Shown as "Jogando …" — phrase after the verb should read like a game/activity title.
-        lines = (
-            "/help · mapa de comandos",
-            "t!p · som na call",
-            "t!c · perguntas e respostas",
-            "t!g · caça-jogos Steam/Epic",
-            "t!r · roleta musical",
-            "/about · quem sou eu",
-        )
-        i = 0
+        i = 1
         await client.wait_until_ready()
         while not client.is_closed():
-            try:
-                await client.change_presence(
-                    activity=discord.Game(name=lines[i % len(lines)]),
-                    status=discord.Status.online,
-                )
-            except Exception:
-                log.debug("Presence update failed", exc_info=True)
+            await _set_playing_presence(client, PRESENCE_LINES[i % len(PRESENCE_LINES)])
             i += 1
             await asyncio.sleep(50)
 
