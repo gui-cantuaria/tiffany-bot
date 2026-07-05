@@ -68,7 +68,10 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/notebook-gamer/s/",
     "/promocoes/monitor/s/",
     "/promocoes/roteador-e-repetidor/s/",
-    # Peripherals removed from scrape (keyboard/mouse/headset/webcam dominated the feed).
+    # Peripherals — low cap per cycle (variety without dominating the feed)
+    "/promocoes/mouse/s/",
+    "/promocoes/teclado/s/",
+    "/promocoes/headset/s/",
     # Removed (404 on Promobit since Jun/2026): ssd, pasta-termica, mousepad, etc.
 ]
 
@@ -127,6 +130,8 @@ _mention_date_ofertas: str = ""
 # Intraday dedup: same product at different prices should not repeat within the day
 _posted_title_keys: set = set()
 _posted_title_keys_date: str = ""
+_posted_cat_counts: dict[str, int] = {}
+_posted_cat_counts_date: str = ""
 
 # =========================
 # COLORS AND EMOJIS
@@ -262,26 +267,26 @@ _PARTS_RESERVE_CATEGORIES = (
     "Gabinete",
 )
 _ENRICH_CAP = 40
-_ENRICH_PARTS_CAP = 28
-# Max posts per category per cycle — peripherals effectively disabled.
+_ENRICH_PARTS_CAP = 22
+# Max posts per category per cycle — cap heavy PC parts to 1 for variety.
 _PER_CAT_POST_LIMIT: dict[str, int] = {
-    "Placa de Vídeo": 2,
-    "Memória RAM": 2,
-    "Processador": 2,
-    "Placa-mãe": 2,
-    "SSD": 2,
+    "Placa de Vídeo": 1,
+    "Memória RAM": 1,
+    "Processador": 1,
+    "Placa-mãe": 1,
+    "SSD": 1,
     "Gabinete": 1,
     "Pasta Térmica": 1,
     "Fonte": 1,
     "Cooler": 1,
-    "Hardware PC": 2,
+    "Hardware PC": 1,
     "Monitor": 1,
     "Notebook": 1,
     "PC Gamer": 1,
     "Adaptadores e rede": 1,
-    "Teclado": 0,
-    "Mouse": 0,
-    "Headset": 0,
+    "Teclado": 1,
+    "Mouse": 1,
+    "Headset": 1,
     "Webcam": 0,
     "Mousepad": 0,
     "Mesa digitalizadora": 0,
@@ -381,7 +386,7 @@ def _is_duplicate(history: dict, url: str) -> bool:
 
 
 def _is_title_key_in_history(history: dict, key: str) -> bool:
-    """Check whether a title_key already exists in persistent history (7 days)."""
+    """Check whether a title_key already exists in persistent history (14 days)."""
     if not key:
         return False
     for v in history.get("deals", {}).values():
@@ -417,8 +422,8 @@ def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listi
 
 
 def _clean_history(history: dict) -> None:
-    """Remove entries older than 7 days."""
-    cutoff = time.time() - (7 * 24 * 3600)
+    """Remove entries older than 14 days."""
+    cutoff = time.time() - (14 * 24 * 3600)
     deals = history.get("deals", {})
     to_remove = [k for k, v in deals.items() if v.get("ts", 0) < cutoff]
     for k in to_remove:
@@ -446,21 +451,103 @@ _MODEL_RE = re.compile(
     r'|[A-Za-z]\d+[A-Za-z]\d*'              # i7, M7, H510
     r')\b'
 )
+_RYZEN_RE = re.compile(r"ryzen\s*(?:\d\s+)?(\d{4}x?)\b", re.I)
+_INTEL_CPU_RE = re.compile(
+    r"core\s*(?:ultra\s*)?(i[3579])(?:[\s\-]*(\d{4,5}[a-z]?))?\b", re.I
+)
+_RTX_RE = re.compile(r"(?:geforce\s*)?(?:rtx|gtx)\s*(\d{4,5}(?:\s*(?:ti|super))?)\b", re.I)
+_RX_RE = re.compile(r"(?:radeon\s*)?(?:rx)\s*(\d{4}(?:\s*xt)?)\b", re.I)
+_DDR_GB_RE = re.compile(r"(\d+)\s*gb\b", re.I)
+_CHIPSET_RE = re.compile(r"\b([abxzh]\d{3,4}[a-z]?(?:m)?(?:[\-_][a-z0-9]+)?)\b", re.I)
+_NOTEBOOK_LINE_RE = re.compile(
+    r"\b(galaxy\s*book\s*\d+|vivobook\s*\d+|tuf\s*gaming\s*f\d+|ideapad\s*\w+|"
+    r"nitro\s*\d+|legion\s*\w+|pavilion\s*\d+)\b",
+    re.I,
+)
 
-def _title_key(title: str) -> str:
-    """Build a product key for intraday dedup.
-    Prioritizes brand + SKU/model to match the same item under different titles."""
+
+def _norm_title_text(title: str) -> str:
     t = unicodedata.normalize("NFD", title.lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     t = re.sub(r"[^\w\s\-]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
 
+
+def _product_fingerprint(title: str) -> str:
+    """Stable product identity across Promobit title variants (same SKU, new price)."""
+    raw = title or ""
+    t = _norm_title_text(raw)
+    if not t:
+        return ""
+
+    parts: list[str] = []
+
+    m = _RTX_RE.search(raw) or _RX_RE.search(raw)
+    if m:
+        gpu = re.sub(r"\s+", "", m.group(1).lower())
+        parts.append(f"gpu:{gpu}")
+
+    m = _RYZEN_RE.search(raw)
+    if m:
+        parts.append(f"cpu:ryzen{m.group(1).lower()}")
+    else:
+        m = _INTEL_CPU_RE.search(raw)
+        if m:
+            suffix = (m.group(2) or m.group(1)).lower().replace(" ", "")
+            parts.append(f"cpu:intel{suffix}")
+
+    if any(k in t for k in ("memoria ram", "memória ram", "ddr4", "ddr5", "vengeance", "fury beast")):
+        ddr = "ddr5" if "ddr5" in t else "ddr4" if "ddr4" in t else "ram"
+        size_m = _DDR_GB_RE.search(raw)
+        size = size_m.group(1) if size_m else "?"
+        if "vengeance" in t:
+            parts.append(f"ram:vengeance-{size}gb-{ddr}")
+        else:
+            words = [w for w in t.split() if w not in _TITLE_GENERIC and len(w) >= 2]
+            brand = words[0] if words else "ram"
+            parts.append(f"ram:{brand}-{size}gb-{ddr}")
+
+    if any(k in t for k in ("placa mae", "placa-mãe", "placa mãe", "chipset", "motherboard")):
+        for tok in _CHIPSET_RE.findall(raw):
+            tok_l = tok.lower()
+            if len(tok_l) >= 4 and tok_l[0] in "abxzh" and tok_l[1].isdigit():
+                parts.append(f"mobo:{tok_l}")
+                break
+
+    if "gabinete" in t or "wideload" in t:
+        models = [m.lower() for m in _MODEL_RE.findall(raw) if len(m) >= 4]
+        if models:
+            parts.append(f"case:{models[0]}")
+        elif "wideload" in t:
+            parts.append("case:redragon-wideload")
+
+    if "monitor" in t:
+        models = sorted({m.lower() for m in _MODEL_RE.findall(raw) if len(m) >= 4})
+        if models:
+            parts.append(f"mon:{models[0]}")
+
+    m = _NOTEBOOK_LINE_RE.search(raw)
+    if m:
+        slug = re.sub(r"\s+", "-", m.group(1).lower())
+        parts.append(f"nb:{slug}")
+
+    return " ".join(parts)
+
+
+def _title_key(title: str) -> str:
+    """Build a product key for intraday and cross-day dedup."""
+    fp = _product_fingerprint(title)
+    if fp:
+        return fp
+
+    t = _norm_title_text(title)
     models = sorted(set(m.lower() for m in _MODEL_RE.findall(title)))
     words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
     brand = words[0] if words else ""
 
     if models:
-        parts = sorted(set(([brand] if brand else []) + models))
-        return " ".join(parts)
+        core = sorted(set(([brand] if brand else []) + models))
+        return " ".join(core)
 
     return " ".join(sorted(set(words[:5])))
 
@@ -1265,15 +1352,21 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
 
 def _deal_score(deal: dict) -> float:
     """Composite score: discount × quality × log(popularity).
-    PC parts get a boost so they win ties over monitors/notebooks."""
+    PC parts get a modest boost; categories already posted today are penalized."""
     disc = deal.get("discount_pct") or 0
     stars = deal.get("stars") or 4.0      # neutral when missing
     sales = deal.get("sales_count") or 10  # low when missing
     score = disc * stars * math.log10(max(sales, 10))
     if _is_pc_part_deal(deal):
-        score *= 1.35
+        score *= 1.12
     elif (deal.get("category") or "") in {"Monitor", "Notebook", "PC Gamer"}:
-        score *= 0.85
+        score *= 0.95
+    cat = deal.get("category") or ""
+    posted_today = _posted_cat_counts.get(cat, 0)
+    if posted_today >= 2:
+        score *= 0.25
+    elif posted_today >= 1:
+        score *= 0.55
     return score
 
 
@@ -1309,7 +1402,10 @@ def _pick_enrichment_batch(candidates: list, cap: int = _ENRICH_CAP) -> list:
             cat == "Hardware e periféricos" and _title_has_parts_keyword(deal.get("title", ""))
         ):
             parts.append(deal)
-        elif cat in {"Monitor", "Notebook", "PC Gamer", "Adaptadores e rede"}:
+        elif cat in {
+            "Monitor", "Notebook", "PC Gamer", "Adaptadores e rede",
+            "Teclado", "Mouse", "Headset",
+        }:
             secondary.append(deal)
         # Peripherals and junk hardware are skipped entirely.
 
@@ -1389,7 +1485,13 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
             break
         _try_add(cat)
 
-    # Phase 4: fill any leftover slots with best remaining parts only
+    # Phase 4: at most one peripheral (mouse/keyboard/headset) for variety
+    for cat in ("Mouse", "Teclado", "Headset"):
+        if len(selected) >= limit:
+            break
+        _try_add(cat)
+
+    # Phase 5: fill any leftover slots with best remaining parts only
     fill_cats = list(_PARTS_RESERVE_CATEGORIES) + parts_cats
     progressed = True
     while len(selected) < limit and progressed:
@@ -1712,25 +1814,38 @@ async def _run_deals_cycle_inner() -> None:
     log.info(f"Raw total: {len(all_deals)} deals collected")
 
     # Reset intraday dedup when the day rolls over
-    global _posted_title_keys, _posted_title_keys_date
+    global _posted_title_keys, _posted_title_keys_date, _posted_cat_counts, _posted_cat_counts_date
     today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
     if today_br != _posted_title_keys_date:
         _posted_title_keys = set()
         _posted_title_keys_date = today_br
+    if today_br != _posted_cat_counts_date:
+        _posted_cat_counts = {}
+        _posted_cat_counts_date = today_br
 
-    # Dedup by URL (7-day history) + intraday by product (same product, different price)
+    # Dedup by URL (14-day history) + intraday by product + store listing ID
     candidates = []
     _cycle_keys: set[str] = set()  # dedup within the same cycle
     _cycle_urls: set[str] = set()  # URL dedup within cycle (cross-category)
+    _cycle_listings: set[str] = set()
     for deal in all_deals:
         if deal["url"] in _cycle_urls:
             continue
         _cycle_urls.add(deal["url"])
         if _is_duplicate(history, deal["url"]):
             continue
+        listing = _listing_key(deal.get("url", ""))
+        if listing and (
+            listing in _cycle_listings
+            or _is_listing_in_history(history, listing)
+        ):
+            log.debug(f"  Dedup store listing (early): {deal['title'][:60]}")
+            continue
+        if listing:
+            _cycle_listings.add(listing)
         key = _title_key(deal["title"])
         if key and (key in _posted_title_keys or key in _cycle_keys or _is_title_key_in_history(history, key)):
-            log.debug(f"  Dedup similar product (intraday or 7d history): {deal['title'][:60]}")
+            log.debug(f"  Dedup similar product (intraday or history): {deal['title'][:60]}")
             continue
         if key:
             _cycle_keys.add(key)
@@ -1880,6 +1995,8 @@ async def _run_deals_cycle_inner() -> None:
             _listing = _deal_listing_key(deal)
             _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey, listing=_listing)
             _posted_title_keys.add(_orig_tkey)
+            cat = deal.get("category") or "?"
+            _posted_cat_counts[cat] = _posted_cat_counts.get(cat, 0) + 1
 
             posted += 1
             log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")

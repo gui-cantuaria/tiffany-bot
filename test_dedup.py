@@ -94,46 +94,52 @@ def topic_add(h: dict, titulo: str) -> None:
 # PARTE 2: Testes de offers.py (cross-day title dedup)
 # =================================================================
 
-_TITLE_GENERIC = frozenset({
-    "notebook", "teclado", "mouse", "headset", "monitor", "processador",
-    "memoria", "placa", "ssd", "webcam", "laptop", "desktop", "gamer",
-    "gaming", "mecanico", "sem", "fio", "com", "para", "rgb", "led",
-    "preto", "branco", "prata", "cinza", "compacto", "gamer",
-})
+try:
+    from offers_cog import (
+        _deal_hash,
+        _is_title_key_in_history,
+        _mark_posted,
+        _title_key,
+    )
+except ImportError:
+    _TITLE_GENERIC = frozenset({
+        "notebook", "teclado", "mouse", "headset", "monitor", "processador",
+        "memoria", "placa", "ssd", "webcam", "laptop", "desktop", "gamer",
+        "gaming", "mecanico", "sem", "fio", "com", "para", "rgb", "led",
+        "preto", "branco", "prata", "cinza", "compacto", "gamer",
+    })
 
+    def _title_key(title: str) -> str:
+        t = unicodedata.normalize("NFD", title.lower())
+        t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+        t = re.sub(r"[^\w\s]", " ", t)
+        words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
+        return " ".join(words[:3])
 
-def _title_key(title: str) -> str:
-    t = unicodedata.normalize("NFD", title.lower())
-    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    t = re.sub(r"[^\w\s]", " ", t)
-    words = [w for w in t.split() if len(w) >= 2 and w not in _TITLE_GENERIC]
-    return " ".join(words[:3])
+    def _deal_hash(url: str) -> str:
+        return hashlib.sha256(url.encode()).hexdigest()[:16]
 
-
-def _deal_hash(url: str) -> str:
-    return hashlib.sha256(url.encode()).hexdigest()[:16]
-
-
-def _is_title_key_in_history(history: dict, key: str) -> bool:
-    if not key:
+    def _is_title_key_in_history(history: dict, key: str) -> bool:
+        if not key:
+            return False
+        for v in history.get("deals", {}).values():
+            if isinstance(v, dict) and v.get("tkey") == key:
+                return True
         return False
-    for v in history.get("deals", {}).values():
-        if isinstance(v, dict) and v.get("tkey") == key:
-            return True
-    return False
 
-
-def _mark_posted(history: dict, url: str, title: str) -> None:
-    h = _deal_hash(url)
-    entry = {
-        "url": url,
-        "title": title[:100],
-        "ts": time.time(),
-    }
-    key = _title_key(title)
-    if key:
-        entry["tkey"] = key
-    history.setdefault("deals", {})[h] = entry
+    def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listing: str = "") -> None:
+        h = _deal_hash(url)
+        entry = {
+            "url": url,
+            "title": title[:100],
+            "ts": time.time(),
+        }
+        key = orig_tkey or _title_key(title)
+        if key:
+            entry["tkey"] = key
+        if listing:
+            entry["listing"] = listing
+        history.setdefault("deals", {})[h] = entry
 
 
 # =================================================================
@@ -258,12 +264,26 @@ print("=" * 60)
 # --- Test 7: _title_key extrai marca+modelo ---
 print("\n🔹 _title_key")
 k1 = _title_key("Samsung Galaxy Book4 i5 512GB SSD Notebook Gamer")
-check("_title_key extrai 3 palavras significativas", len(k1.split()) == 3)
-check("Remove 'notebook' e 'gamer' (genéricos)", "notebook" not in k1 and "gamer" not in k1)
-check("Mantém 'samsung'", "samsung" in k1)
+check("_title_key notebook Galaxy Book4", "nb:galaxy-book4" in k1 or "galaxy" in k1)
 
 k2 = _title_key("Monitor LG 27\" 4K UHD IPS")
-check("_title_key com aspas/pontuação", len(k2.split()) >= 2)
+check("_title_key com aspas/pontuação", len(k2.split()) >= 1)
+
+k_ryzen_a = _title_key("AMD Ryzen 7 5700 AM4 8C 16T 4.6GHz 65W TDP")
+k_ryzen_b = _title_key("Processador AMD Ryzen 7 5700 8N16T AM4")
+check("Ryzen 5700 títulos diferentes → mesma key", k_ryzen_a == k_ryzen_b and "cpu:ryzen5700" in k_ryzen_a)
+
+k_gpu_a = _title_key("Placa de Video MSI RTX 5060 Shadow 2x OC, 8GB, GDDR7")
+k_gpu_b = _title_key("Placa de Video MSI RTX 5060 Shadow 2X OC 8GB GDDR7-912-V537-037")
+check("RTX 5060 títulos diferentes → mesma key", k_gpu_a == k_gpu_b and "gpu:5060" in k_gpu_a)
+
+k_ram_a = _title_key("Memória DDR4 16GB PC3200 Vengeance LPX Preto CORSAIR")
+k_ram_b = _title_key("Memória DDR4 16GB PC3200 Vengeance LPX Preto CORSAIR")
+check("Corsair Vengeance 16GB → key estável", k_ram_a == k_ram_b and "ram:vengeance-16gb-ddr4" in k_ram_a)
+
+k_mobo_a = _title_key("Placa-Mãe Asus Prime B550M-A, AMD AM4")
+k_mobo_b = _title_key("Placa Mãe ASUS PRIME B550M-A AM4")
+check("B550M-A títulos diferentes → mesma key", k_mobo_a == k_mobo_b and "mobo:b550m-a" in k_mobo_a)
 
 k_empty = _title_key("")
 check("Título vazio → string vazia ou curta", len(k_empty.split()) <= 1)
