@@ -1321,8 +1321,9 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
                 if resp.status != 200:
                     return f"Não consegui acessar a página (HTTP {resp.status})."
                 html = await resp.text(errors="replace")
-    except Exception as e:
-        return f"Erro ao buscar a página: {e}"
+    except Exception:
+        log.exception("Failed to fetch URL for summary: %s", url)
+        return "Não consegui acessar a página. Verifique o link e tente de novo."
 
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
@@ -1367,8 +1368,9 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
                 timeout=30.0,
             )
         return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Erro ao resumir com IA: {e}"
+    except Exception:
+        log.exception("Failed to summarize URL with AI: %s", url)
+        return "Não consegui resumir esse link agora. Tenta de novo em instantes."
 
 
 _VOICE_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_state.json")
@@ -3108,7 +3110,13 @@ def _embed_music_added(
 
 
 def _embed(description: str, *, title: str = None, footer: str = None) -> discord.Embed:
-    """Create default Tiffany embed in pink."""
+    """Create default Tiffany embed in pink.
+
+    Descriptions are clamped to Discord's 4096-char embed limit so a long AI
+    response, summary or lyrics can never make the message fail to send.
+    """
+    if description and len(description) > 4096:
+        description = description[:4093].rstrip() + "..."
     em = discord.Embed(description=description, color=TIFFANY_PINK)
     if title:
         em.set_author(name=title)
@@ -5450,8 +5458,9 @@ def register_voice(bot: commands.Bot) -> None:
                 try:
                     await vc.move_to(specific_channel)
                     return sess, vc
-                except Exception as e:
-                    await ctx.send(embed=_embed(f"⚠️ Erro ao mover para o canal: {e}"))
+                except Exception:
+                    log.exception("Failed to move to voice channel guild=%s", gid)
+                    await ctx.send(embed=_embed("⚠️ Não consegui mudar de canal de voz. Tenta de novo."))
                     return None, None
             # Restart dead workers (ensures queue always processed)
             if sess.music_task is None or sess.music_task.done():
@@ -5555,11 +5564,13 @@ def register_voice(bot: commands.Bot) -> None:
                         channel.connect(self_deaf=False),
                         timeout=timeout,
                     )
-                except Exception as e:
-                    await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
+                except Exception:
+                    log.exception("Failed to connect to voice channel guild=%s", guild.id)
+                    await ctx.send(embed=_embed("⚠️ Não consegui entrar no canal de voz. Tenta de novo."))
                     return None, None
-            except Exception as e:
-                await ctx.send(embed=_embed(f"⚠️ Erro ao entrar no canal de voz: {e}"))
+            except Exception:
+                log.exception("Failed to connect to voice channel guild=%s", guild.id)
+                await ctx.send(embed=_embed("⚠️ Não consegui entrar no canal de voz. Tenta de novo."))
                 return None, None
 
         # Create session
@@ -6057,9 +6068,9 @@ def register_voice(bot: commands.Bot) -> None:
                 search_query = re.sub(r"^ytsearch\d*:", "", query).strip()
             try:
                 tracks = await wavelink.Playable.search(search_query)
-            except Exception as e:
-                log.error("Lavalink search failed: %s", e)
-                await status.edit(embed=_embed(f"❌ Erro na busca: {e}"))
+            except Exception:
+                log.exception("Lavalink search failed")
+                await status.edit(embed=_embed("❌ Não consegui buscar essa música agora. Tenta de novo."))
                 return
             if not tracks:
                 # AI fallback: try AI interpretation
@@ -6876,8 +6887,9 @@ def register_voice(bot: commands.Bot) -> None:
             try:
                 await vc.seek(int(target_sec * 1000))
                 session.song_start_time = time.monotonic() - target_sec
-            except Exception as e:
-                await ctx.send(embed=_embed(f"⚠️ Erro ao fazer seek: {e}"))
+            except Exception:
+                log.exception("Failed to seek (lavalink) guild=%s", ctx.guild.id if ctx.guild else 0)
+                await ctx.send(embed=_embed("⚠️ Não consegui pular na música. Tenta de novo."))
                 return
         else:
             # yt-dlp: recreate source with FFmpeg -ss
@@ -6935,8 +6947,8 @@ def register_voice(bot: commands.Bot) -> None:
             return
         status = await ctx.reply(embed=_embed("📄 Lendo o link..."), mention_author=False)
         summary = await _summarize_url(url, api_key)
-        # Check blocked content in response
-        if _contains_blocked_content(summary):
+        # Response summarizes untrusted external content -> full moderation (literal + AI)
+        if await _should_block_content(summary):
             try:
                 await status.delete()
             except discord.HTTPException:

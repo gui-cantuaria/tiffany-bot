@@ -145,6 +145,9 @@ discord_client = _TiffanyBot(
     intents=intents,
     help_command=None,  # /help slash command provides command help
     tree_cls=_TiffanyCommandTree,
+    # Never let AI answers, summaries or external text trigger mass pings.
+    # User mentions stay on (intended for the "@author" reply in voice/reroll).
+    allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
 )
 if _voice_available and tiffany_voice:
     tiffany_voice.register_voice(discord_client)
