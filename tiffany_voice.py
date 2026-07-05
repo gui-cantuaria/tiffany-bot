@@ -785,10 +785,6 @@ FFMPEG_OPTS = {
 }
 
 
-def _ffmpeg_available() -> bool:
-    return FFMPEG_EXECUTABLE is not None
-
-
 def _lavalink_enabled() -> bool:
     """Lavalink should only be active when a server is running (e.g. docker-compose).
     On VPS with systemd, leave off (default) to avoid reconnect spam and prioritize
@@ -1255,6 +1251,27 @@ _ANTISPAM_MSGS = [
 ]
 
 
+def _url_is_safe_to_fetch(url: str) -> bool:
+    """Reject non-http(s) URLs and hosts that resolve to private/loopback/
+    link-local/reserved IPs (SSRF guard for user-supplied URLs like t!su)."""
+    import socket
+    import ipaddress
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        # Resolve every address the host maps to; block if any is not global.
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if not ip.is_global or ip.is_multicast:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 async def _summarize_url(url: str, api_key: str = "") -> str:
     """Fetch URL content and summarize using AI."""
     import random
@@ -1266,6 +1283,9 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
         from bs4 import BeautifulSoup
     except ImportError:
         return "beautifulsoup4 não instalado. Rode: pip install beautifulsoup4"
+
+    if not _url_is_safe_to_fetch(url):
+        return "Não consigo acessar esse endereço (apenas links públicos http/https são permitidos)."
 
     headers = {
         "User-Agent": (
@@ -1328,7 +1348,7 @@ async def _summarize_url(url: str, api_key: str = "") -> str:
             )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-            return "Erro ao resumir com IA: {e}"
+        return f"Erro ao resumir com IA: {e}"
 
 
 _VOICE_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice_state.json")
@@ -1792,7 +1812,7 @@ def _transcribe_with_vosk(wav_48k: bytes) -> Optional[str]:
         rec.AcceptWaveform(pcm_16k)
         result = json.loads(rec.FinalResult())
         text = result.get("text", "").strip()
-        log.info("Vosk STT: %r", text)
+        log.debug("Vosk STT: %r", text)
         return text if text else None
     except subprocess.TimeoutExpired:
         if proc:
@@ -2001,9 +2021,9 @@ def _transcribe_with_openrouter(wav_16k: bytes) -> Optional[str]:
         try:
             text = _openrouter_stt_request(api_key, model, wav_16k)
             if text:
-                log.info("OpenRouter STT (%s): %r", model, text)
+                log.debug("OpenRouter STT (%s): %r", model, text)
                 return text
-            log.info("OpenRouter STT (%s): empty response", model)
+            log.debug("OpenRouter STT (%s): empty response", model)
         except Exception as e:
             last_err = e
             log.warning("OpenRouter STT (%s) failed: %s", model, e)
@@ -3725,10 +3745,13 @@ async def _voice_listen_loop(
             # Music echo has low peak; direct mic voice has high peak (>3000).
             _playing_now = vc.is_playing()
             _paused_for_listen = False
+            # Audio already drained before pausing (must not be lost — see below).
+            _prefix_pcm = b""
+            _prefix_uid = 0
 
             if _playing_now:
                 # Check if someone spoke loud enough to be real voice (not echo)
-                pcm_peek, _ = _drain_ready_user_pcm(session)
+                pcm_peek, peek_uid = _drain_ready_user_pcm(session)
                 if not pcm_peek:
                     # Clear accumulated echo buffers (low audio = music echo)
                     with session.buf_lock:
@@ -3741,15 +3764,25 @@ async def _voice_listen_loop(
                     # Music echo — discard
                     log.debug("Audio during playback discarded (peak=%d < %d)", peek_peak, VOICE_OVER_MUSIC_PEAK)
                     continue
-                # Loud voice detected! Pause music and capture full command
+                # Loud voice detected! Pause music and capture the rest of the command.
                 log.info("Voice detected during playback (peak=%d) — pausing music to listen...", peek_peak)
                 vc.pause()
                 _paused_for_listen = True
-                # Wait for full command (2s capture without music)
+                # Keep the audio we just drained; the second drain below would
+                # otherwise lose the START of the command spoken over the music.
+                _prefix_pcm = pcm_peek
+                _prefix_uid = peek_uid
+                # Wait for the rest of the utterance (music muted now).
                 await asyncio.sleep(VOICE_OVER_MUSIC_WAIT_SEC)
 
-            # Process audio as soon as user pauses for ≥0.8s
+            # Process audio as soon as user pauses for ≥_SILENCE_SEC
             pcm, speaker_uid = _drain_ready_user_pcm(session)
+            # Merge the pre-pause audio (same speaker) so the command isn't truncated.
+            if _prefix_pcm:
+                if pcm and speaker_uid == _prefix_uid:
+                    pcm = _prefix_pcm + pcm
+                elif not pcm:
+                    pcm, speaker_uid = _prefix_pcm, _prefix_uid
             if not pcm:
                 # If paused to listen but captured nothing, resume music
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
@@ -3811,6 +3844,20 @@ async def _voice_listen_loop(
                     dur, peak, voiced_ratio * 100,
                 )
                 _stt_fail_count += 1
+                # After several failures in a row, tell the user once (mic/settings
+                # issue) — otherwise the feature fails completely silently.
+                if session and _stt_fail_count == 3:
+                    now_hint = time.monotonic()
+                    if now_hint - session.last_stt_hint_ts >= 120:
+                        session.last_stt_hint_ts = now_hint
+                        await _notify(
+                            bot,
+                            session.text_channel_id,
+                            "🎤 Estou ouvindo áudio mas não consegui entender. "
+                            "Fale mais perto do microfone, um pouco mais alto e "
+                            "comece com **Tiffany, ...**. Se persistir, verifique o "
+                            "volume de entrada do seu mic no Discord.",
+                        )
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -4970,6 +5017,9 @@ def register_voice(bot: commands.Bot) -> None:
         content = message.content.strip()
         if not content:
             return
+        # Cap length before regex parsing to avoid ReDoS/CPU abuse on long input.
+        if len(content) > 200:
+            return
         lower = content.lower()
         if lower.startswith(("t!", "!", "/", "-", ".", ";", ">", "?", "%")):
             return
@@ -5479,7 +5529,17 @@ def register_voice(bot: commands.Bot) -> None:
         _sessions[gid] = session
 
         mode_str = "Lavalink" if use_lavalink else "yt-dlp"
-        log.info("Session created guild=%s mode=%s voice=%s", gid, mode_str, session.listen_task is not None)
+        _voice_on = session.listen_task is not None
+        log.info("Session created guild=%s mode=%s voice=%s", gid, mode_str, _voice_on)
+        if not _voice_on and not use_lavalink:
+            # yt-dlp mode should always support listening; if it's off, STT will
+            # never work — surface the likely cause loudly for diagnosis.
+            log.warning(
+                "VOICE LISTENING OFF (guild=%s) — 'Tiffany, ...' commands will NOT work. "
+                "Likely: VoiceRecvClient connect timeout (raise VOICE_CONNECT_TIMEOUT_SEC), "
+                "discord-ext-voice-recv missing (_VOICE_RECV_AVAILABLE=%s), or vc.listen() failed.",
+                gid, _VOICE_RECV_AVAILABLE,
+            )
         _save_voice_state(gid, channel.id, ctx.channel.id)
         log.info("Tiffany joined %s (guild=%s)", channel.name, gid)
         return session, vc

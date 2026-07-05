@@ -86,6 +86,27 @@ music/playlist commands fail with "Não consegui extrair músicas".
 - Migration plan lives in `docs/python-migration.md`. Not urgent, but plan it
   before yt-dlp drops 3.10 support.
 
+## Voice STT ("Tiffany, ...") — how it works & troubleshooting
+Voice listening is a **separate path** from music. Music can work while listening
+is completely off. Listening requires: `discord-ext-voice-recv` installed →
+`VoiceRecvClient` connected (NOT wavelink, NOT the fallback `VoiceClient`) →
+`vc.listen(sink)` → `_voice_listen_loop`.
+
+**Diagnose on the VPS after `t!p`:**
+```bash
+journalctl -u tiffany-bot -n 80 --no-pager | grep -Ei "Session created|VOICE LISTENING OFF|VoiceRecvClient timeout|Áudio captado|STT guild"
+```
+- `voice=True` → listening active. `VOICE LISTENING OFF` warning → STT can't work; fix the cause it prints.
+- Common cause: `VOICE_CONNECT_TIMEOUT_SEC=10` in `.env` is too low → raise to `25`.
+- Offline fallback model: run `bash scripts/setup-vosk.sh` once (downloads `vosk-model-small-pt-0.3/`, which is NOT in the repo).
+
+**Talking tips:** speak ≥2s, pause ≥1s, start with "Tiffany, ...". During music the
+bot pauses playback when it hears a loud voice, then captures the command (the
+pre-pause audio is now preserved and merged, so short commands aren't truncated).
+
+**Key STT env vars:** `STT_GEMINI_FALLBACK=1` (also gates Whisper — misleading name),
+`STT_OPENROUTER_MODEL`, `STT_CHAT_MODEL`, `DEBUG_STT=1` (saves `/tmp/tiffany_debug_audio.wav`).
+
 ## Known Issues
 - Opus decoder may throw `OpusError: corrupted stream` — monkey-patched to return silence frames
 - VPS YouTube blocking — resolved via Cloudflare WARP SOCKS5 proxy at 127.0.0.1:40000 (see WARP section)

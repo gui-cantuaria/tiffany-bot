@@ -25,3 +25,12 @@ voice_state.json
 voice_stats.json
 notices_metrics.json
 chat_memory.json
+notices_history.json
+notices_queue.json
+offers_history.json
+price_monitors.json
+playlists.json
+dice_macros.json
+
+# Editor / local tooling
+.claude/

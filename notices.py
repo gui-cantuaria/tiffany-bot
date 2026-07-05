@@ -2167,7 +2167,7 @@ _CMD_NAMES = (
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
     "alerta", "alert", "monitor",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "l",
-    "ch", "247",
+    "247",
     "s", "c", "p", "r", "d",
 )
 
