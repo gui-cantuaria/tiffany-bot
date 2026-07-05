@@ -1,0 +1,21 @@
+---
+description: Deploy workflow — user asks for changes, agent commits and pushes; GitHub Actions updates VPS
+alwaysApply: true
+---
+
+# Tiffany Bot — fluxo de deploy automático
+
+When the user asks for code changes, bug fixes, or features for Tiffany Bot:
+
+1. Implement the change in the repo (minimal diff, project conventions from CLAUDE.md).
+2. When the user confirms or says "commita", "deploy", "sobe", "atualiza na VPS", or similar:
+   - **Do NOT** ask them to run manual VPS commands for code deploys.
+   - Run `git commit` + `git push origin main` (never commit `.env` or runtime JSON state files).
+3. After push, tell the user deploy is automatic via GitHub Actions (`Deploy to VPS` workflow).
+4. Mention they can check **GitHub → Actions** for status; no SSH needed unless `.env`/infra changed.
+
+Production VPS uses **systemd + `.venv` (Python 3.11)** + **WARP proxy**. Deploy script: `scripts/deploy.sh` with `DEPLOY_MODE=systemd`.
+
+If GitHub Actions fails, common fixes: `VPS_HOST` and `VPS_SSH_KEY` secrets — see `docs/deploy-automation.md`.
+
+Do not instruct the user to `git pull` on the VPS (local `.env` there). Deploy uses `git checkout origin/main -- <files>` via `deploy.sh`.

@@ -11,6 +11,9 @@ set -e
 
 cd /opt/tiffany-bot
 
+# Production VPS uses systemd + venv (not Docker).
+export DEPLOY_MODE="${DEPLOY_MODE:-systemd}"
+
 echo "[deploy] Baixando atualizações..."
 git fetch origin main
 
@@ -20,9 +23,9 @@ git checkout origin/main -- \
   affiliate_config.py random_songs.py requirements.txt \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service \
-  scripts/warp-setup.sh scripts/warp-healthcheck.sh \
+  scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
   scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
-  CLAUDE.md docs/voice-technical.md docs/python-migration.md 2>/dev/null || true
+  CLAUDE.md docs/voice-technical.md docs/python-migration.md docs/deploy-automation.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
@@ -121,7 +124,15 @@ fi
 
 echo "[deploy] Modo systemd..."
 cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
+chmod +x scripts/run.sh scripts/warp-setup.sh scripts/warp-healthcheck.sh 2>/dev/null || true
 systemctl daemon-reload
+
+# Ensure WARP healthcheck timer is installed (idempotent).
+if [ -f scripts/tiffany-warp-healthcheck.timer ]; then
+    cp -f scripts/tiffany-warp-healthcheck.service /etc/systemd/system/
+    cp -f scripts/tiffany-warp-healthcheck.timer /etc/systemd/system/
+    systemctl enable --now tiffany-warp-healthcheck.timer 2>/dev/null || true
+fi
 
 # Prefer the project venv (Python 3.11+); create it if missing.
 VENV="/opt/tiffany-bot/.venv"

@@ -78,7 +78,8 @@ VPS, run `bash scripts/warp-setup.sh` once. A healthcheck timer
 (`tiffany-warp-healthcheck.timer`) auto-reconnects it. See `docs/voice-technical.md`.
 
 ### Automated (GitHub Actions)
-Push to `main` triggers `.github/workflows/deploy.yml` → SSH → `scripts/deploy.sh` → restart
+Push to `main` triggers `.github/workflows/deploy.yml` → SSH → `scripts/deploy.sh` → restart.
+User workflow: ask in Cursor → agent commits/pushes → VPS updates automatically. See `docs/deploy-automation.md`.
 
 ### Manual
 ```bash
