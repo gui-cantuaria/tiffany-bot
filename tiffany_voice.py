@@ -1241,7 +1241,7 @@ def _save_stats() -> None:
 
 _stats: dict[str, int] = _load_stats()
 
-# Price monitors (t!alerta) — shared with offers.py via file
+# Price monitors (t!alerta) — shared with offers_cog.py via file
 PRICE_MONITORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_monitors.json")
 
 def _load_monitors() -> list:
@@ -3012,8 +3012,8 @@ def _usage_for_cmd(token: str) -> str:
 
 _COMMON_TYPOS: dict[str, str] = {
     # Common typos for each command
-    "pla": "p", "plya": "p", "paly": "p", "paly": "p", "plau": "p", "toca": "p", "tocar": "p",
-    "ply": "p", "pla": "p", "plat": "p", "plaay": "p", "pplay": "p",
+    "pla": "p", "plya": "p", "paly": "p", "plau": "p", "toca": "p", "tocar": "p",
+    "ply": "p", "plat": "p", "plaay": "p", "pplay": "p",
     "cha": "c", "caht": "c", "cah": "c", "cht": "c", "ia": "c", "perguntar": "c",
     "skp": "s", "ski": "s", "skpi": "s", "pular": "s", "pulr": "s", "next": "s",
     "proxima": "s", "prox": "s", "pross": "s",

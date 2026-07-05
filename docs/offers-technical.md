@@ -1,6 +1,6 @@
 # Offers Bot Technical Reference
 
-Detailed reference for offers.py internals. Only needed when modifying scraping, filters, or embed formatting.
+Detailed reference for `offers_cog.py` internals (the active offers module, loaded as a Cog by `notices.py`). Only needed when modifying scraping, filters, or embed formatting.
 
 ## Embed Layout
 - Author: `Via {store} • Oferta {cat_emoji}`

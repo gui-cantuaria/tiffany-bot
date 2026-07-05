@@ -30,7 +30,7 @@ _count_by_cwd() {
 
 echo "==> Atualizando arquivos do GitHub..."
 git fetch origin main
-git checkout origin/main -- launcher.py notices.py tiffany_voice.py scripts/vps-restart.sh affiliate_config.py offers.py 2>/dev/null || \
+git checkout origin/main -- launcher.py notices.py tiffany_voice.py scripts/vps-restart.sh affiliate_config.py offers_cog.py 2>/dev/null || \
   git checkout origin/main -- launcher.py notices.py tiffany_voice.py scripts/vps-restart.sh
 
 echo "==> Parando instâncias antigas (cwd $TIFFANY_DIR)..."
