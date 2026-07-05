@@ -59,7 +59,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
 ## Random Music (`t!r`)
-- ~5050 international songs in `random_songs.py`
+- Exactly 5000 international hits in `random_songs.py` (format: `Title - Artist`)
 - Avoids repeating last played random song
 
 ## Lavalink / wavelink

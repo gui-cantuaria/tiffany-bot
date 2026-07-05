@@ -54,27 +54,22 @@ HISTORY_FILE = "offers_history.json"
 # --- Promobit ---
 PROMOBIT_BASE = "https://www.promobit.com.br"
 CATEGORIAS_PROMOBIT = [
-    # === PC parts (highest priority) ===
-    "/promocoes/processador/s/",
+    # === PC parts (scrape first — enrichment budget favors these) ===
+    "/promocoes/placa-de-video/s/",
     "/promocoes/memoria-ram/s/",
+    "/promocoes/processador/s/",
     "/promocoes/placa-mae/s/",
     "/promocoes/gabinete/s/",
-    # === Peripherals ===
-    "/promocoes/monitor/s/",
-    "/promocoes/teclado/s/",
-    "/promocoes/mouse/s/",
-    "/promocoes/headset/s/",
-    "/promocoes/webcam/s/",
-    # === General hardware ===
+    # SSD/pasta térmica/fonte often appear here — filtered by title to parts only
     "/promocoes/hardware-perifericos/s/",
+    # === Full systems (low cap per cycle) ===
     "/promocoes/pc-gamer/s/",
-    "/promocoes/roteador-e-repetidor/s/",
-    # === Other ===
     "/promocoes/notebooks/s/",
     "/promocoes/notebook-gamer/s/",
-    # Removed (404 on Promobit since Jun/2026):
-    # ssd, pasta-termica, mousepad, mesa-digitalizadora,
-    # braco-articulado-para-monitor, televisao, tablet, celular
+    "/promocoes/monitor/s/",
+    "/promocoes/roteador-e-repetidor/s/",
+    # Peripherals removed from scrape (keyboard/mouse/headset/webcam dominated the feed).
+    # Removed (404 on Promobit since Jun/2026): ssd, pasta-termica, mousepad, etc.
 ]
 
 # Full whitelist (for when all affiliate programs are active)
@@ -165,8 +160,10 @@ CATEGORIAS_EMOJI = {
     "Memória RAM": "🧩",
     "Mesa digitalizadora": "🎨",
     "Gabinete": "🖥️",
-    "Mousepad": "🖱️",
-    "Pasta Térmica": "🔧",
+    "Hardware PC": "🔧",
+    "Pasta Térmica": "🌡️",
+    "Fonte": "⚡",
+    "Cooler": "❄️",
     "Tablet": "📱",
     "Celular": "📱",
     "TV": "📺",
@@ -209,21 +206,89 @@ _CATEGORY_PRIORITY = {
     "SSD": 1,
     "Gabinete": 1,
     "Pasta Térmica": 1,
-    "Monitor": 2,
-    "Teclado": 2,
-    "Mouse": 2,
-    "Headset": 2,
-    "Mousepad": 2,
-    "Webcam": 2,
-    "Mesa digitalizadora": 2,
-    "Hardware e periféricos": 2,
-    "PC Gamer": 3,
-    "Notebook": 3,
-    "Suporte e Acessórios": 4,
-    "TV": 4,
-    "Tablet": 4,
-    "Celular": 4,
+    "Fonte": 1,
+    "Cooler": 1,
+    "Hardware PC": 1,
+    "Teclado": 6,
+    "Mouse": 6,
+    "Headset": 6,
+    "Mousepad": 6,
+    "Webcam": 6,
+    "Mesa digitalizadora": 6,
+    "Hardware e periféricos": 6,
+    "Monitor": 4,
+    "PC Gamer": 4,
+    "Notebook": 4,
+    "Suporte e Acessórios": 7,
+    "TV": 7,
+    "Tablet": 7,
+    "Celular": 7,
     "Adaptadores e rede": 5,
+}
+
+# PC parts we want to surface more often (GPU/RAM were under-represented).
+_PARTS_CATEGORIES = frozenset({
+    "Processador", "Placa de Vídeo", "Memória RAM", "Placa-mãe", "SSD",
+    "Gabinete", "Pasta Térmica", "Fonte", "Cooler", "Hardware PC",
+})
+_PERIPHERAL_CATEGORIES = frozenset({
+    "Teclado", "Mouse", "Headset", "Webcam", "Mousepad",
+    "Mesa digitalizadora", "Suporte e Acessórios",
+})
+# Title hints for SSD/fonte/cooler inside /hardware-perifericos/
+_PARTS_TITLE_KEYWORDS = (
+    "ssd", "nvme", "m.2", "m2 ", "sata iii", "hd interno",
+    "memoria ram", "memória ram", "ddr4", "ddr5",
+    "processador", "ryzen", "core i3", "core i5", "core i7", "core i9", "core ultra",
+    "placa de video", "placa de vídeo", "geforce", "radeon", "rtx ", "rx ", "arc a",
+    "placa mae", "placa-mãe", "placa mãe", "chipset", "b650", "b550", "x670", "z790",
+    "fonte ", "fonte atx", "80 plus", "psu ",
+    "cooler", "water cooler", "watercooler", "pasta termica", "pasta térmica",
+    "dissipador", "ventoinha", "gabinete",
+)
+_PERIPHERAL_TITLE_KEYWORDS = (
+    "teclado", "mouse", "headset", "fone de ouvido", "fone gamer", "webcam",
+    "mousepad", "pad mouse", "suporte monitor", "braco articulado", "braço articulado",
+    "hub usb", "cabo hdmi", "cabo displayport", "cabo usb", "adaptador usb",
+    "carregador", "capa ", "pelicula", "película", "gamer chair", "cadeira gamer",
+)
+_PARTS_RESERVE_CATEGORIES = (
+    "Placa de Vídeo",
+    "Memória RAM",
+    "Processador",
+    "Placa-mãe",
+    "SSD",
+    "Gabinete",
+)
+_ENRICH_CAP = 40
+_ENRICH_PARTS_CAP = 28
+# Max posts per category per cycle — peripherals effectively disabled.
+_PER_CAT_POST_LIMIT: dict[str, int] = {
+    "Placa de Vídeo": 2,
+    "Memória RAM": 2,
+    "Processador": 2,
+    "Placa-mãe": 2,
+    "SSD": 2,
+    "Gabinete": 1,
+    "Pasta Térmica": 1,
+    "Fonte": 1,
+    "Cooler": 1,
+    "Hardware PC": 2,
+    "Monitor": 1,
+    "Notebook": 1,
+    "PC Gamer": 1,
+    "Adaptadores e rede": 1,
+    "Teclado": 0,
+    "Mouse": 0,
+    "Headset": 0,
+    "Webcam": 0,
+    "Mousepad": 0,
+    "Mesa digitalizadora": 0,
+    "Hardware e periféricos": 0,
+    "Suporte e Acessórios": 0,
+    "TV": 0,
+    "Tablet": 0,
+    "Celular": 0,
 }
 
 # Network category (adapters/routers): Promobit has no dedicated "network adapter"
@@ -799,6 +864,12 @@ _TITLE_SPECS_BY_CATEGORY = {
         "brand + model | type (Router/Repeater/USB Adapter) • standard (e.g. Wi-Fi 6 AX3000) • bands (Dual-band/Tri-band) • speed (e.g. 2400+600Mbps) • ports (e.g. 4x Gigabit)",
     "Gabinete":
         "brand + model | tower type (Full Tower/Mid Tower/Mini Tower/Mini ITX) • supported form factor (ATX/mATX/ITX) • side panel (tempered glass/acrylic/none) • cable management (yes/no) • color",
+    "Fonte":
+        "brand + model | wattage (e.g. 650W) • certification (80 Plus Bronze/Gold/Platinum) • modular (full/semi/no) • form factor (ATX/SFX)",
+    "Cooler":
+        "brand + model | type (air/AIO liquid) • socket support (AM4/AM5/LGA1700) • fan size (e.g. 120mm) • TDP rating if available",
+    "Hardware PC":
+        "brand + model | main specs (capacity, speed, socket, interface) separated by spaces",
 }
 
 _TITLE_SPECS_DEFAULT = (
@@ -1036,6 +1107,69 @@ def _is_spam_title(title: str) -> bool:
             return True
     return False
 
+def _title_has_parts_keyword(title: str) -> bool:
+    t = (title or "").lower()
+    return any(k in t for k in _PARTS_TITLE_KEYWORDS)
+
+
+def _title_has_peripheral_keyword(title: str) -> bool:
+    t = (title or "").lower()
+    return any(k in t for k in _PERIPHERAL_TITLE_KEYWORDS)
+
+
+def _infer_part_category(title: str) -> str:
+    """Best-effort category for misc hardware listings."""
+    t = (title or "").lower()
+    if any(k in t for k in ("ssd", "nvme", "m.2", "m2 ", "sata iii")):
+        return "SSD"
+    if any(k in t for k in ("fonte ", "fonte atx", "80 plus", "psu ")):
+        return "Fonte"
+    if any(k in t for k in ("pasta termica", "pasta térmica")):
+        return "Pasta Térmica"
+    if any(k in t for k in ("cooler", "water cooler", "watercooler", "dissipador", "ventoinha")):
+        return "Cooler"
+    if any(k in t for k in ("memoria ram", "memória ram", "ddr4", "ddr5")):
+        return "Memória RAM"
+    if any(k in t for k in ("placa de video", "placa de vídeo", "geforce", "radeon", "rtx ", "rx ")):
+        return "Placa de Vídeo"
+    if any(k in t for k in ("processador", "ryzen", "core i3", "core i5", "core i7", "core i9", "core ultra")):
+        return "Processador"
+    if any(k in t for k in ("placa mae", "placa-mãe", "placa mãe", "chipset")):
+        return "Placa-mãe"
+    if "gabinete" in t:
+        return "Gabinete"
+    return "Hardware PC"
+
+
+def _normalize_deal_category(deal: dict) -> None:
+    """Reclassify mixed hardware listings into PC part categories when possible."""
+    cat = deal.get("category") or ""
+    title = deal.get("title") or ""
+    if cat != "Hardware e periféricos":
+        return
+    if _title_has_peripheral_keyword(title) and not _title_has_parts_keyword(title):
+        deal["category"] = cat  # stays — will be filtered out
+        return
+    if _title_has_parts_keyword(title):
+        deal["category"] = _infer_part_category(title)
+
+
+def _is_pc_part_deal(deal: dict) -> bool:
+    return (deal.get("category") or "") in _PARTS_CATEGORIES
+
+
+def _is_peripheral_deal(deal: dict) -> bool:
+    cat = deal.get("category") or ""
+    if cat in _PERIPHERAL_CATEGORIES:
+        return True
+    if cat == "Hardware e periféricos":
+        title = deal.get("title") or ""
+        if _title_has_parts_keyword(title):
+            return False
+        return True
+    return False
+
+
 def _is_irrelevant(deal: dict) -> bool:
     """True if the title indicates a non-IT/PC product or spam/obsolete hardware."""
     title = (deal.get("title") or "").lower()
@@ -1044,6 +1178,9 @@ def _is_irrelevant(deal: dict) -> bool:
     if any(k in title for k in _OBSOLETE_KEYWORDS):
         return True
     if _is_spam_title(deal.get("title", "")):
+        return True
+    # Drop pure peripherals/accessories from mixed hardware category.
+    if _is_peripheral_deal(deal):
         return True
     return False
 
@@ -1127,11 +1264,16 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
 
 def _deal_score(deal: dict) -> float:
     """Composite score: discount × quality × log(popularity).
-    Used to rank within the same category priority."""
+    PC parts get a boost so they win ties over monitors/notebooks."""
     disc = deal.get("discount_pct") or 0
     stars = deal.get("stars") or 4.0      # neutral when missing
     sales = deal.get("sales_count") or 10  # low when missing
-    return disc * stars * math.log10(max(sales, 10))
+    score = disc * stars * math.log10(max(sales, 10))
+    if _is_pc_part_deal(deal):
+        score *= 1.35
+    elif (deal.get("category") or "") in {"Monitor", "Notebook", "PC Gamer"}:
+        score *= 0.85
+    return score
 
 
 def _interleave_by_store(deals: list) -> list:
@@ -1152,11 +1294,53 @@ def _interleave_by_store(deals: list) -> list:
     return result
 
 
+def _cat_post_limit(cat: str, default: int = 2) -> int:
+    return _PER_CAT_POST_LIMIT.get(cat, default)
+
+
+def _pick_enrichment_batch(candidates: list, cap: int = _ENRICH_CAP) -> list:
+    """Reserve enrichment slots for PC parts before anything else."""
+    parts: list = []
+    secondary: list = []
+    for deal in candidates:
+        cat = deal.get("category") or ""
+        if cat in _PARTS_CATEGORIES or (
+            cat == "Hardware e periféricos" and _title_has_parts_keyword(deal.get("title", ""))
+        ):
+            parts.append(deal)
+        elif cat in {"Monitor", "Notebook", "PC Gamer", "Adaptadores e rede"}:
+            secondary.append(deal)
+        # Peripherals and junk hardware are skipped entirely.
+
+    selected: list = []
+    per_cat: dict[str, int] = {}
+    for deal in parts:
+        if len(selected) >= _ENRICH_PARTS_CAP:
+            break
+        cat = deal.get("category") or "?"
+        if per_cat.get(cat, 0) >= 4:
+            continue
+        selected.append(deal)
+        per_cat[cat] = per_cat.get(cat, 0) + 1
+
+    remaining = max(0, cap - len(selected))
+    if remaining:
+        selected.extend(secondary[:remaining])
+    return selected[:cap]
+
+
+def _pop_best_for_store(items: list, store_counts: dict[str, int], max_per_store: int) -> tuple[dict | None, int]:
+    """Pop best item from list respecting per-store cap. Returns (item, index) or (None, -1)."""
+    for i, item in enumerate(items):
+        store = _normalize_store(item.get("store", ""))
+        if store_counts.get(store, 0) < max_per_store:
+            return items.pop(i), i
+    return None, -1
+
+
 def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store: int = 2) -> list:
-    """Select up to `limit` deals ensuring category VARIETY and per-store caps.
-    Expects `deals` already sorted by (category priority, -score). Round-robin:
-    picks the best from each category in turn (max `max_per_cat` per category),
-    respecting `max_per_store` per store."""
+    """Select deals prioritizing PC parts, then limited monitors/systems.
+    Peripherals are excluded via _PER_CAT_POST_LIMIT=0."""
     from collections import OrderedDict
     by_cat: "OrderedDict[str, list]" = OrderedDict()
     for d in deals:
@@ -1165,34 +1349,55 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
     selected: list = []
     counts: dict[str, int] = {}
     store_counts: dict[str, int] = {}
+
+    def _try_add(cat: str) -> bool:
+        if counts.get(cat, 0) >= _cat_post_limit(cat, max_per_cat):
+            return False
+        items = by_cat.get(cat) or []
+        if not items:
+            return False
+        item, _ = _pop_best_for_store(items, store_counts, max_per_store)
+        if item is None:
+            return False
+        selected.append(item)
+        counts[cat] = counts.get(cat, 0) + 1
+        store = _normalize_store(item.get("store", ""))
+        store_counts[store] = store_counts.get(store, 0) + 1
+        return True
+
+    # Phase 1: reserve core PC parts (GPU/RAM/CPU/mobo/SSD/case)
+    for cat in _PARTS_RESERVE_CATEGORIES:
+        if len(selected) >= limit:
+            break
+        _try_add(cat)
+
+    # Phase 2: round-robin remaining part categories (fonte, cooler, pasta, hardware pc)
+    parts_cats = [c for c in by_cat if c in _PARTS_CATEGORIES and c not in _PARTS_RESERVE_CATEGORIES]
     progressed = True
     while len(selected) < limit and progressed:
         progressed = False
-        for cat, items in by_cat.items():
+        for cat in parts_cats:
             if len(selected) >= limit:
                 break
-            if counts.get(cat, 0) >= max_per_cat or not items:
-                continue
-                
-            # Find the first item in this category that does not exceed the store cap
-            idx_to_pop = -1
-            for i, item in enumerate(items):
-                store = _normalize_store(item.get("store", ""))
-                if store_counts.get(store, 0) < max_per_store:
-                    idx_to_pop = i
-                    break
-            
-            if idx_to_pop == -1:
-                # All remaining items in this category exceed the store cap
-                continue
-                
-            item = items.pop(idx_to_pop)
-            selected.append(item)
-            counts[cat] = counts.get(cat, 0) + 1
-            
-            store = _normalize_store(item.get("store", ""))
-            store_counts[store] = store_counts.get(store, 0) + 1
-            progressed = True
+            if _try_add(cat):
+                progressed = True
+
+    # Phase 3: at most one monitor + one notebook/PC gamer if slots remain
+    for cat in ("Monitor", "Notebook", "PC Gamer"):
+        if len(selected) >= limit:
+            break
+        _try_add(cat)
+
+    # Phase 4: fill any leftover slots with best remaining parts only
+    progressed = True
+    while len(selected) < limit and progressed:
+        progressed = False
+        for cat in _PARTS_RESERVE_CATEGORIES + parts_cats:
+            if len(selected) >= limit:
+                break
+            if _try_add(cat):
+                progressed = True
+
     return selected
 
 
@@ -1229,7 +1434,7 @@ def _format_description(deal: dict) -> str:
         savings = deal["original_price"] - deal["price"]
         if savings > 0:
             eco = f"R$ {savings:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            lines.append(f"Economize **{eco}** nessa compra")
+            lines.append(f"Economia de **{eco}**")
 
     # 3) 30-day historical price variation
     lowest = deal.get("lowest_price_30d")
@@ -1239,7 +1444,7 @@ def _format_description(deal: dict) -> str:
         if current <= lowest * 1.02:  # within 2% of low = historical low
             lines.append(f"🏆 **Menor preço em 30 dias!**")
         elif current > lowest * 1.1:  # more than 10% above low = was cheaper before
-            lines.append(f"📉 Já esteve mais barato: {lowest_fmt}")
+            lines.append(f"📉 Já custou {lowest_fmt}")
 
     # 4) Everything the buyer needs before clicking
     details = []
@@ -1379,11 +1584,26 @@ def _build_embed(deal: dict) -> discord.Embed:
     """Build the deal embed."""
     discount = deal.get("discount_pct", 0)
     cor = _cor_embed(deal)
+    category = deal.get("category") or "Oferta"
+    store = deal.get("store", "Loja")
+    is_part = _is_pc_part_deal(deal)
 
-    # Title: emoji + full product name (discount already shown in description)
-    title = f"{EMOJI_FOGO} {_sanitize_title(deal['title'][:200])}"
+    cat_emoji = CATEGORIAS_EMOJI.get(category, "🖥️")
+    for cat_key, emoji in CATEGORIAS_EMOJI.items():
+        if cat_key.lower() in category.lower():
+            cat_emoji = emoji
+            break
 
-    desc = _format_description(deal)
+    clean_title = _sanitize_title(deal["title"][:200])
+    title = f"{EMOJI_FOGO} {clean_title}"
+
+    desc_parts: list[str] = []
+    if is_part:
+        desc_parts.append(f"**🔧 Peça de PC · {category}**")
+    else:
+        desc_parts.append(f"**{cat_emoji} {category}**")
+    desc_parts.append(_format_description(deal))
+    desc = "\n\n".join(desc_parts)
     # Unified URL for title and button (avoids inconsistency)
     buy_url = _buy_url(deal)
 
@@ -1403,18 +1623,15 @@ def _build_embed(deal: dict) -> discord.Embed:
         color=cor,
     )
 
-    # Author line
-    store = deal.get("store", "Loja")
-    cat_emoji = "🖥️"
-    for cat_key, emoji in CATEGORIAS_EMOJI.items():
-        if cat_key.lower() in deal.get("category", "").lower():
-            cat_emoji = emoji
-            break
-
     embed.set_author(
-        name=f"Via {store} • Oferta {cat_emoji}",
+        name=f"{cat_emoji} {category} · {store} · {discount:.0f}% OFF",
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
+
+    embed.add_field(name="Loja", value=store, inline=True)
+    embed.add_field(name="Categoria", value=category, inline=True)
+    if discount:
+        embed.add_field(name="Desconto", value=f"**{discount:.0f}%**", inline=True)
 
     # Image — set at post time (_build_embed does not set here
     # to avoid double set_image if download fails)
@@ -1482,6 +1699,7 @@ async def _run_deals_cycle_inner() -> None:
         cat_name = _SLUG_TO_CATEGORY.get(cat_slug, cat_slug.replace("-", " ").title())
         for d in deals:
             d["category"] = cat_name
+            _normalize_deal_category(d)
 
         log.info(f"  {cat_path}: {len(deals)} deals found")
         all_deals.extend(deals)
@@ -1542,10 +1760,12 @@ async def _run_deals_cycle_inner() -> None:
 
     # Enrich each deal (fetch details)
     enriched = []
-    for deal in pre_candidates[:26]:  # Cap to avoid abuse (covers more categories)
+    enrich_batch = _pick_enrichment_batch(pre_candidates)
+    for deal in enrich_batch:
         try:
             # Save ORIGINAL title key before enrichment mutates the title
             deal["_orig_tkey"] = _title_key(deal["title"])
+            _normalize_deal_category(deal)
             deal = await asyncio.wait_for(_enrich_deal(http_session, deal), timeout=30.0)
             await asyncio.sleep(1.5)
 
@@ -1593,11 +1813,14 @@ async def _run_deals_cycle_inner() -> None:
             -_deal_score(d),
         )
     )
-    # Diversify by category: round-robin, max 2 from the same category per cycle.
-    # Ensures variety (priority parts get a turn) and avoids monitor/motherboard floods.
+    # Diversify by category: parts reserved first; monitors/peripherals capped lower.
     approved = _select_diverse(approved, MAX_POSTS_POR_CICLO, max_per_cat=2)
-    # Vary stores: avoid back-to-back from the same store
     approved = _interleave_by_store(approved)
+    parts_posted = sum(1 for d in approved if _is_pc_part_deal(d))
+    log.info(
+        f"Selection: {len(approved)} to post "
+        f"({parts_posted} peças de PC, {len(approved) - parts_posted} outros)"
+    )
 
     # Post
     channel = _bot.get_channel(CANAL_OFERTAS_ID)

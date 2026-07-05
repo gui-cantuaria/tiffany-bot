@@ -66,8 +66,8 @@ def webhook_notify(message: str) -> None:
         data = json.dumps({"content": f"🤖 **Tiffany Healthcheck**\n{message}"}).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"Healthcheck webhook failed: {e}")
 
 
 MAX_LOG_SIZE = 5 * 1024 * 1024  # 5MB per log file

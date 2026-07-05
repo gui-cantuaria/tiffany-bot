@@ -112,7 +112,7 @@ _MUSIC_CMDS = frozenset({
     "p", "play", "s", "skip", "np", "nowplaying",
     "247", "nonstop", "pl", "playlist", "r", "random",
     "l", "loop", "lo", "pa", "pause", "re", "resume", "cl", "clear",
-    "sh", "shuffle", "rp", "replay", "hi", "history",
+    "sh", "shuffle", "rp", "replay",
     "ap", "autoplay", "ly", "lyrics", "ff", "seek", "su", "summary",
 })
 
@@ -2176,8 +2176,8 @@ async def _verificar_feeds_inner():
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "loop", "play", "chat", "seek", "nonstop", "queue",
-    "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "l",
+    "shuffle", "replay", "autoplay", "lyrics", "roll", "dice", "clip",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "ap", "ly", "cp", "l",
     "247",
     "s", "c", "p", "r", "d", "q",
 )
@@ -2214,8 +2214,31 @@ async def on_message(message: discord.Message):
 
 
 @discord_client.event
+async def on_guild_join(guild: discord.Guild):
+    """Welcome message when a new server adds Tiffany — highlights value for admins."""
+    try:
+        em = tiffany_voice.build_welcome_embed(guild, discord_client)
+        invite = tiffany_voice.bot_invite_url(discord_client)
+        view = tiffany_voice.invite_link_view(invite)
+        channel = guild.system_channel
+        if not channel or not channel.permissions_for(guild.me).send_messages:
+            for ch in guild.text_channels:
+                if ch.permissions_for(guild.me).send_messages:
+                    channel = ch
+                    break
+        if channel:
+            await channel.send(embed=em, view=view)
+            log.info("Welcome message sent guild=%s (%s)", guild.name, guild.id)
+    except discord.Forbidden:
+        log.warning("No permission to send welcome in guild=%s", guild.id)
+    except Exception:
+        log.exception("Failed to send welcome guild=%s", guild.id)
+
+
+@discord_client.event
 async def on_ready():
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
+    await tiffany_voice.start_presence_rotation(discord_client)
     # Load offers Cog before syncing slash commands
     if not discord_client.get_cog("OffersCog"):
         try:
@@ -2280,10 +2303,10 @@ async def cmd_status(interaction: discord.Interaction):
 
     if conexao_ruim or fontes_criticas:
         nivel, titulo, cor = "🔴", "Com instabilidades", 0xED4245
-        msg = "Estou com alguns problemas agora. Costuma ser temporário — tenta de novo em alguns minutos. 🙏"
+        msg = "Estou instável agora. Tente de novo em alguns minutos. 🙏"
     elif conexao_lenta or fontes_lentas:
         nivel, titulo, cor = "🟡", "Pequenas instabilidades", 0xFEE75C
-        msg = "Tô funcionando, mas com uma leve lentidão no momento."
+        msg = "Funcionando, com leve lentidão."
     else:
         nivel, titulo, cor = "🟢", "Funcionando normalmente", 0x57F287
         msg = "Tá tudo certo por aqui! 💖"

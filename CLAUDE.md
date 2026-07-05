@@ -36,7 +36,7 @@ systemd (tiffany-bot.service)
 | `tiffany_voice.py` | Music, voice commands, AI chat, clip, playlists |
 | `offers_cog.py` | Deals/offers bot (Discord Cog loaded by notices.py) |
 | `launcher.py` | Process supervisor with lockfile |
-| `random_songs.py` | ~5050 international songs for t!r |
+| `random_songs.py` | 5000 famous international songs for t!r (Title - Artist) |
 | `affiliate_config.py` | Affiliate link builder per store (env-driven) |
 
 **Detailed technical docs** (read on demand when modifying specific modules):
