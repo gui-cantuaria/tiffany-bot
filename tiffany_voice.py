@@ -6663,6 +6663,12 @@ def register_voice(bot: commands.Bot) -> None:
 
         source_url = ""
         raw_query = query.strip()
+        # Refuse up front on the RAW text the user typed (or the current song),
+        # before any network probe/search. Catches blocked terms even when a URL
+        # probe would later resolve to a "clean" title.
+        if await _should_block_content(raw_query or search_term):
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            return
         if re.match(r"^https?://", search_term):
             source_url = _normalize_music_url(search_term)
             try:
