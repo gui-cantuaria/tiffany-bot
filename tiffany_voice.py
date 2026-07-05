@@ -3016,8 +3016,10 @@ _COMMON_TYPOS: dict[str, str] = {
     "ply": "p", "pla": "p", "plat": "p", "plaay": "p", "pplay": "p",
     "cha": "c", "caht": "c", "cah": "c", "cht": "c", "ia": "c", "perguntar": "c",
     "skp": "s", "ski": "s", "skpi": "s", "pular": "s", "pulr": "s", "next": "s",
-    "entrar": "e", "entr": "e", "join": "e", "entar": "e",
+    "proxima": "s", "prox": "s", "pross": "s",
     "sair": "cl", "leav": "cl", "leve": "cl", "leaev": "cl", "sai": "cl", "disconnect": "cl",
+    "parar": "cl", "desligar": "cl", "desconectar": "cl",
+    "musica": "p", "music": "p", "song": "p", "colocar": "p", "poe": "p", "bota": "p",
     "paus": "pa", "pausar": "pa", "pausa": "pa", "stop": "pa",
     "resum": "re", "reusme": "re", "rsume": "re", "retomar": "re", "continuar": "re", "volta": "re",
     "cler": "cl", "clar": "cl", "limpiar": "cl", "limpar": "cl", "limpa": "cl",
@@ -3050,11 +3052,12 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
     w = (wrong or "").lower()
     if not w:
         return "Comando não reconhecido. Prefixo: **`t!`** — ex: `t!p`, `t!c`. Lista completa: `/help`."
-    if w in {"q", "queue", "fila", "queu", "que", "qeueu", "qeue"}:
-        return (
-            "Para ver a fila, use **`/queue`** (slash).\n"
-            "Para saber o que está tocando: `t!np`."
-        )
+    if w in {"help", "ajuda", "ajudar", "comandos", "comando", "helpp", "hepl", "menu"}:
+        return "A ajuda completa fica em **`/help`** (digite `/` e escolha) — mostra todos os comandos."
+    if w in {"entrar", "entra", "entr", "entar", "join", "conectar", "vem"}:
+        return "Eu entro na call **automaticamente** quando você toca algo: use **`t!p <música>`**."
+    if w in {"queu", "que", "qeueu", "qeue", "fil", "fla", "filla"}:
+        return "Para ver a fila e o que está tocando, use **`t!q`** / **`t!queue`** (ou `/queue`)."
     # Common typo map -> correct command
     if w in _COMMON_TYPOS:
         target = _COMMON_TYPOS[w]
