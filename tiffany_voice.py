@@ -5491,9 +5491,8 @@ def register_voice(bot: commands.Bot) -> None:
         allowed, wait = _check_cmd_rate_limit(message.author.id, "d")
         if not allowed:
             try:
-                await message.reply(
+                await message.channel.send(
                     embed=_embed(f"⏳ Aguarde **{wait:.0f}s** antes de rolar de novo."),
-                    mention_author=False,
                     delete_after=5,
                 )
             except discord.HTTPException:
@@ -5504,10 +5503,9 @@ def register_voice(bot: commands.Bot) -> None:
         desc, total_crits, total_fumbles = _format_dice_description(roll_results)
         em = _build_dice_embed(desc, total_crits, total_fumbles)
         try:
-            await message.reply(
+            await message.channel.send(
                 embed=em,
                 view=DiceRerollView(rolls_info),
-                mention_author=False,
             )
             if message.guild:
                 await _maybe_warn_rollem_conflict(message.channel, message.guild)
@@ -6719,7 +6717,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         if question and await _should_block_content(question):
-            await ctx.send(embed=_embed(_pick_blocked_reply()), delete_after=20)
+            await ctx.send(embed=_embed(_pick_blocked_reply()))
             return
 
         allowed, remaining = _check_cooldown(ctx.author.id)
@@ -6736,7 +6734,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(msg), delete_after=8)
             return
 
-        thinking = await ctx.reply(embed=_embed("🧠 Pensando..."), mention_author=False)
+        thinking = await ctx.send(embed=_embed("🧠 Pensando..."))
         answer = await _answer_question(
             question, ctx.guild.id, None, None,
             image_urls=image_urls if image_urls else None,
@@ -7042,7 +7040,7 @@ def register_voice(bot: commands.Bot) -> None:
             await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
 
-        status = await ctx.reply(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."), mention_author=False)
+        status = await ctx.send(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."))
         lyrics = await _fetch_lyrics(search_term)
         if not lyrics:
             await status.edit(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
@@ -7120,10 +7118,9 @@ def register_voice(bot: commands.Bot) -> None:
         rolls_info = [(expression, "")]
         em = _build_dice_embed(desc, total_crits, total_fumbles)
         try:
-            await ctx.reply(
+            await ctx.send(
                 embed=em,
                 view=DiceRerollView(rolls_info),
-                mention_author=False,
             )
             if ctx.guild:
                 await _maybe_warn_rollem_conflict(ctx.channel, ctx.guild)
@@ -7251,7 +7248,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not os.getenv("OPENROUTER_API_KEY", "").strip():
             await ctx.send(embed=_embed("⚠️ Serviço de IA indisponível no momento."))
             return
-        status = await ctx.reply(embed=_embed("📄 Lendo link..."), mention_author=False)
+        status = await ctx.send(embed=_embed("📄 Lendo link..."))
         summary = await _summarize_url(
             url, lang=resolve_guild_lang(ctx.guild), guild_id=ctx.guild.id,
         )

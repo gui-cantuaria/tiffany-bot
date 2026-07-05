@@ -107,26 +107,6 @@ intents = discord.Intents.default()
 if os.getenv("VOICE_ENABLED", "1").strip() == "1":
     intents.voice_states = True
 intents.message_content = True
-# Music commands: skip reply (response is obvious via pink embed)
-_MUSIC_CMDS = frozenset({
-    "p", "play", "s", "skip", "np", "nowplaying",
-    "247", "nonstop", "pl", "playlist", "r", "random",
-    "l", "loop", "lo", "pa", "pause", "re", "resume", "cl", "clear",
-    "sh", "shuffle", "rp", "replay",
-    "ap", "autoplay", "ly", "lyrics", "ff", "seek", "su", "summary",
-})
-
-class _ReplyContext(commands.Context):
-    """Custom context that auto-replies to the user's message (except music commands)."""
-    async def send(self, content=None, **kwargs):
-        if "reference" not in kwargs:
-            cmd_name = self.command.name if self.command else ""
-            if cmd_name not in _MUSIC_CMDS:
-                kwargs["reference"] = self.message
-                kwargs.setdefault("mention_author", False)
-        return await super().send(content, **kwargs)
-
-
 class _TiffanyCommandTree(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if _voice_available and tiffany_voice:
@@ -134,12 +114,7 @@ class _TiffanyCommandTree(discord.app_commands.CommandTree):
         return True
 
 
-class _TiffanyBot(commands.Bot):
-    async def get_context(self, message, *, cls=_ReplyContext):
-        return await super().get_context(message, cls=cls)
-
-
-discord_client = _TiffanyBot(
+discord_client = commands.Bot(
     command_prefix=commands.when_mentioned_or("t!", "T!"),
     case_insensitive=True,
     intents=intents,
