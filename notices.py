@@ -978,11 +978,11 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
                     "content": (
                         "You are an image validator for a tech news bot. "
                         "Analyze whether the image relates to the news title. "
-                        "Reply ONLY 'SIM' if the image is relevant to the news topic, "
-                        "or 'NAO' if the image is completely irrelevant (e.g. ad, random product, "
+                        "Reply ONLY 'YES' if the image is relevant to the news topic, "
+                        "or 'NO' if the image is completely irrelevant (e.g. ad, random product, "
                         "generic logo, lawn mower in a cybersecurity story, etc). "
                         "Generic tech images (keyboards, screens, servers) are acceptable "
-                        "for tech news. Reply only SIM or NAO, nothing else."
+                        "for tech news. Reply only YES or NO, nothing else."
                     ),
                 },
                 {
@@ -998,7 +998,7 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
             timeout=15.0,
         )
         answer = resp.choices[0].message.content.strip().upper()
-        relevante = "SIM" in answer
+        relevante = "YES" in answer or (answer.startswith("Y") and "NO" not in answer) or "SIM" in answer
         if not relevante:
             log.info(f"AI rejected image as irrelevant: {img_url[:80]} | title: {titulo[:60]}")
         return relevante
@@ -1353,7 +1353,16 @@ Article Text: {texto_base[:8000]}
             response = await ai_client.chat.completions.create(
                 model=modelo,
                 messages=[
-                    {"role": "system", "content": "Reply ONLY with valid JSON, no markdown, no text outside JSON. CRITICAL RULES: 1) Output titulo, resumo, and categoria in Brazilian Portuguese — clear and readable; common tech jargon OK, but never Portuguese-ing English verbs or stacking obscure terms. 2) Resumo: dense paragraph with 4-6 sentences, 600-1000 characters. Each sentence must bring CONCRETE FACTS — FORBIDDEN generic filler like 'pode ter implicações significativas' or 'destaca a importância'. 3) NEVER invent information not in the article."},
+                    {"role": "system", "content": (
+                        "Reply ONLY with valid JSON, no markdown, no text outside JSON. "
+                        "CRITICAL RULES: "
+                        "1) Output titulo, resumo, and categoria in Brazilian Portuguese (PT-BR) — clear and readable; "
+                        "common tech jargon may stay in English; never Portuguese-ize English verbs or stack obscure terms. "
+                        "2) Resumo: one dense paragraph, 4-6 sentences, 600-1000 characters. "
+                        "Each sentence must contain CONCRETE FACTS from the article — "
+                        "FORBIDDEN generic filler (e.g. 'may have significant implications', 'highlights the importance of'). "
+                        "3) NEVER invent information not present in the article."
+                    )},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
