@@ -4,12 +4,11 @@ Detailed reference for `offers_cog.py` internals (the active offers module, load
 
 ## Embed Layout
 - Author: `Via {store} • Oferta {cat_emoji}`
-- Title: `🔥 {product} — {discount}% OFF`
+- Title: `🔥 {product}` (title links to affiliate URL)
 - Description line 1: `~~R$ original~~ → **R$ current** (-X%)`
-- Description line 2: `Você economiza R$ X` (no emoji)
-- Details block: `🏷️ Cupom: \`code\``, `💳 installments`, `⏰ Expira: date`, `⭐ N/5 (N avaliações)`, tags
-- CTA: `## [COMPRAR COM X% OFF](url)` (heading link, no emoji)
-- Button: `🛒 COMPRAR COM X% OFF` (Discord link button)
+- Description line 2: `Economize R$ X nessa compra`
+- Details block: `🏷️ Cupom: code`, `💳 installments`, `⏰ Expira: date`, `✅ Frete grátis`, event tags (e.g. Prime Day)
+- Button: `COMPRAR COM X% OFF` (Discord link button)
 - Footer: `Preço sujeito a alterações`
 - Thread: `🛒 {store}: {title[:70]}`
 

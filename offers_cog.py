@@ -153,7 +153,7 @@ CATEGORIAS_EMOJI = {
     "Notebook": "💻",
     "Monitor": "🖥️",
     "Processador": "⚡",
-    "Placa de Vídeo": "🎮",
+    "Placa de Vídeo": "🚀",
     "Placa-mãe": "🔧",
     "PC Gamer": "🎮",
     "Adaptadores e rede": "📡",
@@ -1539,29 +1539,19 @@ def _format_description(deal: dict) -> str:
     # 1) Highlighted price
     lines.append(_format_price_line(deal))
 
-    # 2) Savings — bold amount reinforces the benefit
+    # 2) Savings
     if deal.get("original_price") and deal.get("price"):
         savings = deal["original_price"] - deal["price"]
         if savings > 0:
             eco = f"R$ {savings:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            lines.append(f"Economia de **{eco}**")
+            lines.append(f"Economize **{eco}** nessa compra")
 
-    # 3) 30-day historical price variation
-    lowest = deal.get("lowest_price_30d")
-    current = deal.get("price")
-    if lowest and current:
-        lowest_fmt = f"R$ {lowest:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        if current <= lowest * 1.02:  # within 2% of low = historical low
-            lines.append(f"🏆 **Menor preço em 30 dias!**")
-        elif current > lowest * 1.1:  # more than 10% above low = was cheaper before
-            lines.append(f"📉 Já custou {lowest_fmt}")
-
-    # 4) Everything the buyer needs before clicking
+    # Details block (cupom, frete, tags, etc.)
     details = []
 
     # Coupon (real codes only, not descriptive text)
     if deal.get("coupon"):
-        details.append(f"🏷️ Cupom: `{deal['coupon']}`")
+        details.append(f"🏷️ Cupom: {deal['coupon']}")
 
     # Installments — verb + condition makes it clearer
     if deal.get("installments"):
@@ -1600,17 +1590,7 @@ def _format_description(deal: dict) -> str:
             continue
         others.append(n)
     if others:
-        details.append(" • ".join(others[:2]))
-
-    # Rating — show score + buyer count in natural language
-    stars = deal.get("stars")
-    sales = deal.get("sales_count")
-    if stars and sales:
-        stars_fmt = f"{stars:.1f}".replace(".", ",")
-        details.append(f"⭐ {stars_fmt} de 5 · {sales} compradores avaliaram")
-    elif stars:
-        stars_fmt = f"{stars:.1f}".replace(".", ",")
-        details.append(f"⭐ Nota {stars_fmt} de 5")
+        details.extend(others[:2])
 
     if details:
         lines.append("")
@@ -1692,11 +1672,9 @@ def _build_view(deal: dict) -> Optional[discord.ui.View]:
 
 def _build_embed(deal: dict) -> discord.Embed:
     """Build the deal embed."""
-    discount = deal.get("discount_pct", 0)
     cor = _cor_embed(deal)
     category = deal.get("category") or "Oferta"
     store = deal.get("store", "Loja")
-    is_part = _is_pc_part_deal(deal)
 
     cat_emoji = CATEGORIAS_EMOJI.get(category, "🖥️")
     for cat_key, emoji in CATEGORIAS_EMOJI.items():
@@ -1707,21 +1685,8 @@ def _build_embed(deal: dict) -> discord.Embed:
     clean_title = _sanitize_title(deal["title"][:200])
     title = f"{EMOJI_FOGO} {clean_title}"
 
-    desc_parts: list[str] = []
-    if is_part:
-        desc_parts.append(f"**🔧 Peça de PC · {category}**")
-    else:
-        desc_parts.append(f"**{cat_emoji} {category}**")
-    desc_parts.append(_format_description(deal))
-    desc = "\n\n".join(desc_parts)
-    # Unified URL for title and button (avoids inconsistency)
+    desc = _format_description(deal)
     buy_url = _buy_url(deal)
-
-    # HIGHLIGHTED CTA in body: clickable heading (large and bold).
-    # Reinforces the button (Discord only renders gray) with high visibility.
-    if buy_url.startswith("http"):
-        cta_txt = f"COMPRAR COM {discount:.0f}% OFF" if discount else "COMPRAR COM DESCONTO"
-        desc += f"\n\n## [{cta_txt}]({buy_url})"
 
     if len(desc) > 4096:
         desc = desc[:4093] + "..."
@@ -1734,7 +1699,7 @@ def _build_embed(deal: dict) -> discord.Embed:
     )
 
     embed.set_author(
-        name=f"{cat_emoji} {category} · {store} · {discount:.0f}% OFF",
+        name=f"Via {store} • Oferta {cat_emoji}",
         icon_url="https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
     )
 
