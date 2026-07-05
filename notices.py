@@ -2163,9 +2163,9 @@ async def _verificar_feeds_inner():
 
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "loop", "play", "chat", "seek", "nonstop", "queue", "fila",
+    "loop", "play", "chat", "seek", "nonstop", "queue",
     "shuffle", "replay", "history", "autoplay", "lyrics", "roll", "dice", "clip",
-    "alerta", "alert", "monitor",
+    "alert", "monitor",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "hi", "ap", "ly", "cp", "l",
     "247",
     "s", "c", "p", "r", "d", "q",

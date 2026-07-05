@@ -1021,7 +1021,7 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "ly": 2.0, "lyrics": 2.0,
     "c": 2.0, "chat": 2.0,
     "su": 2.0, "summary": 2.0,
-    "alert": 2.0, "alerta": 2.0, "monitor": 2.0,
+    "alert": 2.0, "monitor": 2.0,
     "player-status": 2.0,
     # 5s — audio recording
     "cp": 5.0, "clip": 5.0,
@@ -2851,7 +2851,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: d20, 4d6, c50+50)"),
     ("cp", ["clip"], "t!cp / t!clip — últimos 30s de áudio"),
-    ("alert", ["alerta", "monitor"], "t!alert <product> — price alert via DM"),
+    ("alert", ["monitor"], "t!alert <product> — price alert via DM"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
 ]
 
@@ -3036,7 +3036,7 @@ _COMMON_TYPOS: dict[str, str] = {
     "dado": "d", "dados": "d", "rolar": "d", "rola": "d", "rol": "d",
     "clp": "cp", "clipe": "cp",
     "sum": "su", "sumar": "su", "resumo": "su", "resumir": "su",
-    "alert": "alerta", "alrt": "alerta",
+    "alrt": "alert", "alerta": "alert", "alerte": "alert",
     "24": "247", "nstop": "247", "nonstp": "247",
     # Prefixes from other common bots
 }
@@ -3056,7 +3056,7 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
         return "A ajuda completa fica em **`/help`** (digite `/` e escolha) — mostra todos os comandos."
     if w in {"entrar", "entra", "entr", "entar", "join", "conectar", "vem"}:
         return "Eu entro na call **automaticamente** quando você toca algo: use **`t!p <música>`**."
-    if w in {"queu", "que", "qeueu", "qeue", "fil", "fla", "filla"}:
+    if w in {"queu", "que", "qeueu", "qeue", "fila", "fil", "fla", "filla"}:
         return "Para ver a fila e o que está tocando, use **`t!q`** / **`t!queue`** (ou `/queue`)."
     # Common typo map -> correct command
     if w in _COMMON_TYPOS:
@@ -5679,7 +5679,7 @@ def register_voice(bot: commands.Bot) -> None:
                     f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
                 ))
 
-    @bot.command(name="q", aliases=["queue", "fila", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue")
+    @bot.command(name="q", aliases=["queue", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue")
     async def cmd_queue(ctx: commands.Context):
         if not ctx.guild:
             return
@@ -6686,7 +6686,7 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
         await status.edit(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
 
-    @bot.command(name="alert", aliases=["alerta", "monitor"], help="Price alert: t!alert <product> | t!alert list | t!alert remove <id>")
+    @bot.command(name="alert", aliases=["monitor"], help="Price alert: t!alert <product> | t!alert list | t!alert remove <id>")
     async def cmd_alerta(ctx: commands.Context, *, args: str = ""):
         if not ctx.guild:
             return
