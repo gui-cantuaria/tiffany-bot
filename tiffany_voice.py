@@ -3282,6 +3282,31 @@ async def _notify(
     return None
 
 
+async def _send_private_notice(
+    user,
+    channel,
+    content: str,
+    *,
+    delete_after: Optional[float] = 8.0,
+) -> None:
+    """Deliver a sensitive/punishment-type notice (content refusal, anti-spam,
+    rate limit) privately in the user's DM so they aren't exposed in the channel.
+    Falls back to a discreet auto-deleting channel message if the user's DMs are closed."""
+    em = _embed(content)
+    try:
+        if user is not None:
+            await user.send(embed=em)
+            return
+    except (discord.Forbidden, discord.HTTPException):
+        pass  # DMs closed/blocked — fall back to the channel
+    try:
+        if channel is not None and hasattr(channel, "send"):
+            mention = getattr(user, "mention", "") or None
+            await channel.send(content=mention, embed=em, delete_after=delete_after)
+    except discord.HTTPException:
+        pass
+
+
 async def _ensure_opus() -> None:
     if discord.opus.is_loaded():
         return
@@ -5746,7 +5771,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             total = len(songs)
             if await _playlist_is_blocked(title=name, tracks=songs):
-                await ctx.reply(embed=_embed(_pick_blocked_reply()))
+                await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
                 return
             sess, vc = await _ensure_connected(ctx)
             if not sess:
@@ -5893,7 +5918,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Early block (instant, literal): catches typed text. AI runs later
         # in background on worker — does not delay playback.
         if not re.match(r"^https?://", query) and _contains_blocked_content(query):
-            await ctx.send(embed=_embed(_pick_blocked_reply()))
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
@@ -5941,7 +5966,11 @@ def register_voice(bot: commands.Bot) -> None:
                 tracks=tracks,
                 source_url=query,
             ):
-                await status.edit(embed=_embed(_pick_blocked_reply()))
+                try:
+                    await status.delete()
+                except discord.HTTPException:
+                    pass
+                await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
                 return
             vagas = QUEUE_MAX - fila_atual
             added = 0
@@ -6061,7 +6090,11 @@ def register_voice(bot: commands.Bot) -> None:
             # Post-resolution block: real title may reveal prohibited content.
             _lv_src = getattr(track, "uri", "") or query
             if await _should_block_media(track_display, _lv_src):
-                await status.edit(embed=_embed(_pick_blocked_reply()))
+                try:
+                    await status.delete()
+                except discord.HTTPException:
+                    pass
+                await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
                 return
             # Dedup
             def _normalize_for_dup(s: str) -> str:
@@ -6224,7 +6257,11 @@ def register_voice(bot: commands.Bot) -> None:
         # content. AI moderation (text + thumbnail) runs in background on worker,
         # without delaying playback start.
         if _contains_blocked_content(display) or _contains_blocked_content(probe_title or ""):
-            await status.edit(embed=_embed(_pick_blocked_reply()))
+            try:
+                await status.delete()
+            except discord.HTTPException:
+                pass
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
 
         # Duplicate detection: check if song already playing or in queue
@@ -6317,7 +6354,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         question = question.strip() if question else ""
         if question and await _should_block_content(question):
-            await ctx.reply(embed=_embed(_pick_blocked_reply()))
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
 
         thinking = await ctx.reply(embed=_embed("🧠 Pensando..."), mention_author=False)
@@ -6629,7 +6666,7 @@ def register_voice(bot: commands.Bot) -> None:
         search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
 
         if await _should_block_media(search_term, source_url or raw_query):
-            await ctx.reply(embed=_embed(_pick_blocked_reply()))
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
 
         status = await ctx.reply(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."), mention_author=False)
@@ -6638,7 +6675,11 @@ def register_voice(bot: commands.Bot) -> None:
             await status.edit(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
             return
         if await _should_block_content(lyrics):
-            await status.edit(embed=_embed(_pick_blocked_reply()))
+            try:
+                await status.delete()
+            except discord.HTTPException:
+                pass
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
         # Truncate to fit embed (4096 chars)
         if len(lyrics) > 3800:
@@ -6687,7 +6728,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Uso: `t!alert <produto>` — ex: `t!alert RTX 5060`"), delete_after=10)
             return
         if _contains_blocked_content(args):
-            await ctx.reply(embed=_embed(_pick_blocked_reply()))
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
         user_mons = [m for m in monitors if m["user_id"] == user_id]
         if len(user_mons) >= 10:
@@ -6874,7 +6915,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Uso: `t!su <URL>` — precisa ser um link completo (https://...)"))
             return
         if _contains_blocked_content(url):
-            await ctx.reply(embed=_embed(_pick_blocked_reply()))
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
@@ -6896,7 +6937,11 @@ def register_voice(bot: commands.Bot) -> None:
         summary = await _summarize_url(url, api_key)
         # Check blocked content in response
         if _contains_blocked_content(summary):
-            await status.edit(embed=_embed(_pick_blocked_reply()))
+            try:
+                await status.delete()
+            except discord.HTTPException:
+                pass
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
             return
         await status.edit(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
         # Save to user context for future t!c reference
@@ -6964,10 +7009,9 @@ def register_voice(bot: commands.Bot) -> None:
             except discord.HTTPException:
                 pass
         msg = random.choice(_ANTISPAM_MSGS).format(mention=message.author.mention)
-        try:
-            await channel.send(msg)
-        except discord.HTTPException:
-            pass
+        # Warn privately so the user isn't publicly shamed; the @everyone/@here
+        # message itself was already removed above.
+        await _send_private_notice(message.author, channel, msg)
 
     # Central command error handler (cooldown, permission, unknown command, etc.)
     @bot.listen("on_command_error")
