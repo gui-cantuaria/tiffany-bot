@@ -3454,6 +3454,20 @@ async def _notify(
     return None
 
 
+_PRIVATE_NOTICE_CHANNEL_FALLBACK: tuple[str, ...] = (
+    "{mention} Não consegui te mandar no privado — deixo aqui só um instante.",
+    "{mention} Sua DM está fechada; leia abaixo (esta mensagem some em segundos).",
+    "{mention} Abra as DMs comigo para avisos discretos — por ora, só pra você:",
+    "{mention} Te aviso aqui rapidinho porque o privado não abriu.",
+    "{mention} Preferia no privado, mas sua DM está bloqueada — leia e sigo:",
+    "{mention} Só você precisa ver isso; sumo daqui a pouco.",
+    "{mention} Ative as DMs pra próximas vezes — aviso rápido abaixo:",
+    "{mention} Mensagem sensível — some em instantes.",
+    "{mention} Não expor no canal seria o ideal; abra a DM quando puder.",
+    "{mention} Deixo aqui um momento e apago — abra o privado na próxima.",
+)
+
+
 async def _send_private_notice(
     user,
     channel,
@@ -3473,8 +3487,11 @@ async def _send_private_notice(
         pass  # DMs closed/blocked — fall back to the channel
     try:
         if channel is not None and hasattr(channel, "send"):
-            mention = getattr(user, "mention", "") or None
-            await channel.send(content=mention, embed=em, delete_after=delete_after)
+            import random
+            mention = getattr(user, "mention", "") or ""
+            wrapper = random.choice(_PRIVATE_NOTICE_CHANNEL_FALLBACK).format(mention=mention)
+            fallback_em = _embed(f"{wrapper}\n\n{content}")
+            await channel.send(embed=fallback_em, delete_after=delete_after)
     except discord.HTTPException:
         pass
 
