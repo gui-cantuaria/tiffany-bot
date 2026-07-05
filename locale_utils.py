@@ -55,13 +55,15 @@ def chat_system_prompt(lang: GuildLang) -> str:
         unsure = "'não tenho certeza', 'não sei', 'posso estar errada'"
 
     return (
-        "You are Tiffany, a Discord assistant created by Tuffine. You are your own AI — not ChatGPT, Gemini, or Claude.\n\n"
+        "You are Tiffany, a Discord assistant. You are your own AI — not ChatGPT, Gemini, or Claude.\n\n"
         "PERSONALITY:\n"
         "- Humble and honest: never boast, never act superior or all-knowing.\n"
         f"- Admit limits openly ({unsure}) — never bluff.\n"
         "- If the user corrects you, acknowledge briefly without being defensive.\n"
         "- You're a bot with real limits; don't pretend to be human or omniscient.\n"
-        "- Helpful and warm, not arrogant or preachy.\n\n"
+        "- Helpful and warm, not arrogant or preachy.\n"
+        "- Do not mention your creator or who built you unless the user explicitly asks "
+        "(e.g. who created you, who is Tuffine, who made the bot).\n\n"
         "HOW TO REPLY:\n"
         "- First sentence = direct answer to what was asked. Then add detail only if needed.\n"
         "- Max 2 short paragraphs. Discord chat, not an essay. No emojis.\n"
@@ -180,7 +182,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
     "- t!g / t!game <filters> — game picks (store, price, studio, rating, genre, tags, year…)\n"
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
-    "- t!d — RPG shortcuts (dice: type directly in chat, e.g. d20, 4d6, c50+50)\n"
+    "- Dice in chat (no prefix): d20, D20+7, 4d6, c50+50, adv, stats\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
     "- Slash: /help, /about, /queue, /status, /stats, /player-status (admin)\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
@@ -370,16 +372,16 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.dice.title": {"pt": "🎲 Dados / RPG", "en": "🎲 Dice / RPG", "es": "🎲 Dados / RPG"},
     "help.dice.body": {
         "pt": (
-            "`d20` · `4d6` · `2d10+5` — rolagens no chat\n`c50+50` — calculadora\n"
-            "Atalhos: `t!d adv` · `dis` · `stats` · `coin`\nℹ️ `t!d` — guia completo"
+            "`d20` · `D20+7` · `4d6` · `2d10+5` — rolagens no chat\n"
+            "`c50+50` — calculadora · `adv` · `dis` · `stats` · `coin` · `init +3`"
         ),
         "en": (
-            "`d20` · `4d6` · `2d10+5` — rolls in chat\n`c50+50` — calculator\n"
-            "Shortcuts: `t!d adv` · `dis` · `stats` · `coin`\nℹ️ `t!d` — full guide"
+            "`d20` · `D20+7` · `4d6` · `2d10+5` — rolls in chat\n"
+            "`c50+50` — calculator · `adv` · `dis` · `stats` · `coin` · `init +3`"
         ),
         "es": (
-            "`d20` · `4d6` · `2d10+5` — tiradas en el chat\n`c50+50` — calculadora\n"
-            "Atajos: `t!d adv` · `dis` · `stats` · `coin`\nℹ️ `t!d` — guía completa"
+            "`d20` · `D20+7` · `4d6` · `2d10+5` — tiradas en el chat\n"
+            "`c50+50` — calculadora · `adv` · `dis` · `stats` · `coin` · `init +3`"
         ),
     },
     "help.clip.title": {"pt": "🎬 Clipe & Playlists", "en": "🎬 Clip & Playlists", "es": "🎬 Clip y Playlists"},
@@ -447,9 +449,9 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "⏳ Demasiados mensajes privados ahora — espera un momento e intenta de nuevo.",
     },
     "err.guild_only": {
-        "pt": "⚠️ Esse comando só funciona **num servidor** (música, voz e call). No privado use **`t!c`**, **`t!g`**, **`t!su`** ou **`t!d`**.",
-        "en": "⚠️ This command only works **in a server** (music, voice, and voice channel). In DMs use **`t!c`**, **`t!g`**, **`t!su`**, or **`t!d`**.",
-        "es": "⚠️ Este comando solo funciona **en un servidor** (música, voz y canal de voz). En privado usa **`t!c`**, **`t!g`**, **`t!su`** o **`t!d`**.",
+        "pt": "⚠️ Esse comando só funciona **num servidor** (música, voz e call). No privado use **`t!c`**, **`t!g`** ou **`t!su`**.",
+        "en": "⚠️ This command only works **in a server** (music, voice, and voice channel). In DMs use **`t!c`**, **`t!g`**, or **`t!su`**.",
+        "es": "⚠️ Este comando solo funciona **en un servidor** (música, voz y canal de voz). En privado usa **`t!c`**, **`t!g`** o **`t!su`**.",
     },
     "err.dm_no_shared_guild": {
         "pt": "⚠️ No privado, só atendo quem compartilha **pelo menos um servidor** comigo. Me chame num servidor onde eu esteja.",

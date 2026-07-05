@@ -1040,6 +1040,8 @@ class _GuildVoiceSession:
     music_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     queue_display: list[str] = field(default_factory=list)
     queue_durations: list[float] = field(default_factory=list)  # seconds, parallel to queue
+    queue_requesters: list[int] = field(default_factory=list)  # user ids, parallel to queue
+    current_requester_id: int = 0  # who requested the track now playing
     _queue_empty_since: float = 0.0  # monotonic — idle after empty queue
     current_song: str = ""
     current_query: str = ""
@@ -1076,7 +1078,13 @@ class _GuildVoiceSession:
     _resume_after_question: bool = False
     # "Thinking..." message from last voice question — edited when answer arrives
     last_question_status_msg: Any = None
+    last_play_status_msg: Any = None
+    last_play_status_query: str = ""
+    ytdl_probe_cache: dict[str, dict] = field(default_factory=dict)
 
+
+_YTDL_PROBE_CACHE_TTL = 300.0
+_YTDL_PROBE_CACHE_MAX = 20
 
 _sessions: dict[int, _GuildVoiceSession] = {}
 
@@ -2625,6 +2633,48 @@ def _normalize_music_url(url: str) -> str:
     return url
 
 
+def _play_query_key(query: str) -> str:
+    q = (query or "").strip()
+    if not q:
+        return ""
+    if re.match(r"^https?://", q, re.IGNORECASE):
+        return _normalize_music_url(q).strip().lower()
+    return q.lower()
+
+
+def _store_ytdl_probe_cache(session: "_GuildVoiceSession", entry: dict) -> None:
+    q = (entry.get("query") or "").strip()
+    if not q:
+        return
+    key = _play_query_key(q)
+    if not key:
+        return
+    session.ytdl_probe_cache[key] = {
+        "query": q,
+        "duration": float(entry.get("duration") or 0),
+        "title": (entry.get("title") or "").strip(),
+        "cached_at": time.monotonic(),
+    }
+    if len(session.ytdl_probe_cache) > _YTDL_PROBE_CACHE_MAX:
+        oldest_key = min(
+            session.ytdl_probe_cache,
+            key=lambda k: session.ytdl_probe_cache[k].get("cached_at", 0),
+        )
+        session.ytdl_probe_cache.pop(oldest_key, None)
+
+
+def _pop_ytdl_probe_cache(session: "_GuildVoiceSession", query: str) -> Optional[dict]:
+    key = _play_query_key(query)
+    if not key:
+        return None
+    entry = session.ytdl_probe_cache.pop(key, None)
+    if not entry:
+        return None
+    if (time.monotonic() - entry.get("cached_at", 0)) > _YTDL_PROBE_CACHE_TTL:
+        return None
+    return entry
+
+
 async def _amazon_music_url_to_search(url: str) -> Optional[str]:
     """Extract song name from Amazon Music URLs.
     E.g. music.amazon.com.br/albums/B0DQXL3N81?trackAsin=B0DQXHX1DG
@@ -2986,10 +3036,21 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
 MAX_SONG_DURATION_SEC = 30 * 60  # 30 minutes — reject songs above this
 
 
-def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
-    """Extract duration/title without downloading. Returns (duration_sec or None, title or error)."""
+def _title_from_ytdl_info(info: dict) -> str:
+    raw_title = info.get("title") or info.get("id") or "audio"
+    track_name = info.get("track") or ""
+    artist_name = info.get("artist") or info.get("creator") or info.get("uploader") or ""
+    artist_name = re.sub(r"\s*-\s*Topic$", "", artist_name, flags=re.IGNORECASE).strip()
+    if track_name and artist_name:
+        return f"{track_name} - {artist_name}"
+    if " - " in raw_title or " – " in raw_title:
+        return raw_title
+    return _format_track_display(raw_title)
+
+
+def _blocking_ytdl_extract_entry(query: str) -> Optional[dict]:
     if not _YTDLP_AVAILABLE:
-        return None, ""
+        return None
     extract_opts = {**YDL_OPTS, "quiet": True, "no_warnings": True}
     try:
         with yt_dlp.YoutubeDL(extract_opts) as ydl:
@@ -2997,13 +3058,23 @@ def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
             if info and "entries" in info:
                 info = info["entries"][0] if info["entries"] else None
             if not info:
-                return None, ""
-            duration = float(info.get("duration") or 0) or None
-            title = info.get("title") or info.get("id") or ""
-            return duration, title
+                return None
+            return {
+                "query": query.strip(),
+                "duration": float(info.get("duration") or 0),
+                "title": _title_from_ytdl_info(info),
+            }
     except Exception as e:
-        log.debug("ytdl probe failed: %s", e)
+        log.debug("ytdl extract failed: %s", e)
+        return None
+
+
+def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
+    entry = _blocking_ytdl_extract_entry(query)
+    if not entry:
         return None, ""
+    d = entry["duration"]
+    return (d or None), entry["title"]
 
 
 def _blocking_ytdl_search(term: str, n: int = 4) -> list[dict]:
@@ -3064,10 +3135,14 @@ def _match_score(query: str, title: str) -> float:
     return round(0.7 * coverage + 0.3 * ratio, 3)
 
 
-def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str], str, Optional[str], float]:
+def _blocking_ytdl_download(
+    query: str,
+    display: str = "",
+    *,
+    probe_entry: Optional[dict] = None,
+) -> tuple[Optional[str], str, Optional[str], float]:
     """Download audio to temp file via yt-dlp (with WARP proxy).
-    Returns (filepath, title, tmpdir, duration_sec) — tmpdir must be removed after use.
-    display: display title (used as search fallback when query is direct URL)."""
+    probe_entry: cached t!p extract — skips duplicate extract_info when query matches."""
     if not _YTDLP_AVAILABLE:
         return None, "yt-dlp não disponível", None, 0
 
@@ -3097,37 +3172,41 @@ def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str
         queries.append(f"scsearch1:{display}")
 
     _last_error = "sem resultado para a busca"
+    probe_used = False
 
     for q in queries:
         try:
-            log.info("yt-dlp downloading: %s", q)
-            # Phase 1: extract_info without download to check duration
-            with yt_dlp.YoutubeDL(extract_opts) as ydl:
-                info = ydl.extract_info(q, download=False)
-                if info and "entries" in info:
-                    info = info["entries"][0] if info["entries"] else None
-                if not info:
-                    continue
-                duration = float(info.get("duration") or 0)
-                raw_title = info.get("title") or info.get("id") or "audio"
-                # Format as "Song - Artist" using yt-dlp metadata
-                track_name = info.get("track") or ""
-                artist_name = info.get("artist") or info.get("creator") or info.get("uploader") or ""
-                # Strip "- Topic" from YouTube Music auto-generated channels
-                artist_name = re.sub(r"\s*-\s*Topic$", "", artist_name, flags=re.IGNORECASE).strip()
-                if track_name and artist_name:
-                    title = f"{track_name} - {artist_name}"
-                elif " - " in raw_title or " – " in raw_title:
-                    title = raw_title
-                else:
-                    title = _format_track_display(raw_title)
+            cache_hit = (
+                not probe_used
+                and probe_entry
+                and _play_query_key(q) == _play_query_key(probe_entry.get("query", ""))
+            )
+            if cache_hit:
+                probe_used = True
+                duration = float(probe_entry.get("duration") or 0)
+                title = probe_entry.get("title") or display or "audio"
+                dl_q = probe_entry.get("query") or q
                 if duration > MAX_SONG_DURATION_SEC:
                     dur_min = int(duration // 60)
-                    log.warning("Rejected by duration: %s (%d min)", title, dur_min)
                     _last_error = f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)"
-                    continue  # Try next query (e.g. scsearch or simplified version)
+                    continue
+                log.info("yt-dlp downloading (probe cache): %s", dl_q)
+            else:
+                log.info("yt-dlp downloading: %s", q)
+                with yt_dlp.YoutubeDL(extract_opts) as ydl:
+                    info = ydl.extract_info(q, download=False)
+                    if info and "entries" in info:
+                        info = info["entries"][0] if info["entries"] else None
+                    if not info:
+                        continue
+                    duration = float(info.get("duration") or 0)
+                    title = _title_from_ytdl_info(info)
+                    if duration > MAX_SONG_DURATION_SEC:
+                        dur_min = int(duration // 60)
+                        _last_error = f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)"
+                        continue
+                dl_q = q
 
-            # Phase 2: actual download
             dl_opts = {
                 **YDL_OPTS,
                 "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best",
@@ -3136,7 +3215,7 @@ def _blocking_ytdl_download(query: str, display: str = "") -> tuple[Optional[str
                 "no_warnings": True,
             }
             with yt_dlp.YoutubeDL(dl_opts) as ydl:
-                ydl.download([q])
+                ydl.download([dl_q])
                 for fname in os.listdir(tmp_dir):
                     fp = os.path.join(tmp_dir, fname)
                     if os.path.isfile(fp) and os.path.getsize(fp) > 1024:
@@ -3250,7 +3329,6 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("c", ["chat"], "t!c / t!chat <pergunta>"),
     ("g", ["game", "games"], "t!g / t!game <filtros> — jogos (loja, preço, estúdio, nota…)"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
-    ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: d20, 4d6, c50+50)"),
     ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
 ]
@@ -3507,12 +3585,79 @@ def _format_track_display(title: str) -> str:
     return clean
 
 
+def _format_song_and_artist(title: str) -> str:
+    clean = _format_track_display(title)
+    parts = re.split(r"\s+[-–—|]\s+", clean, maxsplit=1)
+    if len(parts) == 2:
+        artist, song = parts[0].strip(), parts[1].strip()
+        if artist and song:
+            return f"{song} - {artist}"
+    return clean
+
+
+def _embed_now_playing(*, source_label: str, track_title: str) -> discord.Embed:
+    em = discord.Embed(color=TIFFANY_PINK)
+    line = f"{source_label}: {_format_song_and_artist(track_title)[:200]}"
+    icon = _platform_icon_url(source_label)
+    if icon:
+        em.set_author(name=line[:256], icon_url=icon)
+    else:
+        em.description = f"**{line}**"
+    return em
+
+
+async def _post_now_playing(
+    bot: discord.Client,
+    session: "_GuildVoiceSession",
+    *,
+    track_title: str,
+    query: str,
+) -> None:
+    if not session.text_channel_id:
+        return
+    src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
+    em = _embed_now_playing(source_label=src, track_title=track_title)
+    q_key = _play_query_key(query)
+    msg = session.last_play_status_msg
+    stored_key = _play_query_key(session.last_play_status_query)
+    if msg and stored_key and stored_key == q_key:
+        try:
+            await msg.edit(embed=em)
+            return
+        except discord.HTTPException:
+            log.debug("Could not edit play status to now playing", exc_info=True)
+        finally:
+            session.last_play_status_msg = None
+            session.last_play_status_query = ""
+    elif session.last_play_status_msg:
+        session.last_play_status_msg = None
+        session.last_play_status_query = ""
+    ch = bot.get_channel(session.text_channel_id)
+    if not ch or not hasattr(ch, "send"):
+        return
+    try:
+        await ch.send(embed=em)
+    except discord.HTTPException:
+        log.warning("Failed to send now playing in channel %s", session.text_channel_id)
+
+
 def _queue_eta_sec(session: "_GuildVoiceSession") -> float:
     eta = 0.0
     if session.current_song and session.current_duration > 0 and session.song_start_time > 0:
         eta += max(0.0, session.current_duration - (time.monotonic() - session.song_start_time))
     eta += sum(session.queue_durations)
     return eta
+
+
+def _append_queue_item(
+    session: "_GuildVoiceSession",
+    display: str,
+    duration: float,
+    requester_id: int,
+) -> None:
+    session.queue_display.append(display)
+    session.queue_durations.append(duration)
+    session.queue_requesters.append(requester_id)
 
 
 def _all_cmd_tokens() -> list[str]:
@@ -3732,7 +3877,7 @@ def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed
     lines: list[str] = []
     if session.current_song:
         src = _track_source_label(session.current_query)
-        line = f"▶️ **Tocando agora** ({src}): {session.current_song[:100]}"
+        line = f"**{src}:** {_format_song_and_artist(session.current_song)[:100]}"
         if session.current_duration > 0:
             elapsed_sec = int(time.monotonic() - session.song_start_time) if session.song_start_time > 0 else 0
             elapsed_sec = max(0, min(elapsed_sec, int(session.current_duration)))
@@ -3987,11 +4132,21 @@ class _YTSource(discord.AudioSource):
             self._tmpdir = None
 
     @classmethod
-    async def from_query(cls, query: str, *, volume: float = 0.35, seek_sec: float = 0, display: str = "") -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
-        """Return (source, title, filepath, tmpdir, duration). If seek_sec > 0, skip to that position."""
+    async def from_query(
+        cls,
+        query: str,
+        *,
+        volume: float = 0.35,
+        seek_sec: float = 0,
+        display: str = "",
+        probe_entry: Optional[dict] = None,
+    ) -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
         loop = asyncio.get_running_loop()
         async with _download_semaphore:
-            fp, title, tmpdir, duration = await loop.run_in_executor(None, lambda: _blocking_ytdl_download(query, display))
+            fp, title, tmpdir, duration = await loop.run_in_executor(
+                None,
+                lambda: _blocking_ytdl_download(query, display, probe_entry=probe_entry),
+            )
         if not fp:
             return None, title, None, None, 0
         # Opus 192k + volume — skip from_probe (we already know yt-dlp format)
@@ -4126,6 +4281,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         display_name = session.queue_display.pop(0)
                     if session.queue_durations:
                         session.queue_durations.pop(0)
+                    if session.queue_requesters:
+                        session.current_requester_id = session.queue_requesters.pop(0)
+                    else:
+                        session.current_requester_id = 0
                 except (IndexError, AttributeError):
                     pass  # fallback to display extracted from query
             # Never show URLs as display — use placeholder until yt-dlp resolves title
@@ -4164,9 +4323,13 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             dl_fp = session._loop_cache_file
                             dl_tmpdir = session._loop_cache_tmpdir
                     if source is None:
+                        probe_entry = _pop_ytdl_probe_cache(session, query)
                         try:
                             source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
-                                _YTSource.from_query(query, display=display_name), timeout=120.0
+                                _YTSource.from_query(
+                                    query, display=display_name, probe_entry=probe_entry,
+                                ),
+                                timeout=120.0,
                             )
                         except asyncio.TimeoutError:
                             session.current_song = ""
@@ -4253,13 +4416,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     if vc.channel:
                         _vs_entry = _snapshot_voice_entry(guild_id, vc.channel.id, session.text_channel_id, session)
                         asyncio.get_running_loop().run_in_executor(None, _write_voice_state, guild_id, _vs_entry)
-                    src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
-                    asyncio.create_task(_notify(
-                        bot,
-                        session.text_channel_id,
-                        f"▶️ **Tocando agora:** {display_name[:100]}",
-                        author=src,
-                        icon_url=_platform_icon_url(src),
+                    asyncio.create_task(_post_now_playing(
+                        bot, session, track_title=display_name, query=query,
                     ))
                     # Watchdog: timeout proportional to duration (min 10 min, max duration + 2 min)
                     watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
@@ -4303,6 +4461,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         auto_query = f"ytsearch1:{display_name} mix"
                         session.queue_display.append(f"▶ Auto: {display_name[:70]}")
                         session.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                        session.queue_requesters.append(0)
                         await session.music_queue.put(auto_query)
                     session.current_song = ""
                     session.current_query = ""
@@ -4631,6 +4790,8 @@ async def _voice_listen_loop(
                 except Exception:
                     pass  # QueueEmpty — queue cleared
                 session.queue_display.clear()
+                session.queue_durations.clear()
+                session.queue_requesters.clear()
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, "⏹️ Parei a música.")
                 continue
@@ -4677,9 +4838,10 @@ async def _voice_listen_loop(
                             session.music_queue.task_done()
                     except Exception:
                         pass
-                    _combined = list(zip(session.queue_display, _old_items))
+                    _combined = list(zip(session.queue_display, _old_items, session.queue_requesters))
                     _rnd.shuffle(_combined)
-                    session.queue_display = [d for d, _ in _combined]
+                    session.queue_display = [d for d, _, _ in _combined]
+                    session.queue_requesters = [r for _, _, r in _combined]
                     _new_q = asyncio.Queue()
                     for _, q in _combined:
                         await _new_q.put(q)
@@ -4697,6 +4859,7 @@ async def _voice_listen_loop(
                     q = session.current_query
                     d = session.current_song or q
                     session.queue_display.insert(0, d)
+                    session.queue_requesters.insert(0, session.current_requester_id)
                     items = [q]
                     try:
                         while True:
@@ -4760,10 +4923,12 @@ async def _voice_listen_loop(
                     pass
                 session.queue_display.clear()
                 session.queue_durations.clear()
+                session.queue_requesters.clear()
                 session.skip_votes.clear()
                 session._cancel_download = True
                 _clear_loop(session)
                 session.current_song = ""
+                session.current_requester_id = 0
                 if vc.is_playing() or vc.is_paused():
                     vc.stop()
                 _clear_voice_state(guild_id)
@@ -4832,8 +4997,7 @@ async def _voice_listen_loop(
                     continue
                 song, _from_discovery = _pick_random_song(session, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
                 display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
-                session.queue_display.append(display)
-                session.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                _append_queue_item(session, display, _DEFAULT_TRACK_EST_SEC, speaker_uid or 0)
                 await session.music_queue.put(song)
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, f"🎲 Música aleatória na fila: **{display}**")
@@ -4960,8 +5124,7 @@ async def _voice_listen_loop(
                             continue
                     elif not re.match(r"^https?://", q):
                         q = f"ytsearch1:{q}"
-                    session.queue_display.append(display)
-                    session.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                    _append_queue_item(session, display, _DEFAULT_TRACK_EST_SEC, speaker_uid or 0)
                     await session.music_queue.put(q)
                     added += 1
                     if len(session.queue_display) + (1 if session.current_song else 0) >= QUEUE_MAX:
@@ -6318,6 +6481,10 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         humans = [m for m in vc.channel.members if not m.bot] if vc.channel else []
         required = 2 if len(humans) >= 3 else 1
+        is_requester = bool(
+            session.current_requester_id
+            and ctx.author.id == session.current_requester_id
+        )
 
         async def _do_skip():
             if _is_wavelink_player(vc):
@@ -6325,12 +6492,17 @@ def register_voice(bot: commands.Bot) -> None:
             else:
                 vc.stop()
 
-        if required == 1:
+        if required == 1 or is_requester:
             session.skip_votes.clear()
             _clear_loop(session)
             prox = session.queue_display[0] if session.queue_display else None
             await _do_skip()
-            if prox:
+            if is_requester and required > 1:
+                if prox:
+                    await ctx.send(embed=_embed(f"⏭️ Pulado — você pediu esta faixa. Próxima: **{prox[:80]}**"))
+                else:
+                    await ctx.send(embed=_embed("⏭️ Pulado — você pediu esta faixa. Fila vazia."))
+            elif prox:
                 await ctx.send(embed=_embed(f"⏭️ Pulado. Próxima: **{prox[:80]}**"))
             else:
                 await ctx.send(embed=_embed("⏭️ Pulado. Fila vazia."))
@@ -6470,12 +6642,12 @@ def register_voice(bot: commands.Bot) -> None:
                         continue
                     track = tracks[0]
                     track_dur = (track.length or 0) / 1000.0
-                    sess.queue_display.append(track.title or display)
-                    sess.queue_durations.append(track_dur)
+                    _append_queue_item(sess, track.title or display, track_dur, ctx.author.id)
                     if not vc.playing and not vc.queue.count:
                         await vc.play(track)
                         sess.current_song = track.title or display
                         sess.current_duration = track_dur
+                        sess.current_requester_id = ctx.author.id
                         sess.song_start_time = time.monotonic()
                         sess.history.append(sess.current_song)
                     else:
@@ -6494,8 +6666,7 @@ def register_voice(bot: commands.Bot) -> None:
                         break
                     display = song.get("display", song.get("query", "???"))
                     query = song.get("query", f"ytsearch1:{display}")
-                    sess.queue_display.append(display)
-                    sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+                    _append_queue_item(sess, display, _DEFAULT_TRACK_EST_SEC, ctx.author.id)
                     await sess.music_queue.put(query)
                     added += 1
 
@@ -6557,19 +6728,18 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             track = tracks[0]
             track_dur = (track.length or 0) / 1000.0
-            sess.queue_display.append(track.title or display)
-            sess.queue_durations.append(track_dur)
+            _append_queue_item(sess, track.title or display, track_dur, ctx.author.id)
             if not vc.playing:
                 await vc.play(track)
                 sess.current_song = track.title or display
                 sess.current_duration = track_dur
+                sess.current_requester_id = ctx.author.id
                 sess.song_start_time = time.monotonic()
                 sess.history.append(sess.current_song)
             else:
                 vc.queue.put(track)
         else:
-            sess.queue_display.append(display)
-            sess.queue_durations.append(_DEFAULT_TRACK_EST_SEC)
+            _append_queue_item(sess, display, _DEFAULT_TRACK_EST_SEC, ctx.author.id)
             await sess.music_queue.put(song)
 
         _revive_workers(ctx.guild.id, vc, sess)
@@ -6661,8 +6831,7 @@ def register_voice(bot: commands.Bot) -> None:
             added_dur = 0.0
             for track in tracks[:vagas]:
                 td = float(track.get("duration") or _DEFAULT_TRACK_EST_SEC)
-                sess.queue_display.append(track["display"])
-                sess.queue_durations.append(td)
+                _append_queue_item(sess, track["display"], td, ctx.author.id)
                 await sess.music_queue.put(track["query"])
                 added += 1
                 added_dur += td
@@ -6716,12 +6885,15 @@ def register_voice(bot: commands.Bot) -> None:
         _probe_title: str = ""
         if is_url and not resolved_from_platform:
             try:
-                _probe_dur, _probe_title = await asyncio.wait_for(
-                    asyncio.to_thread(_blocking_ytdl_probe, query), timeout=25.0
+                entry = await asyncio.wait_for(
+                    asyncio.to_thread(_blocking_ytdl_extract_entry, query), timeout=25.0
                 )
             except (asyncio.TimeoutError, Exception):
-                _probe_dur, _probe_title = None, ""
-            if _probe_title:
+                entry = None
+            if entry:
+                _store_ytdl_probe_cache(sess, entry)
+                _probe_dur = entry["duration"] or None
+                _probe_title = entry["title"]
                 display = _probe_title
                 dur = _probe_dur  # type: ignore[assignment]
             else:
@@ -6801,14 +6973,14 @@ def register_voice(bot: commands.Bot) -> None:
                     await confirm_msg.edit(embed=_embed("⏰ Tempo esgotado. Música não adicionada."))
                     return
 
-            sess.queue_display.append(track_display)
-            sess.queue_durations.append(track_dur_sec)
+            _append_queue_item(sess, track_display, track_dur_sec, ctx.author.id)
 
             if not player.playing:
                 await player.play(track)
                 sess.current_song = track_display
                 sess.current_query = getattr(track, "uri", None) or search_query or query
                 sess.current_duration = track_dur_sec
+                sess.current_requester_id = ctx.author.id
                 sess.song_start_time = time.monotonic()
                 sess.history.append(track_display)
                 if len(sess.history) > 50:
@@ -6833,10 +7005,17 @@ def register_voice(bot: commands.Bot) -> None:
         # asyncio-level timeout: if yt-dlp hangs, don't block the command.
         async def _probe(q: str) -> tuple[Optional[float], str]:
             try:
-                return await asyncio.wait_for(asyncio.to_thread(_blocking_ytdl_probe, q), timeout=25.0)
+                entry = await asyncio.wait_for(
+                    asyncio.to_thread(_blocking_ytdl_extract_entry, q), timeout=25.0
+                )
             except asyncio.TimeoutError:
                 log.warning("Probe yt-dlp exceeded 25s: %s", q[:80])
                 return None, ""
+            if entry:
+                _store_ytdl_probe_cache(sess, entry)
+                d = entry["duration"]
+                return (d or None), entry["title"]
+            return None, ""
 
         async def _search(term: str, n: int = 4) -> list[dict]:
             try:
@@ -6918,6 +7097,11 @@ def register_voice(bot: commands.Bot) -> None:
                 query = f"https://www.youtube.com/watch?v={best['id']}"
             elif best.get("url"):
                 query = best["url"]
+            _store_ytdl_probe_cache(sess, {
+                "query": query.strip(),
+                "duration": float(dur or best.get("duration") or 0),
+                "title": _format_track_display(display),
+            })
         else:
             # Platform URL already resolved: probe if not done above
             if not (is_url and not resolved_from_platform):
@@ -6984,8 +7168,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
 
         track_dur = float(dur or 0)
-        sess.queue_display.append(display)
-        sess.queue_durations.append(track_dur)
+        _append_queue_item(sess, display, track_dur, ctx.author.id)
         await sess.music_queue.put(query)
         req = ctx.author.display_name or str(ctx.author)
         pos = len(sess.queue_display) + (1 if sess.current_song else 0)
@@ -7002,6 +7185,8 @@ def register_voice(bot: commands.Bot) -> None:
                 source_label=_track_source_label(query, resolved_platform=bool(_detect_music_platform(query))),
             )
         )
+        sess.last_play_status_msg = status
+        sess.last_play_status_query = _play_query_key(query)
 
     @bot.command(name="c", aliases=["chat"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -7194,10 +7379,12 @@ def register_voice(bot: commands.Bot) -> None:
                 pass  # QueueEmpty — queue cleared
         session.queue_display.clear()
         session.queue_durations.clear()
+        session.queue_requesters.clear()
         session.skip_votes.clear()
         session._cancel_download = True
         _clear_loop(session)
         session.current_song = ""
+        session.current_requester_id = 0
         # Stop current song too
         if _is_wavelink_player(vc):
             await vc.stop()
@@ -7246,10 +7433,14 @@ def register_voice(bot: commands.Bot) -> None:
             all_durs = list(session.queue_durations[:n])
             while len(all_durs) < n:
                 all_durs.append(_DEFAULT_TRACK_EST_SEC)
-            combined = list(zip(all_displays, wl_tracks[:n], all_durs))
+            all_requesters = list(session.queue_requesters[:n])
+            while len(all_requesters) < n:
+                all_requesters.append(0)
+            combined = list(zip(all_displays, wl_tracks[:n], all_durs, all_requesters))
             random.shuffle(combined)
-            session.queue_display = [d for d, _, _ in combined]
-            session.queue_durations = [du for _, _, du in combined]
+            session.queue_display = [d for d, _, _, _ in combined]
+            session.queue_durations = [du for _, _, du, _ in combined]
+            session.queue_requesters = [r for _, _, _, r in combined]
             for _, track, _ in combined:
                 vc.queue.put(track)
             _clear_loop(session)
@@ -7275,11 +7466,15 @@ def register_voice(bot: commands.Bot) -> None:
             all_durs = list(session.queue_durations[:n])
             while len(all_durs) < n:
                 all_durs.append(_DEFAULT_TRACK_EST_SEC)
-            combined = list(zip(all_displays, all_queries, all_durs))
+            all_requesters = list(session.queue_requesters[:n])
+            while len(all_requesters) < n:
+                all_requesters.append(0)
+            combined = list(zip(all_displays, all_queries, all_durs, all_requesters))
             random.shuffle(combined)
-            session.queue_display = [d for d, _, _ in combined]
-            session.queue_durations = [du for _, _, du in combined]
-            for _, q, _ in combined:
+            session.queue_display = [d for d, _, _, _ in combined]
+            session.queue_durations = [du for _, _, du, _ in combined]
+            session.queue_requesters = [r for _, _, _, r in combined]
+            for _, q, _, _ in combined:
                 session.music_queue.put_nowait(q)
             _clear_loop(session)
             if vc.is_playing() or vc.is_paused():
@@ -7306,7 +7501,6 @@ def register_voice(bot: commands.Bot) -> None:
         if _is_wavelink_player(vc):
             # Lavalink mode: fetch current track again and insert at front of queue
             if vc.current:
-                # Insert at front of wavelink queue (drain, prepend, re-add)
                 old_tracks = []
                 while not vc.queue.is_empty:
                     old_tracks.append(vc.queue.get())
@@ -7315,6 +7509,7 @@ def register_voice(bot: commands.Bot) -> None:
                     vc.queue.put(t)
                 session.queue_display.insert(0, display)
                 session.queue_durations.insert(0, session.current_duration or _DEFAULT_TRACK_EST_SEC)
+                session.queue_requesters.insert(0, session.current_requester_id)
             _clear_loop(session)
             await vc.skip(force=True)
         else:
@@ -7322,6 +7517,7 @@ def register_voice(bot: commands.Bot) -> None:
             query = session.current_query
             session.queue_display.insert(0, display)
             session.queue_durations.insert(0, session.current_duration or _DEFAULT_TRACK_EST_SEC)
+            session.queue_requesters.insert(0, session.current_requester_id)
             items = [query]
             try:
                 while True:
@@ -7405,78 +7601,6 @@ def register_voice(bot: commands.Bot) -> None:
         if len(lyrics) > 3800:
             lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
         await status.edit(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
-
-    @bot.command(name="d", aliases=["roll", "dice"], help="Rola dados: t!d / t!roll <expressão>")
-    async def cmd_roll(ctx: commands.Context, *, expression: str = ""):
-        if not await _require_dm_access(ctx):
-            return
-        if not expression.strip():
-            await ctx.send(embed=_embed(_DICE_HELP_TEXT))
-            return
-        if ctx.guild:
-            _touch_activity(ctx.guild.id)
-        
-        low = expression.lower().strip()
-        
-        if low.startswith("macro add "):
-            parts = expression.split(" ", 2)
-            if len(parts) == 3:
-                name_expr = parts[2].strip().split(" ", 1)
-                if len(name_expr) == 2:
-                    name, expr = name_expr[0], name_expr[1]
-                    ok, err = _set_dice_macro(ctx.author.id, name, expr)
-                    if ok:
-                        await ctx.send(embed=_embed(f"✅ Macro **{name.lower()}** salva como `{expr}`."))
-                    else:
-                        await ctx.send(embed=_embed(f"⚠️ {err}"))
-                    return
-            await ctx.send(embed=_embed("⚠️ Uso correto: `t!d macro add <nome> <fórmula>`"))
-            return
-            
-        if low.startswith("macro remove ") or low.startswith("macro rm "):
-            parts = expression.split(" ", 2)
-            if len(parts) == 3:
-                name = parts[2].strip()
-                if _remove_dice_macro(ctx.author.id, name):
-                    await ctx.send(embed=_embed(f"🗑️ Macro **{name}** removida."))
-                else:
-                    await ctx.send(embed=_embed(f"⚠️ Macro **{name}** não encontrada."))
-                return
-            await ctx.send(embed=_embed("⚠️ Uso correto: `t!d macro remove <nome>`"))
-            return
-            
-        if low == "macro list" or low == "macro":
-            macros = _dice_macros.get(str(ctx.author.id), {})
-            if not macros:
-                await ctx.send(embed=_embed("Você não tem nenhuma macro salva. Use `t!d macro add <nome> <fórmula>`."))
-                return
-            lines = [f"**{name}**: `{expr}`" for name, expr in macros.items()]
-            await ctx.send(embed=_embed("**Suas Macros de Dados:**\n\n" + "\n".join(lines)))
-            return
-
-        # Check if expression is a saved macro
-        macro_expr = _get_dice_macro(ctx.author.id, low)
-        if macro_expr:
-            expression = macro_expr
-            low = expression.lower()
-
-        text, crits, fumbles = _roll_dice(expression)
-        if not _dice_roll_ok(text):
-            await ctx.send(embed=_embed(text))
-            return
-        desc, total_crits, total_fumbles = _format_dice_description([(text, crits, fumbles)])
-        rolls_info = [(expression, "")]
-        em = _build_dice_embed(desc, total_crits, total_fumbles)
-        try:
-            await ctx.send(
-                embed=em,
-                view=DiceRerollView(rolls_info),
-            )
-            if ctx.guild:
-                await _maybe_warn_rollem_conflict(ctx.channel, ctx.guild)
-        except discord.HTTPException as e:
-            log.warning("Failed to send t!d roll: %s", e)
-            await ctx.send(embed=_embed("⚠️ Não consegui enviar a rolagem. Verifique minhas permissões no canal."))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -8164,12 +8288,8 @@ def register_voice(bot: commands.Bot) -> None:
             session.song_start_time = time.monotonic()
             log.info("Lavalink playing: %s (%.0fs)", track.title, session.current_duration)
             src = _track_source_label(uri) if uri else "YouTube"
-            asyncio.create_task(_notify(
-                bot,
-                session.text_channel_id,
-                f"▶️ **Tocando agora:** {(track.title or 'Desconhecido')[:100]}",
-                author=src,
-                icon_url=_platform_icon_url(src),
+            asyncio.create_task(_post_now_playing(
+                bot, session, track_title=track.title or "Desconhecido", query=uri,
             ))
 
         @bot.listen("on_wavelink_track_end")
@@ -8196,6 +8316,11 @@ def register_voice(bot: commands.Bot) -> None:
                 session.queue_display.pop(0)
             if session.queue_durations:
                 session.queue_durations.pop(0)
+            if session.queue_requesters:
+                session.queue_requesters.pop(0)
+            session.current_requester_id = (
+                session.queue_requesters[0] if session.queue_requesters else 0
+            )
 
             # Next track in Lavalink queue
             if not player.queue.is_empty:
