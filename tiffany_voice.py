@@ -344,6 +344,23 @@ _BLOCKED_TERMS = frozenset({
     "estado islamico", "boko haram", "talibã", "taliban",
     "pedofilia", "pedofilo", "estupro", "estuprador",
     "escravidao", "escravagismo",
+    # More dictators / authoritarian figures
+    "suharto", "milosevic", "slobodan milosevic", "mugabe", "robert mugabe",
+    "trujillo", "rafael trujillo", "duvalier", "papa doc", "jorge videla",
+    "hosni mubarak", "mubarak", "mengistu", "bokassa", "hissene habre",
+    "than shwe", "efrain rios montt", "somoza", "enver hoxha",
+    # Homophobic / transphobic slurs (hate content)
+    "viado", "viadinho", "viadao", "boiola", "bicha", "baitola",
+    "sapatao", "traveco", "faggot", "faggots", "tranny", "trannies",
+    # Xenophobic / racist slurs (hate content)
+    "nigger", "niggers", "nigga", "chink", "spic", "kike", "wetback", "gook",
+    # Harassment / sexual violence
+    "assedio", "assedio sexual", "assedio moral", "abuso sexual", "molestar",
+    "molestador", "molestamento", "aliciamento", "aliciar menor",
+    "estupro coletivo", "cultura do estupro", "zoofilia", "incesto", "necrofilia",
+    # Explicit sexual / pornographic content
+    "sexo explicito", "pornografia", "pornografico", "pornô", "porno",
+    "hentai", "pack de nudes", "onlyfans leak",
     # Heavy occultism (user-requested)
     "diabo", "demonio", "satanas", "satan", "lucifer", "baphomet", "invocar o diabo",
     # Extreme violence / gore
@@ -517,7 +534,10 @@ async def _ai_content_is_blocked(text: str) -> bool:
                             "or alludes — EVEN if CODED, via nicknames, euphemisms, or wordplay — to: dictators "
                             "(Hitler, Stalin, Mussolini, Kim Jong Un, Maduro, Pol Pot, Pinochet, Saddam, Gaddafi etc.), "
                             "nazism, fascism, totalitarian regimes, genocide/Holocaust, racial supremacy or hate, "
-                            "terrorism, or pedophilia. "
+                            "terrorism, pedophilia, "
+                            "homophobic or transphobic hate/slurs, xenophobic or nationality-based hate, "
+                            "harassment or bullying, sexual violence or rape, sexual exploitation, "
+                            "explicit or pornographic sexual content, and extremely graphic or disturbing (gore) content. "
                             "Also block ANTHEMS, MARCHES, and SONGS of nazi/fascist regimes or hate parties, "
                             "even if the name does not cite the regime. Examples to BLOCK: 'Horst Wessel Lied', 'Die Fahne Hoch', "
                             "'Giovinezza', 'Cara al Sol', 'Erika', 'Panzerlied', 'SS marschiert', 'Deutschland Erwache', "
