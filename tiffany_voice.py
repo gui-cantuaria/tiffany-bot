@@ -1122,7 +1122,6 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "ly": 2.0, "lyrics": 2.0,
     "c": 2.0, "chat": 2.0,
     "su": 2.0, "summary": 2.0,
-    "alert": 2.0, "monitor": 2.0,
     "player-status": 2.0,
     # 5s — audio recording
     "cp": 5.0, "clip": 5.0,
@@ -1341,23 +1340,6 @@ def _save_stats() -> None:
         pass
 
 _stats: dict[str, int] = _load_stats()
-
-# Price monitors (t!alerta) — shared with offers_cog.py via file
-PRICE_MONITORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_monitors.json")
-
-def _load_monitors() -> list:
-    try:
-        with open(PRICE_MONITORS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-def _save_monitors(monitors: list) -> None:
-    try:
-        with open(PRICE_MONITORS_FILE, "w", encoding="utf-8") as f:
-            json.dump(monitors, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 # Playlists saved in JSON per server
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
@@ -2980,7 +2962,6 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: d20, 4d6, c50+50)"),
     ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
-    ("alert", ["monitor"], "t!alert <product> — price alert via DM"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
 ]
 
@@ -2995,7 +2976,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- t!d — RPG shortcuts (dice: type directly in chat, e.g. d20, 4d6, c50+50)\n"
-    "- t!alert <product> — price alert via DM · t!247 / t!nonstop — stay 24/7 in voice\n"
+    "- t!247 / t!nonstop — stay 24/7 in voice\n"
     "- Slash: /help, /play, /join, /leave, /skip, /pause, /resume, /queue, /status, /stats, /player-status (admin)\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
@@ -3195,7 +3176,6 @@ _COMMON_TYPOS: dict[str, str] = {
     "dado": "d", "dados": "d", "rolar": "d", "rola": "d", "rol": "d",
     "clp": "cp", "clipe": "cp",
     "sum": "su", "sumar": "su", "resumo": "su", "resumir": "su",
-    "alrt": "alert", "alerta": "alert", "alerte": "alert",
     "24": "247", "nstop": "247", "nonstp": "247",
     # Prefixes from other common bots
 }
@@ -6952,64 +6932,6 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
         await status.edit(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
 
-    @bot.command(name="alert", aliases=["monitor"], help="Price alert: t!alert <product> | t!alert list | t!alert remove <id>")
-    async def cmd_alerta(ctx: commands.Context, *, args: str = ""):
-        if not ctx.guild:
-            return
-        _stats["commands_used"] += 1
-        args = args.strip()
-
-        monitors = _load_monitors()
-        user_id = ctx.author.id
-
-        # List user price alerts
-        if args.lower() in ("list", "lista", "listar", ""):
-            user_mons = [m for m in monitors if m["user_id"] == user_id]
-            if not user_mons:
-                await ctx.send(embed=_embed("📭 Nenhum alerta de preço ativo.\nUse `t!alert <produto>` para criar um."), delete_after=30)
-                return
-            lines = [f"`{i+1}.` {m['keyword']}" for i, m in enumerate(user_mons)]
-            await ctx.send(embed=_embed("🔔 **Seus alertas de preço:**\n" + "\n".join(lines) + "\n\nUse `t!alert remove <número>` para remover."), delete_after=60)
-            return
-
-        # Remove alert
-        if args.lower().startswith("remove ") or args.lower().startswith("remover "):
-            idx_str = args.split(" ", 1)[1].strip()
-            user_mons = [m for m in monitors if m["user_id"] == user_id]
-            try:
-                idx = int(idx_str) - 1
-                if idx < 0 or idx >= len(user_mons):
-                    raise ValueError
-            except ValueError:
-                await ctx.send(embed=_embed("⚠️ Número inválido. Use `t!alert list` para ver seus alertas."), delete_after=10)
-                return
-            to_remove = user_mons[idx]
-            monitors = [m for m in monitors if m is not to_remove]
-            _save_monitors(monitors)
-            await ctx.send(embed=_embed(f"🗑️ Alerta **{to_remove['keyword']}** removido."), delete_after=15)
-            return
-
-        # Add alert
-        if len(args) < 3:
-            await ctx.send(embed=_embed("⚠️ Uso: `t!alert <produto>` — ex: `t!alert RTX 5060`"), delete_after=10)
-            return
-        if _contains_blocked_content(args):
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
-            return
-        user_mons = [m for m in monitors if m["user_id"] == user_id]
-        if len(user_mons) >= 10:
-            await ctx.send(embed=_embed("⚠️ Limite de 10 alertas por usuário. Remova um com `t!alert remove <número>`."), delete_after=15)
-            return
-        monitors.append({
-            "id": int(time.monotonic() * 1000) % 10**9,
-            "user_id": user_id,
-            "guild_id": ctx.guild.id,
-            "keyword": args[:100],
-            "added_at": datetime.now().isoformat(),
-        })
-        _save_monitors(monitors)
-        await ctx.send(embed=_embed(f"🔔 Alerta criado! Você receberá um DM quando encontrarmos oferta de **{args[:80]}**."), delete_after=30)
-
     @bot.command(name="d", aliases=["roll", "dice"], help="Rola dados: t!d / t!roll <expressão>")
     async def cmd_roll(ctx: commands.Context, *, expression: str = ""):
         if not ctx.guild:
@@ -7762,11 +7684,6 @@ def register_voice(bot: commands.Bot) -> None:
             "Atalhos: `t!d adv` / `t!d dis` / `t!d stats` / `t!d coin`\n"
             "ℹ️ `t!d` mostra tudo (explosão, pools, Fate, macros)"
         ), inline=False)
-        em.add_field(name="🔔 Alertas de preço", value=(
-            "`t!alert <produto>` — Cria alerta (aviso na DM)\n"
-            "`t!alert list` — Lista os alertas ativos\n"
-            "`t!alert remove <n>` — Remove um alerta"
-        ), inline=False)
         em.add_field(name="🎬 Clipe & Playlists", value=(
             "`t!cp` / `t!clip` `[mp3|wav]` — Salva os últimos 30s de áudio (padrão mp3)\n"
             "`t!pl` / `t!playlist` — `save` / `load` / `list` / `del`"
@@ -7844,10 +7761,6 @@ def register_voice(bot: commands.Bot) -> None:
         questions = _stats.get("questions_answered", 0)
         cmds = _stats.get("commands_used", 0)
 
-        # Active price alerts (total and this server)
-        all_monitors = _load_monitors()
-        guild_monitors = len([m for m in all_monitors if m.get("guild_id") == (interaction.guild_id or 0)])
-
         # Offers posted today (reads offers_history.json)
         offers_hoje = 0
         try:
@@ -7876,7 +7789,6 @@ def register_voice(bot: commands.Bot) -> None:
         em.add_field(name="⌨️ Comandos usados", value=f"{cmds:,}", inline=True)
         em.add_field(name="📰 Notícias hoje", value=str(noticias_hoje), inline=True)
         em.add_field(name="🛒 Ofertas hoje", value=str(offers_hoje), inline=True)
-        em.add_field(name="🔔 Alertas de preço", value=f"{guild_monitors} neste servidor", inline=True)
         await interaction.response.send_message(embed=em, ephemeral=True)
 
     # ============================

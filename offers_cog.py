@@ -1324,72 +1324,6 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         return None
 
 
-PRICE_MONITORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_monitors.json")
-
-
-def _load_price_monitors() -> list:
-    try:
-        with open(PRICE_MONITORS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-
-def _monitor_matches(keyword: str, title: str) -> bool:
-    """True if every alert keyword word appears in the title (case-insensitive)."""
-    kw_words = keyword.lower().split()
-    title_l = title.lower()
-    return all(w in title_l for w in kw_words)
-
-
-async def _notify_price_alerts(deal: dict, msg) -> None:
-    """Send DM to users with a price alert matching this deal."""
-    monitors = _load_price_monitors()
-    if not monitors:
-        return
-    title = deal.get("title", "")
-    disc = deal.get("discount_pct", 0)
-    store = deal.get("store", "")
-    buy_url = _buy_url(deal)
-    notified: set[int] = set()
-
-    for m in monitors:
-        user_id = m.get("user_id")
-        keyword = m.get("keyword", "")
-        if not user_id or not keyword:
-            continue
-        if user_id in notified:
-            continue
-        if not _monitor_matches(keyword, title):
-            continue
-        try:
-            user = await _bot.fetch_user(user_id)
-            if not user:
-                continue
-            price_str = ""
-            if deal.get("price"):
-                price_str = f"R$ {deal['price']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            desc = f"🔔 **Alerta:** `{keyword}`\n\n**{title[:120]}**\n"
-            if price_str:
-                desc += f"💰 {price_str}"
-                if disc:
-                    desc += f" (-{disc:.0f}%)"
-                desc += "\n"
-            if store:
-                desc += f"🏪 {store}\n"
-            if buy_url:
-                desc += f"\n[Ver oferta]({buy_url})"
-            elif msg.jump_url:
-                desc += f"\n[Ver no Discord]({msg.jump_url})"
-            em = discord.Embed(description=desc, color=0xFF4500)
-            em.set_footer(text="Use t!alerta list para gerenciar seus alertas")
-            await user.send(embed=em)
-            notified.add(user_id)
-            log.info(f"  🔔 Price alert DM sent to user {user_id} (keyword: {keyword})")
-        except Exception as e:
-            log.debug(f"  Failed to send price alert DM to {user_id}: {e}")
-
-
 def _store_destination(deal: dict) -> Optional[str]:
     """Best DIRECT store destination (no affiliate yet):
     1) resolved Promobit product link; 2) store search by name."""
@@ -1715,9 +1649,6 @@ async def _run_deals_cycle_inner() -> None:
             _listing = _deal_listing_key(deal)
             _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey, listing=_listing)
             _posted_title_keys.add(_orig_tkey)
-
-            # Notify users with matching price alerts
-            await _notify_price_alerts(deal, msg)
 
             posted += 1
             log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
