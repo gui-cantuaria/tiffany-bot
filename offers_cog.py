@@ -55,7 +55,7 @@ HISTORY_FILE = "offers_history.json"
 PROMOBIT_BASE = "https://www.promobit.com.br"
 CATEGORIAS_PROMOBIT = [
     # === PC parts (scrape first — enrichment budget favors these) ===
-    "/promocoes/placa-de-video/s/",
+    "/promocoes/placa-video/s/",  # slug changed on Promobit (placa-de-video → 404)
     "/promocoes/memoria-ram/s/",
     "/promocoes/processador/s/",
     "/promocoes/placa-mae/s/",
@@ -178,7 +178,8 @@ _SLUG_TO_CATEGORY = {
     "monitor": "Monitor",
     "processador": "Processador",
     "placa-mae": "Placa-mãe",
-    "placa-de-video": "Placa de Vídeo",
+    "placa-de-video": "Placa de Vídeo",  # legacy slug
+    "placa-video": "Placa de Vídeo",
     "pc-gamer": "PC Gamer",
     "roteador-e-repetidor": "Adaptadores e rede",
     "teclado": "Teclado",
@@ -1382,21 +1383,28 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
             if _try_add(cat):
                 progressed = True
 
-    # Phase 3: at most one monitor + one notebook/PC gamer if slots remain
-    for cat in ("Monitor", "Notebook", "PC Gamer"):
+    # Phase 3: at most one monitor/notebook/PC gamer/network if slots remain
+    for cat in ("Monitor", "Notebook", "PC Gamer", "Adaptadores e rede"):
         if len(selected) >= limit:
             break
         _try_add(cat)
 
     # Phase 4: fill any leftover slots with best remaining parts only
+    fill_cats = list(_PARTS_RESERVE_CATEGORIES) + parts_cats
     progressed = True
     while len(selected) < limit and progressed:
         progressed = False
-        for cat in _PARTS_RESERVE_CATEGORIES + parts_cats:
+        for cat in fill_cats:
             if len(selected) >= limit:
                 break
             if _try_add(cat):
                 progressed = True
+
+    # Safety net: if filters passed but category caps blocked everything, post best anyway
+    if not selected and deals:
+        remaining = sorted(deals, key=lambda d: -_deal_score(d))
+        for deal in remaining[:limit]:
+            selected.append(deal)
 
     return selected
 
@@ -1799,6 +1807,11 @@ async def _run_deals_cycle_inner() -> None:
         approved.append(deal)
 
     log.info(f"After filters: {len(approved)} approved")
+    if not approved:
+        log.warning(
+            f"No deals passed filters this cycle "
+            f"(enriched={len(enriched)}, raw={len(all_deals)}, candidates={len(candidates)})"
+        )
     # Diagnostic: rejection reason summary (visible even at LOG_LEVEL=INFO)
     if rejections:
         summary = " · ".join(
@@ -1922,7 +1935,15 @@ class OffersCog(commands.Cog):
     @deals_loop.before_loop
     async def _before_deals_loop(self):
         await self.bot.wait_until_ready()
-        log.info("Offers cog ready. First cycle will run immediately via the loop.")
+        log.info("Offers cog ready — running first cycle now (loop waits %s min before next).", SCAN_INTERVAL_MIN)
+        now_br = datetime.now(FUSO_HORARIO_BR)
+        if HORA_INICIO <= now_br.hour < HORA_FIM:
+            try:
+                await _run_deals_cycle()
+            except Exception as e:
+                log.exception(f"Offers first cycle error: {e}")
+        else:
+            log.info(f"Outside business hours ({now_br.hour}h) — first cycle deferred to next loop tick.")
     
     @commands.Cog.listener()
     async def on_ready(self):

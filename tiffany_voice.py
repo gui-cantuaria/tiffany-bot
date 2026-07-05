@@ -3062,7 +3062,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- t!d — RPG shortcuts (dice: type directly in chat, e.g. d20, 4d6, c50+50)\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
-    "- Slash: /help, /about, /play, /join, /leave, /skip, /pause, /resume, /queue, /status, /stats, /player-status (admin)\n"
+    "- Slash: /help, /about, /queue, /status, /stats, /player-status (admin)\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
     "'Tiffany, [question]' (music pauses while answering)\n"
@@ -3122,65 +3122,60 @@ def bot_invite_url(client: discord.Client) -> str:
 def build_about_embed(client: discord.Client, *, for_admin: bool = False) -> discord.Embed:
     """Pitch embed for server owners and members."""
     em = discord.Embed(
-        title="✨ Tiffany — bot para seu servidor",
+        title="Tiffany",
         description=(
-            "**Música, IA, voz e dados RPG** no mesmo bot — sem empilhar vários bots.\n"
-            "Entro no canal sozinha, fila automática, embeds rosas e comandos curtos (`t!`).\n"
-            "Sou IA com limites — se errar, me corrige."
+            "Bot de **música**, **chat** e **utilidades** — comandos com prefixo **`t!`**.\n"
+            "Entra num canal de voz e manda **`t!p`** ou **`t!play`** que eu entro pra tocar.\n"
+            "No chat: **`t!c`** pra conversar, **`t!su`** pra resumir link, **`t!cp`** pra clipar a call."
         ),
         color=TIFFANY_PINK,
     )
     if client.user:
         em.set_author(name="Tiffany", icon_url=client.user.display_avatar.url)
     em.add_field(
-        name="🎵 Música profissional",
+        name="Música",
         value=(
-            "• YouTube, Spotify, Deezer, Apple Music, Amazon Music\n"
-            "• Fila, shuffle, loop, autoplay, playlists e **5000 hits** no `t!r`\n"
-            "• **Controle por voz:** «Tiffany, toca / pula / pausa / fila»"
+            "Link, busca ou nome — YouTube, Spotify, Deezer, Apple Music, Amazon Music.\n"
+            "Fila, shuffle, loop, autoplay, playlists; `t!r` sorteia entre ~5000 hits.\n"
+            "Na call: *«Tiffany, toca…»*, *«pula»*, *«pausa»*, *«fila»*."
         ),
         inline=False,
     )
     em.add_field(
-        name="💬 IA & utilidades",
+        name="Chat e extras",
         value=(
-            "• `t!c` — chat com memória (aceita imagem)\n"
-            "• `t!su` — resume artigos e links\n"
-            "• `t!cp` — clipe MP3/WAV dos últimos 30 s da call"
+            "`t!c` — conversa com memória (manda imagem se quiser)\n"
+            "`t!su` — resume artigo ou link\n"
+            "`t!cp` — clipe MP3/WAV dos últimos 30 s da call"
         ),
         inline=False,
     )
     em.add_field(
-        name="🎲 Engajamento",
-        value=(
-            "• Dados RPG no chat (`d20`, `4d6`, `c50+50`) com botão de reroll\n"
-            "• Slash commands: `/play`, `/queue`, `/help`, `/status`"
-        ),
+        name="Dados",
+        value="`d20`, `4d6`, `c50+50` no chat — tem botão de reroll.",
         inline=False,
     )
     if for_admin:
         em.add_field(
-            name="⚙️ Setup rápido (admin)",
+            name="Pra rodar (admin)",
             value=(
-                "1. Me dê **Conectar**, **Falar**, **Enviar mensagens** e **Embeds**\n"
-                "2. Entre em um canal de voz\n"
-                "3. `t!p [música]` ou `/play` — pronto!\n"
-                "Diagnóstico: `/player-status` · Saúde: `/status`"
+                "Permissões: **Conectar**, **Falar**, **Enviar mensagens**, **Embeds**.\n"
+                "Entra num canal de voz → **`t!p [música]`**.\n"
+                "Diagnóstico: **`/player-status`** (admin) · **`/status`** (geral)."
             ),
             inline=False,
         )
-    em.set_footer(text="Use /help para a lista completa · Tiffany by Tuffine")
+    em.set_footer(text="/help = lista completa · Tiffany by Tuffine")
     return em
 
 
 def build_welcome_embed(guild: discord.Guild, client: discord.Client) -> discord.Embed:
     em = build_about_embed(client, for_admin=True)
-    em.title = f"✨ Valeu por me adicionar, {guild.name}!"
+    em.title = f"Cheguei no {guild.name}"
     em.description = (
-        f"Pronta para animar o **{guild.name}** com música, IA e utilidades.\n"
-        "**Comece agora:** entre em um canal de voz e use **`t!p`** ou **`/play`**.\n"
-        "Não sou perfeita — se algo falhar ou eu falar besteira, me avisa.\n"
-        "Lista completa: **`/help`** · Apresentação: **`/about`**"
+        f"Valeu por me adicionar no **{guild.name}**.\n"
+        "Entra num canal de voz e manda **`t!p`** ou **`t!play`** pra começar.\n"
+        "Comandos: **`/help`** · Sobre mim: **`/about`**"
     )
     return em
 
@@ -3222,7 +3217,7 @@ async def start_presence_rotation(client: discord.Client) -> None:
             "«Tiffany, toca...» — voz",
             "t!c — chat com IA",
             "t!r — hit aleatório",
-            "/about — conheça a Tiffany",
+            "/about — o que eu faço",
         )
         i = 0
         await client.wait_until_ready()
@@ -3456,7 +3451,7 @@ def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
     if w in {"entrar", "entra", "entr", "entar", "join", "conectar", "vem"}:
         return "Entro no canal ao tocar algo: **`t!p <música>`**."
     if w in {"queu", "que", "qeueu", "qeue", "fila", "fil", "fla", "filla"}:
-        return "Fila e faixa atual: **`t!q`** / **`t!queue`** (ou `/queue`)."
+        return "Fila e faixa atual: **`t!q`** / **`t!queue`** (ou **`/queue`**)."
     # Common typo map -> correct command
     if w in _COMMON_TYPOS:
         target = _COMMON_TYPOS[w]
@@ -5782,7 +5777,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     def _revive_workers(gid: int, vc, session) -> None:
         """Restart music/question workers if they died — ensures queue
-        never freezes when user runs control commands (t!s, /queue...)
+        never freezes when user runs control commands (t!s, t!q, /queue...)
         and not only t!p. Lavalink mode has no worker (uses event listeners)."""
         try:
             if not vc or not vc.is_connected() or _is_wavelink_player(vc):
@@ -7769,88 +7764,7 @@ def register_voice(bot: commands.Bot) -> None:
     # SLASH COMMANDS
     # ============================
 
-    async def _ctx_from_interaction(
-        interaction: discord.Interaction,
-        *,
-        defer: bool = False,
-        thinking: bool = False,
-    ) -> Optional[commands.Context]:
-        """Build a prefix-style Context from a slash interaction."""
-        if not interaction.guild:
-            await _slash_reply(interaction, "⚠️ Use em um servidor.")
-            return None
-        if defer and not interaction.response.is_done():
-            await interaction.response.defer(thinking=thinking)
-        return await commands.Context.from_interaction(interaction)
-
-    @bot.tree.command(name="play", description="Toca uma música ou URL")
-    @app_commands.describe(query="Nome da música ou link (YouTube, Spotify, Deezer…)")
-    async def slash_play(interaction: discord.Interaction, query: str):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction, defer=True)
-        if not ctx:
-            return
-        await cmd_play.callback(ctx, query=query)
-
-    @bot.tree.command(name="join", description="Entra no seu canal de voz")
-    async def slash_join(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        sess, vc = await _ensure_connected(ctx)
-        if sess and vc and vc.channel:
-            await _slash_reply(
-                interaction,
-                f"🔊 Conectada em **{vc.channel.name}**!\nUse `/play` para tocar algo.",
-                ephemeral=False,
-            )
-
-    @bot.tree.command(name="leave", description="Para a música, limpa a fila e sai da call")
-    async def slash_leave(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        await cmd_clear.callback(ctx)
-
-    @bot.tree.command(name="skip", description="Pula a faixa atual")
-    async def slash_skip(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        await cmd_pular.callback(ctx)
-
-    @bot.tree.command(name="pause", description="Pausa a música")
-    async def slash_pause(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        await cmd_pause.callback(ctx)
-
-    @bot.tree.command(name="resume", description="Retoma a música pausada")
-    async def slash_resume(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        await cmd_resume.callback(ctx)
-
-    @bot.tree.command(name="about", description="Por que adicionar a Tiffany no seu servidor")
+    @bot.tree.command(name="about", description="Quem é a Tiffany e o que ela faz aqui")
     async def slash_about(interaction: discord.Interaction):
         is_admin = bool(
             interaction.guild
@@ -7886,7 +7800,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!cl` / `t!clear` — Para tudo e sai do canal"
         ), inline=False)
         em.add_field(name="🎵 Música — Fila", value=(
-            "`t!q` / `t!queue` — Fila e faixa atual\n"
+            "`t!q` / `t!queue` — Fila e faixa atual (também **`/queue`**)\n"
             "`t!sh` / `t!shuffle` — Embaralha a fila\n"
             "`t!l` / `t!loop` — Repete a faixa atual\n"
             "`t!r` / `t!random` — Música aleatória\n"
@@ -7912,13 +7826,11 @@ def register_voice(bot: commands.Bot) -> None:
             "«Tiffany, o que tá tocando / fila» — Info\n"
             "«Tiffany, [pergunta]» — Chat (pausa a música)"
         ), inline=False)
-        em.add_field(name="🔧 Comandos Slash", value=(
-            "Música: `/play` · `/join` · `/leave` · `/skip` · `/pause` · `/resume` · `/queue`\n"
-            "Geral: `/help` · `/about` · `/status` · `/stats` · `/player-status` — admin"
+        em.add_field(name="🔧 Slash commands", value=(
+            "`/help` · `/about` · `/queue` · `/status` · `/stats` · `/player-status` (admin)"
         ), inline=False)
         em.set_footer(text="YouTube · Spotify · Deezer · Apple Music · Amazon Music · /about")
         await interaction.response.send_message(embed=em, ephemeral=True)
-
 
     @bot.tree.command(name="queue", description="Mostra a fila de músicas")
     async def slash_queue(interaction: discord.Interaction):
@@ -7935,23 +7847,23 @@ def register_voice(bot: commands.Bot) -> None:
                 await _slash_reply(
                     interaction,
                     "⚠️ Conexão de voz dessincronizada após restart.\n"
-                    "Use `t!cl` ou `/leave` e depois `t!p` ou `/play` para reconectar.",
+                    "Use **`t!cl`** e depois **`t!p`** para reconectar.",
                 )
             else:
                 await _slash_reply(
                     interaction,
-                    "⚠️ Não estou em canal de voz.\nUse `t!p` ou `/play` para eu entrar.",
+                    "⚠️ Não estou em canal de voz.\nUse **`t!p`** para eu entrar.",
                 )
             return
         if not session:
             await _slash_reply(
                 interaction,
-                "⚠️ Sessão de música não iniciada.\nUse `t!p` ou `/play` para começar.",
+                "⚠️ Sessão de música não iniciada.\nUse **`t!p`** para começar.",
             )
             return
         q_em = _format_queue_embed(session)
         if not q_em:
-            await _slash_reply(interaction, "📭 Fila vazia.\nUse `t!p` ou `/play` para adicionar músicas.")
+            await _slash_reply(interaction, "📭 Fila vazia.\nUse **`t!p`** para adicionar músicas.")
             return
         await _slash_reply(interaction, q_em)
 
