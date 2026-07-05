@@ -2820,7 +2820,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("l", ["loop", "lo"], "t!l / t!loop — loop on/off"),
     ("sh", ["shuffle"], "t!sh / t!shuffle — embaralhar fila"),
     ("rp", ["replay"], "t!rp / t!replay — repetir do início"),
-    ("np", ["nowplaying"], "t!np / t!nowplaying — tocando agora"),
+    ("q", ["queue", "np"], "t!q / t!queue — fila + música tocando agora"),
     ("r", ["random"], "t!r / t!random — música aleatória (sem repetir na fila/sessão)"),
     ("pl", ["playlist"], "t!pl save|load|list|del <nome>"),
     ("ff", ["seek"], "t!ff / t!seek +30, -15, 1:30"),
@@ -2838,7 +2838,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
 _HELP_COMMANDS_TEXT = (
     "COMANDOS DA TIFFANY (use t! ou /help no Discord):\n"
     + "\n".join(f"- {usage}" for _, _, usage in _COMMAND_REGISTRY)
-    + "\n- /help, /play, /join, /leave, /skip, /pause, /resume, /nowplaying, /queue, /status, /stats (slash) · /player-status (admin)\n"
+    + "\n- /help, /play, /join, /leave, /skip, /pause, /resume, /queue, /status, /stats (slash) · /player-status (admin)\n"
     "- Dados SEM prefixo: digite direto no chat (ex: d20, 4d6, 2d20kh1, 3#d20, 4d6 for glory, [d20+5 ataque], c50+50)\n"
     "- Voz na call: «Tiffany, toca [música]», «Tiffany, para/pula/pausa/continua/limpa», «Tiffany, aleatória/autoplay/24-7», «Tiffany, o que está tocando», «Tiffany, avança/volta 30 segundos», «Tiffany, [pergunta]» (a música pausa enquanto responde)\n"
     "A Tiffany entra na call automaticamente quando você pede uma música (t!p). Sai automaticamente após inatividade ou com t!cl.\n"
@@ -3101,11 +3101,20 @@ def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed
     """Build queue embed (slash, voice, text). Returns None if empty."""
     lines: list[str] = []
     if session.current_song:
-        elapsed = ""
-        if session.song_start_time > 0:
-            elapsed = f" · `{_fmt_dur(time.monotonic() - session.song_start_time)}` decorrido"
-        dur = f" `{_fmt_dur(session.current_duration)}`" if session.current_duration > 0 else ""
-        lines.append(f"▶️ **Tocando agora:** {session.current_song[:100]}{dur}{elapsed}")
+        src = _track_source_label(session.current_query)
+        line = f"▶️ **Tocando agora** ({src}): {session.current_song[:100]}"
+        if session.current_duration > 0:
+            elapsed_sec = int(time.monotonic() - session.song_start_time) if session.song_start_time > 0 else 0
+            elapsed_sec = max(0, min(elapsed_sec, int(session.current_duration)))
+            bar_len = 20
+            filled = min(bar_len, int((elapsed_sec / session.current_duration) * bar_len))
+            line += (
+                f"\n⏱️ {_fmt_dur(elapsed_sec)} / {_fmt_dur(session.current_duration)}"
+                f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
+            )
+        elif session.song_start_time > 0:
+            line += f"\n⏱️ `{_fmt_dur(time.monotonic() - session.song_start_time)}` decorrido"
+        lines.append(line)
     if session.queue_display:
         if lines:
             lines.append("")
@@ -5608,8 +5617,8 @@ def register_voice(bot: commands.Bot) -> None:
                     f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
                 ))
 
-    @bot.command(name="np", aliases=["nowplaying"], help="Música tocando agora: t!np / t!nowplaying")
-    async def cmd_now_playing(ctx: commands.Context):
+    @bot.command(name="q", aliases=["queue", "fila", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue")
+    async def cmd_queue(ctx: commands.Context):
         if not ctx.guild:
             return
         _stats["commands_used"] += 1
@@ -5619,33 +5628,11 @@ def register_voice(bot: commands.Bot) -> None:
         if not session or not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em nenhum canal de voz."))
             return
-        if not session.current_song:
-            await ctx.send(embed=_embed("📭 Nada tocando no momento."))
+        q_em = _format_queue_embed(session)
+        if not q_em:
+            await ctx.send(embed=_embed("📭 Nada tocando e fila vazia."))
             return
-        # Lavalink has precise position; yt-dlp uses monotonic estimate
-        if _is_wavelink_player(vc) and hasattr(vc, 'position'):
-            elapsed = int(vc.position / 1000)
-        else:
-            elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
-        m, s = divmod(elapsed, 60)
-        dur = session.current_duration
-        dur_str = ""
-        progress_bar = ""
-        if dur > 0:
-            dm, ds = divmod(int(dur), 60)
-            dur_str = f" / {dm:02d}:{ds:02d}"
-            # Progress bar visual
-            bar_len = 20
-            filled = min(bar_len, int((elapsed / dur) * bar_len))
-            progress_bar = f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
-        fila_info = f"\n📋 Fila: {len(session.queue_display)} música(s)" if session.queue_display else ""
-        loop_info = "\n🔁 Loop ativo" if session.loop_enabled else ""
-        autoplay_info = "\n▶️ Autoplay" if session.autoplay else ""
-        src = _track_source_label(session.current_query)
-        await ctx.send(embed=_embed(
-            f"▶️  **{src}** — **Tocando agora:**  {session.current_song[:100]}\n"
-            f"⏱️ {m:02d}:{s:02d}{dur_str}{progress_bar}{fila_info}{loop_info}{autoplay_info}"
-        ))
+        await ctx.send(embed=q_em)
 
     @bot.command(name="247", aliases=["nonstop"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)")
     async def cmd_nonstop(ctx: commands.Context):
@@ -7370,16 +7357,6 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await cmd_resume.callback(ctx)
 
-    @bot.tree.command(name="nowplaying", description="Mostra a música que está tocando")
-    async def slash_nowplaying(interaction: discord.Interaction):
-        if not _voice_enabled():
-            await _slash_reply(interaction, "⚠️ Módulo de voz desativado neste servidor.")
-            return
-        ctx = await _ctx_from_interaction(interaction)
-        if not ctx:
-            return
-        await cmd_now_playing.callback(ctx)
-
     @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
     async def slash_help(interaction: discord.Interaction):
         em = discord.Embed(title="✨ Tiffany · Comandos", color=TIFFANY_PINK)
@@ -7402,7 +7379,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!r` / `t!random` — Aleatória (sem repetir fila/sessão)\n"
             "`t!rp` / `t!replay` — Repetir do início\n"
             "`t!ff` / `t!seek` — Pular tempo (`+30`, `-15`, `1:30`)\n"
-            "`t!np` / `t!nowplaying` — Tocando agora\n"
+            "`t!q` / `t!queue` — Fila + tocando agora\n"
             "`t!hi` / `t!history` — Histórico\n"
             "`t!ap` / `t!autoplay` — Autoplay\n"
             "`t!ly` / `t!lyrics` — Letra da música\n"
@@ -7436,7 +7413,7 @@ def register_voice(bot: commands.Bot) -> None:
         ), inline=False)
         em.add_field(name="🔧 Slash", value=(
             "**Música:** `/play` · `/join` · `/leave` · `/skip` · `/pause` · `/resume` · "
-            "`/nowplaying` · `/queue`\n"
+            "`/queue`\n"
             "**Geral:** `/help` · `/status` · `/stats` · `/player-status` *(admin)*"
         ), inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
