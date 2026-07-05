@@ -12,6 +12,5 @@ vosk-model-small-pt-0.3/
 scripts/extra_songs_bulk.txt
 _build_songs.py
 test_*.py
-tiffany-music-bot/
 *.md
 !CLAUDE.md
