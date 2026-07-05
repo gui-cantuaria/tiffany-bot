@@ -7443,62 +7443,58 @@ def register_voice(bot: commands.Bot) -> None:
         em = discord.Embed(title="✨ Tiffany · Comandos", color=TIFFANY_PINK)
         if interaction.guild and interaction.guild.me and interaction.guild.me.avatar:
             em.set_thumbnail(url=interaction.guild.me.avatar.url)
+        em.description = "Prefixo **`t!`** · Todos os comandos são simples e diretos."
         em.add_field(name="💬 Chat & IA", value=(
             "`t!c` / `t!chat` — Pergunta à IA (aceita imagens)\n"
             "`t!su` / `t!summary` — Resume um link"
         ), inline=False)
-        em.add_field(name="🎵 Música", value=(
-            "`t!p` / `t!play` — Tocar música ou URL (entra na call automaticamente)\n"
-            "`t!pa` / `t!pause` — Pausar\n"
-            "`t!re` / `t!resume` — Retomar\n"
-            "`t!s` / `t!skip` — Pular faixa\n"
-            "`t!l` / `t!loop` — Loop on/off\n"
-            "`t!sh` / `t!shuffle` — Embaralhar fila"
+        em.add_field(name="🎵 Música — Tocar", value=(
+            "`t!p` / `t!play` — Toca música ou link (entra na call sozinha)\n"
+            "`t!pa` / `t!pause` — Pausa\n"
+            "`t!re` / `t!resume` — Retoma\n"
+            "`t!s` / `t!skip` — Pula a faixa\n"
+            "`t!rp` / `t!replay` — Repete do início\n"
+            "`t!ff` / `t!seek` — Avança/volta (`+30`, `-15`, `1:30`)\n"
+            "`t!cl` / `t!clear` — Para tudo e sai da call"
         ), inline=False)
-        em.add_field(name="🎵 Música (cont.)", value=(
-            "`t!cl` / `t!clear` — Parar, limpar fila e sair da call\n"
-            "`t!r` / `t!random` — Aleatória (sem repetir fila/sessão)\n"
-            "`t!rp` / `t!replay` — Repetir do início\n"
-            "`t!ff` / `t!seek` — Pular tempo (`+30`, `-15`, `1:30`)\n"
-            "`t!q` / `t!queue` — Fila + tocando agora\n"
-            "`t!hi` / `t!history` — Histórico\n"
-            "`t!ap` / `t!autoplay` — Autoplay\n"
-            "`t!ly` / `t!lyrics` — Letra da música\n"
-            "`t!247` / `t!nonstop` — Modo 24/7 na call"
+        em.add_field(name="🎵 Música — Fila", value=(
+            "`t!q` / `t!queue` — Mostra a fila e o que toca agora\n"
+            "`t!sh` / `t!shuffle` — Embaralha a fila\n"
+            "`t!l` / `t!loop` — Repete a música atual\n"
+            "`t!r` / `t!random` — Toca uma aleatória\n"
+            "`t!hi` / `t!history` — Últimas músicas tocadas\n"
+            "`t!ap` / `t!autoplay` — Continua sozinha ao esvaziar\n"
+            "`t!247` / `t!nonstop` — Fica 24/7 na call\n"
+            "`t!ly` / `t!lyrics` — Mostra a letra"
         ), inline=False)
-        em.add_field(name="🎬 Clip & 📂 Playlists", value=(
-            "`t!cp` / `t!clip` — Salvar últimos 30s de áudio\n"
-            "`t!pl` / `t!playlist` — `save` `load` `list` `del`"
-        ), inline=True)
         em.add_field(name="🎲 Dados / RPG", value=(
-            "**É só digitar no chat** (sem prefixo):\n"
-            "`d20` — um dado de 20 lados\n"
-            "`4d6` · `2d10+5` — vários dados, com bônus\n"
-            "`4d6 ataque` — dá um nome à rolagem\n"
-            "`[d20+5]` — rolar no meio de uma frase\n"
-            "`c50+50` — usar como calculadora\n"
-            "**Atalhos:** `t!d adv` / `t!d dis` (vantagem/desvantagem), "
-            "`t!d stats`, `t!d init +3`, `t!d coin`\n"
-            "ℹ️ Digite **`t!d`** pra ver tudo (explosão, pools, Fate, macros...)"
+            "Só digitar no chat, sem prefixo:\n"
+            "`d20` — um dado · `4d6` / `2d10+5` — vários + bônus\n"
+            "`4d6 ataque` — dá um nome · `[d20+5]` — no meio da frase\n"
+            "`c50+50` — usa como calculadora\n"
+            "Atalhos: `t!d adv` / `t!d dis` / `t!d stats` / `t!d coin`\n"
+            "ℹ️ `t!d` mostra tudo (explosão, pools, Fate, macros)"
         ), inline=False)
-        em.add_field(name="🔔 Alerts", value=(
-            "`t!alert <product>` — Price alert via DM\n"
-            "`t!alert list` — View active alerts\n"
-            "`t!alert remove <n>` — Remove alert"
-        ), inline=True)
+        em.add_field(name="🔔 Alertas de preço", value=(
+            "`t!alert <produto>` — Cria alerta (aviso na DM)\n"
+            "`t!alert list` — Lista os alertas ativos\n"
+            "`t!alert remove <n>` — Remove um alerta"
+        ), inline=False)
+        em.add_field(name="🎬 Clipe & Playlists", value=(
+            "`t!cp` / `t!clip` — Salva os últimos 30s de áudio\n"
+            "`t!pl` / `t!playlist` — `save` / `load` / `list` / `del`"
+        ), inline=False)
         em.add_field(name="🎙️ Voz na call", value=(
-            "«Tiffany, toca `[música]`» — Adicionar à fila\n"
-            "«Tiffany, para / pula / pausa / continua» — Controle\n"
-            "«Tiffany, limpa / shuffle / loop / replay» — Fila\n"
+            "«Tiffany, toca `[música]`» — Adiciona à fila\n"
+            "«Tiffany, pula / pausa / continua / para» — Controla\n"
+            "«Tiffany, limpa / shuffle / loop / replay» — Mexe na fila\n"
             "«Tiffany, aleatória / autoplay / 24/7» — Modos\n"
-            "«Tiffany, o que está tocando / mostra a fila» — Info\n"
-            "«Tiffany, avança/volta `[N]` segundos» — Seek\n"
-            "«Tiffany, `[pergunta]`» — IA pausa a música e responde"
+            "«Tiffany, o que tá tocando / mostra a fila» — Info\n"
+            "«Tiffany, `[pergunta]`» — Pausa a música e responde"
         ), inline=False)
-        em.add_field(name="🔧 Slash", value=(
-            "**Música:** `/play` · `/join` · `/leave` · `/skip` · `/pause` · `/resume` · "
-            "`/queue`\n"
-            "**Geral:** `/help` · `/status` · `/stats` · `/player-status` *(admin)*"
+        em.add_field(name="🔧 Comandos Slash", value=(
+            "Música: `/play` · `/join` · `/leave` · `/skip` · `/pause` · `/resume` · `/queue`\n"
+            "Geral: `/help` · `/status` · `/stats` · `/player-status` *(admin)*"
         ), inline=False)
         em.set_footer(text="YouTube • Spotify • Deezer • Apple Music • Amazon Music")
         await interaction.response.send_message(embed=em, ephemeral=True)
