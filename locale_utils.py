@@ -178,6 +178,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!q / t!queue — now playing + queue · t!r / t!random · t!ap / t!autoplay\n"
     "- t!pl save|load|list|del <name> — playlists · t!ff / t!seek +30,-15,1:30\n"
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
+    "- t!g / t!game <filters> — game picks (store, price, studio, rating, genre, tags, year…)\n"
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- t!d — RPG shortcuts (dice: type directly in chat, e.g. d20, 4d6, c50+50)\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
@@ -229,16 +230,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "about.chat.body": {
         "pt": (
             "`t!c` — conversa com memória (manda imagem se quiser)\n"
+            "`t!g` — recomenda jogos (loja, preço, estúdio, nota, gênero, tags…)\n"
             "`t!su` — resume artigo ou link\n"
             "`t!cp` — clipe MP3/WAV dos últimos 30 s da call"
         ),
         "en": (
             "`t!c` — chat with memory (images OK)\n"
+            "`t!g` — game picks (store, price, studio, rating, genre, tags…)\n"
             "`t!su` — summarize an article or link\n"
             "`t!cp` — MP3/WAV clip of the last 30 s in voice"
         ),
         "es": (
             "`t!c` — chat con memoria (imágenes OK)\n"
+            "`t!g` — recomienda juegos (tienda, precio, estudio, nota, género, tags…)\n"
             "`t!su` — resume artículo o link\n"
             "`t!cp` — clip MP3/WAV de los últimos 30 s de la call"
         ),
@@ -314,9 +318,9 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "help.chat.title": {"pt": "💬 Chat & IA", "en": "💬 Chat & AI", "es": "💬 Chat e IA"},
     "help.chat.body": {
-        "pt": "`t!c` / `t!chat` — Pergunta à IA (com imagem)\n`t!su` / `t!summary` — Resume um link",
-        "en": "`t!c` / `t!chat` — Ask the AI (images OK)\n`t!su` / `t!summary` — Summarize a link",
-        "es": "`t!c` / `t!chat` — Pregunta a la IA (con imagen)\n`t!su` / `t!summary` — Resume un link",
+        "pt": "`t!c` / `t!chat` — Pergunta à IA (com imagem)\n`t!g` / `t!game` — Jogos (loja, estúdio, nota, preço…)\n`t!su` / `t!summary` — Resume um link",
+        "en": "`t!c` / `t!chat` — Ask the AI (images OK)\n`t!g` / `t!game` — Games (store, studio, rating, price…)\n`t!su` / `t!summary` — Summarize a link",
+        "es": "`t!c` / `t!chat` — Pregunta a la IA (con imagen)\n`t!g` / `t!game` — Juegos (tienda, estudio, nota, precio…)\n`t!su` / `t!summary` — Resume un link",
     },
     "help.music_play.title": {"pt": "🎵 Música — Tocar", "en": "🎵 Music — Play", "es": "🎵 Música — Reproducir"},
     "help.music_play.body": {
@@ -432,6 +436,26 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "Sorry, too many requests right now. Wait a few seconds and try again.",
         "es": "Perdón, demasiadas solicitudes ahora. Espera unos segundos e intenta de nuevo.",
     },
+    "err.server_rate_limit": {
+        "pt": "⏳ Muitas requisições neste servidor! Aguarde um momento.",
+        "en": "⏳ Too many requests in this server! Wait a moment.",
+        "es": "⏳ ¡Demasiadas solicitudes en este servidor! Espera un momento.",
+    },
+    "err.dm_rate_limit": {
+        "pt": "⏳ Muitas mensagens no privado agora — aguarde um momento e tente de novo.",
+        "en": "⏳ Too many DMs right now — wait a moment and try again.",
+        "es": "⏳ Demasiados mensajes privados ahora — espera un momento e intenta de nuevo.",
+    },
+    "err.guild_only": {
+        "pt": "⚠️ Esse comando só funciona **num servidor** (música, voz e call). No privado use **`t!c`**, **`t!g`**, **`t!su`** ou **`t!d`**.",
+        "en": "⚠️ This command only works **in a server** (music, voice, and voice channel). In DMs use **`t!c`**, **`t!g`**, **`t!su`**, or **`t!d`**.",
+        "es": "⚠️ Este comando solo funciona **en un servidor** (música, voz y canal de voz). En privado usa **`t!c`**, **`t!g`**, **`t!su`** o **`t!d`**.",
+    },
+    "err.dm_no_shared_guild": {
+        "pt": "⚠️ No privado, só atendo quem compartilha **pelo menos um servidor** comigo. Me chame num servidor onde eu esteja.",
+        "en": "⚠️ In DMs I only reply to users who share **at least one server** with me. Message me from a server I'm in.",
+        "es": "⚠️ En privado solo atiendo a quien comparte **al menos un servidor** conmigo. Escríbeme desde un servidor donde esté.",
+    },
     "err.duplicate_question": {
         "pt": "Você já fez essa pergunta — prefiro não repetir a mesma resposta. Tenta reformular ou espera um pouco.",
         "en": "You already asked that — I'd rather not repeat the same answer. Try rephrasing or wait a bit.",
@@ -476,5 +500,114 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "⚠️ Apenas **administradores** podem usar `/player-status`.",
         "en": "⚠️ Only **administrators** can use `/player-status`.",
         "es": "⚠️ Solo **administradores** pueden usar `/player-status`.",
+    },
+    "game.usage.title": {
+        "pt": "🎮 **Uso:** `t!g` ou `t!game` <filtros em linguagem natural>",
+        "en": "🎮 **Usage:** `t!g` or `t!game` <filters in natural language>",
+        "es": "🎮 **Uso:** `t!g` o `t!game` <filtros en lenguaje natural>",
+    },
+    "game.usage.hint": {
+        "pt": "Aceita filtros específicos: loja, preço, gênero, tags, estúdio, publicadora, avaliação, ano, idioma PT-BR, multiplayer e mais.",
+        "en": "Supports specific filters: store, price, genre, tags, studio, publisher, rating, year, PT-BR language, multiplayer, and more.",
+        "es": "Acepta filtros específicos: tienda, precio, género, tags, estudio, publisher, nota, año, idioma PT-BR, multijugador y más.",
+    },
+    "game.usage.examples": {
+        "pt": "**Exemplos:**\n• `t!g terror multiplayer até 10 reais na steam`\n• `t!game estúdio Supergiant roguelike nota 90+ grátis epic`\n• `t!g rpg FromSoftware steam reviews muito positivas legendas PT`",
+        "en": "**Examples:**\n• `t!g horror multiplayer under 10 BRL on steam`\n• `t!game studio Supergiant roguelike rating 90+ free epic`\n• `t!g rpg FromSoftware steam reviews very positive PT subtitles`",
+        "es": "**Ejemplos:**\n• `t!g terror multijugador hasta 10 reales en steam`\n• `t!game estudio Supergiant roguelike nota 90+ gratis epic`\n• `t!g rpg FromSoftware steam reviews muy positivas subtítulos PT`",
+    },
+    "game.searching": {
+        "pt": "🎮 Procurando jogos...",
+        "en": "🎮 Searching for games...",
+        "es": "🎮 Buscando juegos...",
+    },
+    "game.empty": {
+        "pt": "😕 Não achei jogos com esses filtros.\n\nTente ampliar o preço, tirar multijogador ou mudar o gênero/loja.",
+        "en": "😕 No games matched those filters.\n\nTry widening price, dropping multiplayer, or changing genre/store.",
+        "es": "😕 No encontré juegos con esos filtros.\n\nPrueba ampliar el precio, quitar multijugador o cambiar género/tienda.",
+    },
+    "game.title": {
+        "pt": "🎮 **Recomendações**",
+        "en": "🎮 **Recommendations**",
+        "es": "🎮 **Recomendaciones**",
+    },
+    "game.section.filters": {
+        "pt": "**Filtros**",
+        "en": "**Filters**",
+        "es": "**Filtros**",
+    },
+    "game.section.games": {
+        "pt": "**Jogos**",
+        "en": "**Games**",
+        "es": "**Juegos**",
+    },
+    "game.footer": {
+        "pt": "Preços verificados nas lojas (BRL) · confira antes de comprar",
+        "en": "Store-verified prices (BRL) · double-check before buying",
+        "es": "Precios verificados en tiendas (BRL) · confirma antes de comprar",
+    },
+    "game.cooldown": {
+        "pt": "⏳ Aguarde **{wait}s** antes de buscar jogos de novo.",
+        "en": "⏳ Wait **{wait}s** before searching games again.",
+        "es": "⏳ Espera **{wait}s** antes de buscar juegos de nuevo.",
+    },
+    "game.err.aiohttp": {
+        "pt": "⚠️ Biblioteca de rede indisponível.",
+        "en": "⚠️ Network library unavailable.",
+        "es": "⚠️ Biblioteca de red no disponible.",
+    },
+    "game.history.title": {
+        "pt": "📜 **Última busca**",
+        "en": "📜 **Last search**",
+        "es": "📜 **Última búsqueda**",
+    },
+    "game.filter.stores": {"pt": "Lojas", "en": "Stores", "es": "Tiendas"},
+    "game.filter.price": {"pt": "Preço", "en": "Price", "es": "Precio"},
+    "game.filter.free": {"pt": "grátis", "en": "free", "es": "gratis"},
+    "game.filter.up_to": {"pt": "até", "en": "up to", "es": "hasta"},
+    "game.filter.from": {"pt": "a partir de", "en": "from", "es": "desde"},
+    "game.filter.genre": {"pt": "Gênero", "en": "Genre", "es": "Género"},
+    "game.filter.tags": {"pt": "Tags", "en": "Tags", "es": "Tags"},
+    "game.filter.multiplayer": {"pt": "Multijogador", "en": "Multiplayer", "es": "Multijugador"},
+    "game.filter.singleplayer": {"pt": "Single-player", "en": "Single-player", "es": "Single-player"},
+    "game.filter.yes": {"pt": "sim", "en": "yes", "es": "sí"},
+    "game.filter.studio": {"pt": "Estúdio", "en": "Studio", "es": "Estudio"},
+    "game.filter.publisher": {"pt": "Publicadora", "en": "Publisher", "es": "Publisher"},
+    "game.filter.rating": {"pt": "Avaliação", "en": "Rating", "es": "Nota"},
+    "game.filter.rating.steam": {"pt": "Steam", "en": "Steam", "es": "Steam"},
+    "game.filter.rating.metacritic": {"pt": "Metacritic", "en": "Metacritic", "es": "Metacritic"},
+    "game.filter.rating.opencritic": {"pt": "OpenCritic", "en": "OpenCritic", "es": "OpenCritic"},
+    "game.filter.rating.any": {"pt": "geral", "en": "general", "es": "general"},
+    "game.filter.steam_reviews": {"pt": "Reviews Steam", "en": "Steam reviews", "es": "Reviews Steam"},
+    "game.filter.reviews.positive": {"pt": "positivas", "en": "positive", "es": "positivas"},
+    "game.filter.reviews.very_positive": {"pt": "muito positivas", "en": "very positive", "es": "muy positivas"},
+    "game.filter.reviews.overwhelmingly_positive": {
+        "pt": "extremamente positivas", "en": "overwhelmingly positive", "es": "extremadamente positivas",
+    },
+    "game.filter.year": {"pt": "Ano", "en": "Year", "es": "Año"},
+    "game.filter.year_from": {"pt": "Ano a partir de", "en": "Year from", "es": "Año desde"},
+    "game.filter.year_to": {"pt": "Ano até", "en": "Year until", "es": "Año hasta"},
+    "game.filter.language": {"pt": "Idioma", "en": "Language", "es": "Idioma"},
+    "game.filter.language_pt": {
+        "pt": "PT-BR (legendas ou dublagem)",
+        "en": "PT-BR (subtitles or dub)",
+        "es": "PT-BR (subtítulos o doblaje)",
+    },
+    "game.filter.exclude": {"pt": "Evitar", "en": "Avoid", "es": "Evitar"},
+    "game.filter.extra": {"pt": "Outros", "en": "Other", "es": "Otros"},
+    "status.warp.ok": {
+        "pt": "Online (música OK)",
+        "en": "Online (music OK)",
+        "es": "Online (música OK)",
+    },
+    "status.warp.down": {
+        "pt": "Offline — música pode falhar",
+        "en": "Offline — music may fail",
+        "es": "Offline — la música puede fallar",
+    },
+    "chat.truncated": {
+        "pt": "\n\n_(resposta encurtada — peça mais detalhes se precisar)_",
+        "en": "\n\n_(answer shortened — ask for more detail if needed)_",
+        "es": "\n\n_(respuesta acortada — pide más detalle si hace falta)_",
     },
 }

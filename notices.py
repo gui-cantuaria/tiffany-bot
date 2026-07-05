@@ -2151,10 +2151,10 @@ async def _verificar_feeds_inner():
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "loop", "play", "chat", "seek", "nonstop", "queue",
-    "shuffle", "replay", "autoplay", "lyrics", "roll", "dice", "clip",
+    "shuffle", "replay", "autoplay", "lyrics", "roll", "dice", "clip", "games", "game",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "ap", "ly", "cp", "l",
     "247",
-    "s", "c", "p", "r", "d", "q",
+    "s", "c", "p", "r", "d", "q", "g",
 )
 
 @discord_client.event
@@ -2301,6 +2301,17 @@ async def cmd_status(interaction: discord.Interaction):
 
     em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
     em.add_field(name="🎵 Música & comandos", value="Disponíveis", inline=True)
+    if _voice_available and tiffany_voice:
+        warp_ok = tiffany_voice.check_warp_proxy_ok()
+        em.add_field(
+            name="🌐 WARP (YouTube)",
+            value=(
+                "Online (música OK)"
+                if warp_ok
+                else "Offline — música pode falhar"
+            ),
+            inline=True,
+        )
     em.add_field(
         name="📰 Notícias",
         value="Ativas (8h–18h)" if em_horario else "Em standby (fora do horário)",

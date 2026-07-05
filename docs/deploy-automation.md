@@ -66,3 +66,28 @@ Na VPS (opcional):
 ```bash
 systemctl status tiffany-bot
 ```
+
+## Runtime JSON state
+
+O bot **não usa banco de dados** — histórico, filas e memória ficam em arquivos JSON na raiz do projeto (`/opt/tiffany-bot/`). O deploy automático **não sobrescreve** esses arquivos (só faz checkout de `.py`, scripts e deps).
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `notices_history.json` | Dedup de notícias (SimHash, títulos) |
+| `notices_queue.json` | Fila de posts pendentes |
+| `chat_memory.json` | Memória de conversa `t!c` (TTL 24h) |
+| `voice_state.json` | Fila/música atual por servidor |
+| `voice_stats.json` | Contadores de uso |
+| `game_history.json` | Última recomendação `t!g` por usuário |
+
+**Backup / migração de VPS:** copie `.env` + `*.json` antes de trocar de máquina:
+
+```powershell
+# Do PC (PowerShell) — ajuste o IP
+scp root@187.77.48.146:/opt/tiffany-bot/.env .
+scp root@187.77.48.146:/opt/tiffany-bot/*.json .
+```
+
+Na VPS nova, envie de volta para `/opt/tiffany-bot/`. Sem isso, dedup de notícias, memória de chat e histórico de jogos recomeçam do zero.
+
+O backup semanal da Hostinger cobre o disco inteiro, mas **restaurar snapshot** é mais pesado que um `scp` dos JSONs — vale guardar cópia local ocasional se o histórico for importante.
