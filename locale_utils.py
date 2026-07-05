@@ -1,6 +1,7 @@
 """Guild locale → language (pt / en / es) for user-facing Tiffany output."""
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 import discord
@@ -15,11 +16,17 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
 
 
 def resolve_guild_lang(guild: Optional[discord.Guild]) -> GuildLang:
-    """Map Discord server locale to pt, en, or es. Default: pt (home server)."""
+    """Map Discord server locale to pt, en, or es. Home GUILD_ID always pt."""
     if guild is None:
         return "pt"
+    home_id = int(os.getenv("GUILD_ID", "0") or "0")
+    if home_id and guild.id == home_id:
+        return "pt"
     raw = getattr(guild, "preferred_locale", None)
-    loc = str(raw or "pt-BR").lower().replace("_", "-")
+    if raw is not None and hasattr(raw, "value"):
+        loc = str(raw.value).lower()
+    else:
+        loc = str(raw or "pt-BR").lower().replace("_", "-")
     for prefix, lang in _LANG_BY_PREFIX:
         if loc.startswith(prefix):
             return lang

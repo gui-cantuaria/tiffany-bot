@@ -514,11 +514,19 @@ def _get_openrouter_client():
 
 
 def _ai_yes_no_is_yes(text: str) -> bool:
-    """Parse YES/NO (or legacy SIM/NAO) from a short AI moderation reply."""
+    """Parse YES/NO from a short AI moderation reply. Ambiguous → do not block."""
     ans = (text or "").strip().upper()
-    if ans.startswith("N") or ans == "NO" or "NAO" in ans or "NÃO" in ans:
+    if not ans:
         return False
-    return ans.startswith("Y") or "YES" in ans or ans.startswith("S") or "SIM" in ans
+    token = ans.split()[0]
+    if token in ("NO", "NAO", "NÃO", "N") or ans.startswith("NO ") or ans.startswith("NAO"):
+        return False
+    if token in ("YES", "SIM", "Y") or ans.startswith("YES"):
+        return True
+    # Legacy single-letter replies only when the whole answer is one token
+    if token == "S" and len(ans.split()) == 1:
+        return True
+    return False
 
 
 async def _ai_content_is_blocked(text: str) -> bool:
@@ -583,8 +591,20 @@ async def _ai_content_is_blocked(text: str) -> bool:
         return _title_is_risky(text) or _contains_blocked_content(text)
 
 
+# Short greetings — skip AI moderation (false blocks + wasted API calls).
+_CHAT_GREETINGS = frozenset({
+    "oi", "ola", "olá", "hi", "hey", "hello", "hola", "eae", "eai", "e aí",
+    "salve", "bom dia", "boa tarde", "boa noite", "yo", "sup", "opa",
+})
+
+
 async def _should_block_content(text: str) -> bool:
     """Combined block: literal list (fast) + AI moderation (euphemisms)."""
+    if not text or not text.strip():
+        return False
+    norm = _strip_accents_lower(text.strip())
+    if norm in _CHAT_GREETINGS:
+        return False
     if _contains_blocked_content(text):
         return True
     return await _ai_content_is_blocked(text)
@@ -6699,7 +6719,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         if question and await _should_block_content(question):
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await ctx.send(embed=_embed(_pick_blocked_reply()), delete_after=20)
             return
 
         allowed, remaining = _check_cooldown(ctx.author.id)
@@ -6722,7 +6742,12 @@ def register_voice(bot: commands.Bot) -> None:
             image_urls=image_urls if image_urls else None,
             user_id=ctx.author.id,
         )
-        await thinking.edit(embed=_embed(f"💬 {answer}"))
+        if not (answer or "").strip():
+            answer = "Não consegui formular uma resposta agora. Tenta de novo?"
+        try:
+            await thinking.edit(embed=_embed(f"💬 {answer}"))
+        except discord.HTTPException:
+            await ctx.send(embed=_embed(f"💬 {answer}"))
 
     @bot.command(name="l", aliases=["loop", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop")
     async def cmd_loop(ctx: commands.Context):
