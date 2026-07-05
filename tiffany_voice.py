@@ -193,10 +193,38 @@ def _ai_rl_ids(ctx: commands.Context) -> tuple[int, int]:
     return 0, ctx.author.id
 
 
-def _user_shares_guild_with_bot(client: discord.Client, user_id: int) -> bool:
+_dm_guild_ok_cache: dict[int, float] = {}
+_DM_GUILD_CACHE_TTL_SEC = 3600
+
+
+async def _user_shares_guild_with_bot(client: discord.Client, user_id: int) -> bool:
+    """True if user is in any guild the bot is in (cache first, then API fetch)."""
+    now = time.monotonic()
+    cached_at = _dm_guild_ok_cache.get(user_id)
+    if cached_at is not None and (now - cached_at) < _DM_GUILD_CACHE_TTL_SEC:
+        return True
+
     for guild in client.guilds:
         if guild.get_member(user_id) is not None:
+            _dm_guild_ok_cache[user_id] = now
             return True
+
+    if not client.guilds:
+        return False
+
+    async def _fetch_in_guild(guild: discord.Guild) -> bool:
+        try:
+            await guild.fetch_member(user_id)
+            return True
+        except discord.NotFound:
+            return False
+        except discord.HTTPException:
+            log.debug("DM guild check: fetch_member failed guild=%s user=%s", guild.id, user_id)
+            return False
+
+    if any(await asyncio.gather(*(_fetch_in_guild(g) for g in client.guilds))):
+        _dm_guild_ok_cache[user_id] = now
+        return True
     return False
 
 
@@ -217,7 +245,7 @@ async def _require_dm_access(ctx: commands.Context) -> bool:
         return True
     if not _dm_require_shared_guild():
         return True
-    if _user_shares_guild_with_bot(ctx.bot, ctx.author.id):
+    if await _user_shares_guild_with_bot(ctx.bot, ctx.author.id):
         return True
     await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "err.dm_no_shared_guild")))
     return False
