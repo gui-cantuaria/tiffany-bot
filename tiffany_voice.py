@@ -1980,6 +1980,32 @@ def _wav_48k_to_16k(wav_48k: bytes) -> bytes:
         return b""
 
 
+def _wav_to_mp3(wav_bytes: bytes) -> bytes:
+    """Convert WAV bytes to MP3 via FFmpeg (VBR ~q2). Returns b'' on failure."""
+    import subprocess
+    exe = FFMPEG_EXECUTABLE or "ffmpeg"
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            [exe, "-i", "pipe:0", "-codec:a", "libmp3lame", "-qscale:a", "2", "-f", "mp3", "pipe:1"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        mp3, _ = proc.communicate(wav_bytes, timeout=60)
+        return mp3 or b""
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.wait()
+        log.warning("FFmpeg timeout converting WAV->MP3")
+        return b""
+    except Exception as e:
+        if proc:
+            proc.kill()
+            proc.wait()
+        log.warning("FFmpeg error converting WAV->MP3: %s", e)
+        return b""
+
+
 def _openrouter_stt_request(api_key: str, model: str, wav_16k: bytes) -> Optional[str]:
     """Uma chamada ao endpoint /audio/transcriptions do OpenRouter."""
     import base64
@@ -2852,7 +2878,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("c", ["chat"], "t!c / t!chat <pergunta>"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("d", ["roll", "dice"], "t!d adv/dis/stats/init/coin — atalhos RPG (dados: digite direto ex: d20, 4d6, c50+50)"),
-    ("cp", ["clip"], "t!cp / t!clip — últimos 30s de áudio"),
+    ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
     ("alert", ["monitor"], "t!alert <product> — price alert via DM"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
 ]
@@ -6969,9 +6995,15 @@ def register_voice(bot: commands.Bot) -> None:
     # AUDIO CLIP
     # ============================
 
-    @bot.command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip")
-    async def cmd_clip(ctx: commands.Context):
+    @bot.command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]")
+    async def cmd_clip(ctx: commands.Context, fmt: str = "mp3"):
         if not ctx.guild:
+            return
+        fmt = (fmt or "mp3").strip().lower().lstrip(".")
+        if fmt in ("mp", "m4a"):
+            fmt = "mp3"
+        if fmt not in ("mp3", "wav"):
+            await ctx.send(embed=_embed("⚠️ Formato inválido. Use `t!clip mp3` ou `t!clip wav` (padrão: mp3)."))
             return
         sess = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
@@ -6986,7 +7018,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Pouco áudio capturado. Fale na call e tente novamente."))
             return
 
-        # Convert PCM to WAV
+        # Convert PCM to WAV (base format; MP3 is transcoded from it below)
         import io
         import wave
         wav_buf = io.BytesIO()
@@ -6998,9 +7030,23 @@ def register_voice(bot: commands.Bot) -> None:
         wav_buf.seek(0)
         duration = len(raw) / (48000 * 2 * 2)  # stereo 16-bit
 
+        ext = fmt
+        if fmt == "mp3":
+            mp3_bytes = await asyncio.to_thread(_wav_to_mp3, wav_buf.getvalue())
+            if mp3_bytes:
+                file_buf = io.BytesIO(mp3_bytes)
+            else:
+                # FFmpeg unavailable/failed -> fall back to WAV so the user still gets audio
+                wav_buf.seek(0)
+                file_buf = wav_buf
+                ext = "wav"
+        else:
+            file_buf = wav_buf
+
+        note = "" if ext == fmt else "\n*(mp3 indisponível, enviei em wav)*"
         await ctx.send(
-            embed=_embed(f"🎬 **Clip salvo!** ({duration:.0f}s de áudio)"),
-            file=discord.File(wav_buf, filename=f"clip_{ctx.guild.id}_{int(time.time())}.wav"),
+            embed=_embed(f"🎬 **Clip salvo!** ({duration:.0f}s de áudio, `.{ext}`){note}"),
+            file=discord.File(file_buf, filename=f"clip_{ctx.guild.id}_{int(time.time())}.{ext}"),
         )
 
     @bot.listen("on_message")
@@ -7499,7 +7545,7 @@ def register_voice(bot: commands.Bot) -> None:
             "`t!alert remove <n>` — Remove um alerta"
         ), inline=False)
         em.add_field(name="🎬 Clipe & Playlists", value=(
-            "`t!cp` / `t!clip` — Salva os últimos 30s de áudio\n"
+            "`t!cp` / `t!clip` `[mp3|wav]` — Salva os últimos 30s de áudio (padrão mp3)\n"
             "`t!pl` / `t!playlist` — `save` / `load` / `list` / `del`"
         ), inline=False)
         em.add_field(name="🎙️ Voz na call", value=(
