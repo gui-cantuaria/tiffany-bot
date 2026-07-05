@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script de deploy para a VPS — chamado pelo GitHub Actions ou manualmente.
 # Uso: bash /opt/tiffany-bot/scripts/deploy.sh
-# Retrigger deploy: 2026-06-28
+# Retrigger deploy: 2026-07-05 (teste do fluxo automático GitHub Actions)
 #
 # Modos:
 #   Docker (padrão se docker compose + docker-compose.yml existirem)
