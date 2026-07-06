@@ -3395,13 +3395,14 @@ def invite_link_view(invite_url: str) -> discord.ui.View | None:
 
 _presence_rotation_task: asyncio.Task | None = None
 
+# Global Discord presence — short lines that read well after Discord's "Playing …"
 PRESENCE_LINES: tuple[str, ...] = (
-    "/help · mapa de comandos",
-    "t!p · som na call",
-    "t!c · perguntas e respostas",
-    "t!g · caça-jogos Steam/Epic",
-    "t!r · roleta musical",
-    "/about · quem sou eu",
+    "/help · all commands",
+    "t!p · play music in voice",
+    "t!c · AI chat",
+    "t!g · find games on Steam/Epic",
+    "t!r · shuffle a random song",
+    "/about · what I can do",
 )
 
 
@@ -3741,6 +3742,7 @@ def _embed_music_added(
     kind: str,
     title: str,
     requester: str,
+    lang: GuildLang,
     thumbnail: str = "",
     duration_sec: float = 0,
     position: int = 0,
@@ -3755,21 +3757,25 @@ def _embed_music_added(
     if _icon:
         em.set_author(name=source_label, icon_url=_icon)
     if kind == "playlist":
-        em.title = "📋 Playlist adicionada"
+        em.title = tr(lang, "music.playlist_added.title")
         em.description = f"**{title[:200]}**"
-        em.add_field(name="Faixas", value=str(track_count), inline=True)
-        em.add_field(name="Duração estimada", value=_fmt_dur(playlist_duration_sec), inline=True)
+        em.add_field(name=tr(lang, "music.field.tracks"), value=str(track_count), inline=True)
+        em.add_field(
+            name=tr(lang, "music.field.est_duration"),
+            value=_fmt_dur(playlist_duration_sec),
+            inline=True,
+        )
     else:
-        em.title = "🎵 Faixa adicionada"
+        em.title = tr(lang, "music.track_added.title")
         em.description = f"**{title[:200]}**"
         if duration_sec > 0:
-            em.add_field(name="Duração", value=_fmt_dur(duration_sec), inline=True)
+            em.add_field(name=tr(lang, "music.field.duration"), value=_fmt_dur(duration_sec), inline=True)
         if position > 1:
-            em.add_field(name="Posição na fila", value=str(position), inline=True)
-            em.add_field(name="Tempo até tocar", value=_fmt_dur(eta_sec), inline=True)
+            em.add_field(name=tr(lang, "music.field.position"), value=str(position), inline=True)
+            em.add_field(name=tr(lang, "music.field.eta"), value=_fmt_dur(eta_sec), inline=True)
         if queue_total > 0:
-            em.add_field(name="Itens na fila", value=str(queue_total), inline=True)
-    em.set_footer(text=f"Pedido por {requester[:80]}")
+            em.add_field(name=tr(lang, "music.field.queue_items"), value=str(queue_total), inline=True)
+    em.set_footer(text=tr(lang, "music.footer.requester", requester=requester[:80]))
     if thumbnail:
         em.set_thumbnail(url=thumbnail)
     return em
@@ -3872,7 +3878,7 @@ def _embed(description: str, *, title: str = None, footer: str = None) -> discor
 _QUEUE_DISPLAY_LIMIT = 20
 
 
-def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed]:
+def _format_queue_embed(session: "_GuildVoiceSession", lang: GuildLang) -> Optional[discord.Embed]:
     """Build queue embed (slash, voice, text). Returns None if empty."""
     lines: list[str] = []
     if session.current_song:
@@ -3888,22 +3894,23 @@ def _format_queue_embed(session: "_GuildVoiceSession") -> Optional[discord.Embed
                 f"\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
             )
         elif session.song_start_time > 0:
-            line += f"\n⏱️ `{_fmt_dur(time.monotonic() - session.song_start_time)}` decorrido"
+            line += f"\n⏱️ `{_fmt_dur(time.monotonic() - session.song_start_time)}` {tr(lang, 'queue.elapsed')}"
         lines.append(line)
     if session.queue_display:
         if lines:
             lines.append("")
         eta_total = _fmt_dur(_queue_eta_sec(session)) if session.queue_durations else ""
         if eta_total and eta_total != "?:??":
-            lines.append(f"⏳ Tempo até o fim da fila: **{eta_total}**")
+            lines.append(tr(lang, "queue.eta_total", eta=eta_total))
             lines.append("")
         for i, name in enumerate(session.queue_display[:_QUEUE_DISPLAY_LIMIT], start=1):
             lines.append(f"`{i}.` {name[:80]}")
         if len(session.queue_display) > _QUEUE_DISPLAY_LIMIT:
-            lines.append(f"*... e mais {len(session.queue_display) - _QUEUE_DISPLAY_LIMIT}*")
+            extra = len(session.queue_display) - _QUEUE_DISPLAY_LIMIT
+            lines.append(tr(lang, "queue.more", count=extra))
     if not lines:
         return None
-    em = discord.Embed(title="📋 Fila de músicas", description="\n".join(lines), color=TIFFANY_PINK)
+    em = discord.Embed(title=tr(lang, "queue.title"), description="\n".join(lines), color=TIFFANY_PINK)
     if session.current_song:
         cur_src = _track_source_label(
             session.current_query,
@@ -4948,7 +4955,7 @@ async def _voice_listen_loop(
                 continue
 
             if action == "queue_show":
-                q_em = _format_queue_embed(session)
+                q_em = _format_queue_embed(session, resolve_guild_lang(vc.guild))
                 if q_em:
                     ch = bot.get_channel(session.text_channel_id)
                     if ch and hasattr(ch, "send"):
@@ -6535,7 +6542,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not session or not vc or not vc.is_connected():
             await ctx.send(embed=_embed("⚠️ Não estou em canal de voz."))
             return
-        q_em = _format_queue_embed(session)
+        q_em = _format_queue_embed(session, _ctx_lang(ctx))
         if not q_em:
             await ctx.send(embed=_embed("📭 Nada na fila."))
             return
@@ -6775,6 +6782,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(_pick_blocked_reply()))
             return
         _stats["commands_used"] += 1
+        lang = _ctx_lang(ctx)
         _touch_activity(ctx.guild.id)
         was_connected = bool(ctx.guild.voice_client and ctx.guild.voice_client.is_connected())
         sess, vc = await _ensure_connected(ctx)
@@ -6792,10 +6800,10 @@ def register_voice(bot: commands.Bot) -> None:
         _ack_name = re.sub(r"^https?://\S*", "link", query)[:80]
         if not was_connected and vc and vc.channel:
             status = await ctx.send(embed=_embed(
-                f"🔊 Entrei em **{vc.channel.name}**\n🔎 Procurando **{_ack_name}**..."
+                tr(lang, "music.join_searching", channel=vc.channel.name, name=_ack_name)
             ))
         else:
-            status = await ctx.send(embed=_embed(f"🔎 Procurando **{_ack_name}**..."))
+            status = await ctx.send(embed=_embed(tr(lang, "music.searching", name=_ack_name)))
 
         is_url = bool(re.match(r"^https?://", query))
 
@@ -6841,6 +6849,7 @@ def register_voice(bot: commands.Bot) -> None:
                 kind="playlist",
                 title=pl_data.get("title") or "Playlist",
                 requester=req,
+                lang=lang,
                 thumbnail=pl_data.get("thumbnail") or "",
                 track_count=added,
                 playlist_duration_sec=added_dur or pl_data.get("duration") or 0,
@@ -6985,7 +6994,7 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.history.append(track_display)
                 if len(sess.history) > 50:
                     sess.history = sess.history[-50:]
-                await status.edit(embed=_embed(f"🎵 Tocando: **{track_display[:100]}**"))
+                await status.edit(embed=_embed(tr(lang, "music.playing", title=track_display[:100])))
             else:
                 player.queue.put(track)
                 req = ctx.author.display_name or str(ctx.author)
@@ -6993,7 +7002,7 @@ def register_voice(bot: commands.Bot) -> None:
                 eta = _queue_eta_sec(sess)
                 _lbl_q = getattr(track, "uri", "") or query
                 await status.edit(embed=_embed_music_added(
-                    kind="track", title=track_display, requester=req,
+                    kind="track", title=track_display, requester=req, lang=lang,
                     duration_sec=track_dur_sec, position=pos,
                     queue_total=pos, eta_sec=eta,
                     source_label=_track_source_label(_lbl_q, resolved_platform=bool(_detect_music_platform(_lbl_q))),
@@ -7178,6 +7187,7 @@ def register_voice(bot: commands.Bot) -> None:
                 kind="track",
                 title=display,
                 requester=req,
+                lang=lang,
                 duration_sec=track_dur,
                 position=pos,
                 queue_total=len(sess.queue_display) + (1 if sess.current_song else 0),
@@ -8203,7 +8213,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not session:
             await _slash_reply(interaction, tr(lang, "slash.queue.no_session"))
             return
-        q_em = _format_queue_embed(session)
+        q_em = _format_queue_embed(session, lang)
         if not q_em:
             await _slash_reply(interaction, tr(lang, "slash.queue.empty"))
             return

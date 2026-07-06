@@ -612,4 +612,58 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "\n\n_(answer shortened — ask for more detail if needed)_",
         "es": "\n\n_(respuesta acortada — pide más detalle si hace falta)_",
     },
+    "music.searching": {
+        "pt": "🔎 Procurando **{name}**...",
+        "en": "🔎 Searching **{name}**...",
+        "es": "🔎 Buscando **{name}**...",
+    },
+    "music.join_searching": {
+        "pt": "🔊 Entrei em **{channel}**\n🔎 Procurando **{name}**...",
+        "en": "🔊 Joined **{channel}**\n🔎 Searching **{name}**...",
+        "es": "🔊 Entré en **{channel}**\n🔎 Buscando **{name}**...",
+    },
+    "music.playing": {
+        "pt": "🎵 Tocando: **{title}**",
+        "en": "🎵 Now playing: **{title}**",
+        "es": "🎵 Reproduciendo: **{title}**",
+    },
+    "music.track_added.title": {
+        "pt": "🎵 Faixa adicionada",
+        "en": "🎵 Track added",
+        "es": "🎵 Pista agregada",
+    },
+    "music.playlist_added.title": {
+        "pt": "📋 Playlist adicionada",
+        "en": "📋 Playlist added",
+        "es": "📋 Playlist agregada",
+    },
+    "music.field.duration": {"pt": "Duração", "en": "Duration", "es": "Duración"},
+    "music.field.position": {"pt": "Posição na fila", "en": "Queue position", "es": "Posición en cola"},
+    "music.field.eta": {"pt": "Tempo até tocar", "en": "Time until play", "es": "Tiempo hasta tocar"},
+    "music.field.queue_items": {"pt": "Itens na fila", "en": "Items in queue", "es": "Items en cola"},
+    "music.field.tracks": {"pt": "Faixas", "en": "Tracks", "es": "Pistas"},
+    "music.field.est_duration": {
+        "pt": "Duração estimada", "en": "Estimated duration", "es": "Duración estimada",
+    },
+    "music.footer.requester": {
+        "pt": "Pedido por {requester}",
+        "en": "Requested by {requester}",
+        "es": "Pedido por {requester}",
+    },
+    "queue.title": {
+        "pt": "📋 Fila de músicas",
+        "en": "📋 Music queue",
+        "es": "📋 Cola de música",
+    },
+    "queue.eta_total": {
+        "pt": "⏳ Tempo até o fim da fila: **{eta}**",
+        "en": "⏳ Time until queue ends: **{eta}**",
+        "es": "⏳ Tiempo hasta el fin de la cola: **{eta}**",
+    },
+    "queue.more": {
+        "pt": "*... e mais {count}*",
+        "en": "*... and {count} more*",
+        "es": "*... y {count} más*",
+    },
+    "queue.elapsed": {"pt": "decorrido", "en": "elapsed", "es": "transcurrido"},
 }
