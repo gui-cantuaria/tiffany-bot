@@ -53,6 +53,13 @@ def test_single_player():
     assert f.single_player is True
 
 
+def test_horror_genre_matches_title_without_store_tag():
+    from game_recommendations import _genre_ok, GameFilters
+    f = GameFilters(genres=["horror"])
+    assert _genre_ok(["Indie", "RPG"], [], f, title="WORLD OF HORROR")
+    assert not _genre_ok(["Indie", "RPG"], [], f, title="Stardew Valley")
+
+
 def test_returns_game_filters_instance():
     f = _regex_parse_filters("fps steam")
     assert isinstance(f, GameFilters)
@@ -68,6 +75,7 @@ if __name__ == "__main__":
         test_language_pt,
         test_steam_reviews_not_in_regex_fallback,
         test_single_player,
+        test_horror_genre_matches_title_without_store_tag,
         test_returns_game_filters_instance,
     ]
     failed = 0

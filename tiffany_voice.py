@@ -3842,8 +3842,10 @@ def _format_song_and_artist(title: str) -> str:
 
 
 def _embed_now_playing(*, source_label: str, track_title: str) -> discord.Embed:
+    """Platform logo + 'Platform: Song - Artist' (no play icon / no 'Tocando agora')."""
     em = discord.Embed(color=TIFFANY_PINK)
-    line = f"{source_label}: {_format_song_and_artist(track_title)[:200]}"
+    track_line = _format_song_and_artist(track_title)[:200]
+    line = f"{source_label}: {track_line}"
     icon = _platform_icon_url(source_label)
     if icon:
         em.set_author(name=line[:256], icon_url=icon)
@@ -3865,24 +3867,22 @@ async def _post_now_playing(
     em = _embed_now_playing(source_label=src, track_title=track_title)
     q_key = _play_query_key(query)
     msg = session.last_play_status_msg
-    stored_key = _play_query_key(session.last_play_status_query)
-    if msg and stored_key and stored_key == q_key:
+    if msg:
         try:
             await msg.edit(embed=em)
+            session.last_play_status_query = q_key
             return
         except discord.HTTPException:
             log.debug("Could not edit play status to now playing", exc_info=True)
-        finally:
             session.last_play_status_msg = None
             session.last_play_status_query = ""
-    elif session.last_play_status_msg:
-        session.last_play_status_msg = None
-        session.last_play_status_query = ""
     ch = bot.get_channel(session.text_channel_id)
     if not ch or not hasattr(ch, "send"):
         return
     try:
-        await ch.send(embed=em)
+        sent = await ch.send(embed=em)
+        session.last_play_status_msg = sent
+        session.last_play_status_query = q_key
     except discord.HTTPException:
         log.warning("Failed to send now playing in channel %s", session.text_channel_id)
 
@@ -4049,14 +4049,8 @@ def _build_game_recommendations_embed(
 async def _filter_verified_games(
     matches: list[game_recommendations.GameMatch],
 ) -> list[game_recommendations.GameMatch]:
-    safe: list[game_recommendations.GameMatch] = []
-    for m in matches:
-        if _contains_blocked_content(m.name):
-            continue
-        if await _should_block_content(m.name):
-            continue
-        safe.append(m)
-    return safe
+    """Store-verified titles: literal blocklist only (skip AI — horror names false-positive)."""
+    return [m for m in matches if not _contains_blocked_content(m.name)]
 
 
 async def _run_game_recommendation(
@@ -4347,17 +4341,23 @@ async def _send_private_notice(
     content: str,
     *,
     delete_after: Optional[float] = 8.0,
+    interaction: Optional[discord.Interaction] = None,
 ) -> None:
-    """Deliver a sensitive/punishment-type notice (content refusal, anti-spam,
-    rate limit) privately in the user's DM so they aren't exposed in the channel.
-    Falls back to a discreet auto-deleting channel message if the user's DMs are closed."""
+    """Deliver a sensitive/punishment-type notice privately (DM first).
+    Falls back to ephemeral slash reply, then a discreet auto-deleting channel message."""
     em = _embed(content)
     try:
         if user is not None:
             await user.send(embed=em)
             return
     except (discord.Forbidden, discord.HTTPException):
-        pass  # DMs closed/blocked — fall back to the channel
+        pass
+    if interaction is not None:
+        try:
+            await _slash_reply(interaction, content, ephemeral=True)
+            return
+        except discord.HTTPException:
+            pass
     try:
         if channel is not None and hasattr(channel, "send"):
             import random
@@ -4367,6 +4367,42 @@ async def _send_private_notice(
             await channel.send(embed=fallback_em, delete_after=delete_after)
     except discord.HTTPException:
         pass
+
+
+async def _enforce_guidelines(
+    ctx: commands.Context,
+    reason: str,
+    *,
+    interaction: Optional[discord.Interaction] = None,
+) -> None:
+    """Delete violating command message and notify the user with the removal reason."""
+    if ctx.message and ctx.guild and _can_delete_in_channel(ctx.message):
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
+    await _send_private_notice(
+        ctx.author, ctx.channel, reason, interaction=interaction,
+    )
+
+
+async def _ctx_reply(
+    ctx: commands.Context,
+    content: str | discord.Embed,
+    **kwargs,
+) -> Optional[discord.Message]:
+    """Reply to the user's command message (Discord reply thread)."""
+    embed = content if isinstance(content, discord.Embed) else _embed(content)
+    ref = ctx.message
+    try:
+        return await ctx.send(
+            embed=embed,
+            reference=ref,
+            mention_author=False,
+            **kwargs,
+        )
+    except discord.HTTPException:
+        return await ctx.send(embed=embed, **kwargs)
 
 
 async def _ensure_opus() -> None:
@@ -7042,7 +7078,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Early block (instant, literal): catches typed text. AI runs later
         # in background on worker — does not delay playback.
         if not re.match(r"^https?://", query) and _contains_blocked_content(query):
-            await ctx.send(embed=_embed(_pick_blocked_reply()))
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
         _stats["commands_used"] += 1
         lang = _ctx_lang(ctx)
@@ -7258,7 +7294,13 @@ def register_voice(bot: commands.Bot) -> None:
                 sess.history.append(track_display)
                 if len(sess.history) > 50:
                     sess.history = sess.history[-50:]
-                await status.edit(embed=_embed(tr(lang, "music.playing", title=track_display[:100])))
+                await status.edit(embed=_embed_now_playing(
+                    source_label=_track_source_label(
+                        getattr(track, "uri", "") or query,
+                        resolved_platform=bool(_detect_music_platform(query)),
+                    ),
+                    track_title=track_display[:200],
+                ))
                 asyncio.create_task(_bg_moderation_guard(sess, vc, bot, track_display, _lv_src))
             else:
                 player.queue.put(track)
@@ -7399,7 +7441,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await status.delete()
             except discord.HTTPException:
                 pass
-            await ctx.send(embed=_embed(_pick_blocked_reply()))
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
 
         # Duplicate detection: check if song already playing or in queue
@@ -7485,41 +7527,41 @@ def register_voice(bot: commands.Bot) -> None:
         ]
 
         if not (question and question.strip()) and not image_urls:
-            await ctx.send(embed=_embed("💬 Uso: `t!c <pergunta>` — ou anexe uma imagem."))
+            await _ctx_reply(ctx, "💬 Uso: `t!c <pergunta>` — ou anexe uma imagem.")
             return
         question = question.strip() if question else ""
 
         nested = _nested_command_hint(question)
         if nested:
-            await ctx.send(embed=_embed(nested), delete_after=18)
+            await _ctx_reply(ctx, nested, delete_after=18)
             return
 
         question = _normalize_chat_question(question)
         if not question and not image_urls:
-            await ctx.send(embed=_embed("💬 Uso: `t!c <pergunta>` — sem repetir meu nome."))
+            await _ctx_reply(ctx, "💬 Uso: `t!c <pergunta>` — sem repetir meu nome.")
             return
 
         zoeira = _try_chat_zoeira_reply(question, user_id=ctx.author.id)
         if zoeira:
-            await ctx.send(embed=_embed(f"💬 {zoeira}"))
+            await _ctx_reply(ctx, f"💬 {zoeira}")
             _add_to_context(ctx.author.id, question, zoeira)
             return
 
         if question and await _should_block_content(question):
-            await ctx.send(embed=_embed(_pick_blocked_reply()))
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
 
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
-            await ctx.send(embed=_embed(f"⏳ Aguarde {remaining}s antes de perguntar novamente."))
+            await _ctx_reply(ctx, f"⏳ Aguarde {remaining}s antes de perguntar novamente.")
             return
         gid, uid = _ai_rl_ids(ctx)
         ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid)
         if not ok:
-            await ctx.send(embed=_embed(_rate_limit_message(lang, reason)), delete_after=8)
+            await _ctx_reply(ctx, _rate_limit_message(lang, reason), delete_after=8)
             return
 
-        thinking = await ctx.send(embed=_embed("🧠 Pensando..."))
+        thinking = await _ctx_reply(ctx, "🧠 Pensando...")
         answer = await _answer_question(
             question, gid, None, None,
             image_urls=image_urls if image_urls else None,
@@ -7528,9 +7570,12 @@ def register_voice(bot: commands.Bot) -> None:
         if not (answer or "").strip():
             answer = "Não consegui formular uma resposta agora. Tenta de novo?"
         try:
-            await thinking.edit(embed=_embed(f"💬 {answer}"))
+            if thinking:
+                await thinking.edit(embed=_embed(f"💬 {answer}"))
+            else:
+                await _ctx_reply(ctx, f"💬 {answer}")
         except discord.HTTPException:
-            await ctx.send(embed=_embed(f"💬 {answer}"))
+            await _ctx_reply(ctx, f"💬 {answer}")
 
     @bot.command(
         name="g",
@@ -7563,11 +7608,18 @@ def register_voice(bot: commands.Bot) -> None:
         if mode == "ok":
             history_line = tr(lang, "game.repeat.note", query=query[:120])
 
-        status = await ctx.send(embed=_embed(tr(lang, "game.searching")))
+        if _contains_blocked_content(query) or await _should_block_content(query):
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
+            return
+
+        status = await _ctx_reply(ctx, tr(lang, "game.searching"))
         result = await _run_game_recommendation(
             ctx.guild, ctx.author, query, history_line=history_line,
         )
-        await status.edit(embed=result)
+        if status:
+            await status.edit(embed=result)
+        else:
+            await _ctx_reply(ctx, result)
 
     @bot.command(name="l", aliases=["loop", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop")
     async def cmd_loop(ctx: commands.Context):
@@ -7855,7 +7907,7 @@ def register_voice(bot: commands.Bot) -> None:
         # before any network probe/search. Catches blocked terms even when a URL
         # probe would later resolve to a "clean" title.
         if await _should_block_content(raw_query or search_term):
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
         if re.match(r"^https?://", search_term):
             source_url = _normalize_music_url(search_term)
@@ -7871,7 +7923,7 @@ def register_voice(bot: commands.Bot) -> None:
         search_term = re.sub(r"^(▶ Auto:\s*|ytsearch\d*:)", "", search_term).strip()[:100]
 
         if await _should_block_media(search_term, source_url or raw_query):
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
 
         status = await ctx.send(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."))
@@ -7884,7 +7936,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await status.delete()
             except discord.HTTPException:
                 pass
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
         # Truncate to fit embed (4096 chars)
         if len(lyrics) > 3800:
@@ -7992,7 +8044,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed("⚠️ Uso: `t!su <URL>` — link completo com https://"))
             return
         if _contains_blocked_content(url):
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:

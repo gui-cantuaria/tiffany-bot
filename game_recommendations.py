@@ -255,15 +255,15 @@ def _regex_parse_filters(text: str) -> GameFilters:
 def _search_term(filters: GameFilters) -> str:
     parts: list[str] = []
     for g in filters.genres:
-        if _norm(g) in HORROR_HINTS or "terror" in _norm(g):
-            parts.extend(["horror", "terror"])
+        gn = _norm(g)
+        if gn in HORROR_HINTS or gn == "terror":
+            parts.append("horror")
         else:
             parts.append(g)
     if filters.multiplayer:
         parts.append("multiplayer")
     parts.extend(filters.developers[:2])
     parts.extend(filters.tags[:2])
-    parts.extend(filters.genres[:2])
     seen: set[str] = set()
     out: list[str] = []
     for p in parts:
@@ -271,7 +271,7 @@ def _search_term(filters: GameFilters) -> str:
         if k and k not in seen:
             seen.add(k)
             out.append(p)
-    return " ".join(out[:5]) or "game"
+    return " ".join(out[:4]) or "games"
 
 
 def _price_ok_brl(is_free: bool, price_cents: Optional[int], filters: GameFilters) -> bool:
@@ -289,13 +289,25 @@ def _price_ok_brl(is_free: bool, price_cents: Optional[int], filters: GameFilter
     return True
 
 
-def _genre_ok(genres: list[str], tags: list[str], filters: GameFilters) -> bool:
+def _genre_ok(
+    genres: list[str],
+    tags: list[str],
+    filters: GameFilters,
+    *,
+    title: str = "",
+) -> bool:
     if not filters.genres:
         return True
     hay = _norm(" ".join(genres + tags))
+    title_n = _norm(title)
     for g in filters.genres:
         gn = _norm(g)
         if gn in hay or (gn in ("terror", "horror") and any(h in hay for h in HORROR_HINTS)):
+            return True
+        # Steam often omits Horror/Terror genre tags — match title when user asked horror.
+        if gn in ("terror", "horror") and any(h in title_n for h in HORROR_HINTS):
+            return True
+        if gn in title_n:
             return True
     return False
 
@@ -369,7 +381,8 @@ def _steam_to_match(detail: dict, app_id: int, filters: GameFilters) -> Optional
     genres = [g.get("description", "") for g in (detail.get("genres") or []) if g.get("description")]
     categories = detail.get("categories") or []
     tags = [c.get("description", "") for c in categories if c.get("description")]
-    if not _genre_ok(genres, tags, filters):
+    name = detail.get("name") or f"App {app_id}"
+    if not _genre_ok(genres, tags, filters, title=name):
         return None
     if not _multiplayer_ok(categories, tags, filters):
         return None
@@ -386,7 +399,7 @@ def _steam_to_match(detail: dict, app_id: int, filters: GameFilters) -> Optional
     else:
         price_label = "—"
     return GameMatch(
-        name=detail.get("name") or f"App {app_id}",
+        name=name,
         store="Steam",
         price_label=price_label,
         url=f"https://store.steampowered.com/app/{app_id}/",
@@ -476,7 +489,7 @@ def _epic_to_match(node: dict, filters: GameFilters) -> Optional[GameMatch]:
         return None
     tags_raw = node.get("tags") or node.get("offerTags") or []
     tags = [str(t.get("name") if isinstance(t, dict) else t) for t in tags_raw]
-    if not _genre_ok([], tags, filters):
+    if not _genre_ok([], tags, filters, title=str(title)):
         return None
     if not _multiplayer_ok([], tags, filters):
         return None
