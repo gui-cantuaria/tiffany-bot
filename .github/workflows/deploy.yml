@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '*.py'
+      - '**.py'
       - 'scripts/**'
       - 'requirements.txt'
       - 'Dockerfile'
@@ -20,22 +20,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.4.0
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          python test_dedup.py
+          python test_game_recommendations.py
+          python test_offers_filters.py
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
         env:
           SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          if [ -z "$SSH_KEY" ]; then
+            echo "VPS_SSH_KEY secret is empty — add the private key in GitHub Settings → Secrets."
+            exit 1
+          fi
+          # Preserve multiline key; strip Windows CR that breaks libcrypto.
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
 
       - name: Deploy via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "VPS_HOST secret is empty — add the VPS IP in GitHub Settings → Secrets."
+            exit 1
+          fi
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \
-            root@${{ secrets.VPS_HOST }} "export DEPLOY_MODE=systemd && bash /opt/tiffany-bot/scripts/deploy.sh"
+            root@"$VPS_HOST" "export DEPLOY_MODE=systemd && bash /opt/tiffany-bot/scripts/deploy.sh"
