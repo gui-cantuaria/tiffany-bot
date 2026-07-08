@@ -53,9 +53,9 @@ SCAN_POR_FEED = 5
 ENTRADAS_POR_FEED = 3
 MAX_IA_CALLS_POR_CICLO = 3
 MAX_VISION_CALLS_POR_CICLO = 2
-IA_COOLDOWN_SEC = 15
+IA_COOLDOWN_SEC = 10
 POST_SPACING_SEC = 120
-MAX_POSTS_POR_CICLO = 1
+MAX_POSTS_POR_CICLO = 2
 
 # --- Score thresholds ---
 NOTA_MIN_APROVACAO = 80
@@ -2245,7 +2245,7 @@ async def on_ready():
     except Exception as e:
         log.warning(f"Error syncing slash commands: {e}")
     if _voice_available and tiffany_voice:
-        await tiffany_voice.start_presence_rotation(discord_client)
+        await tiffany_voice.start_warp_monitor(discord_client)
     if not verificar_feeds.is_running():
         verificar_feeds.start()
 

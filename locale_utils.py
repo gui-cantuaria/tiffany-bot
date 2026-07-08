@@ -666,4 +666,108 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "*... y {count} más*",
     },
     "queue.elapsed": {"pt": "decorrido", "en": "elapsed", "es": "transcurrido"},
+    "voice.module_disabled": {
+        "pt": "⚠️ Módulo de voz **desativado** (`VOICE_ENABLED=0` no `.env`).\nAltere para `VOICE_ENABLED=1` e reinicie o bot.",
+        "en": "⚠️ Voice module **disabled** (`VOICE_ENABLED=0` in `.env`).\nSet `VOICE_ENABLED=1` and restart the bot.",
+        "es": "⚠️ Módulo de voz **desactivado** (`VOICE_ENABLED=0` en `.env`).\nCambia a `VOICE_ENABLED=1` y reinicia el bot.",
+    },
+    "voice.err.not_in_voice": {
+        "pt": "⚠️ Não estou em canal de voz.\nUse **`t!p`** para eu entrar.",
+        "en": "⚠️ I'm not in a voice channel.\nUse **`t!p`** to join.",
+        "es": "⚠️ No estoy en un canal de voz.\nUsa **`t!p`** para que entre.",
+    },
+    "voice.err.nothing_playing": {
+        "pt": "⚠️ Nada tocando no momento. Use **`t!p`** primeiro.",
+        "en": "⚠️ Nothing playing right now. Use **`t!p`** first.",
+        "es": "⚠️ Nada sonando ahora. Usa **`t!p`** primero.",
+    },
+    "voice.err.no_music_now": {
+        "pt": "⚠️ Não tem música tocando agora.",
+        "en": "⚠️ No music is playing right now.",
+        "es": "⚠️ No hay música sonando ahora.",
+    },
+    "voice.rejoin.back": {
+        "pt": "🔄 Voltei! Estou pronta.",
+        "en": "🔄 I'm back! Ready to go.",
+        "es": "🔄 ¡Volví! Lista para tocar.",
+    },
+    "voice.rejoin.restored": {
+        "pt": "🔄 Voltei! Restaurando **{count}** música(s) na fila.",
+        "en": "🔄 I'm back! Restoring **{count}** track(s) in the queue.",
+        "es": "🔄 ¡Volví! Restaurando **{count}** pista(s) en la cola.",
+    },
+    "game.usage.repeat": {
+        "pt": "**Repetir última busca:** `t!g repetir` (ou `repeat`, `última`)",
+        "en": "**Repeat last search:** `t!g repeat` (or `repetir`, `last`)",
+        "es": "**Repetir última búsqueda:** `t!g repetir` (o `repeat`, `última`)",
+    },
+    "game.repeat.empty": {
+        "pt": "📭 Você ainda não fez nenhuma busca de jogos.\nUse **`t!g`** com filtros (ex.: `t!g terror até 20 reais`).",
+        "en": "📭 You haven't searched for games yet.\nUse **`t!g`** with filters (e.g. `t!g horror under 20 BRL`).",
+        "es": "📭 Aún no buscaste juegos.\nUsa **`t!g`** con filtros (ej.: `t!g terror hasta 20 reales`).",
+    },
+    "game.repeat.note": {
+        "pt": "🔁 Repetindo: **{query}**",
+        "en": "🔁 Repeating: **{query}**",
+        "es": "🔁 Repitiendo: **{query}**",
+    },
+    "status.title": {
+        "pt": "🎀 Tiffany · Status",
+        "en": "🎀 Tiffany · Status",
+        "es": "🎀 Tiffany · Status",
+    },
+    "status.not_in_voice": {
+        "pt": "⚠️ Não estou em canal de voz.\nUse **`t!p`** para eu entrar.",
+        "en": "⚠️ I'm not in a voice channel.\nUse **`t!p`** to join.",
+        "es": "⚠️ No estoy en un canal de voz.\nUsa **`t!p`** para que entre.",
+    },
+    "status.field.channel": {"pt": "Canal", "en": "Channel", "es": "Canal"},
+    "status.channel_value": {
+        "pt": "{channel} · {humans} pessoa(s)",
+        "en": "{channel} · {humans} person(s)",
+        "es": "{channel} · {humans} persona(s)",
+    },
+    "status.field.now_playing": {
+        "pt": "▶️ Tocando ({src})",
+        "en": "▶️ Now playing ({src})",
+        "es": "▶️ Reproduciendo ({src})",
+    },
+    "status.field.now_playing_plain": {
+        "pt": "▶️ Tocando",
+        "en": "▶️ Now playing",
+        "es": "▶️ Reproduciendo",
+    },
+    "status.nothing_playing": {
+        "pt": "Nada no momento",
+        "en": "Nothing right now",
+        "es": "Nada ahora",
+    },
+    "status.field.queue": {"pt": "📋 Fila", "en": "📋 Queue", "es": "📋 Cola"},
+    "status.queue_count": {
+        "pt": "{count} música(s)",
+        "en": "{count} track(s)",
+        "es": "{count} pista(s)",
+    },
+    "status.queue_eta_suffix": {
+        "pt": " · ~{eta} restantes",
+        "en": " · ~{eta} left",
+        "es": " · ~{eta} restantes",
+    },
+    "status.field.modes": {"pt": "Modos", "en": "Modes", "es": "Modos"},
+    "status.modes_none": {"pt": "Nenhum", "en": "None", "es": "Ninguno"},
+    "status.mode.loop": {"pt": "🔁 Loop", "en": "🔁 Loop", "es": "🔁 Loop"},
+    "status.mode.autoplay": {"pt": "▶️ Autoplay", "en": "▶️ Autoplay", "es": "▶️ Autoplay"},
+    "status.mode.stay": {"pt": "🔒 24/7", "en": "🔒 24/7", "es": "🔒 24/7"},
+    "status.field.voice_cmds": {
+        "pt": "🎤 Comandos por voz",
+        "en": "🎤 Voice commands",
+        "es": "🎤 Comandos por voz",
+    },
+    "status.voice_on": {"pt": "Ativos", "en": "Active", "es": "Activos"},
+    "status.voice_off": {"pt": "Indisponíveis", "en": "Unavailable", "es": "No disponibles"},
+    "status.field.warp": {
+        "pt": "🌐 WARP (YouTube)",
+        "en": "🌐 WARP (YouTube)",
+        "es": "🌐 WARP (YouTube)",
+    },
 }

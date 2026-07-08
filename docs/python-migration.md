@@ -19,6 +19,7 @@ Tiffany in its own interpreter. **Already wired up in the repo:**
 - `scripts/run.sh` auto-selects `.venv/bin/python` if it exists, else system python3.
 - `scripts/tiffany-bot.service` runs via `run.sh`.
 - `scripts/deploy.sh` creates the venv and installs deps into it automatically.
+- Graceful deploy wait (music queue drain check) uses `.venv/bin/python` when present, not system `python3`.
 
 So the only manual step on the VPS is creating the venv once:
 

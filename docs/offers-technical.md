@@ -17,9 +17,12 @@ Detailed reference for `offers_cog.py` internals (the active offers module, load
 - First cycle runs immediately on startup
 
 ## Category Variety / Prioritization
-- Enrichment ordering by `_CATEGORY_PRIORITY` (CPU/GPU/RAM = priority 1)
-- Diversification: round-robin across categories, max 2 per category per cycle
-- Accessories demoted to priority 4
+- Feed focus: **PC hardware** — parts, notebooks, monitors, prebuilt systems
+- Enrichment ordering by `_CATEGORY_PRIORITY` (parts + Monitor/Notebook/PC Gamer = priority 1)
+- Selection: parts reserved first, then monitors/notebooks/systems, then round-robin fill
+- Per cycle: up to 2 monitors / 2 notebooks / 2 PC gamer; parts capped at 1 each for variety
+- Peripherals (mouse, teclado, headset) **not scraped** and **not posted** (`_PER_CAT_POST_LIMIT=0`)
+- Network adapters: optional, stricter filters, max 1/cycle
 
 ## Filters
 - Discount: 15-100%
@@ -27,6 +30,8 @@ Detailed reference for `offers_cog.py` internals (the active offers module, load
 - Relevance filter (`_is_irrelevant`): rejects non-IT products
 - Stars >= 4.3, sales >= 50
 - Active whitelist: Terabyte, ShopInfo, Amazon, Mercado Livre, Shopee, AliExpress
+- **Pending (commented out in code — not posted until re-enabled):** KaBuM, Magalu, Pichau — affiliate helpers exist in `affiliate_config.py` but `_store_allowed()` rejects them today
+- Enrichment: parallel batch (`OFFERS_ENRICH_CONCURRENCY`, default 4) with short delay per slot — replaces sequential `sleep(1.5)` loop
 - At least one quality metric, or discount >= 25% if no data (`DESCONTO_SEM_METRICA`)
 - Rede/adaptadores: stricter filters (stars >= 4.5, sales >= 100, discount >= 40%)
 

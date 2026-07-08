@@ -104,8 +104,12 @@ journalctl -u tiffany-bot -n 80 --no-pager | grep -Ei "Session created|VOICE LIS
 bot pauses playback when it hears a loud voice, then captures the command (the
 pre-pause audio is now preserved and merged, so short commands aren't truncated).
 
-**Key STT env vars:** `STT_GEMINI_FALLBACK=1` (also gates Whisper — misleading name),
+**Key STT env vars:** `STT_OPENROUTER_ENABLED=1` (preferred; legacy alias `STT_GEMINI_FALLBACK` also gates Whisper **and** Gemini chat STT),
 `STT_OPENROUTER_MODEL`, `STT_CHAT_MODEL`, `DEBUG_STT=1` (saves `/tmp/tiffany_debug_audio.wav`).
+
+**STT pipeline (early exit):** Whisper → (Gemini if no wake word) → stop if wake word found; else Google → Vosk (PT only). Skips later engines when a good wake-word hit is found.
+
+**WARP monitoring:** `WARP_MONITOR=1` (default) posts to `DISCORD_WEBHOOK_HEALTHCHECK` when proxy at `127.0.0.1:40000` goes down/up. Interval: `WARP_MONITOR_INTERVAL_SEC` (default 300).
 
 ## Known Issues
 - Opus decoder may throw `OpusError: corrupted stream` — monkey-patched to return silence frames

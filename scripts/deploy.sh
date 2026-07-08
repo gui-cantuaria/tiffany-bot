@@ -25,7 +25,7 @@ git checkout origin/main -- \
 git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service \
   scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
   scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
-  CLAUDE.md docs/voice-technical.md docs/python-migration.md docs/deploy-automation.md 2>/dev/null || true
+  CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
@@ -38,10 +38,15 @@ fi
 
 # --- Deploy gracioso: espera música terminar antes de reiniciar ---
 VOICE_STATE="/opt/tiffany-bot/voice_state.json"
+VENV="/opt/tiffany-bot/.venv"
+PYTHON="${VENV}/bin/python"
+if [ ! -x "$PYTHON" ]; then
+    PYTHON="python3"
+fi
 MAX_WAIT=120
 WAITED=0
 
-if [ -f "$VOICE_STATE" ] && python3 -c "
+if [ -f "$VOICE_STATE" ] && "$PYTHON" -c "
 import json, sys
 with open('$VOICE_STATE') as f:
     data = json.load(f)
@@ -54,7 +59,7 @@ sys.exit(1)
     while [ $WAITED -lt $MAX_WAIT ]; do
         sleep 5
         WAITED=$((WAITED + 5))
-        if ! python3 -c "
+        if ! "$PYTHON" -c "
 import json, sys
 with open('$VOICE_STATE') as f:
     data = json.load(f)
@@ -135,7 +140,6 @@ if [ -f scripts/tiffany-warp-healthcheck.timer ]; then
 fi
 
 # Prefer the project venv (Python 3.11+); create it if missing.
-VENV="/opt/tiffany-bot/.venv"
 if [ ! -x "$VENV/bin/python" ]; then
     echo "[deploy] Criando venv..."
     (python3.11 -m venv "$VENV" 2>/dev/null) || python3 -m venv "$VENV"

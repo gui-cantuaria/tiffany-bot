@@ -33,7 +33,7 @@ recommend_games(query, openrouter_client)          [game_recommendations.py]
   │      Returns JSON → GameFilters + games[] (official titles only, 3–5 names)
   │
   └─ 2. Fallback on JSON/parse failure:
-         _regex_parse_filters(query) → suggest_game_names() (second AI call)
+         `_regex_parse_filters(query)` → empty AI name list → catalog search only
   │
   ▼
 validate_suggested_games(names, filters)             [game_recommendations.py]
@@ -106,7 +106,8 @@ All limits are in-memory (no JSON persistence). Applied in `cmd_game` before any
 
 | Layer | Constant | Value | Scope |
 |---|---|---|---|
-| Per-command spam | `_CMD_RL_DEFAULT` | **1.5 s** | Per user, command key `"g"` (not in `_CMD_COOLDOWN_MAP`) |
+| Per-command spam | `_CMD_RL_DEFAULT` | **1.0 s** | Per user, command key from name (see `_CMD_COOLDOWN_MAP`) |
+| Game command map | `_CMD_COOLDOWN_MAP["g"]` | **2.0 s** | Extra guard for `t!g` (global `@bot.check` only — do not duplicate in handler) |
 | AI command cooldown | `_CMD_COOLDOWN_SEC` | **8 s** | Minimum gap between AI commands per user |
 | AI abuse window | `_USER_RL_WINDOW` / `_USER_RL_MAX` | **60 s / 3 calls** | Then `_USER_RL_BLOCK_SEC` = **40 s** block |
 | Global AI | `_GLOBAL_RL_WINDOW` / `_GLOBAL_RL_MAX` | **60 s / 15** | All AI features |
@@ -133,7 +134,8 @@ Runtime state beside the bot root (same directory as `chat_memory.json`). **Not 
 
 - Key: Discord user id (string).
 - Updated after each successful recommendation (validated list non-empty).
-- Used for optional “repeat last search” / debugging; trim old entries periodically if file grows (e.g. keep last N users or 30-day TTL in code).
+- **Repeat:** `t!g repetir` / `repeat` / `última` re-runs the saved `query` for that user.
+- **TTL:** entries older than `GAME_HISTORY_TTL_DAYS` (default 30) are pruned on load/save; cap `GAME_HISTORY_MAX_USERS` (default 2000).
 - **Backup:** include in VPS migration (`scp *.json`) — see `docs/deploy-automation.md` → Runtime JSON state.
 
 ## Voice phrase
