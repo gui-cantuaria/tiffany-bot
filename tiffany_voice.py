@@ -8260,10 +8260,10 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if before.color == after.color:
             return
-        await _send_pink_thanks(after.guild)
+        await _send_pink_thanks(after.guild, discord.AuditLogAction.member_role_update)
 
-    async def _send_pink_thanks(guild: discord.Guild) -> None:
-        """Find a channel and send the pink easter egg message."""
+    async def _send_pink_thanks(guild: discord.Guild, action: discord.AuditLogAction) -> None:
+        """Find who gave the bot a pink name and DM them (or fallback to a channel)."""
         gid = guild.id
         if gid in _PINK_THANKED_GUILDS:
             return
@@ -8271,6 +8271,27 @@ def register_voice(bot: commands.Bot) -> None:
         if not me or not _is_pink_shade(me.color):
             return
         _PINK_THANKED_GUILDS.add(gid)
+        import random as _rng
+        msg = _rng.choice(_PINK_THANK_MSGS)
+        # Try to find who did it via audit log and DM them
+        responsible: Optional[discord.User] = None
+        try:
+            async for entry in guild.audit_logs(limit=5, action=action):
+                target_id = getattr(entry.target, "id", None)
+                # member_role_update -> target is the member; verify it's the bot
+                if action == discord.AuditLogAction.member_role_update and target_id != me.id:
+                    continue
+                responsible = entry.user
+                break
+        except discord.Forbidden:
+            pass
+        if responsible and not responsible.bot:
+            try:
+                await responsible.send(embed=_embed(msg))
+                return
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+        # Fallback: send in a guild channel
         channel = guild.system_channel
         if not channel or not channel.permissions_for(me).send_messages:
             for ch in guild.text_channels:
@@ -8279,9 +8300,8 @@ def register_voice(bot: commands.Bot) -> None:
                     break
         if not channel:
             return
-        import random as _rng
         try:
-            await channel.send(embed=_embed(_rng.choice(_PINK_THANK_MSGS)))
+            await channel.send(embed=_embed(msg))
         except Exception:
             pass
 
@@ -8296,7 +8316,7 @@ def register_voice(bot: commands.Bot) -> None:
         me = guild.me
         if not me or after not in me.roles:
             return
-        await _send_pink_thanks(guild)
+        await _send_pink_thanks(guild, discord.AuditLogAction.role_update)
 
     @bot.listen("on_voice_state_update")
     async def _on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
