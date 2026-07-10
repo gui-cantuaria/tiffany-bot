@@ -62,7 +62,10 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/processador/s/",
     "/promocoes/placa-mae/s/",
     "/promocoes/gabinete/s/",
-    # SSD/pasta térmica/fonte often appear here — filtered by title to parts only
+    "/promocoes/ssd/s/",              # re-added: silent skip if 404
+    "/promocoes/fonte/s/",            # re-added: silent skip if 404
+    "/promocoes/pasta-termica/s/",    # re-added: silent skip if 404
+    # SSD/pasta térmica/fonte also appear here — filtered by title to parts only
     "/promocoes/hardware-perifericos/s/",
     # === Systems — notebooks, monitors, prebuilt (high search volume) ===
     "/promocoes/monitor/s/",
@@ -71,7 +74,6 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/pc-gamer/s/",
     "/promocoes/roteador-e-repetidor/s/",
     # Peripherals (mouse/teclado/headset) intentionally omitted — feed focuses on hardware.
-    # Removed (404 on Promobit since Jun/2026): ssd, pasta-termica, mousepad, etc.
 ]
 
 # Full whitelist (for when all affiliate programs are active)
@@ -194,6 +196,7 @@ _SLUG_TO_CATEGORY = {
     "memoria-ram": "Memória RAM",
     "mesa-digitalizadora": "Mesa digitalizadora",
     "gabinete": "Gabinete",
+    "fonte": "Fonte",
     "mousepad": "Mousepad",
     "pasta-termica": "Pasta Térmica",
     "tablet": "Tablet",
