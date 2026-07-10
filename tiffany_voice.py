@@ -8253,23 +8253,28 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.listen("on_member_update")
     async def _pink_name_easter_egg(before: discord.Member, after: discord.Member) -> None:
-        """Send a cute thank-you when someone gives the bot a pink name."""
+        """Send a cute thank-you when someone gives the bot a pink role."""
         if after.id != bot.user.id:
             return
         if not after.guild:
             return
-        gid = after.guild.id
-        if gid in _PINK_THANKED_GUILDS:
-            return
         if before.color == after.color:
             return
-        if not _is_pink_shade(after.color):
+        await _send_pink_thanks(after.guild)
+
+    async def _send_pink_thanks(guild: discord.Guild) -> None:
+        """Find a channel and send the pink easter egg message."""
+        gid = guild.id
+        if gid in _PINK_THANKED_GUILDS:
+            return
+        me = guild.me
+        if not me or not _is_pink_shade(me.color):
             return
         _PINK_THANKED_GUILDS.add(gid)
-        channel = after.guild.system_channel
-        if not channel or not channel.permissions_for(after.guild.me).send_messages:
-            for ch in after.guild.text_channels:
-                if ch.permissions_for(after.guild.me).send_messages:
+        channel = guild.system_channel
+        if not channel or not channel.permissions_for(me).send_messages:
+            for ch in guild.text_channels:
+                if ch.permissions_for(me).send_messages:
                     channel = ch
                     break
         if not channel:
@@ -8279,6 +8284,19 @@ def register_voice(bot: commands.Bot) -> None:
             await channel.send(embed=_embed(_rng.choice(_PINK_THANK_MSGS)))
         except Exception:
             pass
+
+    @bot.listen("on_guild_role_update")
+    async def _pink_role_color_easter_egg(before: discord.Role, after: discord.Role) -> None:
+        """Detect when a role the bot has changes color to pink."""
+        if before.color == after.color:
+            return
+        guild = after.guild
+        if not guild:
+            return
+        me = guild.me
+        if not me or after not in me.roles:
+            return
+        await _send_pink_thanks(guild)
 
     @bot.listen("on_voice_state_update")
     async def _on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
