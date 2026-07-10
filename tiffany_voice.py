@@ -532,7 +532,11 @@ def _decode_hex(text: str) -> str:
 
 def _decode_leet(text: str) -> str:
     """Reverse basic leetspeak (h1tl3r → hitler, n4z1 → nazi)."""
-    leet_map = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
+    leet_map = {
+        "0": "o", "1": "i", "2": "z", "3": "e", "4": "a", "5": "s",
+        "6": "b", "7": "t", "8": "b", "9": "g", "@": "a", "$": "s",
+        "!": "i", "|": "l",
+    }
     result = "".join(leet_map.get(c, c) for c in text.lower())
     return result if result != text.lower() else ""
 
@@ -673,7 +677,10 @@ async def _ai_content_is_blocked(text: str) -> bool:
         blocked = _ai_yes_no_is_yes(resp.choices[0].message.content or "")
         _content_mod_cache[key] = blocked
         if len(_content_mod_cache) > 2000:
-            _content_mod_cache.clear()
+            # Evict oldest 25% instead of nuclear clear
+            to_remove = list(_content_mod_cache.keys())[:500]
+            for k in to_remove:
+                _content_mod_cache.pop(k, None)
         return blocked
     except Exception as e:
         log.debug("AI content moderation failed: %s", e)
@@ -789,7 +796,9 @@ async def _ai_thumbnail_is_blocked(image_url: str) -> bool:
         blocked = _ai_yes_no_is_yes(resp.choices[0].message.content or "")
         _thumb_mod_cache[image_url] = blocked
         if len(_thumb_mod_cache) > 2000:
-            _thumb_mod_cache.clear()
+            to_remove = list(_thumb_mod_cache.keys())[:500]
+            for k in to_remove:
+                _thumb_mod_cache.pop(k, None)
         return blocked
     except Exception as e:
         log.debug("AI thumbnail moderation failed: %s", e)
@@ -1220,28 +1229,26 @@ _user_rl_data: dict[int, dict] = {}
 # --- Per-command rate limit (anti-spam, per user) ---
 _CMD_RL_DEFAULT = 1.5
 _CMD_COOLDOWN_MAP: dict[str, float] = {
-    # 1s — quick lookup
-    "np": 1.0, "nowplaying": 1.0,
+    # 1s — quick lookup / display
+    "np": 1.0, "nowplaying": 1.0, "q": 1.0, "queue": 1.0,
     "s": 1.0, "skip": 1.0,
     "d": 1.0, "roll": 1.0, "dice": 1.0,
-    "help": 1.0, "queue": 1.0, "stats": 1.0, "status": 1.0,
-    "play": 2.0, "join": 2.0, "leave": 1.5,
-    "skip": 1.0, "pause": 1.5, "resume": 1.5, "nowplaying": 1.0,
+    "help": 1.0, "stats": 1.0, "status": 1.0,
     # 1.5s — light control
     "pa": 1.5, "pause": 1.5, "re": 1.5, "resume": 1.5,
     "l": 1.5, "loop": 1.5, "lo": 1.5,
-    "cl": 1.5, "clear": 1.5,
+    "cl": 1.5, "clear": 1.5, "leave": 1.5,
     "247": 1.5, "nonstop": 1.5,
     "ap": 1.5, "autoplay": 1.5,
     "sh": 1.5, "shuffle": 1.5,
     "pl": 1.5, "playlist": 1.5,
-    # 2s — network / AI / queue
-    "p": 1.5, "play": 1.5,
+    # 1.5–2s — network / AI / queue
+    "p": 1.5, "play": 1.5, "join": 2.0,
     "r": 1.5, "random": 1.5,
+    "c": 1.5, "chat": 1.5,
     "ff": 2.0, "seek": 2.0,
     "rp": 2.0, "replay": 2.0,
     "ly": 2.0, "lyrics": 2.0,
-    "c": 1.5, "chat": 1.5,
     "g": 2.0, "game": 2.0, "games": 2.0,
     "su": 2.0, "summary": 2.0,
     "player-status": 2.0,
@@ -3842,15 +3849,14 @@ def _format_song_and_artist(title: str) -> str:
 
 
 def _embed_now_playing(*, source_label: str, track_title: str) -> discord.Embed:
-    """Platform logo + 'Platform: Song - Artist' (no play icon / no 'Tocando agora')."""
+    """Platform logo + 'Song - Artist' (clean, no play icon, no 'Tocando agora')."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
-    line = f"{source_label}: {track_line}"
     icon = _platform_icon_url(source_label)
     if icon:
-        em.set_author(name=line[:256], icon_url=icon)
+        em.set_author(name=track_line[:256], icon_url=icon)
     else:
-        em.description = f"**{line}**"
+        em.description = f"**{track_line}**"
     return em
 
 
@@ -5692,7 +5698,24 @@ def _safe_math_eval(expr: str) -> float:
     safe = re.sub(r"[^0-9+\-*/().\s]", "", expr)
     if not safe.strip() or len(safe) > 200:
         raise ValueError("empty or too long")
-    return float(eval(safe, {"__builtins__": {}}, {}))
+    import ast, operator
+    _OPS = {
+        ast.Add: operator.add, ast.Sub: operator.sub,
+        ast.Mult: operator.mul, ast.Div: operator.truediv,
+        ast.USub: operator.neg, ast.UAdd: operator.pos,
+    }
+    def _eval_node(node):
+        if isinstance(node, ast.Expression):
+            return _eval_node(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_eval_node(node.operand))
+        raise ValueError("unsupported expression")
+    tree = ast.parse(safe, mode="eval")
+    return float(_eval_node(tree))
 
 
 def _format_dice_with_math(
@@ -6922,7 +6945,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             total = len(songs)
             if await _playlist_is_blocked(title=name, tracks=songs):
-                await ctx.send(embed=_embed(_pick_blocked_reply()))
+                await _enforce_guidelines(ctx, _pick_blocked_reply())
                 return
             sess, vc = await _ensure_connected(ctx)
             if not sess:
@@ -7131,7 +7154,7 @@ def register_voice(bot: commands.Bot) -> None:
                     await status.delete()
                 except discord.HTTPException:
                     pass
-                await ctx.send(embed=_embed(_pick_blocked_reply()))
+                await _enforce_guidelines(ctx, _pick_blocked_reply())
                 return
             vagas = QUEUE_MAX - fila_atual
             added = 0
@@ -7253,7 +7276,7 @@ def register_voice(bot: commands.Bot) -> None:
                     await status.delete()
                 except discord.HTTPException:
                     pass
-                await ctx.send(embed=_embed(_pick_blocked_reply()))
+                await _enforce_guidelines(ctx, _pick_blocked_reply())
                 return
             # Dedup
             def _normalize_for_dup(s: str) -> str:
@@ -7782,7 +7805,7 @@ def register_voice(bot: commands.Bot) -> None:
             session.queue_display = [d for d, _, _, _ in combined]
             session.queue_durations = [du for _, _, du, _ in combined]
             session.queue_requesters = [r for _, _, _, r in combined]
-            for _, track, _ in combined:
+            for _, track, _, _ in combined:
                 vc.queue.put(track)
             _clear_loop(session)
             if vc.playing:
@@ -8195,6 +8218,68 @@ def register_voice(bot: commands.Bot) -> None:
             except Exception:
                 pass
 
+    # Slash command error handler (app_commands don't trigger on_command_error)
+    @bot.tree.error
+    async def _on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        log.exception("Slash command error /%s: %s", getattr(interaction.command, "name", "?"), error)
+        msg = "❌ Erro ao executar o comando. Tente de novo."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=_embed(msg), ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=_embed(msg), ephemeral=True)
+        except Exception:
+            pass
+
+    # --- Easter egg: thank whoever gives the bot a pink-coloured role ---
+    _PINK_THANKED_GUILDS: set[int] = set()
+    _PINK_THANK_MSGS = [
+        "Obrigada! Finalmente encontrei meu mundo rosa. 💗",
+        "Alguém aqui tem bom gosto! Adorei ficar de rosa. ✨",
+        "Rosa?! Pra mim?! Me sinto especial agora. 💕",
+        "Olha só, até meu nome combina comigo agora. Amei! 🌸",
+        "Quem fez isso tem meu respeito eterno. Rosa é a minha cor. 💖",
+    ]
+
+    def _is_pink_shade(color: discord.Color) -> bool:
+        """Return True if *color* is a pink shade (hue 290-350°, sat>=30%, val>=40%)."""
+        r, g, b = color.r, color.g, color.b
+        if r == 0 and g == 0 and b == 0:
+            return False
+        import colorsys
+        h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+        hue = h * 360
+        return 290 <= hue <= 350 and s >= 0.30 and v >= 0.40
+
+    @bot.listen("on_member_update")
+    async def _pink_name_easter_egg(before: discord.Member, after: discord.Member) -> None:
+        """Send a cute thank-you when someone gives the bot a pink name."""
+        if after.id != bot.user.id:
+            return
+        if not after.guild:
+            return
+        gid = after.guild.id
+        if gid in _PINK_THANKED_GUILDS:
+            return
+        if before.color == after.color:
+            return
+        if not _is_pink_shade(after.color):
+            return
+        _PINK_THANKED_GUILDS.add(gid)
+        channel = after.guild.system_channel
+        if not channel or not channel.permissions_for(after.guild.me).send_messages:
+            for ch in after.guild.text_channels:
+                if ch.permissions_for(after.guild.me).send_messages:
+                    channel = ch
+                    break
+        if not channel:
+            return
+        import random as _rng
+        try:
+            await channel.send(embed=_embed(_rng.choice(_PINK_THANK_MSGS)))
+        except Exception:
+            pass
+
     @bot.listen("on_voice_state_update")
     async def _on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
         """Auto-disconnect when everyone leaves the channel (safety net).
@@ -8390,7 +8475,7 @@ def register_voice(bot: commands.Bot) -> None:
         if _lavalink_enabled() and _WAVELINK_AVAILABLE:
             lava_host = os.getenv("LAVALINK_HOST", "localhost")
             lava_port = int(os.getenv("LAVALINK_PORT", "2333"))
-            lava_pass = os.getenv("LAVALINK_PASSWORD", "tiffany_lavalink_2026")
+            lava_pass = os.getenv("LAVALINK_PASSWORD", "")
             try:
                 node = wavelink.Node(
                     uri=f"http://{lava_host}:{lava_port}",
@@ -8606,12 +8691,13 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception:
             pass
 
-        em = discord.Embed(title="📊 Tiffany · Estatísticas", color=TIFFANY_PINK)
-        em.add_field(name="🎵 Músicas tocadas", value=f"{songs:,}", inline=True)
-        em.add_field(name="💬 Perguntas respondidas", value=f"{questions:,}", inline=True)
-        em.add_field(name="⌨️ Comandos usados", value=f"{cmds:,}", inline=True)
-        em.add_field(name="📰 Notícias hoje", value=str(noticias_hoje), inline=True)
-        em.add_field(name="🛒 Ofertas hoje", value=str(offers_hoje), inline=True)
+        lang = resolve_guild_lang(interaction.guild)
+        em = discord.Embed(title=tr(lang, "stats.title"), color=TIFFANY_PINK)
+        em.add_field(name=tr(lang, "stats.songs"), value=f"{songs:,}", inline=True)
+        em.add_field(name=tr(lang, "stats.questions"), value=f"{questions:,}", inline=True)
+        em.add_field(name=tr(lang, "stats.commands"), value=f"{cmds:,}", inline=True)
+        em.add_field(name=tr(lang, "stats.news_today"), value=str(noticias_hoje), inline=True)
+        em.add_field(name=tr(lang, "stats.offers_today"), value=str(offers_hoje), inline=True)
         await interaction.response.send_message(embed=em, ephemeral=True)
 
     # ============================

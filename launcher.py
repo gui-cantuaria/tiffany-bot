@@ -109,7 +109,7 @@ def start_bot(bot_config: dict):
     return proc, log_file
 
 
-log("🚀 Starting Tuffine system...")
+log("🚀 Starting Tiffany system...")
 
 # Start all bots for the first time
 for bot in bots:
@@ -175,7 +175,7 @@ except KeyboardInterrupt:
             data["log_file"].close()
         log(f"💤 {name} shut down successfully.")
 
-    log("👋 Tuffine system shut down safely.")
+    log("👋 Tiffany system shut down safely.")
 finally:
     if _lock_fd:
         try:

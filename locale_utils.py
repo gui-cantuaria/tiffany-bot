@@ -770,4 +770,15 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "🌐 WARP (YouTube)",
         "es": "🌐 WARP (YouTube)",
     },
+    # /stats command fields
+    "stats.title": {
+        "pt": "📊 Tiffany · Estatísticas",
+        "en": "📊 Tiffany · Statistics",
+        "es": "📊 Tiffany · Estadísticas",
+    },
+    "stats.songs": {"pt": "🎵 Músicas tocadas", "en": "🎵 Songs played", "es": "🎵 Canciones reproducidas"},
+    "stats.questions": {"pt": "💬 Perguntas respondidas", "en": "💬 Questions answered", "es": "💬 Preguntas respondidas"},
+    "stats.commands": {"pt": "⌨️ Comandos usados", "en": "⌨️ Commands used", "es": "⌨️ Comandos usados"},
+    "stats.news_today": {"pt": "📰 Notícias hoje", "en": "📰 News today", "es": "📰 Noticias hoy"},
+    "stats.offers_today": {"pt": "🛒 Ofertas hoje", "en": "🛒 Deals today", "es": "🛒 Ofertas hoy"},
 }
