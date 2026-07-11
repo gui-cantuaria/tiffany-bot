@@ -3458,7 +3458,7 @@ def _blocking_ytdl_probe(query: str) -> tuple[Optional[float], str]:
 
 def _blocking_ytdl_search(term: str, n: int = 4) -> list[dict]:
     """Fast (flat) YouTube search. Returns up to n candidates:
-    {title, duration, id, url, uploader}. Used to confirm the right song."""
+    {title, duration, id, url, uploader, view_count}. Used to confirm the right song."""
     if not _YTDLP_AVAILABLE:
         return []
     opts = {
@@ -3481,6 +3481,7 @@ def _blocking_ytdl_search(term: str, n: int = 4) -> list[dict]:
                 "id": e.get("id") or "",
                 "url": e.get("url") or e.get("webpage_url") or "",
                 "uploader": e.get("uploader") or e.get("channel") or "",
+                "view_count": int(e.get("view_count") or 0),
             })
     except Exception as ex:
         log.debug("ytdl search failed: %s", ex)
@@ -7558,11 +7559,28 @@ def register_voice(bot: commands.Bot) -> None:
             best = scored[0]
             best_score = _match_score(search_term, best["title"])
             second_score = _match_score(search_term, scored[1]["title"]) if len(scored) > 1 else 0.0
+            # Popularity signal: the canonical cut of a famous song dwarfs parodies,
+            # covers and reuploads in view count. Among well-matched candidates, pick
+            # the most-viewed; if it's clearly popular and dominant, it's obviously the
+            # right song — play it without asking (a 1B-view hit shouldn't need a prompt).
+            def _views(c: dict) -> int:
+                return int(c.get("view_count") or 0)
+            relevant = [c for c in scored if _match_score(search_term, c["title"]) >= 0.5]
+            top_pop = max(relevant, key=_views, default=None)
+            runner_views = max([_views(c) for c in relevant if c is not top_pop], default=0)
+            popular_dominant = bool(
+                top_pop is not None
+                and _views(top_pop) >= 5_000_000
+                and _views(top_pop) >= 2 * max(runner_views, 1)
+            )
+            if popular_dominant:
+                best = top_pop
+                best_score = _match_score(search_term, best["title"])
             # Confident: play 1st result directly in most cases.
             # High score → play even if #2 is close (ties are usually the SAME famous
             # song in different uploads: official / lyrics / live). Only fall back to
             # the tie-break for middling scores, and only ask when the match is weak.
-            confident = best_score >= 0.7 or (
+            confident = best_score >= 0.7 or popular_dominant or (
                 best_score >= 0.55 and (len(scored) == 1 or (best_score - second_score) >= 0.08)
             )
 
