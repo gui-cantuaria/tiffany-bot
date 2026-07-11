@@ -34,6 +34,22 @@ def test_pick_enrichment_batch_hardware_first():
     assert "Monitor" in cats or "Notebook" in cats
 
 
+def test_monitor_dedup_similar_sizes():
+    """AOC 22" and AOC 21.5" 120hz should produce the same title key (same product)."""
+    key1 = offers_cog._title_key("Monitor Aoc 22 120hz 1ms Gaming Hdmi 22b35hm23 Preto")
+    key2 = offers_cog._title_key("Monitor AOC 21.5 120hz 1ms Gaming Hdmi")
+    assert key1 == key2, f"Expected same key, got {key1!r} vs {key2!r}"
+
+
+def test_monitor_dedup_different_products():
+    """Different brand or refresh rate should produce different keys."""
+    key_aoc = offers_cog._title_key("Monitor AOC 22 120hz 1ms Gaming")
+    key_lg = offers_cog._title_key("Monitor LG 22 120hz 1ms Gaming")
+    assert key_aoc != key_lg, "Different brands should differ"
+    key_144 = offers_cog._title_key("Monitor AOC 22 144hz 1ms Gaming")
+    assert key_aoc != key_144, "Different refresh rates should differ"
+
+
 if __name__ == "__main__":
     import sys
 
@@ -42,6 +58,8 @@ if __name__ == "__main__":
         test_primary_hardware_categories,
         test_deal_score_prefers_hardware,
         test_pick_enrichment_batch_hardware_first,
+        test_monitor_dedup_similar_sizes,
+        test_monitor_dedup_different_products,
     ]
     failed = 0
     for fn in tests:

@@ -542,6 +542,29 @@ def _product_fingerprint(title: str) -> str:
         models = sorted({m.lower() for m in _MODEL_RE.findall(raw) if len(m) >= 4})
         if models:
             parts.append(f"mon:{models[0]}")
+        else:
+            # No model code → fuzzy fingerprint: brand + size bucket + refresh rate
+            mon_words = [w for w in t.split() if w not in _TITLE_GENERIC and len(w) >= 2]
+            mon_brand = mon_words[0] if mon_words else ""
+            size_bucket = ""
+            for sm in re.finditer(r'\b(\d{2}(?:[.,]\d)?)\b', raw):
+                val = float(sm.group(1).replace(",", "."))
+                if 15 <= val <= 55:
+                    if val <= 22:
+                        size_bucket = "22"
+                    elif val <= 24.5:
+                        size_bucket = "24"
+                    elif val <= 28:
+                        size_bucket = "27"
+                    elif val <= 32:
+                        size_bucket = "32"
+                    else:
+                        size_bucket = "34"
+                    break
+            hz_m = re.search(r'(\d+)\s*hz', t)
+            hz = hz_m.group(1) if hz_m else ""
+            if mon_brand and (size_bucket or hz):
+                parts.append(f"mon:{mon_brand}-{size_bucket}-{hz}hz")
 
     m = _NOTEBOOK_LINE_RE.search(raw)
     if m:
