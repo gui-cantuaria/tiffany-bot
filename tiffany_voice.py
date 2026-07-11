@@ -479,8 +479,46 @@ _BLOCKED_TERMS = frozenset({
 })
 
 
+_ZERO_WIDTH_RE = re.compile(
+    "[\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064"
+    "\ufeff\u00ad\u034f\u061c\u180e\u2028\u2029\u202a-\u202e"
+    "\u2066-\u2069\ufff9-\ufffb]"
+)
+# Unicode confusables: common homoglyphs used to bypass filters
+_CONFUSABLES: dict[str, str] = {
+    # Cyrillic → Latin
+    "\u0430": "a", "\u0435": "e", "\u0456": "i", "\u043e": "o", "\u0440": "p",
+    "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u043d": "h", "\u0442": "t",
+    "\u043c": "m", "\u043a": "k", "\u0432": "b", "\u0433": "r",
+    "\u04bb": "h",  # Cyrillic shha (used in "һitler")
+    "\u0455": "s", "\u0458": "j", "\u0491": "r",
+    # Greek → Latin
+    "\u03b1": "a", "\u03b5": "e", "\u03b9": "i", "\u03bf": "o", "\u03c1": "p",
+    "\u03c4": "t", "\u03ba": "k", "\u03bd": "v", "\u03c5": "u",
+    # Fullwidth → ASCII
+    "\uff41": "a", "\uff42": "b", "\uff43": "c", "\uff44": "d", "\uff45": "e",
+    "\uff46": "f", "\uff47": "g", "\uff48": "h", "\uff49": "i", "\uff4a": "j",
+    "\uff4b": "k", "\uff4c": "l", "\uff4d": "m", "\uff4e": "n", "\uff4f": "o",
+    "\uff50": "p", "\uff51": "q", "\uff52": "r", "\uff53": "s", "\uff54": "t",
+    "\uff55": "u", "\uff56": "v", "\uff57": "w", "\uff58": "x", "\uff59": "y",
+    "\uff5a": "z",
+    # Common look-alikes
+    "\u0131": "i",  # Turkish dotless i
+    "\u017f": "s",  # long s (ſ)
+    "\u01c3": "!",  # Latin letter retroflex click
+    "\u2024": ".",  # one dot leader
+}
+# Build regex for confusable replacement
+_CONFUSABLES_RE = re.compile("|".join(re.escape(k) for k in _CONFUSABLES))
+
+
 def _strip_accents_lower(text: str) -> str:
-    """Lowercase + strip accents for robust comparison."""
+    """Lowercase + strip accents, zero-width chars, and Unicode confusables."""
+    # 1. Remove zero-width / invisible characters
+    text = _ZERO_WIDTH_RE.sub("", text)
+    # 2. Replace confusable homoglyphs with Latin equivalents
+    text = _CONFUSABLES_RE.sub(lambda m: _CONFUSABLES[m.group()], text)
+    # 3. NFKD normalization + strip combining marks
     nfkd = unicodedata.normalize("NFKD", text)
     return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
@@ -552,10 +590,31 @@ def _decode_reverse(text: str) -> str:
         return " ".join(w[::-1] for w in words)
     return ""
 
+def _decode_spaced(text: str) -> str:
+    """Detect spaced-out letters: 'h i t l e r' → 'hitler'."""
+    # Match sequences of single chars separated by spaces/dots/dashes
+    m = re.findall(r"(?:^|\s)([a-zA-Z](?:[\s.\-_]+[a-zA-Z]){3,})(?:\s|$)", text)
+    results = []
+    for match in m:
+        collapsed = re.sub(r"[\s.\-_]+", "", match)
+        if len(collapsed) >= 4:
+            results.append(collapsed)
+    return " ".join(results) if results else ""
+
+def _decode_rot13(text: str) -> str:
+    """Decode ROT13 (uvgyre → hitler). Only decode words ≥ 4 chars."""
+    import codecs
+    words = text.split()
+    if not any(len(w) >= 4 and w.isalpha() for w in words):
+        return ""
+    decoded = codecs.decode(text, "rot_13")
+    return decoded if decoded != text else ""
+
 def _try_decode_all(text: str) -> list[str]:
     """Run all decoders and return non-empty decoded versions."""
     results = []
-    for decoder in (_decode_morse, _decode_base64, _decode_hex, _decode_leet, _decode_reverse):
+    for decoder in (_decode_morse, _decode_base64, _decode_hex, _decode_leet,
+                    _decode_reverse, _decode_spaced, _decode_rot13):
         try:
             decoded = decoder(text)
             if decoded:
@@ -655,7 +714,9 @@ async def _ai_content_is_blocked(text: str) -> bool:
                             "terrorism, pedophilia, "
                             "homophobic or transphobic hate/slurs, xenophobic or nationality-based hate, "
                             "harassment or bullying, sexual violence or rape, sexual exploitation, "
-                            "explicit or pornographic sexual content, and extremely graphic or disturbing (gore) content. "
+                            "explicit or pornographic sexual content, extremely graphic or disturbing (gore) content, "
+                            "self-harm or suicide methods/encouragement, doxxing or threats to reveal personal info, "
+                            "illegal drug synthesis/manufacturing instructions, and weapons/explosives instructions. "
                             "Also block ANTHEMS, MARCHES, and SONGS of nazi/fascist regimes or hate parties, "
                             "even if the name does not cite the regime. Examples to BLOCK: 'Horst Wessel Lied', 'Die Fahne Hoch', "
                             "'Giovinezza', 'Cara al Sol', 'Erika', 'Panzerlied', 'SS marschiert', 'Deutschland Erwache', "
@@ -882,35 +943,64 @@ async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None
 
 _BLOCKED_REPLIES: tuple[str, ...] = (
     (
-        "🚫 **Não posso tocar nem falar sobre esse tema.** "
-        "Envolve ditaduras, ideologias de ódio ou apologia à violência.\n\n"
-        "Peça outra música ou pergunta — fico feliz em ajudar no que couber."
+        "🚫 **Não posso ajudar com esse tema.** "
+        "Envolve conteúdo que viola as diretrizes do Discord e as minhas regras internas.\n\n"
+        "Peça outra música ou pergunta — fico feliz em ajudar."
     ),
     (
-        "🚫 **Preciso recusar.** Não busco, não toco e não cito conteúdo sobre "
-        "ditaduras, nazismo, fascismo ou genocídio — link ou meme incluso.\n\n"
-        "Manda outra música ou pergunta, por favor."
+        "🚫 **Preciso recusar.** Esse tipo de conteúdo é bloqueado automaticamente "
+        "pra manter o servidor seguro e dentro das regras do Discord.\n\n"
+        "Tente outra coisa, por favor."
     ),
     (
-        "🚫 **Fora do que consigo fazer com segurança.** Ditadores, regimes totalitários e ideologias de ódio "
-        "são bloqueados sempre — não é arrogância, é limite claro.\n\n"
+        "🚫 **Bloqueado.** Não busco, toco ou respondo sobre esse assunto — "
+        "é um limite de segurança, não uma opinião.\n\n"
+        "Manda outra música ou pergunta."
+    ),
+    (
+        "🚫 **Fora do que posso fazer.** Esse pedido bate nos meus filtros de segurança.\n\n"
         "Escolha outra faixa ou pergunta."
     ),
     (
-        "🚫 **Não consigo ajudar com isso.** Bloqueio pedidos sobre figuras ditatoriais, nazismo/fascismo, "
-        "genocídio ou ódio.\n\n"
-        "Tente outra música ou pergunta."
+        "🚫 **Conteúdo não permitido.** Sigo as diretrizes do Discord e bloqueio "
+        "temas que envolvam ódio, violência extrema ou conteúdo ilegal.\n\n"
+        "Peça outra coisa."
     ),
-    (
-        "🚫 **Bloqueado.** Esse tema envolve violência, opressão ou regimes totalitários.\n\n"
-        "Peça outra coisa — prefiro ser honesta do que fingir que dá."
-    ),
+)
+
+# Extra refusal messages for specific abuse patterns
+_MANIPULATION_REPLIES: tuple[str, ...] = (
+    "🛡️ **Não caio nessa.** Tentativas de contornar os filtros são detectadas e bloqueadas.",
+    "🛡️ **Detectei uma tentativa de bypass.** Não vou repetir, soletrar ou traduzir conteúdo bloqueado.",
+    "🛡️ **Isso não funciona comigo.** Codificar, inverter ou disfarçar o texto não muda a resposta.",
+    "🛡️ **Filtro ativado.** Não importa como você escreve — o conteúdo é o que conta.",
+)
+
+_SPAM_REPLIES: tuple[str, ...] = (
+    "⏳ **Calma.** Você tá mandando muitas mensagens repetidas. Espera um pouco.",
+    "⏳ **Muitas perguntas parecidas.** Tenta algo diferente ou espera uns segundos.",
+    "⏳ **Já respondido.** Repetir a mesma pergunta não muda a resposta.",
+)
+
+_NSFW_REPLIES: tuple[str, ...] = (
+    "🚫 **Não faço isso.** Conteúdo sexual ou NSFW é contra as regras do Discord pra bots.\n\n"
+    "Use **`t!p`**, **`t!c`** ou **`/help`** pra ver o que posso fazer.",
+    "🚫 **Passo.** Sou DJ e assistente, não respondo a esse tipo de pedido.\n\n"
+    "Manda música ou pergunta de verdade.",
 )
 
 
 def _pick_blocked_reply() -> str:
     import random
     return random.choice(_BLOCKED_REPLIES)
+
+def _pick_manipulation_reply() -> str:
+    import random
+    return random.choice(_MANIPULATION_REPLIES)
+
+def _pick_spam_reply() -> str:
+    import random
+    return random.choice(_SPAM_REPLIES)
 
 
 _NESTED_TIF_CMD_RE = re.compile(r"\bt![a-z0-9]", re.IGNORECASE)
@@ -933,19 +1023,21 @@ _CHAT_ZOEIRA_RES = [
     re.compile(r"\b(?:tira\s+(?:a\s+)?roupa|fica\s+pelad|se\s+pega|vem\s+cavalgar)\b", re.IGNORECASE),
     re.compile(r"\b(?:safad[ao]|gostos[ao]|sexy)\s+(?:tiffany|tiffanu|bot|ia)\b", re.IGNORECASE),
     re.compile(r"\b(?:tiffany|tiffanu|tiff)\s+(?:safad[ao]|gostos[ao]|pelad[ao])\b", re.IGNORECASE),
+    # English NSFW patterns
+    re.compile(r"\b(?:send|show|give)\s+(?:me\s+)?(?:nudes?|pics?|photos?)\b", re.IGNORECASE),
+    re.compile(r"\b(?:take\s+off|strip|undress|get\s+naked)\b", re.IGNORECASE),
+    re.compile(r"\b(?:hot|sexy|slutty|horny)\s+(?:bot|tiffany|ai)\b", re.IGNORECASE),
+    # Portuguese variations with spacing tricks
+    re.compile(r"\b(?:me\s+chup|boquete|punheta|masturb|transar|foder)\b", re.IGNORECASE),
+    re.compile(r"\b(?:putinha|vadia|piranha|vagabunda)\b", re.IGNORECASE),
 ]
 
-_CHAT_ZOEIRA_REPLIES: tuple[str, ...] = (
-    "Desculpa, mas não atendo esse tipo de pedido — sou DJ e assistente. Use **`t!p <música>`** ou **`t!c <pergunta>`**.",
-    "Não é minha função, mas posso ajudar com música, fila e perguntas. Quer tentar?",
-    "Esse pedido não entra na fila nem no chat. Use **`t!p`**, **`t!c`** ou **`/help`**.",
-    "Se era teste: entendi. Agora manda música ou pergunta de verdade.",
-    "Prefiro ser direta: não faço isso. Para música ou chat: **`t!p`** ou **`t!c`**.",
-)
+_CHAT_ZOEIRA_REPLIES: tuple[str, ...] = _NSFW_REPLIES
 
 _CHAT_ZOEIRA_REPEAT_REPLIES: tuple[str, ...] = (
     "Você já mandou isso — a resposta não muda. Tente **`t!p`**, **`t!c`** ou **`/help`**.",
     "Repetir não ajuda. Use **`t!p`**, **`t!c`** ou dados (`d20`, `4d6`).",
+    "Já respondi. Insistir não desbloqueia nada.",
 )
 
 
@@ -988,7 +1080,11 @@ def _looks_like_chat_zoeira(text: str) -> bool:
     if not text or len(text) > 400:
         return False
     norm = _strip_accents_lower(text)
-    return any(p.search(norm) for p in _CHAT_ZOEIRA_RES)
+    if any(p.search(norm) for p in _CHAT_ZOEIRA_RES):
+        return True
+    # Also check with spaces collapsed (bypass: "s a f a d a")
+    collapsed = re.sub(r"\s+", "", norm)
+    return any(p.search(collapsed) for p in _CHAT_ZOEIRA_RES)
 
 
 def _try_chat_zoeira_reply(question: str, *, user_id: int = 0) -> Optional[str]:
@@ -1403,6 +1499,10 @@ _server_ai_calls: dict[int, collections.deque] = {}
 _DM_RL_MAX = 5
 _dm_user_ai_calls: dict[int, collections.deque] = {}
 
+# --- Per-user AI cap (prevents one user from exhausting the server budget) ---
+_USER_AI_RL_MAX = 4   # max 4 AI calls per user per 60s (across all buckets)
+_user_ai_calls: dict[int, collections.deque] = {}
+
 # --- t!g cooldown (separate from t!c / t!su) ---
 _game_cooldown_last: dict[int, float] = {}
 _GAME_CMD_COOLDOWN_SEC = 5
@@ -1418,6 +1518,8 @@ _GAME_REPEAT_TRIGGERS = frozenset({
 async def _ai_interpret_song(query: str) -> Optional[str]:
     """Use AI to fix/interpret misspelled song name. Returns corrected query or None."""
     if not _needs_ai_song_interpret(query):
+        return None
+    if _contains_blocked_content(query):
         return None
     client = _get_openrouter_client()
     if client is None:
@@ -1497,6 +1599,14 @@ def _ai_rate_limit_peek(
             calls.popleft()
         if len(calls) >= _DM_RL_MAX:
             return False, "dm_user"
+    # Per-user cap (applies in both guild and DM contexts)
+    _uid = user_id or 0
+    if _uid:
+        ucalls = _user_ai_calls.setdefault(_uid, collections.deque())
+        while ucalls and (now - ucalls[0]) > _GLOBAL_RL_WINDOW:
+            ucalls.popleft()
+        if len(ucalls) >= _USER_AI_RL_MAX:
+            return False, "user"
     return True, ""
 
 
@@ -1517,6 +1627,9 @@ def _ai_rate_limit_consume(
         _server_ai_calls.setdefault(guild_id, collections.deque()).append(now)
     elif user_id:
         _dm_user_ai_calls.setdefault(user_id, collections.deque()).append(now)
+    _uid = user_id or 0
+    if _uid:
+        _user_ai_calls.setdefault(_uid, collections.deque()).append(now)
     return True
 
 
