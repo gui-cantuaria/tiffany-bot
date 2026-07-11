@@ -3697,7 +3697,12 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
     return raw, uid
 
 
-TIFFANY_PINK = 0xFF69B4  # logo pink color
+TIFFANY_PINK = 0xB84DE6  # brand color — logo pink→purple gradient (magenta-violet)
+TIFFANY_RED = 0xED2939   # errors / user feedback only — strong red, distinct from brand
+
+# Leading emojis that mark an error, refusal, rate-limit or timeout message.
+# _embed() auto-colors these red so users spot problems at a glance.
+_EMBED_ERROR_PREFIXES = ("⚠️", "🚫", "❌", "🛡️", "⏳", "⏰")
 
 # Command registry: (short name, aliases, usage) — used in error suggestions and AI context
 _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
@@ -4260,15 +4265,23 @@ async def _run_game_recommendation(
     return _build_game_recommendations_embed(safe, filters, lang=lang, history_line=history_line)
 
 
-def _embed(description: str, *, title: str = None, footer: str = None) -> discord.Embed:
-    """Create default Tiffany embed in pink.
+def _embed(
+    description: str, *, title: str = None, footer: str = None, error: Optional[bool] = None
+) -> discord.Embed:
+    """Create a Tiffany embed in the brand color, or red for errors/feedback.
+
+    Color: brand magenta-violet by default; strong red when the message is an
+    error/refusal/rate-limit (auto-detected by leading emoji, or forced via
+    `error=True`) so users can tell problems apart from normal replies.
 
     Descriptions are clamped to Discord's 4096-char embed limit so a long AI
     response, summary or lyrics can never make the message fail to send.
     """
     if description and len(description) > 4096:
         description = description[:4093].rstrip() + "..."
-    em = discord.Embed(description=description, color=TIFFANY_PINK)
+    if error is None:
+        error = bool(description) and description.lstrip().startswith(_EMBED_ERROR_PREFIXES)
+    em = discord.Embed(description=description, color=TIFFANY_RED if error else TIFFANY_PINK)
     if title:
         em.set_author(name=title)
     if footer:

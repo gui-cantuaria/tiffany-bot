@@ -445,14 +445,14 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "YouTube · Spotify · Deezer · Apple Music · Amazon Music · /about",
     },
     "err.api_key": {
-        "pt": "Desculpe, não consigo agora — a chave da API não está configurada.",
-        "en": "Sorry, I can't do that right now — the API key isn't configured.",
-        "es": "Perdón, no puedo ahora — la clave de API no está configurada.",
+        "pt": "⚠️ Desculpe, não consigo agora — a chave da API não está configurada.",
+        "en": "⚠️ Sorry, I can't do that right now — the API key isn't configured.",
+        "es": "⚠️ Perdón, no puedo ahora — la clave de API no está configurada.",
     },
     "err.rate_limit": {
-        "pt": "Desculpe, muitas requisições agora. Aguarde alguns segundos e tente de novo.",
-        "en": "Sorry, too many requests right now. Wait a few seconds and try again.",
-        "es": "Perdón, demasiadas solicitudes ahora. Espera unos segundos e intenta de nuevo.",
+        "pt": "⏳ Desculpe, muitas requisições agora. Aguarde alguns segundos e tente de novo.",
+        "en": "⏳ Sorry, too many requests right now. Wait a few seconds and try again.",
+        "es": "⏳ Perdón, demasiadas solicitudes ahora. Espera unos segundos e intenta de nuevo.",
     },
     "err.server_rate_limit": {
         "pt": "⏳ Muitas requisições neste servidor! Aguarde um momento.",
@@ -475,19 +475,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "⚠️ En privado solo atiendo a quien comparte **al menos un servidor** conmigo. Escríbeme desde un servidor donde esté.",
     },
     "err.duplicate_question": {
-        "pt": "Você já fez essa pergunta — prefiro não repetir a mesma resposta. Tenta reformular ou espera um pouco.",
-        "en": "You already asked that — I'd rather not repeat the same answer. Try rephrasing or wait a bit.",
-        "es": "Ya hiciste esa pregunta — prefiero no repetir la misma respuesta. Reformula o espera un poco.",
+        "pt": "⚠️ Você já fez essa pergunta — prefiro não repetir a mesma resposta. Tenta reformular ou espera um pouco.",
+        "en": "⚠️ You already asked that — I'd rather not repeat the same answer. Try rephrasing or wait a bit.",
+        "es": "⚠️ Ya hiciste esa pregunta — prefiero no repetir la misma respuesta. Reformula o espera un poco.",
     },
     "err.summary_failed": {
-        "pt": "Não consegui resumir esse link agora. Tente de novo em instantes.",
-        "en": "I couldn't summarize that link right now. Try again in a moment.",
-        "es": "No pude resumir ese link ahora. Intenta de nuevo en un momento.",
+        "pt": "⚠️ Não consegui resumir esse link agora. Tente de novo em instantes.",
+        "en": "⚠️ I couldn't summarize that link right now. Try again in a moment.",
+        "es": "⚠️ No pude resumir ese link ahora. Intenta de nuevo en un momento.",
     },
     "err.summary_blocked": {
-        "pt": "Desculpe, não consigo resumir links agora. Tente mais tarde.",
-        "en": "Sorry, I can't summarize links right now. Try again later.",
-        "es": "Perdón, no puedo resumir links ahora. Intenta más tarde.",
+        "pt": "⚠️ Desculpe, não consigo resumir links agora. Tente mais tarde.",
+        "en": "⚠️ Sorry, I can't summarize links right now. Try again later.",
+        "es": "⚠️ Perdón, no puedo resumir links ahora. Intenta más tarde.",
     },
     "slash.guild_only": {
         "pt": "⚠️ Use em um servidor.",
@@ -874,19 +874,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "🚫 **Paso.** Soy DJ y asistente, no respondo a ese tipo de pedido.\n\nManda una canción o pregunta de verdad.",
     },
     "repeat.1": {
-        "pt": "Você já mandou isso — a resposta não muda. Tente **`t!p`**, **`t!c`** ou **`/help`**.",
-        "en": "You already sent that — the answer won't change. Try **`t!p`**, **`t!c`**, or **`/help`**.",
-        "es": "Ya enviaste eso — la respuesta no cambia. Prueba **`t!p`**, **`t!c`** o **`/help`**.",
+        "pt": "⚠️ Você já mandou isso — a resposta não muda. Tente **`t!p`**, **`t!c`** ou **`/help`**.",
+        "en": "⚠️ You already sent that — the answer won't change. Try **`t!p`**, **`t!c`**, or **`/help`**.",
+        "es": "⚠️ Ya enviaste eso — la respuesta no cambia. Prueba **`t!p`**, **`t!c`** o **`/help`**.",
     },
     "repeat.2": {
-        "pt": "Repetir não ajuda. Use **`t!p`**, **`t!c`** ou dados (`d20`, `4d6`).",
-        "en": "Repeating won't help. Use **`t!p`**, **`t!c`**, or dice (`d20`, `4d6`).",
-        "es": "Repetir no ayuda. Usa **`t!p`**, **`t!c`** o dados (`d20`, `4d6`).",
+        "pt": "⚠️ Repetir não ajuda. Use **`t!p`**, **`t!c`** ou dados (`d20`, `4d6`).",
+        "en": "⚠️ Repeating won't help. Use **`t!p`**, **`t!c`**, or dice (`d20`, `4d6`).",
+        "es": "⚠️ Repetir no ayuda. Usa **`t!p`**, **`t!c`** o dados (`d20`, `4d6`).",
     },
     "repeat.3": {
-        "pt": "Já respondi. Insistir não desbloqueia nada.",
-        "en": "Already answered. Insisting won't unlock anything.",
-        "es": "Ya respondí. Insistir no desbloquea nada.",
+        "pt": "⚠️ Já respondi. Insistir não desbloqueia nada.",
+        "en": "⚠️ Already answered. Insisting won't unlock anything.",
+        "es": "⚠️ Ya respondí. Insistir no desbloquea nada.",
     },
     # --- Voice-command feedback (spoken commands work in pt/en/es) ---
     "voice.stt.mic_hint": {
