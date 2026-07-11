@@ -941,66 +941,32 @@ async def _bg_moderation_guard(session, vc, bot, title: str, query: str) -> None
         log.debug("Background moderation guard failed", exc_info=True)
 
 
-_BLOCKED_REPLIES: tuple[str, ...] = (
-    (
-        "🚫 **Não posso ajudar com esse tema.** "
-        "Envolve conteúdo que viola as diretrizes do Discord e as minhas regras internas.\n\n"
-        "Peça outra música ou pergunta — fico feliz em ajudar."
-    ),
-    (
-        "🚫 **Preciso recusar.** Esse tipo de conteúdo é bloqueado automaticamente "
-        "pra manter o servidor seguro e dentro das regras do Discord.\n\n"
-        "Tente outra coisa, por favor."
-    ),
-    (
-        "🚫 **Bloqueado.** Não busco, toco ou respondo sobre esse assunto — "
-        "é um limite de segurança, não uma opinião.\n\n"
-        "Manda outra música ou pergunta."
-    ),
-    (
-        "🚫 **Fora do que posso fazer.** Esse pedido bate nos meus filtros de segurança.\n\n"
-        "Escolha outra faixa ou pergunta."
-    ),
-    (
-        "🚫 **Conteúdo não permitido.** Sigo as diretrizes do Discord e bloqueio "
-        "temas que envolvam ódio, violência extrema ou conteúdo ilegal.\n\n"
-        "Peça outra coisa."
-    ),
-)
-
-# Extra refusal messages for specific abuse patterns
-_MANIPULATION_REPLIES: tuple[str, ...] = (
-    "🛡️ **Não caio nessa.** Tentativas de contornar os filtros são detectadas e bloqueadas.",
-    "🛡️ **Detectei uma tentativa de bypass.** Não vou repetir, soletrar ou traduzir conteúdo bloqueado.",
-    "🛡️ **Isso não funciona comigo.** Codificar, inverter ou disfarçar o texto não muda a resposta.",
-    "🛡️ **Filtro ativado.** Não importa como você escreve — o conteúdo é o que conta.",
-)
-
-_SPAM_REPLIES: tuple[str, ...] = (
-    "⏳ **Calma.** Você tá mandando muitas mensagens repetidas. Espera um pouco.",
-    "⏳ **Muitas perguntas parecidas.** Tenta algo diferente ou espera uns segundos.",
-    "⏳ **Já respondido.** Repetir a mesma pergunta não muda a resposta.",
-)
-
-_NSFW_REPLIES: tuple[str, ...] = (
-    "🚫 **Não faço isso.** Conteúdo sexual ou NSFW é contra as regras do Discord pra bots.\n\n"
-    "Use **`t!p`**, **`t!c`** ou **`/help`** pra ver o que posso fazer.",
-    "🚫 **Passo.** Sou DJ e assistente, não respondo a esse tipo de pedido.\n\n"
-    "Manda música ou pergunta de verdade.",
-)
+_BLOCKED_KEYS = ("blocked.1", "blocked.2", "blocked.3", "blocked.4", "blocked.5")
+_MANIPULATION_KEYS = ("manipulation.1", "manipulation.2", "manipulation.3", "manipulation.4")
+_SPAM_KEYS = ("spam.1", "spam.2", "spam.3")
+_NSFW_KEYS = ("nsfw.1", "nsfw.2")
+_REPEAT_KEYS = ("repeat.1", "repeat.2", "repeat.3")
 
 
-def _pick_blocked_reply() -> str:
+def _pick_blocked_reply(lang: str = "pt") -> str:
     import random
-    return random.choice(_BLOCKED_REPLIES)
+    return tr(lang, random.choice(_BLOCKED_KEYS))
 
-def _pick_manipulation_reply() -> str:
+def _pick_manipulation_reply(lang: str = "pt") -> str:
     import random
-    return random.choice(_MANIPULATION_REPLIES)
+    return tr(lang, random.choice(_MANIPULATION_KEYS))
 
-def _pick_spam_reply() -> str:
+def _pick_spam_reply(lang: str = "pt") -> str:
     import random
-    return random.choice(_SPAM_REPLIES)
+    return tr(lang, random.choice(_SPAM_KEYS))
+
+def _pick_nsfw_reply(lang: str = "pt") -> str:
+    import random
+    return tr(lang, random.choice(_NSFW_KEYS))
+
+def _pick_repeat_reply(lang: str = "pt") -> str:
+    import random
+    return tr(lang, random.choice(_REPEAT_KEYS))
 
 
 _NESTED_TIF_CMD_RE = re.compile(r"\bt![a-z0-9]", re.IGNORECASE)
@@ -1032,13 +998,11 @@ _CHAT_ZOEIRA_RES = [
     re.compile(r"\b(?:putinha|vadia|piranha|vagabunda)\b", re.IGNORECASE),
 ]
 
-_CHAT_ZOEIRA_REPLIES: tuple[str, ...] = _NSFW_REPLIES
+def _pick_zoeira_reply(lang: str = "pt") -> str:
+    return _pick_nsfw_reply(lang)
 
-_CHAT_ZOEIRA_REPEAT_REPLIES: tuple[str, ...] = (
-    "Você já mandou isso — a resposta não muda. Tente **`t!p`**, **`t!c`** ou **`/help`**.",
-    "Repetir não ajuda. Use **`t!p`**, **`t!c`** ou dados (`d20`, `4d6`).",
-    "Já respondi. Insistir não desbloqueia nada.",
-)
+def _pick_zoeira_repeat_reply(lang: str = "pt") -> str:
+    return _pick_repeat_reply(lang)
 
 
 def _nested_command_hint(query: str) -> Optional[str]:
@@ -1087,9 +1051,8 @@ def _looks_like_chat_zoeira(text: str) -> bool:
     return any(p.search(collapsed) for p in _CHAT_ZOEIRA_RES)
 
 
-def _try_chat_zoeira_reply(question: str, *, user_id: int = 0) -> Optional[str]:
+def _try_chat_zoeira_reply(question: str, *, user_id: int = 0, lang: str = "pt") -> Optional[str]:
     """Return a witty canned reply for bot-directed zoera, or None."""
-    import random
     if not _looks_like_chat_zoeira(question):
         return None
     if user_id:
@@ -1097,8 +1060,8 @@ def _try_chat_zoeira_reply(question: str, *, user_id: int = 0) -> Optional[str]:
         if entry and entry.get("history"):
             last_q = entry["history"][-1].get("q", "")
             if last_q.strip().lower() == question.strip().lower():
-                return random.choice(_CHAT_ZOEIRA_REPEAT_REPLIES)
-    return random.choice(_CHAT_ZOEIRA_REPLIES)
+                return _pick_zoeira_repeat_reply(lang)
+    return _pick_zoeira_reply(lang)
 
 
 YDL_OPTS: dict[str, Any] = {
@@ -6479,7 +6442,7 @@ def register_voice(bot: commands.Bot) -> None:
                                 return tr(lang, "err.duplicate_question")
 
             question = _normalize_chat_question(question)
-            zoeira = _try_chat_zoeira_reply(question, user_id=_ctx_id)
+            zoeira = _try_chat_zoeira_reply(question, user_id=_ctx_id, lang=lang)
             if zoeira:
                 if _ctx_id:
                     _add_to_context(_ctx_id, question, zoeira)
@@ -6525,7 +6488,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             # Full moderation on AI output (literal + AI layer, same as t!su).
             if await _should_block_content(answer):
-                return _pick_blocked_reply()
+                return _pick_blocked_reply(lang)
 
             # Save to context for follow-up questions
             if _ctx_id:

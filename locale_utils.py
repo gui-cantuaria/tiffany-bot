@@ -790,4 +790,90 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "stats.commands": {"pt": "⌨️ Comandos usados", "en": "⌨️ Commands used", "es": "⌨️ Comandos usados"},
     "stats.news_today": {"pt": "📰 Notícias hoje", "en": "📰 News today", "es": "📰 Noticias hoy"},
     "stats.offers_today": {"pt": "🛒 Ofertas hoje", "en": "🛒 Deals today", "es": "🛒 Ofertas hoy"},
+    # ===== Safety / moderation feedback =====
+    "blocked.1": {
+        "pt": "🚫 **Não posso ajudar com esse tema.** Envolve conteúdo que viola as diretrizes do Discord e as minhas regras internas.\n\nPeça outra música ou pergunta — fico feliz em ajudar.",
+        "en": "🚫 **I can't help with that topic.** It involves content that violates Discord's guidelines and my safety rules.\n\nAsk for another song or question — happy to help.",
+        "es": "🚫 **No puedo ayudar con ese tema.** Involucra contenido que viola las directrices de Discord y mis reglas internas.\n\nPide otra canción o pregunta — con gusto ayudo.",
+    },
+    "blocked.2": {
+        "pt": "🚫 **Preciso recusar.** Esse tipo de conteúdo é bloqueado automaticamente pra manter o servidor seguro e dentro das regras do Discord.\n\nTente outra coisa, por favor.",
+        "en": "🚫 **I have to decline.** This type of content is automatically blocked to keep the server safe and within Discord's rules.\n\nTry something else, please.",
+        "es": "🚫 **Debo rechazar.** Este tipo de contenido se bloquea automáticamente para mantener el servidor seguro y dentro de las reglas de Discord.\n\nIntenta otra cosa, por favor.",
+    },
+    "blocked.3": {
+        "pt": "🚫 **Bloqueado.** Não busco, toco ou respondo sobre esse assunto — é um limite de segurança, não uma opinião.\n\nManda outra música ou pergunta.",
+        "en": "🚫 **Blocked.** I don't search, play, or answer about this topic — it's a safety limit, not an opinion.\n\nSend another song or question.",
+        "es": "🚫 **Bloqueado.** No busco, reproduzco ni respondo sobre este tema — es un límite de seguridad, no una opinión.\n\nManda otra canción o pregunta.",
+    },
+    "blocked.4": {
+        "pt": "🚫 **Fora do que posso fazer.** Esse pedido bate nos meus filtros de segurança.\n\nEscolha outra faixa ou pergunta.",
+        "en": "🚫 **Outside what I can do.** This request hits my safety filters.\n\nChoose another track or question.",
+        "es": "🚫 **Fuera de lo que puedo hacer.** Esta solicitud activa mis filtros de seguridad.\n\nElige otra pista o pregunta.",
+    },
+    "blocked.5": {
+        "pt": "🚫 **Conteúdo não permitido.** Sigo as diretrizes do Discord e bloqueio temas que envolvam ódio, violência extrema ou conteúdo ilegal.\n\nPeça outra coisa.",
+        "en": "🚫 **Content not allowed.** I follow Discord's guidelines and block topics involving hate, extreme violence, or illegal content.\n\nAsk for something else.",
+        "es": "🚫 **Contenido no permitido.** Sigo las directrices de Discord y bloqueo temas que involucren odio, violencia extrema o contenido ilegal.\n\nPide otra cosa.",
+    },
+    "manipulation.1": {
+        "pt": "🛡️ **Não caio nessa.** Tentativas de contornar os filtros são detectadas e bloqueadas.",
+        "en": "🛡️ **Not falling for that.** Attempts to bypass the filters are detected and blocked.",
+        "es": "🛡️ **No caigo en eso.** Los intentos de evadir los filtros son detectados y bloqueados.",
+    },
+    "manipulation.2": {
+        "pt": "🛡️ **Detectei uma tentativa de bypass.** Não vou repetir, soletrar ou traduzir conteúdo bloqueado.",
+        "en": "🛡️ **Bypass attempt detected.** I won't repeat, spell out, or translate blocked content.",
+        "es": "🛡️ **Intento de bypass detectado.** No voy a repetir, deletrear ni traducir contenido bloqueado.",
+    },
+    "manipulation.3": {
+        "pt": "🛡️ **Isso não funciona comigo.** Codificar, inverter ou disfarçar o texto não muda a resposta.",
+        "en": "🛡️ **That doesn't work on me.** Encoding, reversing, or disguising text won't change the answer.",
+        "es": "🛡️ **Eso no funciona conmigo.** Codificar, invertir o disfrazar el texto no cambia la respuesta.",
+    },
+    "manipulation.4": {
+        "pt": "🛡️ **Filtro ativado.** Não importa como você escreve — o conteúdo é o que conta.",
+        "en": "🛡️ **Filter triggered.** No matter how you write it — the content is what counts.",
+        "es": "🛡️ **Filtro activado.** No importa cómo lo escribas — el contenido es lo que cuenta.",
+    },
+    "spam.1": {
+        "pt": "⏳ **Calma.** Você tá mandando muitas mensagens repetidas. Espera um pouco.",
+        "en": "⏳ **Easy there.** You're sending too many repeated messages. Wait a moment.",
+        "es": "⏳ **Tranquilo.** Estás enviando muchos mensajes repetidos. Espera un momento.",
+    },
+    "spam.2": {
+        "pt": "⏳ **Muitas perguntas parecidas.** Tenta algo diferente ou espera uns segundos.",
+        "en": "⏳ **Too many similar questions.** Try something different or wait a few seconds.",
+        "es": "⏳ **Muchas preguntas parecidas.** Intenta algo diferente o espera unos segundos.",
+    },
+    "spam.3": {
+        "pt": "⏳ **Já respondido.** Repetir a mesma pergunta não muda a resposta.",
+        "en": "⏳ **Already answered.** Repeating the same question won't change the answer.",
+        "es": "⏳ **Ya respondido.** Repetir la misma pregunta no cambia la respuesta.",
+    },
+    "nsfw.1": {
+        "pt": "🚫 **Não faço isso.** Conteúdo sexual ou NSFW é contra as regras do Discord pra bots.\n\nUse **`t!p`**, **`t!c`** ou **`/help`** pra ver o que posso fazer.",
+        "en": "🚫 **I don't do that.** Sexual or NSFW content is against Discord's rules for bots.\n\nUse **`t!p`**, **`t!c`**, or **`/help`** to see what I can do.",
+        "es": "🚫 **No hago eso.** Contenido sexual o NSFW es contra las reglas de Discord para bots.\n\nUsa **`t!p`**, **`t!c`** o **`/help`** para ver qué puedo hacer.",
+    },
+    "nsfw.2": {
+        "pt": "🚫 **Passo.** Sou DJ e assistente, não respondo a esse tipo de pedido.\n\nManda música ou pergunta de verdade.",
+        "en": "🚫 **Pass.** I'm a DJ and assistant — I don't respond to that kind of request.\n\nSend a real song or question.",
+        "es": "🚫 **Paso.** Soy DJ y asistente, no respondo a ese tipo de pedido.\n\nManda una canción o pregunta de verdad.",
+    },
+    "repeat.1": {
+        "pt": "Você já mandou isso — a resposta não muda. Tente **`t!p`**, **`t!c`** ou **`/help`**.",
+        "en": "You already sent that — the answer won't change. Try **`t!p`**, **`t!c`**, or **`/help`**.",
+        "es": "Ya enviaste eso — la respuesta no cambia. Prueba **`t!p`**, **`t!c`** o **`/help`**.",
+    },
+    "repeat.2": {
+        "pt": "Repetir não ajuda. Use **`t!p`**, **`t!c`** ou dados (`d20`, `4d6`).",
+        "en": "Repeating won't help. Use **`t!p`**, **`t!c`**, or dice (`d20`, `4d6`).",
+        "es": "Repetir no ayuda. Usa **`t!p`**, **`t!c`** o dados (`d20`, `4d6`).",
+    },
+    "repeat.3": {
+        "pt": "Já respondi. Insistir não desbloqueia nada.",
+        "en": "Already answered. Insisting won't unlock anything.",
+        "es": "Ya respondí. Insistir no desbloquea nada.",
+    },
 }
