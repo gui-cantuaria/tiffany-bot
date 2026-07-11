@@ -1797,13 +1797,35 @@ _stats: dict[str, int] = _load_stats()
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
 
 
-_ANTISPAM_MSGS = [
-    "{mention} Não posso deixar @everyone/@here no canal. Mensagem removida.",
-    "{mention} Marcar todo mundo atrapalha o servidor. Mensagem removida.",
-    "{mention} Não aqui. Mensagem removida.",
-    "{mention} Removi a mensagem para proteger o canal.",
-    "{mention} Se repetir, posso aplicar punição. Mensagem removida.",
-]
+_ANTISPAM_MSGS: dict[GuildLang, tuple[str, ...]] = {
+    "pt": (
+        "{mention} Não posso deixar @everyone/@here no canal. Mensagem removida.",
+        "{mention} Marcar todo mundo atrapalha o servidor. Mensagem removida.",
+        "{mention} Não aqui. Mensagem removida.",
+        "{mention} Removi a mensagem para proteger o canal.",
+        "{mention} Se repetir, posso aplicar punição. Mensagem removida.",
+    ),
+    "en": (
+        "{mention} I can't allow @everyone/@here in the channel. Message removed.",
+        "{mention} Pinging everyone disrupts the server. Message removed.",
+        "{mention} Not here. Message removed.",
+        "{mention} I removed the message to protect the channel.",
+        "{mention} If it happens again, I may apply a penalty. Message removed.",
+    ),
+    "es": (
+        "{mention} No puedo permitir @everyone/@here en el canal. Mensaje eliminado.",
+        "{mention} Mencionar a todos molesta al servidor. Mensaje eliminado.",
+        "{mention} Aquí no. Mensaje eliminado.",
+        "{mention} Eliminé el mensaje para proteger el canal.",
+        "{mention} Si se repite, puedo aplicar una sanción. Mensaje eliminado.",
+    ),
+}
+
+
+def _pick_localized(pool: dict[GuildLang, tuple[str, ...]], lang: GuildLang) -> str:
+    """Pick a random message from a per-language pool (falls back to pt)."""
+    import random
+    return random.choice(pool.get(lang) or pool["pt"])
 
 
 def _url_is_safe_to_fetch(url: str) -> bool:
@@ -4408,18 +4430,44 @@ async def _notify(
     return None
 
 
-_PRIVATE_NOTICE_CHANNEL_FALLBACK: tuple[str, ...] = (
-    "{mention} Não abri DM — aviso rápido aqui (some em instantes).",
-    "{mention} DM fechada. Leia abaixo — some em segundos.",
-    "{mention} Abra a DM para avisos discretos. Por ora, só para você:",
-    "{mention} Privado indisponível — aviso rápido abaixo.",
-    "{mention} DM bloqueada — leia abaixo:",
-    "{mention} Só você precisa ver isso. Sumo em instantes.",
-    "{mention} Ative a DM na próxima — aviso abaixo:",
-    "{mention} Mensagem sensível — some em instantes.",
-    "{mention} Abra a DM para avisos discretos na próxima.",
-    "{mention} Sumo em instantes — ative a DM na próxima.",
-)
+_PRIVATE_NOTICE_CHANNEL_FALLBACK: dict[GuildLang, tuple[str, ...]] = {
+    "pt": (
+        "{mention} Não abri DM — aviso rápido aqui (some em instantes).",
+        "{mention} DM fechada. Leia abaixo — some em segundos.",
+        "{mention} Abra a DM para avisos discretos. Por ora, só para você:",
+        "{mention} Privado indisponível — aviso rápido abaixo.",
+        "{mention} DM bloqueada — leia abaixo:",
+        "{mention} Só você precisa ver isso. Sumo em instantes.",
+        "{mention} Ative a DM na próxima — aviso abaixo:",
+        "{mention} Mensagem sensível — some em instantes.",
+        "{mention} Abra a DM para avisos discretos na próxima.",
+        "{mention} Sumo em instantes — ative a DM na próxima.",
+    ),
+    "en": (
+        "{mention} Couldn't open a DM — quick notice here (disappears shortly).",
+        "{mention} DM closed. Read below — disappears in seconds.",
+        "{mention} Open your DMs for discreet notices. For now, just for you:",
+        "{mention} DMs unavailable — quick notice below.",
+        "{mention} DM blocked — read below:",
+        "{mention} Only you need to see this. Gone in a moment.",
+        "{mention} Enable DMs next time — notice below:",
+        "{mention} Sensitive message — disappears shortly.",
+        "{mention} Open your DMs for discreet notices next time.",
+        "{mention} Gone in a moment — enable DMs next time.",
+    ),
+    "es": (
+        "{mention} No pude abrir un DM — aviso rápido aquí (desaparece en instantes).",
+        "{mention} DM cerrado. Lee abajo — desaparece en segundos.",
+        "{mention} Abre tus DM para avisos discretos. Por ahora, solo para ti:",
+        "{mention} DM no disponible — aviso rápido abajo.",
+        "{mention} DM bloqueado — lee abajo:",
+        "{mention} Solo tú necesitas ver esto. Desaparece en un momento.",
+        "{mention} Activa los DM la próxima — aviso abajo:",
+        "{mention} Mensaje sensible — desaparece en instantes.",
+        "{mention} Abre tus DM para avisos discretos la próxima vez.",
+        "{mention} Desaparece en un momento — activa los DM la próxima.",
+    ),
+}
 
 
 async def _send_private_notice(
@@ -4447,9 +4495,9 @@ async def _send_private_notice(
             pass
     try:
         if channel is not None and hasattr(channel, "send"):
-            import random
             mention = getattr(user, "mention", "") or ""
-            wrapper = random.choice(_PRIVATE_NOTICE_CHANNEL_FALLBACK).format(mention=mention)
+            lang = resolve_guild_lang(getattr(channel, "guild", None))
+            wrapper = _pick_localized(_PRIVATE_NOTICE_CHANNEL_FALLBACK, lang).format(mention=mention)
             fallback_em = _embed(f"{wrapper}\n\n{content}")
             await channel.send(embed=fallback_em, delete_after=delete_after)
     except discord.HTTPException:
@@ -8243,7 +8291,6 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.listen("on_message")
     async def _antispam_everyone(message: discord.Message) -> None:
         """Remove mensagens com @everyone ou @here e responde sarcasticamente."""
-        import random
         if message.author.bot:
             return
         if not message.guild:
@@ -8263,7 +8310,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await message.delete()
             except discord.HTTPException:
                 pass
-        msg = random.choice(_ANTISPAM_MSGS).format(mention=message.author.mention)
+        msg = _pick_localized(_ANTISPAM_MSGS, resolve_guild_lang(message.guild)).format(mention=message.author.mention)
         # Warn privately so the user isn't publicly shamed; the @everyone/@here
         # message itself was already removed above.
         await _send_private_notice(message.author, channel, msg)
