@@ -643,6 +643,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "🎵 Now playing: **{title}**",
         "es": "🎵 Reproduciendo: **{title}**",
     },
+    "music.now_playing": {
+        "pt": "🎵 **Tocando agora: {title}**",
+        "en": "🎵 **Now playing: {title}**",
+        "es": "🎵 **Reproduciendo ahora: {title}**",
+    },
     "music.track_added.title": {
         "pt": "🎵 Faixa adicionada",
         "en": "🎵 Track added",

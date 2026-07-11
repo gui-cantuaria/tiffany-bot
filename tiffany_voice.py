@@ -3985,15 +3985,14 @@ def _format_song_and_artist(title: str) -> str:
     return clean
 
 
-def _embed_now_playing(*, source_label: str, track_title: str) -> discord.Embed:
-    """Platform logo + 'Song - Artist' (clean, no play icon, no 'Tocando agora')."""
+def _embed_now_playing(*, source_label: str, track_title: str, lang: GuildLang = "pt") -> discord.Embed:
+    """Platform logo (author) + bold, localized 'Now playing: Song - Artist'."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
     icon = _platform_icon_url(source_label)
     if icon:
-        em.set_author(name=track_line[:256], icon_url=icon)
-    else:
-        em.description = f"**{track_line}**"
+        em.set_author(name=source_label[:256], icon_url=icon)
+    em.description = tr(lang, "music.now_playing", title=track_line)
     return em
 
 
@@ -4006,8 +4005,10 @@ async def _post_now_playing(
 ) -> None:
     if not session.text_channel_id:
         return
+    ch = bot.get_channel(session.text_channel_id)
+    lang = resolve_guild_lang(getattr(ch, "guild", None))
     src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
-    em = _embed_now_playing(source_label=src, track_title=track_title)
+    em = _embed_now_playing(source_label=src, track_title=track_title, lang=lang)
     q_key = _play_query_key(query)
     msg = session.last_play_status_msg
     if msg:
@@ -4019,7 +4020,6 @@ async def _post_now_playing(
             log.debug("Could not edit play status to now playing", exc_info=True)
             session.last_play_status_msg = None
             session.last_play_status_query = ""
-    ch = bot.get_channel(session.text_channel_id)
     if not ch or not hasattr(ch, "send"):
         return
     try:
@@ -7493,6 +7493,7 @@ def register_voice(bot: commands.Bot) -> None:
                         resolved_platform=bool(_detect_music_platform(query)),
                     ),
                     track_title=track_display[:200],
+                    lang=lang,
                 ))
                 asyncio.create_task(_bg_moderation_guard(sess, vc, bot, track_display, _lv_src))
             else:
