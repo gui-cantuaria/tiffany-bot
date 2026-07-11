@@ -40,12 +40,17 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 # --- Pipeline ---
 SCAN_INTERVAL_MIN = 30  # deal cycle every 30 min
 
-# Clock-aligned schedule: every 30 min from 8:00 to 17:30 (BR time)
-_OFFER_SCHEDULE = [
-    dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR)
-    for h in range(HORA_INICIO, HORA_FIM)
-    for m in range(0, 60, SCAN_INTERVAL_MIN)
-]
+# Clock-aligned schedule: every 30 min from 8:00 to 18:00 (BR time)
+def _build_offer_schedule():
+    times = []
+    t = HORA_INICIO * 60
+    while t <= HORA_FIM * 60:  # <= includes 18:00 as last cycle
+        h, m = divmod(t, 60)
+        times.append(dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR))
+        t += SCAN_INTERVAL_MIN
+    return times
+
+_OFFER_SCHEDULE = _build_offer_schedule()
 POST_SPACING_SEC = 180  # 3 min between posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # minimum discount percentage

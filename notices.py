@@ -48,9 +48,9 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
 INTERVALO_NOTICIAS_MIN = 45  # interval between news cycles (minutes)
 
-# Clock-aligned schedule: pre-warm at 7:00, then every 45 min from 8:00 to before 18:00
+# Clock-aligned schedule: every 45 min from 8:00 to before 18:00
 def _build_news_schedule():
-    times = [dt_time(hour=HORA_INICIO - 1, minute=MINUTO_PRE_AQUECIMENTO, tzinfo=FUSO_HORARIO_BR)]
+    times = []
     t = HORA_INICIO * 60
     while t < HORA_FIM * 60:
         h, m = divmod(t, 60)
