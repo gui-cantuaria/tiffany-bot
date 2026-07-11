@@ -9,7 +9,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import hashlib
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as dt_time
 from typing import Optional
 from urllib.parse import urljoin, urlparse, quote_plus
 
@@ -39,6 +39,13 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
 SCAN_INTERVAL_MIN = 30  # deal cycle every 30 min
+
+# Clock-aligned schedule: every 30 min from 8:00 to 17:30 (BR time)
+_OFFER_SCHEDULE = [
+    dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR)
+    for h in range(HORA_INICIO, HORA_FIM)
+    for m in range(0, 60, SCAN_INTERVAL_MIN)
+]
 POST_SPACING_SEC = 180  # 3 min between posts
 MAX_POSTS_POR_CICLO = 5
 DESCONTO_MINIMO = 15  # minimum discount percentage
@@ -2037,29 +2044,25 @@ class OffersCog(commands.Cog):
     def cog_unload(self):
         self.deals_loop.cancel()
     
-    @tasks.loop(minutes=SCAN_INTERVAL_MIN)
+    @tasks.loop(time=_OFFER_SCHEDULE)
     async def deals_loop(self):
-        now_br = datetime.now(FUSO_HORARIO_BR)
-        if not (HORA_INICIO <= now_br.hour < HORA_FIM):
-            log.info(f"Outside business hours ({now_br.hour}h). Skipping cycle.")
-            return
         try:
             await _run_deals_cycle()
         except Exception as e:
             log.exception(f"Offers cycle error: {e}")
-    
+
     @deals_loop.before_loop
     async def _before_deals_loop(self):
         await self.bot.wait_until_ready()
-        log.info("Offers cog ready — running first cycle now (loop waits %s min before next).", SCAN_INTERVAL_MIN)
         now_br = datetime.now(FUSO_HORARIO_BR)
         if HORA_INICIO <= now_br.hour < HORA_FIM:
+            log.info("Offers cog ready — running first cycle now.")
             try:
                 await _run_deals_cycle()
             except Exception as e:
                 log.exception(f"Offers first cycle error: {e}")
         else:
-            log.info(f"Outside business hours ({now_br.hour}h) — first cycle deferred to next loop tick.")
+            log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
     
     @commands.Cog.listener()
     async def on_ready(self):

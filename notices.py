@@ -14,7 +14,7 @@ import hashlib
 import struct
 import calendar
 import atexit
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as dt_time
 from typing import Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 
@@ -47,6 +47,18 @@ HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
 INTERVALO_NOTICIAS_MIN = 45  # interval between news cycles (minutes)
+
+# Clock-aligned schedule: pre-warm at 7:00, then every 45 min from 8:00 to before 18:00
+def _build_news_schedule():
+    times = [dt_time(hour=HORA_INICIO - 1, minute=MINUTO_PRE_AQUECIMENTO, tzinfo=FUSO_HORARIO_BR)]
+    t = HORA_INICIO * 60
+    while t < HORA_FIM * 60:
+        h, m = divmod(t, 60)
+        times.append(dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR))
+        t += INTERVALO_NOTICIAS_MIN
+    return times
+
+_NEWS_SCHEDULE = _build_news_schedule()
 
 # --- Pipeline ---
 SCAN_POR_FEED = 5
@@ -1595,31 +1607,12 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
 # Global state for /status
 _last_cycle_time: str = "Nunca"
 _last_cycle_stats: dict = {}
-_last_run_ts: Optional[float] = None  # epoch of last executed cycle
 # Daily counter for news role mentions (max 3 per day)
 _daily_mention_news: int = 0
 _daily_mention_news_date: str = ""
 
-def _janela_ativa_ou_pre_aquecimento(agora: datetime) -> bool:
-    """Allow collection during business hours and pre-warm before 8am."""
-    if HORA_INICIO <= agora.hour < HORA_FIM:
-        return True
-    return agora.hour == (HORA_INICIO - 1) and agora.minute >= MINUTO_PRE_AQUECIMENTO
 
-
-def _deve_rodar_slot(agora: datetime) -> bool:
-    """Run every INTERVALO_NOTICIAS_MIN minutes (elapsed-time control).
-    Only consumes the interval when already in the active window (window check
-    happens BEFORE this), so the first cycle of the day fires as soon as it opens."""
-    global _last_run_ts
-    now = agora.timestamp()
-    if _last_run_ts is not None and (now - _last_run_ts) < INTERVALO_NOTICIAS_MIN * 60:
-        return False
-    _last_run_ts = now
-    return True
-
-
-@tasks.loop(minutes=1)
+@tasks.loop(time=_NEWS_SCHEDULE)
 async def verificar_feeds():
     try:
         await _verificar_feeds_inner()
@@ -1632,13 +1625,6 @@ async def _verificar_feeds_inner():
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
-    # Window first: outside it we do not consume the interval (keeps the first
-    # cycle of the day firing when the window opens).
-    if not _janela_ativa_ou_pre_aquecimento(agora):
-        return
-
-    if not _deve_rodar_slot(agora):
-        return
 
     # Reset prune flags for this cycle
     _simhash_pruned_this_cycle = False
