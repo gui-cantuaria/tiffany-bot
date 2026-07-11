@@ -150,6 +150,7 @@ def build_about_embed(
     em.add_field(name=tr(lang, "about.music.title"), value=tr(lang, "about.music.body"), inline=False)
     em.add_field(name=tr(lang, "about.chat.title"), value=tr(lang, "about.chat.body"), inline=False)
     em.add_field(name=tr(lang, "about.dice.title"), value=tr(lang, "about.dice.body"), inline=False)
+    em.add_field(name=tr(lang, "about.language.title"), value=tr(lang, "about.language.body"), inline=False)
     if for_admin:
         em.add_field(name=tr(lang, "about.admin.title"), value=tr(lang, "about.admin.body"), inline=False)
     em.set_footer(text=tr(lang, "about.footer"))
@@ -281,6 +282,12 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
             "Entra a un canal de voz → **`t!p [música]`**.\n"
             "Diagnóstico: **`/player-status`** (admin) · **`/status`** (general)."
         ),
+    },
+    "about.language.title": {"pt": "🌐 Idioma", "en": "🌐 Language", "es": "🌐 Idioma"},
+    "about.language.body": {
+        "pt": "Respondo no idioma do servidor (PT / EN / ES), definido pela **língua do servidor no Discord**. Servidor em português → falo português; em inglês → inglês; em espanhol → espanhol.",
+        "en": "I reply in your server's language (PT / EN / ES), based on the **server's language in Discord**. Portuguese server → Portuguese; English → English; Spanish → Spanish.",
+        "es": "Respondo en el idioma del servidor (PT / EN / ES), según el **idioma del servidor en Discord**. Servidor en portugués → portugués; en inglés → inglés; en español → español.",
     },
     "about.footer": {
         "pt": "/help = lista completa · Tiffany by Tuffine",
@@ -875,5 +882,242 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Já respondi. Insistir não desbloqueia nada.",
         "en": "Already answered. Insisting won't unlock anything.",
         "es": "Ya respondí. Insistir no desbloquea nada.",
+    },
+    # --- Voice-command feedback (spoken commands work in pt/en/es) ---
+    "voice.stt.mic_hint": {
+        "pt": "🎤 Estou ouvindo áudio mas não consegui entender. Fale mais perto do microfone, um pouco mais alto e comece com **Tiffany, ...**. Se persistir, verifique o volume de entrada do seu mic no Discord.",
+        "en": "🎤 I can hear audio but couldn't make it out. Speak closer to the mic, a bit louder, and start with **Tiffany, ...**. If it keeps happening, check your mic input volume in Discord.",
+        "es": "🎤 Escucho audio pero no logré entender. Habla más cerca del micrófono, un poco más alto y empieza con **Tiffany, ...**. Si persiste, revisa el volumen de entrada de tu mic en Discord.",
+    },
+    "voice.stt.wake_only": {
+        "pt": "🎤 **Sim, estou ouvindo!** Diga sua pergunta completa: **Tiffany, qual é a capital do Brasil?**",
+        "en": "🎤 **Yes, I'm listening!** Say your full question: **Tiffany, what's the capital of France?**",
+        "es": "🎤 **¡Sí, te escucho!** Di tu pregunta completa: **Tiffany, ¿cuál es la capital de España?**",
+    },
+    "voice.stt.incomplete": {
+        "pt": "🎤 Te ouvi! Complete: **Tiffany, qual é a capital do Brasil?** ou **Tiffany, toca [música]**.",
+        "en": "🎤 I heard you! Finish it: **Tiffany, what's the capital of France?** or **Tiffany, play [song]**.",
+        "es": "🎤 ¡Te escuché! Complétalo: **Tiffany, ¿cuál es la capital de España?** o **Tiffany, toca [música]**.",
+    },
+    "voice.stopped": {
+        "pt": "⏹️ Parei a música.",
+        "en": "⏹️ Stopped the music.",
+        "es": "⏹️ Detuve la música.",
+    },
+    "voice.skipped": {
+        "pt": "⏭️ Pulei a faixa.",
+        "en": "⏭️ Skipped the track.",
+        "es": "⏭️ Salté la pista.",
+    },
+    "voice.nothing_to_loop": {
+        "pt": "⚠️ Nada tocando para repetir.",
+        "en": "⚠️ Nothing playing to loop.",
+        "es": "⚠️ Nada sonando para repetir.",
+    },
+    "voice.loop_on": {
+        "pt": "🔁 Loop ativado: **{title}**",
+        "en": "🔁 Loop on: **{title}**",
+        "es": "🔁 Loop activado: **{title}**",
+    },
+    "voice.loop_off": {
+        "pt": "🔁 Loop desativado.",
+        "en": "🔁 Loop off.",
+        "es": "🔁 Loop desactivado.",
+    },
+    "voice.shuffled": {
+        "pt": "🔀 Fila embaralhada ({count} músicas).",
+        "en": "🔀 Queue shuffled ({count} tracks).",
+        "es": "🔀 Cola mezclada ({count} pistas).",
+    },
+    "voice.queue_too_small": {
+        "pt": "⚠️ Fila com menos de 2 músicas.",
+        "en": "⚠️ Fewer than 2 tracks in the queue.",
+        "es": "⚠️ Menos de 2 pistas en la cola.",
+    },
+    "voice.replaying": {
+        "pt": "🔄 Repetindo: **{title}**",
+        "en": "🔄 Replaying: **{title}**",
+        "es": "🔄 Repitiendo: **{title}**",
+    },
+    "voice.left": {
+        "pt": "👋 **Tiffany saiu** do canal de voz.",
+        "en": "👋 **Tiffany left** the voice channel.",
+        "es": "👋 **Tiffany salió** del canal de voz.",
+    },
+    "voice.paused": {
+        "pt": "⏸️ Pausei a música.",
+        "en": "⏸️ Paused the music.",
+        "es": "⏸️ Pausé la música.",
+    },
+    "voice.resumed": {
+        "pt": "▶️ Continuando a música.",
+        "en": "▶️ Resuming the music.",
+        "es": "▶️ Reanudando la música.",
+    },
+    "voice.not_paused": {
+        "pt": "⚠️ Música não está pausada.",
+        "en": "⚠️ Music isn't paused.",
+        "es": "⚠️ La música no está en pausa.",
+    },
+    "voice.cleared": {
+        "pt": "🗑️ Fila limpa.",
+        "en": "🗑️ Queue cleared.",
+        "es": "🗑️ Cola limpiada.",
+    },
+    "voice.queue_empty": {
+        "pt": "📭 A fila está vazia.",
+        "en": "📭 The queue is empty.",
+        "es": "📭 La cola está vacía.",
+    },
+    "voice.nothing_to_seek": {
+        "pt": "⚠️ Nenhuma música tocando para pular.",
+        "en": "⚠️ No music playing to seek.",
+        "es": "⚠️ No hay música sonando para avanzar.",
+    },
+    "voice.seeking_to": {
+        "pt": "{direction} Pulando para {pos}",
+        "en": "{direction} Seeking to {pos}",
+        "es": "{direction} Avanzando a {pos}",
+    },
+    "voice.queue_full": {
+        "pt": "⚠️ Fila cheia ({cur}/{max}).",
+        "en": "⚠️ Queue full ({cur}/{max}).",
+        "es": "⚠️ Cola llena ({cur}/{max}).",
+    },
+    "voice.random_added": {
+        "pt": "🎲 Música aleatória na fila: **{display}**",
+        "en": "🎲 Random song queued: **{display}**",
+        "es": "🎲 Canción aleatoria en cola: **{display}**",
+    },
+    "voice.autoplay_on": {
+        "pt": "▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares.",
+        "en": "▶️ **Autoplay on** — when the queue ends, I'll play similar songs.",
+        "es": "▶️ **Autoplay activado** — cuando la cola termine, toco canciones similares.",
+    },
+    "voice.autoplay_off": {
+        "pt": "⏹️ **Autoplay desativado**.",
+        "en": "⏹️ **Autoplay off**.",
+        "es": "⏹️ **Autoplay desactivado**.",
+    },
+    "voice.nonstop_on": {
+        "pt": "🔒 **Modo 24/7 ativado** — não saio por inatividade.",
+        "en": "🔒 **24/7 mode on** — I won't leave for inactivity.",
+        "es": "🔒 **Modo 24/7 activado** — no salgo por inactividad.",
+    },
+    "voice.nonstop_off": {
+        "pt": "🔓 **Modo 24/7 desativado** — volto a sair após inatividade.",
+        "en": "🔓 **24/7 mode off** — I'll leave again after inactivity.",
+        "es": "🔓 **Modo 24/7 desactivado** — vuelvo a salir tras inactividad.",
+    },
+    "voice.ask_server_busy": {
+        "pt": "⏳ Muitas perguntas neste servidor!",
+        "en": "⏳ Too many questions in this server!",
+        "es": "⏳ ¡Demasiadas preguntas en este servidor!",
+    },
+    "voice.ask_busy": {
+        "pt": "🧠 Muitas perguntas agora. Aguarde alguns segundos.",
+        "en": "🧠 Too many questions right now. Wait a few seconds.",
+        "es": "🧠 Demasiadas preguntas ahora. Espera unos segundos.",
+    },
+    "voice.ask_cooldown": {
+        "pt": "⏳ Aguarde {secs}s antes de perguntar novamente.",
+        "en": "⏳ Wait {secs}s before asking again.",
+        "es": "⏳ Espera {secs}s antes de preguntar de nuevo.",
+    },
+    "voice.thinking": {
+        "pt": "💬 **{q}**\n🧠 Pensando...",
+        "en": "💬 **{q}**\n🧠 Thinking...",
+        "es": "💬 **{q}**\n🧠 Pensando...",
+    },
+    "voice.added_multi": {
+        "pt": "🎵 **{count} músicas** adicionadas à fila.",
+        "en": "🎵 **{count} songs** added to the queue.",
+        "es": "🎵 **{count} canciones** agregadas a la cola.",
+    },
+    "voice.added_one": {
+        "pt": "🎵 Entendido: **{q}** — adicionando à fila.",
+        "en": "🎵 Got it: **{q}** — adding to the queue.",
+        "es": "🎵 Entendido: **{q}** — agregando a la cola.",
+    },
+    "voice.tts.blocked": {
+        "pt": "Desculpa, não falo sobre isso.",
+        "en": "Sorry, I don't talk about that.",
+        "es": "Perdón, no hablo de eso.",
+    },
+    "voice.tts.wont_play": {
+        "pt": "Essa eu não toco.",
+        "en": "I won't play that one.",
+        "es": "Esa no la toco.",
+    },
+    # --- Wrong-command hints + command error handler ---
+    "hint.prefix.jockie": {
+        "pt": "Prefixo do Jockie Music. Aqui use **`t!p`** (ex.: `t!p https://...`).",
+        "en": "That's Jockie Music's prefix. Here use **`t!p`** (e.g. `t!p https://...`).",
+        "es": "Ese es el prefijo de Jockie Music. Aquí usa **`t!p`** (ej.: `t!p https://...`).",
+    },
+    "hint.prefix.other": {
+        "pt": "Comandos usam **`t!`** — ex.: `t!p`, `t!c`, `t!s`. Lista: **`/help`**.",
+        "en": "Commands use **`t!`** — e.g. `t!p`, `t!c`, `t!s`. List: **`/help`**.",
+        "es": "Los comandos usan **`t!`** — ej.: `t!p`, `t!c`, `t!s`. Lista: **`/help`**.",
+    },
+    "hint.unrecognized": {
+        "pt": "Comando não reconhecido. Prefixo **`t!`** — veja **`/help`**.",
+        "en": "Command not recognized. Prefix **`t!`** — see **`/help`**.",
+        "es": "Comando no reconocido. Prefijo **`t!`** — mira **`/help`**.",
+    },
+    "hint.help": {
+        "pt": "Ajuda completa: **`/help`**.",
+        "en": "Full help: **`/help`**.",
+        "es": "Ayuda completa: **`/help`**.",
+    },
+    "hint.join": {
+        "pt": "Entro no canal ao tocar algo: **`t!p <música>`**.",
+        "en": "I join the channel when you play something: **`t!p <song>`**.",
+        "es": "Entro al canal al reproducir algo: **`t!p <música>`**.",
+    },
+    "hint.queue": {
+        "pt": "Fila e faixa atual: **`t!q`** / **`t!queue`** (ou **`/queue`**).",
+        "en": "Queue and current track: **`t!q`** / **`t!queue`** (or **`/queue`**).",
+        "es": "Cola y pista actual: **`t!q`** / **`t!queue`** (o **`/queue`**).",
+    },
+    "hint.did_you_mean": {
+        "pt": "**`t!{w}`** não existe. Quis dizer **`t!{target}`**?\n{usage}",
+        "en": "**`t!{w}`** doesn't exist. Did you mean **`t!{target}`**?\n{usage}",
+        "es": "**`t!{w}`** no existe. ¿Quisiste decir **`t!{target}`**?\n{usage}",
+    },
+    "hint.unknown": {
+        "pt": "**`t!{w}`** não existe. Veja **`/help`** ou use `t!p`, `t!c`, `t!s`, `t!d`.",
+        "en": "**`t!{w}`** doesn't exist. See **`/help`** or use `t!p`, `t!c`, `t!s`, `t!d`.",
+        "es": "**`t!{w}`** no existe. Mira **`/help`** o usa `t!p`, `t!c`, `t!s`, `t!d`.",
+    },
+    "cmd.usage_fallback": {
+        "pt": "Use `/help` para ver todos os comandos.",
+        "en": "Use `/help` to see all commands.",
+        "es": "Usa `/help` para ver todos los comandos.",
+    },
+    "err.cooldown": {
+        "pt": "⏳ Aguarde {secs}s para usar de novo.",
+        "en": "⏳ Wait {secs}s to use it again.",
+        "es": "⏳ Espera {secs}s para usarlo de nuevo.",
+    },
+    "err.rate_limited": {
+        "pt": "⏳ Aguarde **{secs}s** antes de usar `{cmd}` de novo.",
+        "en": "⏳ Wait **{secs}s** before using `{cmd}` again.",
+        "es": "⏳ Espera **{secs}s** antes de usar `{cmd}` de nuevo.",
+    },
+    "err.missing_perms": {
+        "pt": "⚠️ Sem permissão para este comando.",
+        "en": "⚠️ You don't have permission for this command.",
+        "es": "⚠️ Sin permiso para este comando.",
+    },
+    "err.missing_arg": {
+        "pt": "⚠️ Faltou argumento. Uso: **{usage}**",
+        "en": "⚠️ Missing argument. Usage: **{usage}**",
+        "es": "⚠️ Falta un argumento. Uso: **{usage}**",
+    },
+    "err.bad_arg": {
+        "pt": "⚠️ Argumento inválido. Uso: **{usage}**",
+        "en": "⚠️ Invalid argument. Usage: **{usage}**",
+        "es": "⚠️ Argumento inválido. Uso: **{usage}**",
     },
 }

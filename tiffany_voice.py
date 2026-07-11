@@ -4001,12 +4001,12 @@ def _all_cmd_tokens() -> list[str]:
     return out
 
 
-def _usage_for_cmd(token: str) -> str:
+def _usage_for_cmd(token: str, lang: GuildLang = "pt") -> str:
     t = token.lower()
     for primary, aliases, usage in _COMMAND_REGISTRY:
         if t == primary or t in aliases:
             return usage
-    return "Use `/help` para ver todos os comandos."
+    return tr(lang, "cmd.usage_fallback")
 
 
 _COMMON_TYPOS: dict[str, str] = {
@@ -4039,34 +4039,34 @@ _COMMON_TYPOS: dict[str, str] = {
 }
 
 
-def _hint_for_wrong_command(wrong: str, raw_content: str = "") -> str:
+def _hint_for_wrong_command(wrong: str, raw_content: str = "", lang: GuildLang = "pt") -> str:
     import difflib
     low = (raw_content or "").lower().strip()
     if low.startswith("m!"):
-        return "Prefixo do Jockie Music. Aqui use **`t!p`** (ex.: `t!p https://...`)."
+        return tr(lang, "hint.prefix.jockie")
     if low.startswith(("!", "-", ".", ";", ">", "$", "%")) and not low.startswith("!="):
-        return "Comandos usam **`t!`** — ex.: `t!p`, `t!c`, `t!s`. Lista: **`/help`**."
+        return tr(lang, "hint.prefix.other")
     w = (wrong or "").lower()
     if not w:
-        return "Comando não reconhecido. Prefixo **`t!`** — veja **`/help`**."
+        return tr(lang, "hint.unrecognized")
     if w in {"help", "ajuda", "ajudar", "comandos", "comando", "helpp", "hepl", "menu"}:
-        return "Ajuda completa: **`/help`**."
+        return tr(lang, "hint.help")
     if w in {"entrar", "entra", "entr", "entar", "join", "conectar", "vem"}:
-        return "Entro no canal ao tocar algo: **`t!p <música>`**."
+        return tr(lang, "hint.join")
     if w in {"queu", "que", "qeueu", "qeue", "fila", "fil", "fla", "filla"}:
-        return "Fila e faixa atual: **`t!q`** / **`t!queue`** (ou **`/queue`**)."
+        return tr(lang, "hint.queue")
     # Common typo map -> correct command
     if w in _COMMON_TYPOS:
         target = _COMMON_TYPOS[w]
-        return f"**`t!{w}`** não existe. Quis dizer **`t!{target}`**?\n{_usage_for_cmd(target)}"
+        return tr(lang, "hint.did_you_mean", w=w, target=target, usage=_usage_for_cmd(target, lang))
     # Fuzzy matching with lower cutoff to catch more variants
     matches = difflib.get_close_matches(w, _all_cmd_tokens(), n=1, cutoff=0.45)
     if matches:
         m = matches[0]
         for primary, aliases, _ in _COMMAND_REGISTRY:
             if m == primary or m in aliases:
-                return f"**`t!{w}`** não existe. Quis dizer **`t!{primary}`**?\n{_usage_for_cmd(primary)}"
-    return f"**`t!{w}`** não existe. Veja **`/help`** ou use `t!p`, `t!c`, `t!s`, `t!d`."
+                return tr(lang, "hint.did_you_mean", w=w, target=primary, usage=_usage_for_cmd(primary, lang))
+    return tr(lang, "hint.unknown", w=w)
 
 
 def _embed_music_added(
@@ -5117,16 +5117,14 @@ async def _voice_listen_loop(
                         await _notify(
                             bot,
                             session.text_channel_id,
-                            "🎤 Estou ouvindo áudio mas não consegui entender. "
-                            "Fale mais perto do microfone, um pouco mais alto e "
-                            "comece com **Tiffany, ...**. Se persistir, verifique o "
-                            "volume de entrada do seu mic no Discord.",
+                            tr(resolve_guild_lang(vc.guild), "voice.stt.mic_hint"),
                         )
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
             _stt_fail_count = 0  # reset on successful recognition
             action, arg = _parse_voice_command(text)
+            vlang = resolve_guild_lang(vc.guild)  # server language for spoken-command feedback
             log.info("STT guild=%s: %r -> %s %r", guild_id, text, action, arg)
             if action == "wake_only":
                 now_hint = time.monotonic()
@@ -5135,8 +5133,7 @@ async def _voice_listen_loop(
                     await _notify(
                         bot,
                         session.text_channel_id,
-                        "🎤 **Sim, estou ouvindo!** Diga sua pergunta completa: "
-                        "**Tiffany, qual é a capital do Brasil?**",
+                        tr(vlang, "voice.stt.wake_only"),
                     )
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
@@ -5156,8 +5153,7 @@ async def _voice_listen_loop(
                         await _notify(
                             bot,
                             session.text_channel_id,
-                            "🎤 Te ouvi! Complete: **Tiffany, qual é a capital do Brasil?** "
-                            "ou **Tiffany, toca [música]**.",
+                            tr(vlang, "voice.stt.incomplete"),
                         )
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
@@ -5185,19 +5181,19 @@ async def _voice_listen_loop(
                 session.queue_durations.clear()
                 session.queue_requesters.clear()
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                await _notify(bot, session.text_channel_id, "⏹️ Parei a música.")
+                await _notify(bot, session.text_channel_id, tr(vlang, "voice.stopped"))
                 continue
 
             if action == "skip":
                 _clear_loop(session)
                 vc.stop()
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                await _notify(bot, session.text_channel_id, "⏭️ Pulei a faixa.")
+                await _notify(bot, session.text_channel_id, tr(vlang, "voice.skipped"))
                 continue
 
             if action == "loop":
                 if not session.current_song and not session.current_query:
-                    await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.nothing_to_loop"))
                     continue
                 if not session.current_query and session.current_song:
                     session.current_query = f"ytsearch1:{session.current_song}"
@@ -5209,12 +5205,12 @@ async def _voice_listen_loop(
                     await _notify(
                         bot,
                         session.text_channel_id,
-                        f"🔁 Loop ativado: **{session.loop_display[:80]}**",
+                        tr(vlang, "voice.loop_on", title=session.loop_display[:80]),
                     )
                 else:
                     _clear_loop(session)
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                    await _notify(bot, session.text_channel_id, "🔁 Loop desativado.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.loop_off"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -5239,9 +5235,9 @@ async def _voice_listen_loop(
                         await _new_q.put(q)
                     session.music_queue = _new_q
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                    await _notify(bot, session.text_channel_id, f"🔀 Fila embaralhada ({len(session.queue_display)} músicas).")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.shuffled", count=len(session.queue_display)))
                 else:
-                    await _notify(bot, session.text_channel_id, "⚠️ Fila com menos de 2 músicas.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.queue_too_small"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -5264,9 +5260,9 @@ async def _voice_listen_loop(
                     _clear_loop(session)
                     vc.stop()
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                    await _notify(bot, session.text_channel_id, f"🔄 Repetindo: **{d[:80]}**")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.replaying", title=d[:80]))
                 else:
-                    await _notify(bot, session.text_channel_id, "⚠️ Nada tocando para repetir.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.nothing_to_loop"))
                 continue
 
             if action == "leave":
@@ -5285,25 +5281,25 @@ async def _voice_listen_loop(
                 if vc and vc.is_connected():
                     _mark_voluntary_leave(guild_id)
                     await vc.disconnect(force=True)
-                await _notify(bot, text_ch_id, "👋 **Tiffany saiu** do canal de voz.")
+                await _notify(bot, text_ch_id, tr(vlang, "voice.left"))
                 return
             
             if action == "pause":
                 if vc.is_playing():
                     vc.pause()
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                    await _notify(bot, session.text_channel_id, "⏸️ Pausei a música.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.paused"))
                 else:
-                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.err.no_music_now"))
                 continue
 
             if action == "resume":
                 if vc.is_paused():
                     vc.resume()
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                    await _notify(bot, session.text_channel_id, "▶️ Continuando a música.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.resumed"))
                 else:
-                    await _notify(bot, session.text_channel_id, "⚠️ Música não está pausada.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.not_paused"))
                 continue
 
             if action == "clear":
@@ -5326,22 +5322,22 @@ async def _voice_listen_loop(
                     vc.stop()
                 _clear_voice_state(guild_id)
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                await _notify(bot, session.text_channel_id, "🗑️ Fila limpa.")
+                await _notify(bot, session.text_channel_id, tr(vlang, "voice.cleared"))
                 continue
 
             if action == "nowplaying":
                 if session.current_song:
                     dur = f" `{_fmt_dur(session.current_duration)}`" if session.current_duration > 0 else ""
-                    elapsed = f" · {_fmt_dur(time.monotonic() - session.song_start_time)} decorrido" if session.song_start_time > 0 else ""
+                    elapsed = f" · {_fmt_dur(time.monotonic() - session.song_start_time)} {tr(vlang, 'queue.elapsed')}" if session.song_start_time > 0 else ""
                     await _notify(bot, session.text_channel_id, f"🎵 **{session.current_song[:80]}**{dur}{elapsed}")
                 else:
-                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando agora.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.err.no_music_now"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
 
             if action == "queue_show":
-                q_em = _format_queue_embed(session, resolve_guild_lang(vc.guild))
+                q_em = _format_queue_embed(session, vlang)
                 if q_em:
                     ch = bot.get_channel(session.text_channel_id)
                     if ch and hasattr(ch, "send"):
@@ -5350,14 +5346,14 @@ async def _voice_listen_loop(
                         except discord.HTTPException:
                             pass
                 else:
-                    await _notify(bot, session.text_channel_id, "📭 A fila está vazia.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.queue_empty"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
 
             if action in ("seek_fwd", "seek_back") and arg:
                 if not session.current_song or not session.current_file:
-                    await _notify(bot, session.text_channel_id, "⚠️ Nenhuma música tocando para pular.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.nothing_to_seek"))
                     continue
                 try:
                     delta = int(arg)
@@ -5376,7 +5372,7 @@ async def _voice_listen_loop(
                         vc.play(new_src)
                         direction = "⏩" if action == "seek_fwd" else "⏪"
                         asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                        await _notify(bot, session.text_channel_id, f"{direction} Pulando para {_fmt_dur(target)}")
+                        await _notify(bot, session.text_channel_id, tr(vlang, "voice.seeking_to", direction=direction, pos=_fmt_dur(target)))
                 except Exception as e:
                     log.debug("Voice seek failed: %s", e)
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
@@ -5386,14 +5382,14 @@ async def _voice_listen_loop(
             if action == "random":
                 fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
                 if fila_atual >= QUEUE_MAX:
-                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.queue_full", cur=fila_atual, max=QUEUE_MAX))
                     continue
                 song, _from_discovery = _pick_random_song(session, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
                 display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
                 _append_queue_item(session, display, _DEFAULT_TRACK_EST_SEC, speaker_uid or 0)
                 await session.music_queue.put(song)
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                await _notify(bot, session.text_channel_id, f"🎲 Música aleatória na fila: **{display}**")
+                await _notify(bot, session.text_channel_id, tr(vlang, "voice.random_added", display=display))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -5402,9 +5398,9 @@ async def _voice_listen_loop(
                 session.autoplay = not session.autoplay
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 if session.autoplay:
-                    await _notify(bot, session.text_channel_id, "▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.autoplay_on"))
                 else:
-                    await _notify(bot, session.text_channel_id, "⏹️ **Autoplay desativado**.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.autoplay_off"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -5415,9 +5411,9 @@ async def _voice_listen_loop(
                 _touch_activity(guild_id)
                 asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 if session.stay_24_7:
-                    await _notify(bot, session.text_channel_id, "🔒 **Modo 24/7 ativado** — não saio por inatividade.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.nonstop_on"))
                 else:
-                    await _notify(bot, session.text_channel_id, "🔓 **Modo 24/7 desativado** — volto a sair após inatividade.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.nonstop_off"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
                 continue
@@ -5426,13 +5422,12 @@ async def _voice_listen_loop(
                 if _contains_blocked_content(arg) or await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    await _notify(bot, session.text_channel_id, _pick_blocked_reply())
+                    await _notify(bot, session.text_channel_id, _pick_blocked_reply(vlang))
                     continue
                 allowed, wait = _check_game_cooldown(speaker_uid)
                 if not allowed:
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    vlang = resolve_guild_lang(bot.get_guild(guild_id))
                     await _notify(
                         bot, session.text_channel_id,
                         tr(vlang, "game.cooldown", wait=wait),
@@ -5456,24 +5451,20 @@ async def _voice_listen_loop(
                 if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    asyncio.create_task(_tts_speak_quick(vc, "Desculpa, não falo sobre isso."))
-                    await _notify(bot, session.text_channel_id, _pick_blocked_reply())
+                    asyncio.create_task(_tts_speak_quick(vc, tr(vlang, "voice.tts.blocked")))
+                    await _notify(bot, session.text_channel_id, _pick_blocked_reply(vlang))
                     continue
                 allowed, remaining = _check_cooldown(speaker_uid)
                 if not allowed:
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    await _notify(bot, session.text_channel_id, f"⏳ Aguarde {remaining}s antes de perguntar novamente.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.ask_cooldown", secs=remaining))
                     continue
                 ok, reason = _ai_rate_limit_peek(guild_id, bucket="voice")
                 if not ok:
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    msg = (
-                        "⏳ Muitas perguntas neste servidor!"
-                        if reason == "server"
-                        else "🧠 Muitas perguntas agora. Aguarde alguns segundos."
-                    )
+                    msg = tr(vlang, "voice.ask_server_busy") if reason == "server" else tr(vlang, "voice.ask_busy")
                     await _notify(bot, session.text_channel_id, msg)
                     continue
                 if _paused_for_listen:
@@ -5482,7 +5473,7 @@ async def _voice_listen_loop(
                 status_msg = await _notify(
                     bot,
                     session.text_channel_id,
-                    f"💬 **{arg[:80]}**\n🧠 Pensando...",
+                    tr(vlang, "voice.thinking", q=arg[:80]),
                     return_message=True,
                 )
                 session.last_question_status_msg = status_msg
@@ -5492,13 +5483,13 @@ async def _voice_listen_loop(
                 if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    asyncio.create_task(_tts_speak_quick(vc, "Essa eu não toco."))
-                    await _notify(bot, session.text_channel_id, _pick_blocked_reply())
+                    asyncio.create_task(_tts_speak_quick(vc, tr(vlang, "voice.tts.wont_play")))
+                    await _notify(bot, session.text_channel_id, _pick_blocked_reply(vlang))
                     continue
                 # Check queue limit
                 fila_atual = len(session.queue_display) + (1 if session.current_song else 0)
                 if fila_atual >= QUEUE_MAX:
-                    await _notify(bot, session.text_channel_id, f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.queue_full", cur=fila_atual, max=QUEUE_MAX))
                     continue
                 # Supports multiple songs separated by comma or " e "
                 parts = re.split(r'\s*,\s*|\s+e\s+', arg)
@@ -5526,9 +5517,9 @@ async def _voice_listen_loop(
                 if added > 0:
                     asyncio.create_task(_tts_speak_quick(vc, "Ok."))
                 if added > 1:
-                    await _notify(bot, session.text_channel_id, f"🎵 **{added} músicas** adicionadas à fila.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.added_multi", count=added))
                 elif added == 1:
-                    await _notify(bot, session.text_channel_id, f"🎵 Entendido: **{arg[:100]}** — adicionando à fila.")
+                    await _notify(bot, session.text_channel_id, tr(vlang, "voice.added_one", q=arg[:100]))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
     except asyncio.CancelledError:
@@ -8280,28 +8271,29 @@ def register_voice(bot: commands.Bot) -> None:
     # Central command error handler (cooldown, permission, unknown command, etc.)
     @bot.listen("on_command_error")
     async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
+        lang = _ctx_lang(ctx)
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(embed=_embed(f"⏳ Aguarde {error.retry_after:.0f}s para usar de novo."), delete_after=4)
+            await ctx.send(embed=_embed(tr(lang, "err.cooldown", secs=f"{error.retry_after:.0f}")), delete_after=4)
         elif isinstance(error, TiffanyRateLimited):
             prefix = "/" if error.slash else "t!"
             await ctx.send(
-                embed=_embed(f"⏳ Aguarde **{error.retry_after:.0f}s** antes de usar `{prefix}{error.cmd}` de novo."),
+                embed=_embed(tr(lang, "err.rate_limited", secs=f"{error.retry_after:.0f}", cmd=f"{prefix}{error.cmd}")),
                 delete_after=4,
             )
         elif isinstance(error, commands.MissingPermissions):
-            await ctx.send(embed=_embed("⚠️ Sem permissão para este comando."), delete_after=5)
+            await ctx.send(embed=_embed(tr(lang, "err.missing_perms")), delete_after=5)
         elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send(embed=_embed("⚠️ Esse comando só funciona em um servidor."))
+            await ctx.send(embed=_embed(tr(lang, "err.guild_only")))
         elif isinstance(error, commands.CommandNotFound):
             wrong = (ctx.invoked_with or "").strip()
             raw = ctx.message.content if ctx.message else ""
-            await ctx.send(embed=_embed(_hint_for_wrong_command(wrong, raw)), delete_after=20)
+            await ctx.send(embed=_embed(_hint_for_wrong_command(wrong, raw, lang)), delete_after=20)
         elif isinstance(error, commands.MissingRequiredArgument):
             usage = (ctx.command.help if ctx.command and ctx.command.help else f"t!{ctx.command.name}")
-            await ctx.send(embed=_embed(f"⚠️ Faltou argumento. Uso: **{usage}**"), delete_after=12)
+            await ctx.send(embed=_embed(tr(lang, "err.missing_arg", usage=usage)), delete_after=12)
         elif isinstance(error, commands.BadArgument):
             usage = (ctx.command.help if ctx.command and ctx.command.help else f"t!{ctx.command.name}")
-            await ctx.send(embed=_embed(f"⚠️ Argumento inválido. Uso: **{usage}**"), delete_after=12)
+            await ctx.send(embed=_embed(tr(lang, "err.bad_arg", usage=usage)), delete_after=12)
         elif isinstance(error, commands.CommandInvokeError):
             log.exception("Error running command %s: %s", ctx.command, error.original)
             try:
