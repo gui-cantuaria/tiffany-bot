@@ -3502,14 +3502,23 @@ def _song_tokens(s: str) -> list[str]:
 
 def _match_score(query: str, title: str) -> float:
     """0..1 — how well the YouTube title matches the user search.
-    Combines token coverage (70%) with sequence similarity (30%)."""
+    Combines fuzzy token coverage (70%) with sequence similarity (30%).
+    Coverage tolerates small typos so a misspelled famous song (e.g.
+    'mockinbird' ~ 'mockingbird') still scores as a confident match."""
     import difflib
     q = _song_tokens(query)
     if not q:
         return 0.0
     t_tokens = _song_tokens(title)
     t_set = set(t_tokens)
-    coverage = sum(1 for w in q if w in t_set) / len(q)
+
+    def _covered(w: str) -> bool:
+        if w in t_set:
+            return True
+        # tolerate typos / minor variants against any title token
+        return any(difflib.SequenceMatcher(None, w, tw).ratio() >= 0.82 for tw in t_tokens)
+
+    coverage = sum(1 for w in q if _covered(w)) / len(q)
     ratio = difflib.SequenceMatcher(None, " ".join(q), " ".join(t_tokens)).ratio()
     return round(0.7 * coverage + 0.3 * ratio, 3)
 
@@ -7550,8 +7559,12 @@ def register_voice(bot: commands.Bot) -> None:
             best_score = _match_score(search_term, best["title"])
             second_score = _match_score(search_term, scored[1]["title"]) if len(scored) > 1 else 0.0
             # Confident: play 1st result directly in most cases.
-            # Only ask when score is very low OR top 2 are nearly tied (real ambiguity, e.g. parody vs original).
-            confident = best_score >= 0.55 and (len(scored) == 1 or (best_score - second_score) >= 0.08)
+            # High score → play even if #2 is close (ties are usually the SAME famous
+            # song in different uploads: official / lyrics / live). Only fall back to
+            # the tie-break for middling scores, and only ask when the match is weak.
+            confident = best_score >= 0.7 or (
+                best_score >= 0.55 and (len(scored) == 1 or (best_score - second_score) >= 0.08)
+            )
 
             if not confident:
                 linhas = []
