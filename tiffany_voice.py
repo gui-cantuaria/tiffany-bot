@@ -3919,8 +3919,12 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
             return "Apple Music"
         if "amazon" in p:
             return "Amazon Music"
+        if "music.youtube" in p:
+            return "YouTube Music"
         return "Streaming"
     q = (query or "").lower()
+    if "music.youtube.com" in q:
+        return "YouTube Music"
     if "youtube.com" in q or "youtu.be" in q or q.startswith("ytsearch"):
         return "YouTube"
     if "soundcloud" in q or q.startswith("scsearch"):
@@ -3931,12 +3935,30 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
 # Platform label -> domain used by Google's favicon service (reliable, no hosting).
 _PLATFORM_ICON_DOMAINS: dict[str, str] = {
     "YouTube": "youtube.com",
+    "YouTube Music": "music.youtube.com",
     "Spotify": "open.spotify.com",
     "Deezer": "deezer.com",
     "Apple Music": "music.apple.com",
     "Amazon Music": "music.amazon.com",
     "SoundCloud": "soundcloud.com",
 }
+
+# Platform label -> inline emoji (Discord descriptions can't render logo images;
+# for exact brand logos, upload custom server emojis and swap these values).
+_PLATFORM_EMOJI: dict[str, str] = {
+    "YouTube": "▶️",
+    "YouTube Music": "🎶",
+    "Spotify": "🟢",
+    "Deezer": "🎧",
+    "Apple Music": "🍎",
+    "Amazon Music": "🛒",
+    "SoundCloud": "☁️",
+}
+
+
+def _platform_emoji(label: str) -> str:
+    """Inline emoji for the streaming platform (falls back to a music note)."""
+    return _PLATFORM_EMOJI.get(label or "", "🎵")
 
 
 def _platform_icon_url(label: str) -> str:
@@ -3986,13 +4008,11 @@ def _format_song_and_artist(title: str) -> str:
 
 
 def _embed_now_playing(*, source_label: str, track_title: str, lang: GuildLang = "pt") -> discord.Embed:
-    """Platform logo (author) + bold, localized 'Now playing: Song - Artist'."""
+    """Single line: platform emoji + bold, localized 'Now playing: Song - Artist'."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
-    icon = _platform_icon_url(source_label)
-    if icon:
-        em.set_author(name=source_label[:256], icon_url=icon)
-    em.description = tr(lang, "music.now_playing", title=track_line)
+    emoji = _platform_emoji(source_label)
+    em.description = f"{emoji} " + tr(lang, "music.now_playing", title=track_line)
     return em
 
 
@@ -4141,9 +4161,6 @@ def _embed_music_added(
     source_label: str = "",
 ) -> discord.Embed:
     em = discord.Embed(color=TIFFANY_PINK)
-    _icon = _platform_icon_url(source_label)
-    if _icon:
-        em.set_author(name=source_label, icon_url=_icon)
     if kind == "playlist":
         em.title = tr(lang, "music.playlist_added.title")
         em.description = f"**{title[:200]}**"
