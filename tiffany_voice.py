@@ -1087,6 +1087,28 @@ FFMPEG_OPTS = {
     "options": "-vn",
 }
 
+# YouTube bestaudio tops out around 128-160 kbps (opus itag 251 / m4a 140).
+# Encoding above this adds no audible detail — the source is the ceiling.
+_MAX_OPUS_KBPS = 160
+
+
+def _target_bitrate_kbps(vc) -> int:
+    """Opus encode bitrate for a voice client, boost-aware.
+
+    Discord caps audio at the channel's configured bitrate (96k without boost,
+    128k/256k/384k on server levels 1/2/3). Listeners never receive above that,
+    so we match the channel and clamp to the ~160k YouTube source ceiling.
+    Falls back to 128k if the channel bitrate is unavailable.
+    """
+    try:
+        ch = getattr(vc, "channel", None)
+        raw = getattr(ch, "bitrate", None)
+        if raw:
+            return max(48, min(int(raw) // 1000, _MAX_OPUS_KBPS))
+    except Exception:
+        pass
+    return 128
+
 
 def _lavalink_enabled() -> bool:
     """Lavalink should only be active when a server is running (e.g. docker-compose).
@@ -1150,6 +1172,7 @@ class _GuildVoiceSession:
     random_picked: set[str] = field(default_factory=set)  # keys already picked by t!r this session
     autoplay: bool = False  # autoplay: play similar songs when queue ends
     stay_24_7: bool = False  # 24/7 mode: do not disconnect on inactivity
+    bitrate_kbps: int = 128  # Opus encode bitrate — matches the voice channel's cap (boost-aware)
     # Restore seek (playback position to restore after restart)
     restore_seek_sec: float = 0.0
     # Clip — last 30s of call audio (all users, time-aligned mix)
@@ -2979,6 +3002,7 @@ async def _prefetch_track(
         try:
             bundle = await _YTSource.from_query(
                 query, display=display, probe_entry=probe_entry,
+                bitrate_kbps=session.bitrate_kbps,
             )
             if session.prefetch_key == key:
                 session.prefetch_bundle = bundle
@@ -4579,6 +4603,7 @@ class _YTSource(discord.AudioSource):
         seek_sec: float = 0,
         display: str = "",
         probe_entry: Optional[dict] = None,
+        bitrate_kbps: int = 128,
     ) -> tuple[Optional["_YTSource"], str, Optional[str], Optional[str], float]:
         loop = asyncio.get_running_loop()
         async with _download_semaphore:
@@ -4588,11 +4613,11 @@ class _YTSource(discord.AudioSource):
             )
         if not fp:
             return None, title, None, None, 0
-        # Opus 128k + volume — skip from_probe (we already know yt-dlp format).
-        # 128k matches YouTube bestaudio (~128-160k) and Discord's Tier-1 channel cap;
-        # going higher wastes VPS CPU/bandwidth with no audible gain.
+        # Opus bitrate matches the voice channel's cap (boost-aware, see
+        # _target_bitrate_kbps) — encoding above the channel or the ~160k source
+        # ceiling just wastes VPS CPU/bandwidth with no audible gain.
         # -thread_queue_size 4096: larger buffer to avoid stutter on disk/network reads
-        options = f"-vn -b:a 128k -filter:a volume={volume} -threads 2"
+        options = f"-vn -b:a {bitrate_kbps}k -filter:a volume={volume} -threads 2"
         before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
@@ -4607,11 +4632,11 @@ class _YTSource(discord.AudioSource):
         return cls(src, tmpdir=tmpdir), title, fp, tmpdir, duration
 
     @classmethod
-    async def from_file(cls, filepath: str, *, volume: float = 0.35, seek_sec: float = 0) -> Optional["_YTSource"]:
+    async def from_file(cls, filepath: str, *, volume: float = 0.35, seek_sec: float = 0, bitrate_kbps: int = 128) -> Optional["_YTSource"]:
         """Create source from already downloaded file with optional seek."""
         if not os.path.isfile(filepath):
             return None
-        options = f"-vn -b:a 128k -filter:a volume={volume} -threads 2"
+        options = f"-vn -b:a {bitrate_kbps}k -filter:a volume={volume} -threads 2"
         before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
@@ -4744,6 +4769,8 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session.loop_display = display_name
                 _restore_seek = session.restore_seek_sec
                 session.restore_seek_sec = 0.0
+                # Match the voice channel's bitrate cap (boost-aware) for this play cycle.
+                session.bitrate_kbps = _target_bitrate_kbps(vc)
                 yt_source: Optional[_YTSource] = None
                 info = display_name
                 dl_fp = ""
@@ -4760,7 +4787,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     and session._loop_cache_file
                     and os.path.isfile(session._loop_cache_file)
                 ):
-                    yt_source = await _YTSource.from_file(session._loop_cache_file)
+                    yt_source = await _YTSource.from_file(session._loop_cache_file, bitrate_kbps=session.bitrate_kbps)
                     if yt_source:
                         dl_fp = session._loop_cache_file
                         dl_tmpdir = session._loop_cache_tmpdir
@@ -4770,6 +4797,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         yt_source, info, dl_fp, dl_tmpdir, dl_duration = await asyncio.wait_for(
                             _YTSource.from_query(
                                 query, display=display_name, probe_entry=probe_entry,
+                                bitrate_kbps=session.bitrate_kbps,
                             ),
                             timeout=120.0,
                         )
@@ -4821,7 +4849,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 if _restore_seek > 0 and dl_fp and dl_duration > 10:
                     capped = min(_restore_seek, dl_duration - 5.0)
                     if capped > 5:
-                        seek_src = await _YTSource.from_file(dl_fp, seek_sec=capped)
+                        seek_src = await _YTSource.from_file(dl_fp, seek_sec=capped, bitrate_kbps=session.bitrate_kbps)
                         if seek_src:
                             yt_source.cleanup()
                             yt_source = seek_src
@@ -5413,7 +5441,7 @@ async def _voice_listen_loop(
                     dur = session.current_duration
                     if dur > 0 and target >= dur:
                         target = dur - 5
-                    new_src = await _YTSource.from_file(session.current_file, seek_sec=target)
+                    new_src = await _YTSource.from_file(session.current_file, seek_sec=target, bitrate_kbps=session.bitrate_kbps)
                     if new_src:
                         session.seeking = True
                         vc.stop()
@@ -8164,7 +8192,7 @@ def register_voice(bot: commands.Bot) -> None:
                 return
         else:
             # yt-dlp: recreate source with FFmpeg -ss
-            new_source = await _YTSource.from_file(session.current_file, seek_sec=target_sec)
+            new_source = await _YTSource.from_file(session.current_file, seek_sec=target_sec, bitrate_kbps=session.bitrate_kbps)
             if not new_source:
                 await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
                 return
