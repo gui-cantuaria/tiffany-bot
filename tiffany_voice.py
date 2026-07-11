@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import discord
-from discord import app_commands, FFmpegPCMAudio, PCMVolumeTransformer
+from discord import app_commands, FFmpegPCMAudio
 from discord.ext import commands
 
 import game_recommendations
@@ -4588,9 +4588,11 @@ class _YTSource(discord.AudioSource):
             )
         if not fp:
             return None, title, None, None, 0
-        # Opus 192k + volume — skip from_probe (we already know yt-dlp format)
+        # Opus 128k + volume — skip from_probe (we already know yt-dlp format).
+        # 128k matches YouTube bestaudio (~128-160k) and Discord's Tier-1 channel cap;
+        # going higher wastes VPS CPU/bandwidth with no audible gain.
         # -thread_queue_size 4096: larger buffer to avoid stutter on disk/network reads
-        options = f"-vn -b:a 192k -filter:a volume={volume} -threads 2"
+        options = f"-vn -b:a 128k -filter:a volume={volume} -threads 2"
         before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
@@ -4609,7 +4611,7 @@ class _YTSource(discord.AudioSource):
         """Create source from already downloaded file with optional seek."""
         if not os.path.isfile(filepath):
             return None
-        options = f"-vn -b:a 192k -filter:a volume={volume} -threads 2"
+        options = f"-vn -b:a 128k -filter:a volume={volume} -threads 2"
         before_parts = ["-thread_queue_size 4096"]
         if seek_sec > 0:
             before_parts.append(f"-ss {seek_sec:.1f}")
