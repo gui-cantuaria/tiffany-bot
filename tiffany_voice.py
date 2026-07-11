@@ -420,6 +420,11 @@ _BLOCKED_TERMS = frozenset({
     "schicklgruber", "grofaz", "fuhrer", "fuehrer", "der fuhrer", "o fuhrer",
     "1488", "14 88", "88 hh", "gas man", "uncle joe",
     "viennese watercolorist", "failed art student",
+    # Common typos / transpositions used to bypass filters
+    "hilter", "htiler", "hitlr", "hitleer", "h1tler", "hitl3r", "h1tl3r",
+    "stalln", "stailn", "st4lin", "st4l1n",
+    "naz1", "n4zi", "n4z1", "nzai", "nazia", "nazii",
+    "musolin", "musolini", "mussolin", "mussolinni",
     # Cyrillic (Russian) — common alphabet-swap bypass
     "гитлер", "адольф гитлер", "сталин", "иосиф сталин",
     "муссолини", "ким чен ын", "мадуро", "пол пот", "пиночет",
@@ -6342,13 +6347,23 @@ def register_voice(bot: commands.Bot) -> None:
         try:
             _ctx_id = user_id or guild_id
             
-            # Anti-spam: check if exact same question was asked recently
+            # Anti-spam: check for repeated / very similar questions
             if _ctx_id and question and not image_urls:
                 entry = _user_context.get(_ctx_id)
                 if entry and entry.get("history"):
-                    last_q = entry["history"][-1].get("q", "")
-                    if question.strip().lower() == last_q.strip().lower():
-                        return tr(lang, "err.duplicate_question")
+                    q_norm = _strip_accents_lower(question.strip())
+                    q_words = set(q_norm.split())
+                    for turn in entry["history"][-5:]:
+                        prev = _strip_accents_lower((turn.get("q") or "").strip())
+                        # Exact match
+                        if q_norm == prev:
+                            return tr(lang, "err.duplicate_question")
+                        # High word overlap (>80% shared words)
+                        prev_words = set(prev.split())
+                        if q_words and prev_words:
+                            overlap = len(q_words & prev_words) / max(len(q_words), len(prev_words))
+                            if overlap >= 0.8 and len(q_words) >= 3:
+                                return tr(lang, "err.duplicate_question")
 
             question = _normalize_chat_question(question)
             zoeira = _try_chat_zoeira_reply(question, user_id=_ctx_id)
