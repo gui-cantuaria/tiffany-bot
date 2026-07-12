@@ -4197,7 +4197,8 @@ def _embed_music_added(
         )
     else:
         em.title = tr(lang, "music.track_added.title")
-        em.description = f"**{title[:200]}**"
+        # Clean "Song - Artist" (drops '(Official Video)', reorders) like now playing.
+        em.description = f"**{_format_song_and_artist(title)[:200]}**"
         if duration_sec > 0:
             em.add_field(name=tr(lang, "music.field.duration"), value=_fmt_dur(duration_sec), inline=True)
         if position > 1:
