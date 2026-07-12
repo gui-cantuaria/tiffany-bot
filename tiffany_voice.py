@@ -1187,6 +1187,7 @@ class _GuildVoiceSession:
     last_question_status_msg: Any = None
     last_play_status_msg: Any = None
     last_play_status_query: str = ""
+    now_playing_msg: Any = None  # current "Tocando agora" message (re-posted per track)
     ytdl_probe_cache: dict[str, dict] = field(default_factory=dict)
     prefetch_key: str = ""
     prefetch_bundle: Optional[tuple] = None  # YTSource bundle from _YTSource.from_query
@@ -4035,24 +4036,41 @@ async def _post_now_playing(
     src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
     em = _embed_now_playing(source_label=src, track_title=track_title, lang=lang)
     q_key = _play_query_key(query)
-    msg = session.last_play_status_msg
-    if msg:
+    prev_np = session.now_playing_msg
+    # Case 1 — this track has its own fresh command bubble ("🔎 Procurando" /
+    # "Faixa adicionada"): morph it in place, so a direct t!p reads as one message.
+    status_msg = session.last_play_status_msg
+    if status_msg is not None and session.last_play_status_query == q_key:
         try:
-            await msg.edit(embed=em)
-            session.last_play_status_query = q_key
-            return
-        except discord.HTTPException:
-            log.debug("Could not edit play status to now playing", exc_info=True)
+            await status_msg.edit(embed=em)
+            session.now_playing_msg = status_msg
             session.last_play_status_msg = None
             session.last_play_status_query = ""
+            if prev_np is not None and prev_np is not status_msg:
+                try:
+                    await prev_np.delete()
+                except discord.HTTPException:
+                    pass
+            return
+        except discord.HTTPException:
+            session.last_play_status_msg = None
+            session.last_play_status_query = ""
+    # Case 2 — queue/playlist progression: post a fresh "Tocando agora" at the
+    # bottom and drop the previous one, so the current track is always visible
+    # (a whole playlist no longer shares one silently-edited message).
     if not ch or not hasattr(ch, "send"):
         return
     try:
         sent = await ch.send(embed=em)
-        session.last_play_status_msg = sent
-        session.last_play_status_query = q_key
     except discord.HTTPException:
         log.warning("Failed to send now playing in channel %s", session.text_channel_id)
+        return
+    session.now_playing_msg = sent
+    if prev_np is not None:
+        try:
+            await prev_np.delete()
+        except discord.HTTPException:
+            pass
 
 
 def _queue_eta_sec(session: "_GuildVoiceSession") -> float:
