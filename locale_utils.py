@@ -140,8 +140,8 @@ def build_about_embed(
     for_admin: bool = False,
     pink: int,
 ) -> discord.Embed:
+    # No title: the author line already shows "Tiffany" + logo (avoids repeating the name).
     em = discord.Embed(
-        title=tr(lang, "about.title"),
         description=tr(lang, "about.desc"),
         color=pink,
     )
@@ -290,9 +290,9 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Respondo en el idioma del servidor (PT / EN / ES), según el **idioma del servidor en Discord**. Servidor en portugués → portugués; en inglés → inglés; en español → español.",
     },
     "about.footer": {
-        "pt": "/help = lista completa · Tiffany by Tuffine",
-        "en": "/help = full list · Tiffany by Tuffine",
-        "es": "/help = lista completa · Tiffany by Tuffine",
+        "pt": "/help = lista completa de comandos",
+        "en": "/help = full command list",
+        "es": "/help = lista completa de comandos",
     },
     "welcome.title": {
         "pt": "Cheguei no {guild}",

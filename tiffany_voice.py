@@ -4314,8 +4314,12 @@ def _format_queue_embed(session: "_GuildVoiceSession", lang: GuildLang) -> Optio
     """Build queue embed (slash, voice, text). Returns None if empty."""
     lines: list[str] = []
     if session.current_song:
-        src = _track_source_label(session.current_query)
-        line = f"**{src}:** {_format_song_and_artist(session.current_song)[:100]}"
+        src = _track_source_label(
+            session.current_query,
+            resolved_platform=bool(_detect_music_platform(session.current_query)),
+        )
+        emoji = _platform_emoji(src)
+        line = f"{emoji} **{_format_song_and_artist(session.current_song)[:100]}**"
         if session.current_duration > 0:
             elapsed_sec = int(time.monotonic() - session.song_start_time) if session.song_start_time > 0 else 0
             elapsed_sec = max(0, min(elapsed_sec, int(session.current_duration)))
@@ -4343,14 +4347,6 @@ def _format_queue_embed(session: "_GuildVoiceSession", lang: GuildLang) -> Optio
     if not lines:
         return None
     em = discord.Embed(title=tr(lang, "queue.title"), description="\n".join(lines), color=TIFFANY_PINK)
-    if session.current_song:
-        cur_src = _track_source_label(
-            session.current_query,
-            resolved_platform=bool(_detect_music_platform(session.current_query)),
-        )
-        _icon = _platform_icon_url(cur_src)
-        if _icon:
-            em.set_author(name=cur_src, icon_url=_icon)
     extras: list[str] = []
     if session.loop_enabled:
         extras.append("🔁 Loop")
