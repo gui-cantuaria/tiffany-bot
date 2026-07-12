@@ -13,7 +13,11 @@ from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 # TAGS/IDs FROM .env
 # =========================
 AMAZON_TAG = os.getenv("AMAZON_AFFILIATE_TAG", "")
-MERCADOLIVRE_ID = os.getenv("MERCADOLIVRE_AFFILIATE_ID", "")
+MERCADOLIVRE_ID = os.getenv("MERCADOLIVRE_AFFILIATE_ID", "")  # matt_word (label, e.g. username)
+# matt_tool is the numeric tracking id from the ML affiliate portal — REQUIRED for
+# commission attribution (matt_word alone does NOT track). Find it in any link the
+# "Gerador de links" produces: ...?matt_word=you&matt_tool=NNNNNNNN
+MERCADOLIVRE_TOOL_ID = os.getenv("MERCADOLIVRE_TOOL_ID", "")
 AWIN_PUBLISHER_ID = os.getenv("AWIN_PUBLISHER_ID", "")
 MAGALU_SLUG = os.getenv("MAGALU_LOJA_SLUG", "")
 TERABYTE_ID = os.getenv("TERABYTE_AFFILIATE_ID", "")
@@ -89,9 +93,14 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
     if "kabum" in domain and AWIN_PUBLISHER_ID:
         return _awin_deeplink(real_url, AWIN_ADVERTISER_KABUM)
 
-    # --- Mercado Livre ---
-    if "mercadolivre" in domain and MERCADOLIVRE_ID:
-        return _add_param(real_url, "matt_word", MERCADOLIVRE_ID)
+    # --- Mercado Livre (matt_tool = tracking id, matt_word = label) ---
+    if "mercadolivre" in domain and (MERCADOLIVRE_TOOL_ID or MERCADOLIVRE_ID):
+        out = real_url
+        if MERCADOLIVRE_ID:
+            out = _add_param(out, "matt_word", MERCADOLIVRE_ID)
+        if MERCADOLIVRE_TOOL_ID:
+            out = _add_param(out, "matt_tool", MERCADOLIVRE_TOOL_ID)
+        return out
 
     # --- Magazine Luiza / Magalu ---
     if ("magazineluiza" in domain or "magalu" in domain) and MAGALU_SLUG:
@@ -133,7 +142,7 @@ def build_affiliate_url(store_name: str, real_url: str) -> str:
 def has_any_affiliate() -> bool:
     """Return True if at least one affiliate program is configured."""
     return bool(
-        AMAZON_TAG or MERCADOLIVRE_ID or AWIN_PUBLISHER_ID
+        AMAZON_TAG or MERCADOLIVRE_ID or MERCADOLIVRE_TOOL_ID or AWIN_PUBLISHER_ID
         or MAGALU_SLUG or TERABYTE_ID or SHOPINFO_ID or ALIEXPRESS_ID
         or SHOPEE_ID or LOMADEE_SOURCE_ID
     )
@@ -144,8 +153,8 @@ def active_programs() -> List[str]:
     progs = []
     if AMAZON_TAG:
         progs.append(f"Amazon ({AMAZON_TAG})")
-    if MERCADOLIVRE_ID:
-        progs.append(f"Mercado Livre ({MERCADOLIVRE_ID})")
+    if MERCADOLIVRE_TOOL_ID or MERCADOLIVRE_ID:
+        progs.append(f"Mercado Livre (word={MERCADOLIVRE_ID or '-'}, tool={MERCADOLIVRE_TOOL_ID or '-'})")
     if AWIN_PUBLISHER_ID:
         progs.append(f"Awin/KaBuM/Terabyte ({AWIN_PUBLISHER_ID})")
     if MAGALU_SLUG:
