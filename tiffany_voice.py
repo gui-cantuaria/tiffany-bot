@@ -3701,6 +3701,8 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
 TIFFANY_PINK = 0xB84DE6  # brand color — logo pink→purple gradient (magenta-violet)
 TIFFANY_RED = 0xED2939   # errors / user feedback only — strong red, distinct from brand
 
+_BOT_START_TS = time.monotonic()  # module load — used for the /status uptime
+
 # Leading emojis that mark an error, refusal, rate-limit or timeout message.
 # _embed() auto-colors these red so users spot problems at a glance.
 _EMBED_ERROR_PREFIXES = ("⚠️", "🚫", "❌", "🛡️", "⏳", "⏰")
@@ -4359,80 +4361,34 @@ def _format_queue_embed(session: "_GuildVoiceSession", lang: GuildLang) -> Optio
     return em
 
 
-def _format_status_embed(
-    session: Optional["_GuildVoiceSession"],
-    vc,
-    *,
-    lang: GuildLang = "pt",
-) -> discord.Embed:
-    """Voice session status embed (slash /player-status)."""
+def _fmt_uptime(seconds: float) -> str:
+    """Human uptime: '3d 04h', '5h 12min' or '8min'."""
+    s = int(max(0, seconds))
+    d, rem = divmod(s, 86400)
+    h, rem = divmod(rem, 3600)
+    m, _ = divmod(rem, 60)
+    if d:
+        return f"{d}d {h:02d}h"
+    if h:
+        return f"{h}h {m:02d}min"
+    return f"{m}min"
+
+
+def _format_status_embed(client: discord.Client, *, lang: GuildLang = "pt") -> discord.Embed:
+    """Admin health status — discreet proof that Tiffany is up and well.
+    Reports only what works or not; never names internal services/models/APIs."""
     em = discord.Embed(title=tr(lang, "status.title"), color=TIFFANY_PINK)
-    if not session or not vc or not vc.is_connected():
-        em.description = tr(lang, "status.not_in_voice")
-        return em
-    if vc.channel:
-        humans = len([m for m in vc.channel.members if not m.bot])
-        em.add_field(
-            name=tr(lang, "status.field.channel"),
-            value=tr(lang, "status.channel_value", channel=vc.channel.mention, humans=humans),
-            inline=False,
-        )
-    if session.current_song:
-        if _is_wavelink_player(vc) and hasattr(vc, "position"):
-            elapsed = int(vc.position / 1000)
-        else:
-            elapsed = int(time.monotonic() - session.song_start_time) if session.song_start_time else 0
-        m, s = divmod(elapsed, 60)
-        dur = session.current_duration
-        song_line = f"**{session.current_song[:100]}**"
-        if dur > 0:
-            dm, ds = divmod(int(dur), 60)
-            bar_len = 16
-            filled = min(bar_len, int((elapsed / dur) * bar_len))
-            song_line += f"\n⏱️ {m:02d}:{s:02d} / {dm:02d}:{ds:02d}\n`{'▓' * filled}{'░' * (bar_len - filled)}`"
-        else:
-            song_line += f"\n⏱️ {m:02d}:{s:02d}"
-        src = _track_source_label(
-            session.current_query,
-            resolved_platform=bool(_detect_music_platform(session.current_query)),
-        )
-        _icon = _platform_icon_url(src)
-        if _icon:
-            em.set_author(name=src, icon_url=_icon)
-        em.add_field(name=tr(lang, "status.field.now_playing", src=src), value=song_line, inline=False)
-    else:
-        em.add_field(name=tr(lang, "status.field.now_playing_plain"), value=tr(lang, "status.nothing_playing"), inline=False)
-    queue_n = len(session.queue_display)
-    fila_val = tr(lang, "status.queue_count", count=queue_n)
-    if queue_n and session.queue_durations:
-        eta = _fmt_dur(_queue_eta_sec(session))
-        if eta and eta != "?:??":
-            fila_val += tr(lang, "status.queue_eta_suffix", eta=eta)
-    em.add_field(name=tr(lang, "status.field.queue"), value=fila_val, inline=True)
-    mods: list[str] = []
-    if session.loop_enabled:
-        mods.append(tr(lang, "status.mode.loop"))
-    if session.autoplay:
-        mods.append(tr(lang, "status.mode.autoplay"))
-    if session.stay_24_7:
-        mods.append(tr(lang, "status.mode.stay"))
-    em.add_field(
-        name=tr(lang, "status.field.modes"),
-        value=" · ".join(mods) if mods else tr(lang, "status.modes_none"),
-        inline=True,
-    )
-    voice_on = session.listen_task is not None and not session.listen_task.done()
-    em.add_field(
-        name=tr(lang, "status.field.voice_cmds"),
-        value=tr(lang, "status.voice_on") if voice_on else tr(lang, "status.voice_off"),
-        inline=True,
-    )
-    warp_ok = check_warp_proxy_ok()
-    em.add_field(
-        name=tr(lang, "status.field.warp"),
-        value=tr(lang, "status.warp.ok") if warp_ok else tr(lang, "status.warp.down"),
-        inline=True,
-    )
+    ok = tr(lang, "status.health.ok")
+    bad = tr(lang, "status.health.degraded")
+    ping_ms = max(0, round((getattr(client, "latency", 0) or 0) * 1000))
+    music_ok = _YTDLP_AVAILABLE and check_warp_proxy_ok()
+    chat_ok = bool(os.getenv("OPENROUTER_API_KEY", "").strip())
+    voice_ok = _VOICE_RECV_AVAILABLE
+    em.add_field(name=tr(lang, "status.field.ping"), value=f"{ping_ms} ms", inline=True)
+    em.add_field(name=tr(lang, "status.field.music"), value=ok if music_ok else bad, inline=True)
+    em.add_field(name=tr(lang, "status.field.chat"), value=ok if chat_ok else bad, inline=True)
+    em.add_field(name=tr(lang, "status.field.voice_call"), value=ok if voice_ok else bad, inline=True)
+    em.add_field(name=tr(lang, "status.field.uptime"), value=_fmt_uptime(time.monotonic() - _BOT_START_TS), inline=True)
     return em
 
 
@@ -8920,7 +8876,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await _slash_reply(interaction, q_em)
 
-    @bot.tree.command(name="player-status", description="Status da sessão de música na call (admin)")
+    @bot.tree.command(name="player-status", description="Saúde da Tiffany (admin)")
     @app_commands.default_permissions(administrator=True)
     async def slash_player_status(interaction: discord.Interaction):
         lang = resolve_guild_lang(interaction.guild)
@@ -8930,9 +8886,7 @@ def register_voice(bot: commands.Bot) -> None:
         if isinstance(interaction.user, discord.Member) and not interaction.user.guild_permissions.administrator:
             await _slash_reply(interaction, tr(lang, "slash.player_status.admin_only"))
             return
-        session = _sessions.get(interaction.guild.id)
-        vc = interaction.guild.voice_client
-        await _slash_reply(interaction, _format_status_embed(session, vc, lang=lang))
+        await _slash_reply(interaction, _format_status_embed(interaction.client, lang=lang))
 
     @bot.tree.command(name="stats", description="Estatísticas da Tiffany")
     async def slash_stats(interaction: discord.Interaction):

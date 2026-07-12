@@ -737,6 +737,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "🎀 Tiffany · Status",
         "es": "🎀 Tiffany · Status",
     },
+    "status.field.ping": {"pt": "Ping", "en": "Ping", "es": "Ping"},
+    "status.field.music": {"pt": "Música", "en": "Music", "es": "Música"},
+    "status.field.chat": {"pt": "Chat / IA", "en": "Chat / AI", "es": "Chat / IA"},
+    "status.field.voice_call": {"pt": "Voz na call", "en": "Voice in call", "es": "Voz en la call"},
+    "status.field.uptime": {"pt": "Tempo no ar", "en": "Uptime", "es": "Tiempo activo"},
+    "status.health.ok": {"pt": "✅ Operacional", "en": "✅ Operational", "es": "✅ Operativo"},
+    "status.health.degraded": {"pt": "⚠️ Instável", "en": "⚠️ Unstable", "es": "⚠️ Inestable"},
     "status.not_in_voice": {
         "pt": "⚠️ Não estou em canal de voz.\nUse **`t!p`** para eu entrar.",
         "en": "⚠️ I'm not in a voice channel.\nUse **`t!p`** to join.",
