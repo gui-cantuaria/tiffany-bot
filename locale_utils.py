@@ -316,7 +316,7 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
             "Comandos: **`/help`** · Sobre mí: **`/about`**"
         ),
     },
-    "help.title": {"pt": "✨ Tiffany · Comandos", "en": "✨ Tiffany · Commands", "es": "✨ Tiffany · Comandos"},
+    "help.title": {"pt": "Tiffany · Comandos", "en": "Tiffany · Commands", "es": "Tiffany · Comandos"},
     "help.desc": {
         "pt": (
             "**Música, IA, voz, dados RPG e clipe de áudio** — prefixo **`t!`**.\n"
@@ -733,9 +733,9 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "🔁 Repitiendo: **{query}**",
     },
     "status.title": {
-        "pt": "🎀 Tiffany · Status",
-        "en": "🎀 Tiffany · Status",
-        "es": "🎀 Tiffany · Status",
+        "pt": "Tiffany · Status",
+        "en": "Tiffany · Status",
+        "es": "Tiffany · Status",
     },
     "status.field.ping": {"pt": "Ping", "en": "Ping", "es": "Ping"},
     "status.field.music": {"pt": "Música", "en": "Music", "es": "Música"},
@@ -800,9 +800,9 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     # /stats command fields
     "stats.title": {
-        "pt": "📊 Tiffany · Estatísticas",
-        "en": "📊 Tiffany · Statistics",
-        "es": "📊 Tiffany · Estadísticas",
+        "pt": "Tiffany · Estatísticas",
+        "en": "Tiffany · Statistics",
+        "es": "Tiffany · Estadísticas",
     },
     "stats.songs": {"pt": "🎵 Músicas tocadas", "en": "🎵 Songs played", "es": "🎵 Canciones reproducidas"},
     "stats.questions": {"pt": "💬 Perguntas respondidas", "en": "💬 Questions answered", "es": "💬 Preguntas respondidas"},
