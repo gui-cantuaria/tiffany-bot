@@ -1671,11 +1671,31 @@ async def _download_image(session: aiohttp.ClientSession, url: str) -> Optional[
         return None
 
 
+def _is_search_page(url: str) -> bool:
+    """True if the URL is a store SEARCH/listing page (no single product).
+    Affiliate attribution only works on a product page, so we avoid these."""
+    u = (url or "").lower()
+    return bool(
+        "lista.mercadolivre" in u or "listado.mercadolibre" in u
+        or "/search" in u or "/busca" in u or "/s?k=" in u
+        or "wholesale?searchtext" in u or "?searchtext=" in u
+    )
+
+
 def _store_destination(deal: dict) -> Optional[str]:
-    """Best DIRECT store destination (no affiliate yet):
-    1) resolved Promobit product link; 2) store search by name."""
-    if deal.get("product_url"):
-        return deal["product_url"]
+    """Best DIRECT store destination (no affiliate yet). Prefers a real product
+    page (product_url / real_store_url) over a manufactured search listing —
+    a search page can't carry affiliate attribution."""
+    candidates = [deal.get("product_url"), deal.get("real_store_url")]
+    # 1) A direct product page (not a search listing).
+    for c in candidates:
+        if c and c.startswith("http") and not _is_search_page(c):
+            return c
+    # 2) Any resolved store URL beats a manufactured search.
+    for c in candidates:
+        if c and c.startswith("http"):
+            return c
+    # 3) Last resort: store search by product name.
     return _store_search_url(deal.get("store", ""), deal.get("title", ""))
 
 
