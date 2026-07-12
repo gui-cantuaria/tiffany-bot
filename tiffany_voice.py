@@ -1385,7 +1385,7 @@ async def slash_rate_limit_check(interaction: discord.Interaction) -> bool:
     name = interaction.command.name
     ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
     if not ok:
-        em = _embed(f"⏳ Aguarde **{wait:.0f}s** antes de usar `/{name}` de novo.")
+        em = _embed(tr(resolve_guild_lang(interaction.guild), "err.rate_limited", secs=f"{wait:.0f}", cmd=f"/{name}"))
         if interaction.response.is_done():
             await interaction.followup.send(embed=em, ephemeral=True)
         else:
@@ -6358,7 +6358,7 @@ class DiceRerollView(discord.ui.View):
                 rolls_info = _rolls_info_from_footer(ft.text)
         if not rolls_info:
             await interaction.response.send_message(
-                embed=_embed("⚠️ Não consegui re-rolar — fórmula não encontrada."),
+                embed=_embed(tr(resolve_guild_lang(interaction.guild), "cmd.dice.reroll_no_formula")),
                 ephemeral=True,
             )
             return
@@ -6371,7 +6371,7 @@ class DiceRerollView(discord.ui.View):
 
         if not roll_results:
             await interaction.response.send_message(
-                embed=_embed("⚠️ Não consegui re-rolar."),
+                embed=_embed(tr(resolve_guild_lang(interaction.guild), "cmd.dice.reroll_failed")),
                 ephemeral=True,
             )
             return
@@ -6459,7 +6459,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not allowed:
             try:
                 await message.channel.send(
-                    embed=_embed(f"⏳ Aguarde **{wait:.0f}s** antes de rolar de novo."),
+                    embed=_embed(tr(resolve_guild_lang(message.guild), "cmd.dice.cooldown", secs=f"{wait:.0f}")),
                     delete_after=5,
                 )
             except discord.HTTPException:
@@ -6785,7 +6785,7 @@ def register_voice(bot: commands.Bot) -> None:
                     return sess, vc
                 except Exception:
                     log.exception("Failed to move to voice channel guild=%s", gid)
-                    await ctx.send(embed=_embed("⚠️ Não consegui mudar de canal de voz. Tente de novo."))
+                    await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.move_failed")))
                     return None, None
             # Restart dead workers (ensures queue always processed)
             if sess.music_task is None or sess.music_task.done():
@@ -6810,7 +6810,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Concurrent session limit (protects VPS resources)
         _MAX_VOICE_SESSIONS = 5
         if len(_sessions) >= _MAX_VOICE_SESSIONS:
-            await ctx.send(embed=_embed("⚠️ O bot está no limite de canais de voz simultâneos. Tente novamente em breve."))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.limit")))
             return None, None
 
         # Determine voice channel
@@ -6818,7 +6818,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not channel:
             user_vc = ctx.author.voice
             if not user_vc or not user_vc.channel:
-                await ctx.send(embed=_embed("⚠️ Entre em um **canal de voz** antes."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.need_channel")))
                 return None, None
             channel = user_vc.channel
 
@@ -6827,7 +6827,7 @@ def register_voice(bot: commands.Bot) -> None:
         if bot_member:
             perms = channel.permissions_for(bot_member)
             if not perms.connect or not perms.speak:
-                await ctx.send(embed=_embed("⚠️ Não tenho permissão para entrar ou falar neste canal de voz."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.no_perms")))
                 return None, None
 
         # Clear ghost voice state (UI shows bot in call after container restart)
@@ -6891,11 +6891,11 @@ def register_voice(bot: commands.Bot) -> None:
                     )
                 except Exception:
                     log.exception("Failed to connect to voice channel guild=%s", guild.id)
-                    await ctx.send(embed=_embed("⚠️ Não consegui entrar no canal de voz. Tente de novo."))
+                    await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
                     return None, None
             except Exception:
                 log.exception("Failed to connect to voice channel guild=%s", guild.id)
-                await ctx.send(embed=_embed("⚠️ Não consegui entrar no canal de voz. Tente de novo."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
                 return None, None
 
         # Create session
@@ -6958,23 +6958,24 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if not await _require_guild(ctx):
             return
+        lang = _ctx_lang(ctx)
         if args.strip():
-            await ctx.send(embed=_embed(f"⚠️ `t!s` é o comando de **pular música**, não de tocar.\nPara tocar, use `t!p {args.strip()[:100]}`"))
+            await ctx.send(embed=_embed(tr(lang, "cmd.skip.wrong_cmd", q=args.strip()[:100])))
             return
         guild = ctx.guild
         vc = guild.voice_client
         if not vc or not vc.is_connected():
-            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.not_in_voice")))
+            await ctx.send(embed=_embed(tr(lang, "voice.err.not_in_voice")))
             return
         session = _sessions.get(guild.id)
         if not session:
-            await ctx.send(embed=_embed("⚠️ A sessão de voz não está ativa no momento."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.skip.no_session")))
             return
         # Ensure worker is alive before skip (otherwise queue won't advance)
         _revive_workers(guild.id, vc, session)
         _is_playing = vc.playing if _is_wavelink_player(vc) else vc.is_playing()
         if not _is_playing:
-            await ctx.send(embed=_embed("⚠️ Não tem faixa tocando agora."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.skip.nothing")))
             return
 
         _stats["commands_used"] += 1
@@ -6999,13 +7000,13 @@ def register_voice(bot: commands.Bot) -> None:
             await _do_skip()
             if is_requester and required > 1:
                 if prox:
-                    await ctx.send(embed=_embed(f"⏭️ Pulado — você pediu esta faixa. Próxima: **{prox[:80]}**"))
+                    await ctx.send(embed=_embed(tr(lang, "cmd.skip.requester_next", next=prox[:80])))
                 else:
-                    await ctx.send(embed=_embed("⏭️ Pulado — você pediu esta faixa. Fila vazia."))
+                    await ctx.send(embed=_embed(tr(lang, "cmd.skip.requester_empty")))
             elif prox:
-                await ctx.send(embed=_embed(f"⏭️ Pulado. Próxima: **{prox[:80]}**"))
+                await ctx.send(embed=_embed(tr(lang, "cmd.skip.next", next=prox[:80])))
             else:
-                await ctx.send(embed=_embed("⏭️ Pulado. Fila vazia."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.skip.empty")))
         else:
             session.skip_votes.add(ctx.author.id)
             current_votes = len(session.skip_votes)
@@ -7015,14 +7016,15 @@ def register_voice(bot: commands.Bot) -> None:
                 prox = session.queue_display[0] if session.queue_display else None
                 await _do_skip()
                 if prox:
-                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Próxima: **{prox[:80]}**"))
+                    await ctx.send(embed=_embed(tr(lang, "cmd.skip.vote_next", votes=f"{required}/{required}", next=prox[:80])))
                 else:
-                    await ctx.send(embed=_embed(f"⏭️ {required}/{required} votos — pulando! Fila vazia."))
+                    await ctx.send(embed=_embed(tr(lang, "cmd.skip.vote_empty", votes=f"{required}/{required}")))
             else:
-                await ctx.send(embed=_embed(
-                    f"🗳️ Voto registrado ({current_votes}/{required}) para pular "
-                    f"**{session.current_song[:60]}**. Falta(m) {required - current_votes} voto(s)."
-                ))
+                await ctx.send(embed=_embed(tr(
+                    lang, "cmd.skip.vote_registered",
+                    votes=current_votes, required=required,
+                    song=session.current_song[:60], missing=required - current_votes,
+                )))
 
     @bot.command(name="q", aliases=["queue", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue")
     async def cmd_queue(ctx: commands.Context):
@@ -7037,7 +7039,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         q_em = _format_queue_embed(session, _ctx_lang(ctx))
         if not q_em:
-            await ctx.send(embed=_embed("📭 Nada na fila."))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.queue.nothing")))
             return
         await ctx.send(embed=q_em)
 
@@ -7048,15 +7050,16 @@ def register_voice(bot: commands.Bot) -> None:
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed("⚠️ Use `t!p` primeiro para eu entrar no canal."))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.need_play")))
             return
         session.stay_24_7 = not session.stay_24_7
         session._queue_empty_since = 0.0
         _touch_activity(ctx.guild.id)
+        _lang = _ctx_lang(ctx)
         if session.stay_24_7:
-            await ctx.send(embed=_embed("🔒 **Modo 24/7 ativado** — não saio por inatividade nem fila vazia."))
+            await ctx.send(embed=_embed(tr(_lang, "cmd.nonstop.on")))
         else:
-            await ctx.send(embed=_embed("🔓 **Modo 24/7 desativado** — volto a sair após inatividade."))
+            await ctx.send(embed=_embed(tr(_lang, "voice.nonstop_off")))
 
     @bot.command(name="pl", aliases=["playlist"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
@@ -7065,26 +7068,27 @@ def register_voice(bot: commands.Bot) -> None:
         _stats["commands_used"] += 1
         _touch_activity(ctx.guild.id)
         gid = str(ctx.guild.id)
+        lang = _ctx_lang(ctx)
 
         if action == "list":
             data = _load_playlists()
             guild_pls = data.get(gid, {})
             if not guild_pls:
-                await ctx.send(embed=_embed("📭 Nenhuma playlist salva neste servidor."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.playlist.none_saved")))
                 return
-            lines = [f"**Playlists salvas:**"]
+            lines = [tr(lang, "cmd.playlist.list_header")]
             for pname, songs in guild_pls.items():
-                lines.append(f"`{pname}` — {len(songs)} música(s)")
+                lines.append(tr(lang, "cmd.playlist.list_item", name=pname, count=len(songs)))
             await ctx.send(embed=_embed("\n".join(lines)))
             return
 
         if not name:
-            await ctx.send(embed=_embed("⚠️ Uso: `t!pl save <nome>` | `t!pl load <nome>` | `t!pl list` | `t!pl del <nome>`"))
+            await ctx.send(embed=_embed(tr(lang, "cmd.playlist.usage")))
             return
         # Sanitize name: limit length and strip problematic characters
         name = name.strip()[:50]
         if not name:
-            await ctx.send(embed=_embed("⚠️ Nome da playlist inválido."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_name")))
             return
 
         data = _load_playlists()
@@ -7093,7 +7097,7 @@ def register_voice(bot: commands.Bot) -> None:
         if action == "save":
             session = _sessions.get(ctx.guild.id)
             if not session:
-                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.not_in_voice")))
+                await ctx.send(embed=_embed(tr(lang, "voice.err.not_in_voice")))
                 return
             songs = []
             if session.current_song:
@@ -7103,25 +7107,25 @@ def register_voice(bot: commands.Bot) -> None:
             for display in session.queue_display:
                 songs.append({"display": display, "query": f"ytsearch1:{display}"})
             if not songs:
-                await ctx.send(embed=_embed("⚠️ Fila vazia — nada para salvar."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.playlist.queue_empty")))
                 return
             guild_pls[name] = songs
             _save_playlists(data)
-            await ctx.send(embed=_embed(f"💾 Playlist **{name}** salva com {len(songs)} música(s)."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.playlist.saved", name=name, count=len(songs))))
 
         elif action == "load":
             songs = guild_pls.get(name)
             if not songs:
-                await ctx.send(embed=_embed(f"⚠️ Playlist **{name}** não encontrada."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.playlist.not_found", name=name)))
                 return
             total = len(songs)
             if await _playlist_is_blocked(title=name, tracks=songs):
-                await _enforce_guidelines(ctx, _pick_blocked_reply())
+                await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
                 return
             sess, vc = await _ensure_connected(ctx)
             if not sess:
                 return
-            status = await ctx.send(embed=_embed(f"📋 Carregando playlist **{name}** ({total} faixa(s))..."))
+            status = await ctx.send(embed=_embed(tr(lang, "cmd.playlist.loading", name=name, count=total)))
             fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
             vagas = max(0, QUEUE_MAX - fila_atual)
             added = 0
@@ -7156,7 +7160,7 @@ def register_voice(bot: commands.Bot) -> None:
                     if added % 5 == 0:
                         try:
                             await status.edit(embed=_embed(
-                                f"📋 Carregando **{name}**... `{added}/{min(total, vagas)}` faixa(s)"
+                                tr(lang, "cmd.playlist.loading_progress", name=name, done=added, total=min(total, vagas))
                             ))
                         except discord.HTTPException:
                             pass
@@ -7172,27 +7176,27 @@ def register_voice(bot: commands.Bot) -> None:
 
             skipped = max(0, total - added - failed)
             if added == 0:
-                msg = f"❌ Não consegui carregar faixas de **{name}**."
+                msg = tr(lang, "cmd.playlist.load_none", name=name)
                 if failed:
-                    msg += f"\n{failed} faixa(s) não encontrada(s)."
+                    msg += "\n" + tr(lang, "cmd.playlist.load_failed_line", count=failed)
             else:
-                msg = f"▶️ Playlist **{name}**: **{added}** música(s) adicionadas à fila."
+                msg = tr(lang, "cmd.playlist.load_ok", name=name, added=added)
                 if failed:
-                    msg += f"\n⚠️ {failed} faixa(s) não encontrada(s)."
+                    msg += "\n⚠️ " + tr(lang, "cmd.playlist.load_failed_line", count=failed)
                 if skipped:
-                    msg += f"\n⚠️ {skipped} faixa(s) ignorada(s) — fila cheia."
+                    msg += "\n" + tr(lang, "cmd.playlist.load_skipped", count=skipped)
             await status.edit(embed=_embed(msg))
 
         elif action == "del":
             if name not in guild_pls:
-                await ctx.send(embed=_embed(f"⚠️ Playlist **{name}** não encontrada."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.playlist.not_found", name=name)))
                 return
             del guild_pls[name]
             _save_playlists(data)
-            await ctx.send(embed=_embed(f"🗑️ Playlist **{name}** deletada."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.playlist.deleted", name=name)))
 
         else:
-            await ctx.send(embed=_embed("⚠️ Ação inválida. Use: `save`, `load`, `list` ou `del`."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_action")))
 
     @bot.command(name="r", aliases=["random"], help="Música aleatória (sem repetir na fila/sessão): t!r")
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
@@ -7201,6 +7205,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not await _require_guild(ctx):
             return
         _touch_activity(ctx.guild.id)
+        lang = _ctx_lang(ctx)
         # If URL/query passed, redirect to t!p (e.g. t!r https://...)
         if query and query.strip():
             ctx.message.content = f"t!p {query}"
@@ -7212,8 +7217,10 @@ def register_voice(bot: commands.Bot) -> None:
         fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
         if fila_atual >= QUEUE_MAX:
             eta = _queue_eta_sec(sess)
-            eta_str = f" (fila termina em ~{_fmt_dur(eta)})" if eta > 0 else ""
-            await ctx.send(embed=_embed(f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}){eta_str}. Aguarde."))
+            if eta > 0:
+                await ctx.send(embed=_embed(tr(lang, "cmd.play.queue_full_eta", cur=fila_atual, max=QUEUE_MAX, eta=_fmt_dur(eta))))
+            else:
+                await ctx.send(embed=_embed(tr(lang, "cmd.play.queue_full", cur=fila_atual, max=QUEUE_MAX)))
             return
         song, _from_discovery = _pick_random_song(sess, _RANDOM_SONGS, discovery=_RANDOM_DISCOVERY)
         display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
@@ -7224,7 +7231,7 @@ def register_voice(bot: commands.Bot) -> None:
             except Exception:
                 tracks = []
             if not tracks:
-                await ctx.send(embed=_embed(f"❌ Não encontrei **{display[:80]}**. Tente `t!r` novamente."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.random.not_found", name=display[:80])))
                 return
             track = tracks[0]
             track_dur = (track.length or 0) / 1000.0
@@ -7243,7 +7250,7 @@ def register_voice(bot: commands.Bot) -> None:
             await sess.music_queue.put(song)
 
         _revive_workers(ctx.guild.id, vc, sess)
-        await ctx.send(embed=_embed(f"🎲 Música aleatória na fila: **{display}**"))
+        await ctx.send(embed=_embed(tr(lang, "voice.random_added", display=display)))
 
     @bot.command(name="p", aliases=["play"], help="Toca uma música: t!p / t!play <nome ou URL>")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
@@ -7252,7 +7259,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not await _require_voice(ctx):
             return
         if not query or not query.strip():
-            await ctx.send(embed=_embed("🎵 Uso: `t!p <música ou URL>`"))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.play.usage")))
             return
         query = query.strip()
         # Cap query length to prevent abuse
@@ -7284,8 +7291,10 @@ def register_voice(bot: commands.Bot) -> None:
         fila_atual = len(sess.queue_display) + (1 if sess.current_song else 0)
         if fila_atual >= QUEUE_MAX:
             eta = _queue_eta_sec(sess)
-            eta_str = f" A fila termina em ~{_fmt_dur(eta)}." if eta > 0 else ""
-            await ctx.send(embed=_embed(f"⚠️ Fila cheia ({fila_atual}/{QUEUE_MAX}).{eta_str}"))
+            if eta > 0:
+                await ctx.send(embed=_embed(tr(lang, "cmd.play.queue_full_eta", cur=fila_atual, max=QUEUE_MAX, eta=_fmt_dur(eta))))
+            else:
+                await ctx.send(embed=_embed(tr(lang, "cmd.play.queue_full", cur=fila_atual, max=QUEUE_MAX)))
             return
 
         # Immediate feedback: search/resolution may take a few seconds.
@@ -7310,11 +7319,11 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-            await status.edit(embed=_embed("📋 Extraindo músicas da playlist..."))
+            await status.edit(embed=_embed(tr(lang, "cmd.play.extracting")))
             pl_data = await _extract_playlist_tracks(query)
             tracks = pl_data.get("tracks") or []
             if not tracks:
-                await status.edit(embed=_embed("❌ Playlist inacessível. Confira se é pública."))
+                await status.edit(embed=_embed(tr(lang, "cmd.play.inaccessible")))
                 return
             if await _playlist_is_blocked(
                 title=pl_data.get("title") or "Playlist",
@@ -7371,7 +7380,7 @@ def register_voice(bot: commands.Bot) -> None:
                 query = resolved
                 resolved_from_platform = True
             else:
-                await status.edit(embed=_embed("❌ Link não resolvido. Tente o nome da música."))
+                await status.edit(embed=_embed(tr(lang, "cmd.play.link_unresolved")))
                 return
         elif not is_url:
             query = f"ytsearch1:{query}"
@@ -7412,7 +7421,7 @@ def register_voice(bot: commands.Bot) -> None:
                 tracks = await wavelink.Playable.search(search_query)
             except Exception:
                 log.exception("Lavalink search failed")
-                await status.edit(embed=_embed("❌ Não consegui buscar essa música agora. Tente de novo."))
+                await status.edit(embed=_embed(tr(lang, "cmd.play.search_failed")))
                 return
             if not tracks:
                 # AI fallback: try AI interpretation
@@ -7427,7 +7436,7 @@ def register_voice(bot: commands.Bot) -> None:
                         if tracks:
                             display = corrected
                 if not tracks:
-                    await status.edit(embed=_embed(f"❌ Nenhum resultado para **{display[:80]}**."))
+                    await status.edit(embed=_embed(tr(lang, "cmd.play.no_result", name=display[:80])))
                     return
 
             track = tracks[0]
@@ -7461,7 +7470,7 @@ def register_voice(bot: commands.Bot) -> None:
                         break
             if is_dup:
                 await status.edit(
-                    embed=_embed(f"⚠️ **{track_display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
+                    embed=_embed(tr(lang, "cmd.play.dup_confirm", name=track_display[:80]))
                 )
                 confirm_msg = status
                 def _check_confirm_lv(m: discord.Message) -> bool:
@@ -7470,10 +7479,10 @@ def register_voice(bot: commands.Bot) -> None:
                 try:
                     resp = await bot.wait_for("message", check=_check_confirm_lv, timeout=15.0)
                     if resp.content.strip().lower() in ("n", "nao", "não", "no"):
-                        await confirm_msg.edit(embed=_embed("👌 Música não adicionada."))
+                        await confirm_msg.edit(embed=_embed(tr(lang, "cmd.play.not_added")))
                         return
                 except asyncio.TimeoutError:
-                    await confirm_msg.edit(embed=_embed("⏰ Tempo esgotado. Música não adicionada."))
+                    await confirm_msg.edit(embed=_embed(tr(lang, "cmd.play.timeout")))
                     return
 
             _append_queue_item(sess, track_display, track_dur_sec, ctx.author.id)
@@ -7552,9 +7561,7 @@ def register_voice(bot: commands.Bot) -> None:
                     display = corrected
                     candidates = await _search(search_term, 4)
             if not candidates:
-                await status.edit(embed=_embed(
-                    f"❌ Nenhum resultado para **{search_term[:80]}**. Tente artista + música ou cole o link."
-                ))
+                await status.edit(embed=_embed(tr(lang, "cmd.play.no_result_hint", name=search_term[:80])))
                 return
 
             scored = sorted(candidates, key=lambda c: _match_score(search_term, c["title"]), reverse=True)
@@ -7592,9 +7599,9 @@ def register_voice(bot: commands.Bot) -> None:
                     up = f" · {c['uploader'][:30]}" if c.get("uploader") else ""
                     linhas.append(f"**{i}.** {c['title'][:80]}{up}  `[{_fmt_dur(c['duration'])}]`")
                 await status.edit(embed=_embed(
-                    f"🤔 Qual faixa é? (busca: **{search_term[:60]}**)\n\n"
-                    + "\n".join(linhas)
-                    + "\n\nResponda **`1`**, **`2`**, **`3`** ou **`n`** para cancelar."
+                    tr(lang, "cmd.play.which_track", term=search_term[:60])
+                    + "\n\n" + "\n".join(linhas)
+                    + "\n\n" + tr(lang, "cmd.play.which_track_footer")
                 ))
 
                 def _check_pick(m: discord.Message) -> bool:
@@ -7609,17 +7616,17 @@ def register_voice(bot: commands.Bot) -> None:
                 try:
                     resp = await bot.wait_for("message", check=_check_pick, timeout=20.0)
                 except asyncio.TimeoutError:
-                    await status.edit(embed=_embed("⏰ Tempo esgotado. Nada foi adicionado."))
+                    await status.edit(embed=_embed(tr(lang, "cmd.play.timeout")))
                     return
                 pick = resp.content.strip().lower()
                 if pick in ("n", "no", "nao", "não"):
-                    await status.edit(embed=_embed("👌 Cancelado. Envie artista + música ou o link."))
+                    await status.edit(embed=_embed(tr(lang, "cmd.play.cancelled")))
                     return
                 idx = {"2": 1, "3": 2}.get(pick, 0)
                 if idx >= len(scored):
                     idx = 0
                 best = scored[idx]
-                await status.edit(embed=_embed(f"🔎 Pegando **{best['title'][:80]}**..."))
+                await status.edit(embed=_embed(tr(lang, "cmd.play.getting", name=best['title'][:80])))
 
             # Play exactly the chosen video (deterministic, no re-search)
             probe_title = best["title"]
@@ -7681,7 +7688,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         if is_dup:
             await status.edit(
-                embed=_embed(f"⚠️ **{display[:80]}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)")
+                embed=_embed(tr(lang, "cmd.play.dup_confirm", name=display[:80]))
             )
             confirm_msg = status
             def _check_confirm(m: discord.Message) -> bool:
@@ -7693,10 +7700,10 @@ def register_voice(bot: commands.Bot) -> None:
             try:
                 resp = await bot.wait_for("message", check=_check_confirm, timeout=15.0)
                 if resp.content.strip().lower() in ("n", "nao", "não", "no"):
-                    await confirm_msg.edit(embed=_embed("👌 Música não adicionada."))
+                    await confirm_msg.edit(embed=_embed(tr(lang, "cmd.play.not_added")))
                     return
             except asyncio.TimeoutError:
-                await confirm_msg.edit(embed=_embed("⏰ Tempo esgotado. Música não adicionada."))
+                await confirm_msg.edit(embed=_embed(tr(lang, "cmd.play.timeout")))
                 return
 
         track_dur = float(dur or 0)
@@ -7861,11 +7868,11 @@ def register_voice(bot: commands.Bot) -> None:
             session.loop_query = session.current_query
             session.loop_display = session.current_song or session.current_query
             nome = session.loop_display[:100]
-            await ctx.send(embed=_embed(f"🔁 Loop **ativado** — repetindo: **{nome}**"))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.on", name=nome)))
             await _try_react_ok(ctx.message)
         else:
             _clear_loop(session)
-            await ctx.send(embed=_embed("🔁 Loop **desativado**."))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.off")))
             await _try_react_ok(ctx.message)
 
     @bot.command(name="pa", aliases=["pause"], help="Pausa a música: t!pa / t!pause")
@@ -7887,7 +7894,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.no_music_now")))
                 return
             vc.pause()
-        await ctx.send(embed=_embed("⏸️ Pausado. Use `t!re` para continuar."))
+        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.done")))
         await _try_react_ok(ctx.message)
 
     @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t!re / t!resume")
@@ -7901,15 +7908,15 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if _is_wavelink_player(vc):
             if not vc.paused:
-                await ctx.send(embed=_embed("⚠️ A música não está pausada."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.not_paused")))
                 return
             await vc.pause(False)
         else:
             if not vc.is_paused():
-                await ctx.send(embed=_embed("⚠️ A música não está pausada."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.not_paused")))
                 return
             vc.resume()
-        await ctx.send(embed=_embed("▶️ Voltando de onde parou!"))
+        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.resume.done")))
         await _try_react_ok(ctx.message)
 
     @bot.command(name="cl", aliases=["clear"], help="Para música, limpa fila e sai da call: t!cl / t!clear")
@@ -7963,7 +7970,7 @@ def register_voice(bot: commands.Bot) -> None:
             await vc.disconnect(force=True)
         except Exception:
             pass
-        await ctx.send(embed=_embed("🗑️ Fila limpa. Saí do canal."))
+        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.clear.done")))
 
     @bot.command(name="sh", aliases=["shuffle"], help="Embaralha a fila: t!sh / t!shuffle")
     async def cmd_shuffle(ctx: commands.Context):
@@ -7979,7 +7986,7 @@ def register_voice(bot: commands.Bot) -> None:
         if _is_wavelink_player(vc):
             # Lavalink mode: shuffle wavelink queue + queue_display
             if vc.queue.count < 2 and len(session.queue_display) < 2:
-                await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.too_small")))
                 return
             # Drain wavelink queue
             wl_tracks = []
@@ -8018,7 +8025,7 @@ def register_voice(bot: commands.Bot) -> None:
             if len(all_queries) < 2:
                 for q in drained_queries:
                     session.music_queue.put_nowait(q)
-                await ctx.send(embed=_embed("⚠️ A fila precisa de pelo menos 2 músicas para embaralhar."))
+                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.too_small")))
                 return
             all_durs = list(session.queue_durations[:n])
             while len(all_durs) < n:
@@ -8038,7 +8045,7 @@ def register_voice(bot: commands.Bot) -> None:
                 vc.stop()
 
         _touch_activity(ctx.guild.id)
-        await ctx.send(embed=_embed(f"🔀 Fila embaralhada! ({len(session.queue_display)} músicas — tocando em nova ordem)"))
+        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.done", count=len(session.queue_display))))
 
     @bot.command(name="rp", aliases=["replay"], help="Repete a música atual: t!rp / t!replay")
     async def cmd_replay(ctx: commands.Context):
@@ -8050,7 +8057,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.not_in_voice")))
             return
         if not session.current_query:
-            await ctx.send(embed=_embed("⚠️ Nada tocando no momento."))
+            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.no_music_now")))
             return
         _touch_activity(ctx.guild.id)
         display = session.current_song or session.current_query
@@ -8087,7 +8094,7 @@ def register_voice(bot: commands.Bot) -> None:
             _clear_loop(session)
             vc.stop()
 
-        await ctx.send(embed=_embed(f"🔄 Repetindo: **{display[:80]}**"))
+        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.replaying", title=display[:80])))
 
     @bot.command(name="ap", aliases=["autoplay"], help="Liga/desliga autoplay: t!ap / t!autoplay")
     async def cmd_autoplay(ctx: commands.Context):
@@ -8100,20 +8107,22 @@ def register_voice(bot: commands.Bot) -> None:
             return
         _touch_activity(ctx.guild.id)
         session.autoplay = not session.autoplay
+        _lang = _ctx_lang(ctx)
         if session.autoplay:
-            await ctx.send(embed=_embed("▶️ **Autoplay ativado** — quando a fila acabar, toco músicas similares."))
+            await ctx.send(embed=_embed(tr(_lang, "voice.autoplay_on")))
         else:
-            await ctx.send(embed=_embed("⏹️ **Autoplay desativado**."))
+            await ctx.send(embed=_embed(tr(_lang, "voice.autoplay_off")))
 
     @bot.command(name="ly", aliases=["lyrics"], help="Busca letra da música: t!ly / t!lyrics")
     async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
         if not await _require_guild(ctx):
             return
         session = _sessions.get(ctx.guild.id)
+        lang = _ctx_lang(ctx)
         # If no query passed, use current song
         search_term = query.strip() if query.strip() else (session.current_song if session else "")
         if not search_term:
-            await ctx.send(embed=_embed("⚠️ Nada tocando. Use: `t!ly <nome da música>`"))
+            await ctx.send(embed=_embed(tr(lang, "cmd.lyrics.usage")))
             return
         _touch_activity(ctx.guild.id)
 
@@ -8142,10 +8151,10 @@ def register_voice(bot: commands.Bot) -> None:
             await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
 
-        status = await ctx.send(embed=_embed(f"🎤 Buscando letra de **{search_term[:60]}**..."))
+        status = await ctx.send(embed=_embed(tr(lang, "cmd.lyrics.searching", name=search_term[:60])))
         lyrics = await _fetch_lyrics(search_term)
         if not lyrics:
-            await status.edit(embed=_embed(f"❌ Não encontrei a letra de **{search_term[:60]}**."))
+            await status.edit(embed=_embed(tr(lang, "cmd.lyrics.not_found", name=search_term[:60])))
             return
         if await _should_block_content(lyrics):
             try:
@@ -8156,8 +8165,8 @@ def register_voice(bot: commands.Bot) -> None:
             return
         # Truncate to fit embed (4096 chars)
         if len(lyrics) > 3800:
-            lyrics = lyrics[:3800] + "\n\n*... (letra truncada)*"
-        await status.edit(embed=_embed(f"🎤 **Letra:** {search_term[:60]}\n\n{lyrics}"))
+            lyrics = lyrics[:3800] + tr(lang, "cmd.lyrics.truncated")
+        await status.edit(embed=_embed(tr(lang, "cmd.lyrics.result", name=search_term[:60], lyrics=lyrics)))
 
     @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
     async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
@@ -8166,17 +8175,18 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         session = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
+        lang = _ctx_lang(ctx)
         if not session or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.not_in_voice")))
+            await ctx.send(embed=_embed(tr(lang, "voice.err.not_in_voice")))
             return
         _has_song = session.current_song and (_is_wavelink_player(vc) or session.current_file)
         if not _has_song:
-            await ctx.send(embed=_embed("⚠️ Nenhuma música tocando."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.seek.nothing")))
             return
         if not time_arg:
             dur = session.current_duration
-            dur_str = f" (duração: {int(dur)//60}:{int(dur)%60:02d})" if dur > 0 else ""
-            await ctx.send(embed=_embed(f"⏩ Use: `t!ff +30` (avançar 30s), `t!ff -15` (voltar 15s), `t!ff 1:30` (ir para 1m30s){dur_str}"))
+            dur_str = tr(lang, "cmd.seek.duration", time=f"{int(dur)//60}:{int(dur)%60:02d}") if dur > 0 else ""
+            await ctx.send(embed=_embed(tr(lang, "cmd.seek.usage", dur=dur_str)))
             return
         # Compute current elapsed time
         elapsed = time.monotonic() - session.song_start_time if session.song_start_time else 0
@@ -8193,17 +8203,17 @@ def register_voice(bot: commands.Bot) -> None:
             try:
                 mins, secs = int(parts[0]), int(parts[1])
                 if mins > 600 or secs > 59:
-                    await ctx.send(embed=_embed("⚠️ Tempo fora do limite (máx 600:59)."))
+                    await ctx.send(embed=_embed(tr(lang, "cmd.seek.out_of_range")))
                     return
                 target_sec = mins * 60 + secs
             except (ValueError, IndexError):
-                await ctx.send(embed=_embed("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`"))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.invalid")))
                 return
         else:
             try:
                 target_sec = int(time_arg)
             except ValueError:
-                await ctx.send(embed=_embed("⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`"))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.invalid")))
                 return
         if relative:
             target_sec = elapsed + (sign * target_sec)
@@ -8212,7 +8222,7 @@ def register_voice(bot: commands.Bot) -> None:
         dur = session.current_duration
         if dur > 0 and target_sec >= dur:
             dm, ds = divmod(int(dur), 60)
-            await ctx.send(embed=_embed(f"⚠️ A música só tem **{dm}:{ds:02d}** de duração. Escolha um tempo menor."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.seek.too_short", dur=f"{dm}:{ds:02d}")))
             return
         if _is_wavelink_player(vc):
             # Lavalink: native seek
@@ -8221,20 +8231,20 @@ def register_voice(bot: commands.Bot) -> None:
                 session.song_start_time = time.monotonic() - target_sec
             except Exception:
                 log.exception("Failed to seek (lavalink) guild=%s", ctx.guild.id if ctx.guild else 0)
-                await ctx.send(embed=_embed("⚠️ Não consegui pular na música. Tente de novo."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.failed")))
                 return
         else:
             # yt-dlp: recreate source with FFmpeg -ss
             new_source = await _YTSource.from_file(session.current_file, seek_sec=target_sec, bitrate_kbps=session.bitrate_kbps)
             if not new_source:
-                await ctx.send(embed=_embed("⚠️ Erro ao fazer seek. O arquivo pode ter sido removido."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.file_gone")))
                 return
             session.seeking = True
             try:
                 vc.stop()
             except Exception:
                 session.seeking = False
-                await ctx.send(embed=_embed("⚠️ Erro ao fazer seek."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.error")))
                 return
             await asyncio.sleep(0.3)
             session.song_start_time = time.monotonic() - target_sec
@@ -8242,14 +8252,14 @@ def register_voice(bot: commands.Bot) -> None:
                 vc.play(new_source)
             except Exception:
                 session.seeking = False
-                await ctx.send(embed=_embed("⚠️ Erro ao retomar playback após seek."))
+                await ctx.send(embed=_embed(tr(lang, "cmd.seek.resume_failed")))
                 return
         tm, ts = divmod(int(target_sec), 60)
         dur_str = ""
         if dur > 0:
             dm, ds = divmod(int(dur), 60)
             dur_str = f" / {dm}:{ds:02d}"
-        await ctx.send(embed=_embed(f"⏩ Pulando para **{tm:02d}:{ts:02d}{dur_str}**"))
+        await ctx.send(embed=_embed(tr(lang, "cmd.seek.jumped", pos=f"{tm:02d}:{ts:02d}{dur_str}")))
 
     @bot.command(name="su", aliases=["summary"], help="Resume um link: t!su / t!summary <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
@@ -8257,14 +8267,14 @@ def register_voice(bot: commands.Bot) -> None:
             return
         lang = _ctx_lang(ctx)
         if not url or not re.match(r"^https?://", url):
-            await ctx.send(embed=_embed("⚠️ Uso: `t!su <URL>` — link completo com https://"))
+            await ctx.send(embed=_embed(tr(lang, "cmd.summary.usage")))
             return
         if _contains_blocked_content(url):
-            await _enforce_guidelines(ctx, _pick_blocked_reply())
+            await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
             return
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
-            await ctx.send(embed=_embed(f"⏳ Aguarde {remaining}s antes de usar novamente."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.summary.cooldown", secs=remaining)))
             return
         gid, uid = _ai_rl_ids(ctx)
         ok, reason = _ai_rate_limit_peek(gid, bucket="summary", user_id=uid)
@@ -8275,9 +8285,9 @@ def register_voice(bot: commands.Bot) -> None:
         if ctx.guild:
             _touch_activity(ctx.guild.id)
         if not os.getenv("OPENROUTER_API_KEY", "").strip():
-            await ctx.send(embed=_embed("⚠️ Serviço de IA indisponível no momento."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.chat.ai_unavailable")))
             return
-        status = await ctx.send(embed=_embed("📄 Lendo link..."))
+        status = await ctx.send(embed=_embed(tr(lang, "cmd.summary.reading")))
         summary = await _summarize_url(
             url, lang=lang, guild_id=gid, user_id=uid,
         )
@@ -8287,9 +8297,9 @@ def register_voice(bot: commands.Bot) -> None:
                 await status.delete()
             except discord.HTTPException:
                 pass
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply())
+            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply(lang))
             return
-        await status.edit(embed=_embed(f"📄 **Resumo do link:**\n{summary}"))
+        await status.edit(embed=_embed(tr(lang, "cmd.summary.result", summary=summary)))
         # Save to user context for future t!c reference
         _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
 
@@ -8304,20 +8314,21 @@ def register_voice(bot: commands.Bot) -> None:
         fmt = (fmt or "mp3").strip().lower().lstrip(".")
         if fmt in ("mp", "m4a"):
             fmt = "mp3"
+        lang = _ctx_lang(ctx)
         if fmt not in ("mp3", "wav"):
-            await ctx.send(embed=_embed("⚠️ Formato inválido. Use `t!clip mp3` ou `t!clip wav` (padrão: mp3)."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.clip.invalid_format")))
             return
         sess = _sessions.get(ctx.guild.id)
         vc = ctx.guild.voice_client
         if not sess or not vc or not vc.is_connected():
-            await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.err.not_in_voice")))
+            await ctx.send(embed=_embed(tr(lang, "voice.err.not_in_voice")))
             return
         _touch_activity(ctx.guild.id)
 
         raw = sess.clip_mixer.export_pcm()
 
         if len(raw) < 48000 * 2:  # less than 0.5s mono equivalent
-            await ctx.send(embed=_embed("⚠️ Pouco áudio capturado. Fale na call e tente novamente."))
+            await ctx.send(embed=_embed(tr(lang, "cmd.clip.too_little")))
             return
 
         # Convert PCM to WAV (base format; MP3 is transcoded from it below)
@@ -8345,9 +8356,9 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             file_buf = wav_buf
 
-        note = "" if ext == fmt else "\n*(mp3 indisponível, enviei em wav)*"
+        note = "" if ext == fmt else tr(lang, "cmd.clip.mp3_fallback")
         await ctx.send(
-            embed=_embed(f"🎬 **Clip salvo!** ({duration:.0f}s de áudio, `.{ext}`){note}"),
+            embed=_embed(tr(lang, "cmd.clip.saved", secs=f"{duration:.0f}", ext=ext, note=note)),
             file=discord.File(file_buf, filename=f"clip_{ctx.guild.id}_{int(time.time())}.{ext}"),
         )
 
@@ -8407,7 +8418,7 @@ def register_voice(bot: commands.Bot) -> None:
         elif isinstance(error, commands.CommandInvokeError):
             log.exception("Error running command %s: %s", ctx.command, error.original)
             try:
-                await ctx.send(embed=_embed(f"❌ Erro ao executar `t!{ctx.command}`. Tente de novo."), delete_after=10)
+                await ctx.send(embed=_embed(tr(lang, "cmd.error.exec", cmd=f"t!{ctx.command}")), delete_after=10)
             except Exception:
                 pass
 
@@ -8596,7 +8607,7 @@ def register_voice(bot: commands.Bot) -> None:
             text_ch = bot.get_channel(sess.text_channel_id)
             if text_ch and hasattr(text_ch, "send"):
                 try:
-                    await text_ch.send("👋 **Tiffany saiu** — canal ficou vazio.")
+                    await text_ch.send(tr(resolve_guild_lang(getattr(text_ch, "guild", None)), "cmd.left_empty"))
                 except Exception:
                     pass
         _clear_voice_state(gid)

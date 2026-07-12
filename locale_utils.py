@@ -1132,4 +1132,450 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "⚠️ Invalid argument. Usage: **{usage}**",
         "es": "⚠️ Argumento inválido. Uso: **{usage}**",
     },
+    # --- Text-command replies (t!p, t!s, t!pl, t!r, t!ff, t!ly, dice, clip) ---
+    "cmd.dice.reroll_no_formula": {
+        "pt": "⚠️ Não consegui re-rolar — fórmula não encontrada.",
+        "en": "⚠️ Couldn't reroll — formula not found.",
+        "es": "⚠️ No pude volver a tirar — fórmula no encontrada.",
+    },
+    "cmd.dice.reroll_failed": {
+        "pt": "⚠️ Não consegui re-rolar.",
+        "en": "⚠️ Couldn't reroll.",
+        "es": "⚠️ No pude volver a tirar.",
+    },
+    "cmd.join.move_failed": {
+        "pt": "⚠️ Não consegui mudar de canal de voz. Tente de novo.",
+        "en": "⚠️ Couldn't switch voice channels. Try again.",
+        "es": "⚠️ No pude cambiar de canal de voz. Intenta de nuevo.",
+    },
+    "cmd.join.limit": {
+        "pt": "⚠️ O bot está no limite de canais de voz simultâneos. Tente novamente em breve.",
+        "en": "⚠️ The bot is at its simultaneous voice-channel limit. Try again shortly.",
+        "es": "⚠️ El bot está en el límite de canales de voz simultáneos. Intenta en breve.",
+    },
+    "cmd.join.no_perms": {
+        "pt": "⚠️ Não tenho permissão para entrar ou falar neste canal de voz.",
+        "en": "⚠️ I don't have permission to join or speak in this voice channel.",
+        "es": "⚠️ No tengo permiso para entrar o hablar en este canal de voz.",
+    },
+    "cmd.join.failed": {
+        "pt": "⚠️ Não consegui entrar no canal de voz. Tente de novo.",
+        "en": "⚠️ I couldn't join the voice channel. Try again.",
+        "es": "⚠️ No pude entrar al canal de voz. Intenta de nuevo.",
+    },
+    "cmd.join.need_channel": {
+        "pt": "⚠️ Entre em um **canal de voz** antes.",
+        "en": "⚠️ Join a **voice channel** first.",
+        "es": "⚠️ Entra a un **canal de voz** primero.",
+    },
+    "cmd.skip.wrong_cmd": {
+        "pt": "⚠️ `t!s` é o comando de **pular música**, não de tocar.\nPara tocar, use `t!p {q}`",
+        "en": "⚠️ `t!s` is the **skip** command, not play.\nTo play, use `t!p {q}`",
+        "es": "⚠️ `t!s` es el comando de **saltar**, no de tocar.\nPara tocar, usa `t!p {q}`",
+    },
+    "cmd.skip.no_session": {
+        "pt": "⚠️ A sessão de voz não está ativa no momento.",
+        "en": "⚠️ The voice session isn't active right now.",
+        "es": "⚠️ La sesión de voz no está activa ahora.",
+    },
+    "cmd.skip.nothing": {
+        "pt": "⚠️ Não tem faixa tocando agora.",
+        "en": "⚠️ No track is playing right now.",
+        "es": "⚠️ No hay pista sonando ahora.",
+    },
+    "cmd.skip.requester_next": {
+        "pt": "⏭️ Pulado — você pediu esta faixa. Próxima: **{next}**",
+        "en": "⏭️ Skipped — you requested this track. Next: **{next}**",
+        "es": "⏭️ Saltada — pediste esta pista. Siguiente: **{next}**",
+    },
+    "cmd.skip.requester_empty": {
+        "pt": "⏭️ Pulado — você pediu esta faixa. Fila vazia.",
+        "en": "⏭️ Skipped — you requested this track. Queue empty.",
+        "es": "⏭️ Saltada — pediste esta pista. Cola vacía.",
+    },
+    "cmd.skip.next": {
+        "pt": "⏭️ Pulado. Próxima: **{next}**",
+        "en": "⏭️ Skipped. Next: **{next}**",
+        "es": "⏭️ Saltada. Siguiente: **{next}**",
+    },
+    "cmd.skip.empty": {
+        "pt": "⏭️ Pulado. Fila vazia.",
+        "en": "⏭️ Skipped. Queue empty.",
+        "es": "⏭️ Saltada. Cola vacía.",
+    },
+    "cmd.skip.vote_next": {
+        "pt": "⏭️ {votes} votos — pulando! Próxima: **{next}**",
+        "en": "⏭️ {votes} votes — skipping! Next: **{next}**",
+        "es": "⏭️ {votes} votos — ¡saltando! Siguiente: **{next}**",
+    },
+    "cmd.skip.vote_empty": {
+        "pt": "⏭️ {votes} votos — pulando! Fila vazia.",
+        "en": "⏭️ {votes} votes — skipping! Queue empty.",
+        "es": "⏭️ {votes} votos — ¡saltando! Cola vacía.",
+    },
+    "cmd.skip.vote_registered": {
+        "pt": "🗳️ Voto registrado ({votes}/{required}) para pular **{song}**. Falta(m) {missing} voto(s).",
+        "en": "🗳️ Vote registered ({votes}/{required}) to skip **{song}**. {missing} more vote(s) needed.",
+        "es": "🗳️ Voto registrado ({votes}/{required}) para saltar **{song}**. Faltan {missing} voto(s).",
+    },
+    "cmd.queue.nothing": {
+        "pt": "📭 Nada na fila.",
+        "en": "📭 Nothing in the queue.",
+        "es": "📭 Nada en la cola.",
+    },
+    "cmd.need_play": {
+        "pt": "⚠️ Use `t!p` primeiro para eu entrar no canal.",
+        "en": "⚠️ Use `t!p` first so I join the channel.",
+        "es": "⚠️ Usa `t!p` primero para que entre al canal.",
+    },
+    "cmd.nonstop.on": {
+        "pt": "🔒 **Modo 24/7 ativado** — não saio por inatividade nem fila vazia.",
+        "en": "🔒 **24/7 mode on** — I won't leave for inactivity or an empty queue.",
+        "es": "🔒 **Modo 24/7 activado** — no salgo por inactividad ni cola vacía.",
+    },
+    "cmd.playlist.none_saved": {
+        "pt": "📭 Nenhuma playlist salva neste servidor.",
+        "en": "📭 No playlists saved in this server.",
+        "es": "📭 No hay playlists guardadas en este servidor.",
+    },
+    "cmd.playlist.usage": {
+        "pt": "⚠️ Uso: `t!pl save <nome>` | `t!pl load <nome>` | `t!pl list` | `t!pl del <nome>`",
+        "en": "⚠️ Usage: `t!pl save <name>` | `t!pl load <name>` | `t!pl list` | `t!pl del <name>`",
+        "es": "⚠️ Uso: `t!pl save <nombre>` | `t!pl load <nombre>` | `t!pl list` | `t!pl del <nombre>`",
+    },
+    "cmd.playlist.invalid_name": {
+        "pt": "⚠️ Nome da playlist inválido.",
+        "en": "⚠️ Invalid playlist name.",
+        "es": "⚠️ Nombre de playlist inválido.",
+    },
+    "cmd.playlist.queue_empty": {
+        "pt": "⚠️ Fila vazia — nada para salvar.",
+        "en": "⚠️ Queue empty — nothing to save.",
+        "es": "⚠️ Cola vacía — nada para guardar.",
+    },
+    "cmd.playlist.saved": {
+        "pt": "💾 Playlist **{name}** salva com {count} música(s).",
+        "en": "💾 Playlist **{name}** saved with {count} track(s).",
+        "es": "💾 Playlist **{name}** guardada con {count} pista(s).",
+    },
+    "cmd.playlist.not_found": {
+        "pt": "⚠️ Playlist **{name}** não encontrada.",
+        "en": "⚠️ Playlist **{name}** not found.",
+        "es": "⚠️ Playlist **{name}** no encontrada.",
+    },
+    "cmd.playlist.invalid_action": {
+        "pt": "⚠️ Ação inválida. Use: `save`, `load`, `list` ou `del`.",
+        "en": "⚠️ Invalid action. Use: `save`, `load`, `list`, or `del`.",
+        "es": "⚠️ Acción inválida. Usa: `save`, `load`, `list` o `del`.",
+    },
+    "cmd.playlist.list_header": {
+        "pt": "**Playlists salvas:**",
+        "en": "**Saved playlists:**",
+        "es": "**Playlists guardadas:**",
+    },
+    "cmd.playlist.list_item": {
+        "pt": "`{name}` — {count} música(s)",
+        "en": "`{name}` — {count} track(s)",
+        "es": "`{name}` — {count} pista(s)",
+    },
+    "cmd.playlist.loading": {
+        "pt": "📋 Carregando playlist **{name}** ({count} faixa(s))...",
+        "en": "📋 Loading playlist **{name}** ({count} track(s))...",
+        "es": "📋 Cargando playlist **{name}** ({count} pista(s))...",
+    },
+    "cmd.playlist.loading_progress": {
+        "pt": "📋 Carregando **{name}**... `{done}/{total}` faixa(s)",
+        "en": "📋 Loading **{name}**... `{done}/{total}` track(s)",
+        "es": "📋 Cargando **{name}**... `{done}/{total}` pista(s)",
+    },
+    "cmd.playlist.load_none": {
+        "pt": "❌ Não consegui carregar faixas de **{name}**.",
+        "en": "❌ Couldn't load any tracks from **{name}**.",
+        "es": "❌ No pude cargar pistas de **{name}**.",
+    },
+    "cmd.playlist.load_ok": {
+        "pt": "▶️ Playlist **{name}**: **{added}** música(s) adicionadas à fila.",
+        "en": "▶️ Playlist **{name}**: **{added}** track(s) added to the queue.",
+        "es": "▶️ Playlist **{name}**: **{added}** pista(s) agregadas a la cola.",
+    },
+    "cmd.playlist.load_failed_line": {
+        "pt": "{count} faixa(s) não encontrada(s).",
+        "en": "{count} track(s) not found.",
+        "es": "{count} pista(s) no encontrada(s).",
+    },
+    "cmd.playlist.load_skipped": {
+        "pt": "⚠️ {count} faixa(s) ignorada(s) — fila cheia.",
+        "en": "⚠️ {count} track(s) skipped — queue full.",
+        "es": "⚠️ {count} pista(s) omitida(s) — cola llena.",
+    },
+    "cmd.playlist.deleted": {
+        "pt": "🗑️ Playlist **{name}** deletada.",
+        "en": "🗑️ Playlist **{name}** deleted.",
+        "es": "🗑️ Playlist **{name}** eliminada.",
+    },
+    "cmd.random.not_found": {
+        "pt": "❌ Não encontrei **{name}**. Tente `t!r` novamente.",
+        "en": "❌ Couldn't find **{name}**. Try `t!r` again.",
+        "es": "❌ No encontré **{name}**. Prueba `t!r` de nuevo.",
+    },
+    "cmd.play.usage": {
+        "pt": "🎵 Uso: `t!p <música ou URL>`",
+        "en": "🎵 Usage: `t!p <song or URL>`",
+        "es": "🎵 Uso: `t!p <música o URL>`",
+    },
+    "cmd.play.queue_full": {
+        "pt": "⚠️ Fila cheia ({cur}/{max}). Aguarde.",
+        "en": "⚠️ Queue full ({cur}/{max}). Please wait.",
+        "es": "⚠️ Cola llena ({cur}/{max}). Espera.",
+    },
+    "cmd.play.queue_full_eta": {
+        "pt": "⚠️ Fila cheia ({cur}/{max}) — a fila termina em ~{eta}. Aguarde.",
+        "en": "⚠️ Queue full ({cur}/{max}) — the queue ends in ~{eta}. Please wait.",
+        "es": "⚠️ Cola llena ({cur}/{max}) — la cola termina en ~{eta}. Espera.",
+    },
+    "cmd.play.extracting": {
+        "pt": "📋 Extraindo músicas da playlist...",
+        "en": "📋 Extracting playlist tracks...",
+        "es": "📋 Extrayendo canciones de la playlist...",
+    },
+    "cmd.play.inaccessible": {
+        "pt": "❌ Playlist inacessível. Confira se é pública.",
+        "en": "❌ Playlist inaccessible. Check that it's public.",
+        "es": "❌ Playlist inaccesible. Verifica que sea pública.",
+    },
+    "cmd.play.link_unresolved": {
+        "pt": "❌ Link não resolvido. Tente o nome da música.",
+        "en": "❌ Couldn't resolve the link. Try the song name.",
+        "es": "❌ No se pudo resolver el link. Prueba el nombre de la canción.",
+    },
+    "cmd.play.search_failed": {
+        "pt": "❌ Não consegui buscar essa música agora. Tente de novo.",
+        "en": "❌ Couldn't search for that song right now. Try again.",
+        "es": "❌ No pude buscar esa canción ahora. Intenta de nuevo.",
+    },
+    "cmd.play.no_result": {
+        "pt": "❌ Nenhum resultado para **{name}**.",
+        "en": "❌ No results for **{name}**.",
+        "es": "❌ Sin resultados para **{name}**.",
+    },
+    "cmd.play.no_result_hint": {
+        "pt": "❌ Nenhum resultado para **{name}**. Tente artista + música ou cole o link.",
+        "en": "❌ No results for **{name}**. Try artist + song, or paste the link.",
+        "es": "❌ Sin resultados para **{name}**. Prueba artista + canción, o pega el link.",
+    },
+    "cmd.play.which_track": {
+        "pt": "🤔 Qual faixa é? (busca: **{term}**)",
+        "en": "🤔 Which track is it? (search: **{term}**)",
+        "es": "🤔 ¿Cuál pista es? (búsqueda: **{term}**)",
+    },
+    "cmd.play.which_track_footer": {
+        "pt": "Responda **`1`**, **`2`**, **`3`** ou **`n`** para cancelar.",
+        "en": "Reply **`1`**, **`2`**, **`3`**, or **`n`** to cancel.",
+        "es": "Responde **`1`**, **`2`**, **`3`** o **`n`** para cancelar.",
+    },
+    "cmd.play.getting": {
+        "pt": "🔎 Pegando **{name}**...",
+        "en": "🔎 Getting **{name}**...",
+        "es": "🔎 Obteniendo **{name}**...",
+    },
+    "cmd.play.dup_confirm": {
+        "pt": "⚠️ **{name}** já está na fila ou tocando. Adicionar mesmo assim? (`s`/`n`)",
+        "en": "⚠️ **{name}** is already queued or playing. Add anyway? (`s`/`n`)",
+        "es": "⚠️ **{name}** ya está en la cola o sonando. ¿Agregar igual? (`s`/`n`)",
+    },
+    "cmd.play.not_added": {
+        "pt": "👌 Música não adicionada.",
+        "en": "👌 Song not added.",
+        "es": "👌 Canción no agregada.",
+    },
+    "cmd.play.timeout": {
+        "pt": "⏰ Tempo esgotado. Música não adicionada.",
+        "en": "⏰ Timed out. Song not added.",
+        "es": "⏰ Tiempo agotado. Canción no agregada.",
+    },
+    "cmd.play.cancelled": {
+        "pt": "👌 Cancelado. Envie artista + música ou o link.",
+        "en": "👌 Cancelled. Send artist + song or the link.",
+        "es": "👌 Cancelado. Envía artista + canción o el link.",
+    },
+    "cmd.pause.not_paused": {
+        "pt": "⚠️ A música não está pausada.",
+        "en": "⚠️ The music isn't paused.",
+        "es": "⚠️ La música no está en pausa.",
+    },
+    "cmd.resume.done": {
+        "pt": "▶️ Voltando de onde parou!",
+        "en": "▶️ Resuming from where it stopped!",
+        "es": "▶️ ¡Reanudando desde donde paró!",
+    },
+    "cmd.pause.done": {
+        "pt": "⏸️ Pausado. Use `t!re` para continuar.",
+        "en": "⏸️ Paused. Use `t!re` to resume.",
+        "es": "⏸️ Pausado. Usa `t!re` para continuar.",
+    },
+    "cmd.loop.on": {
+        "pt": "🔁 Loop **ativado** — repetindo: **{name}**",
+        "en": "🔁 Loop **on** — repeating: **{name}**",
+        "es": "🔁 Loop **activado** — repitiendo: **{name}**",
+    },
+    "cmd.loop.off": {
+        "pt": "🔁 Loop **desativado**.",
+        "en": "🔁 Loop **off**.",
+        "es": "🔁 Loop **desactivado**.",
+    },
+    "cmd.dice.cooldown": {
+        "pt": "⏳ Aguarde **{secs}s** antes de rolar de novo.",
+        "en": "⏳ Wait **{secs}s** before rolling again.",
+        "es": "⏳ Espera **{secs}s** antes de tirar de nuevo.",
+    },
+    "cmd.error.exec": {
+        "pt": "❌ Erro ao executar `{cmd}`. Tente de novo.",
+        "en": "❌ Error running `{cmd}`. Try again.",
+        "es": "❌ Error al ejecutar `{cmd}`. Intenta de nuevo.",
+    },
+    "cmd.left_empty": {
+        "pt": "👋 **Tiffany saiu** — canal ficou vazio.",
+        "en": "👋 **Tiffany left** — the channel is empty.",
+        "es": "👋 **Tiffany salió** — el canal quedó vacío.",
+    },
+    "cmd.clear.done": {
+        "pt": "🗑️ Fila limpa. Saí do canal.",
+        "en": "🗑️ Queue cleared. I left the channel.",
+        "es": "🗑️ Cola limpiada. Salí del canal.",
+    },
+    "cmd.shuffle.too_small": {
+        "pt": "⚠️ A fila precisa de pelo menos 2 músicas para embaralhar.",
+        "en": "⚠️ The queue needs at least 2 tracks to shuffle.",
+        "es": "⚠️ La cola necesita al menos 2 pistas para mezclar.",
+    },
+    "cmd.shuffle.done": {
+        "pt": "🔀 Fila embaralhada! ({count} músicas — tocando em nova ordem)",
+        "en": "🔀 Queue shuffled! ({count} tracks — playing in a new order)",
+        "es": "🔀 ¡Cola mezclada! ({count} pistas — sonando en nuevo orden)",
+    },
+    "cmd.lyrics.usage": {
+        "pt": "⚠️ Nada tocando. Use: `t!ly <nome da música>`",
+        "en": "⚠️ Nothing playing. Use: `t!ly <song name>`",
+        "es": "⚠️ Nada sonando. Usa: `t!ly <nombre de la canción>`",
+    },
+    "cmd.lyrics.not_found": {
+        "pt": "❌ Não encontrei a letra de **{name}**.",
+        "en": "❌ Couldn't find lyrics for **{name}**.",
+        "es": "❌ No encontré la letra de **{name}**.",
+    },
+    "cmd.seek.nothing": {
+        "pt": "⚠️ Nenhuma música tocando.",
+        "en": "⚠️ No music playing.",
+        "es": "⚠️ No hay música sonando.",
+    },
+    "cmd.seek.usage": {
+        "pt": "⏩ Use: `t!ff +30` (avançar 30s), `t!ff -15` (voltar 15s), `t!ff 1:30` (ir para 1m30s){dur}",
+        "en": "⏩ Use: `t!ff +30` (forward 30s), `t!ff -15` (back 15s), `t!ff 1:30` (go to 1m30s){dur}",
+        "es": "⏩ Usa: `t!ff +30` (avanzar 30s), `t!ff -15` (retroceder 15s), `t!ff 1:30` (ir a 1m30s){dur}",
+    },
+    "cmd.seek.out_of_range": {
+        "pt": "⚠️ Tempo fora do limite (máx 600:59).",
+        "en": "⚠️ Time out of range (max 600:59).",
+        "es": "⚠️ Tiempo fuera de rango (máx 600:59).",
+    },
+    "cmd.seek.invalid": {
+        "pt": "⚠️ Formato inválido. Use: `+30`, `-15`, `1:30`",
+        "en": "⚠️ Invalid format. Use: `+30`, `-15`, `1:30`",
+        "es": "⚠️ Formato inválido. Usa: `+30`, `-15`, `1:30`",
+    },
+    "cmd.seek.too_short": {
+        "pt": "⚠️ A música só tem **{dur}** de duração. Escolha um tempo menor.",
+        "en": "⚠️ The song is only **{dur}** long. Pick an earlier time.",
+        "es": "⚠️ La canción dura solo **{dur}**. Elige un tiempo menor.",
+    },
+    "cmd.seek.failed": {
+        "pt": "⚠️ Não consegui pular na música. Tente de novo.",
+        "en": "⚠️ Couldn't seek in the song. Try again.",
+        "es": "⚠️ No pude avanzar en la canción. Intenta de nuevo.",
+    },
+    "cmd.seek.resume_failed": {
+        "pt": "⚠️ Erro ao retomar playback após seek.",
+        "en": "⚠️ Error resuming playback after seek.",
+        "es": "⚠️ Error al reanudar la reproducción tras el seek.",
+    },
+    "cmd.chat.ai_unavailable": {
+        "pt": "⚠️ Serviço de IA indisponível no momento.",
+        "en": "⚠️ AI service unavailable right now.",
+        "es": "⚠️ Servicio de IA no disponible ahora.",
+    },
+    "cmd.clip.invalid_format": {
+        "pt": "⚠️ Formato inválido. Use `t!clip mp3` ou `t!clip wav` (padrão: mp3).",
+        "en": "⚠️ Invalid format. Use `t!clip mp3` or `t!clip wav` (default: mp3).",
+        "es": "⚠️ Formato inválido. Usa `t!clip mp3` o `t!clip wav` (default: mp3).",
+    },
+    "cmd.clip.too_little": {
+        "pt": "⚠️ Pouco áudio capturado. Fale na call e tente novamente.",
+        "en": "⚠️ Not enough audio captured. Talk in the call and try again.",
+        "es": "⚠️ Poco audio capturado. Habla en la call e intenta de nuevo.",
+    },
+    "cmd.clip.saved": {
+        "pt": "🎬 **Clip salvo!** ({secs}s de áudio, `.{ext}`){note}",
+        "en": "🎬 **Clip saved!** ({secs}s of audio, `.{ext}`){note}",
+        "es": "🎬 **¡Clip guardado!** ({secs}s de audio, `.{ext}`){note}",
+    },
+    "cmd.clip.mp3_fallback": {
+        "pt": "\n*(mp3 indisponível, enviei em wav)*",
+        "en": "\n*(mp3 unavailable, sent as wav)*",
+        "es": "\n*(mp3 no disponible, enviado en wav)*",
+    },
+    "cmd.lyrics.searching": {
+        "pt": "🎤 Buscando letra de **{name}**...",
+        "en": "🎤 Searching lyrics for **{name}**...",
+        "es": "🎤 Buscando letra de **{name}**...",
+    },
+    "cmd.lyrics.truncated": {
+        "pt": "\n\n*... (letra truncada)*",
+        "en": "\n\n*... (lyrics truncated)*",
+        "es": "\n\n*... (letra truncada)*",
+    },
+    "cmd.lyrics.result": {
+        "pt": "🎤 **Letra:** {name}\n\n{lyrics}",
+        "en": "🎤 **Lyrics:** {name}\n\n{lyrics}",
+        "es": "🎤 **Letra:** {name}\n\n{lyrics}",
+    },
+    "cmd.seek.duration": {
+        "pt": " (duração: {time})",
+        "en": " (duration: {time})",
+        "es": " (duración: {time})",
+    },
+    "cmd.seek.file_gone": {
+        "pt": "⚠️ Erro ao fazer seek. O arquivo pode ter sido removido.",
+        "en": "⚠️ Seek error. The file may have been removed.",
+        "es": "⚠️ Error al hacer seek. El archivo pudo haber sido eliminado.",
+    },
+    "cmd.seek.error": {
+        "pt": "⚠️ Erro ao fazer seek.",
+        "en": "⚠️ Seek error.",
+        "es": "⚠️ Error al hacer seek.",
+    },
+    "cmd.seek.jumped": {
+        "pt": "⏩ Pulando para **{pos}**",
+        "en": "⏩ Jumping to **{pos}**",
+        "es": "⏩ Saltando a **{pos}**",
+    },
+    "cmd.summary.usage": {
+        "pt": "⚠️ Uso: `t!su <URL>` — link completo com https://",
+        "en": "⚠️ Usage: `t!su <URL>` — full link with https://",
+        "es": "⚠️ Uso: `t!su <URL>` — link completo con https://",
+    },
+    "cmd.summary.cooldown": {
+        "pt": "⏳ Aguarde {secs}s antes de usar novamente.",
+        "en": "⏳ Wait {secs}s before using it again.",
+        "es": "⏳ Espera {secs}s antes de usarlo de nuevo.",
+    },
+    "cmd.summary.reading": {
+        "pt": "📄 Lendo link...",
+        "en": "📄 Reading link...",
+        "es": "📄 Leyendo link...",
+    },
+    "cmd.summary.result": {
+        "pt": "📄 **Resumo do link:**\n{summary}",
+        "en": "📄 **Link summary:**\n{summary}",
+        "es": "📄 **Resumen del link:**\n{summary}",
+    },
 }
