@@ -85,6 +85,8 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/notebook-gamer/s/",
     "/promocoes/pc-gamer/s/",
     "/promocoes/roteador-e-repetidor/s/",
+    # Chairs — gaming + office (this category surfaces both); relevant to heavy PC users.
+    "/promocoes/cadeira-gamer/s/",
     # Peripherals (mouse/teclado/headset) intentionally omitted — feed focuses on hardware.
 ]
 
@@ -186,6 +188,7 @@ CATEGORIAS_EMOJI = {
     "Celular": "📱",
     "TV": "📺",
     "Suporte e Acessórios": "🖥️",
+    "Cadeira": "🪑",
 }
 
 # Maps URL slugs to display category names (PT-BR, user-facing)
@@ -215,6 +218,7 @@ _SLUG_TO_CATEGORY = {
     "celular": "Celular",
     "televisao": "TV",
     "braco-articulado-para-monitor": "Suporte e Acessórios",
+    "cadeira-gamer": "Cadeira",
 }
 
 # Category priority for sorting (lower = higher priority)
@@ -241,6 +245,7 @@ _CATEGORY_PRIORITY = {
     "Mesa digitalizadora": 8,
     "Hardware e periféricos": 8,
     "Suporte e Acessórios": 9,
+    "Cadeira": 7,
     "TV": 9,
     "Tablet": 9,
     "Celular": 9,
@@ -309,6 +314,7 @@ _PER_CAT_POST_LIMIT: dict[str, int] = {
     "Mesa digitalizadora": 0,
     "Hardware e periféricos": 0,
     "Suporte e Acessórios": 0,
+    "Cadeira": 1,
     "TV": 0,
     "Tablet": 0,
     "Celular": 0,
@@ -1447,7 +1453,7 @@ def _pick_enrichment_batch(candidates: list, cap: int = _ENRICH_CAP) -> list:
             cat == "Hardware e periféricos" and _title_has_parts_keyword(deal.get("title", ""))
         ):
             primary.append(deal)
-        elif cat == "Adaptadores e rede":
+        elif cat in ("Adaptadores e rede", "Cadeira"):
             secondary.append(deal)
 
     selected: list = []
@@ -1539,6 +1545,10 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
     # Phase 5: network adapters (low cap)
     if len(selected) < limit:
         _try_add("Adaptadores e rede")
+
+    # Phase 5b: chairs (gaming/office — relevant to heavy PC users)
+    if len(selected) < limit:
+        _try_add("Cadeira")
 
     # Phase 6: fill leftover slots with best remaining hardware only
     fill_cats = list(_PARTS_RESERVE_CATEGORIES) + list(_SYSTEM_RESERVE_CATEGORIES) + parts_cats
