@@ -293,10 +293,15 @@ _STT_BLEED_PHRASES = (
 STT_CAPTURE_MAX_BYTES = int(48000 * 2 * 2 * 10)  # 10s rolling per speaker
 STT_TAIL_SEC = 6  # if long audio remains, send only the last N seconds to STT
 MAX_PCM_BYTES = 2 * 1024 * 1024  # 2MB — cap to avoid memory leak if user keeps talking
-# Minimum peak to treat as direct mic voice during playback (music echo is quieter)
-VOICE_OVER_MUSIC_PEAK = 3000
+# Minimum peak to treat as direct mic voice during playback (music echo is quieter).
+# Higher = fewer false pauses (ambient noise / music bleeding into an open mic no
+# longer stutter the song). Env-tunable; default raised from 3000 to 8000.
+VOICE_OVER_MUSIC_PEAK = int(os.getenv("VOICE_OVER_MUSIC_PEAK", "8000") or "8000")
 # Wait time after detecting loud voice during playback (capture full command)
-VOICE_OVER_MUSIC_WAIT_SEC = 2.0
+VOICE_OVER_MUSIC_WAIT_SEC = float(os.getenv("VOICE_OVER_MUSIC_WAIT_SEC", "2.0") or "2.0")
+# Master switch: pause the music to listen for a spoken command. Set 0 to protect
+# playback from ANY interruption (voice commands during music stop working).
+VOICE_PAUSE_FOR_LISTEN = os.getenv("VOICE_PAUSE_FOR_LISTEN", "1").strip() == "1"
 # Clip: 30s stereo 48kHz 16-bit audio = ~5.76MB
 CLIP_DURATION_SEC = 30
 CLIP_FRAME_BYTES = 3840  # 20ms Opus frame — stereo 48kHz 16-bit
@@ -5101,6 +5106,14 @@ async def _voice_listen_loop(
             # Audio already drained before pausing (must not be lost — see below).
             _prefix_pcm = b""
             _prefix_uid = 0
+
+            if _playing_now and not VOICE_PAUSE_FOR_LISTEN:
+                # Music must not be interrupted: drop any captured audio (it's mostly
+                # music bleed anyway) and never pause playback to listen.
+                with session.buf_lock:
+                    for uid in list(session.pcm_buffers.keys()):
+                        session.pcm_buffers[uid] = bytearray()
+                continue
 
             if _playing_now:
                 # Check if someone spoke loud enough to be real voice (not echo)
