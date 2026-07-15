@@ -53,13 +53,13 @@ def _build_offer_schedule():
 _OFFER_SCHEDULE = _build_offer_schedule()
 POST_SPACING_SEC = 180  # 3 min between posts
 MAX_POSTS_POR_CICLO = 5
-DESCONTO_MINIMO = 15  # minimum discount percentage
-NOTA_MINIMA_ESTRELAS = 4.4
-VENDAS_MINIMAS = 30
-AVALIACOES_MINIMAS = 5  # minimum user reviews (same field as sales_count)
+DESCONTO_MINIMO = int(os.getenv("DESCONTO_MINIMO", "15"))  # minimum discount percentage
+NOTA_MINIMA_ESTRELAS = float(os.getenv("NOTA_MINIMA_ESTRELAS", "4.0"))
+VENDAS_MINIMAS = int(os.getenv("VENDAS_MINIMAS", "15"))
+AVALIACOES_MINIMAS = int(os.getenv("AVALIACOES_MINIMAS", "5"))  # minimum user reviews (same field as sales_count)
 # Promobit rarely provides stars/sales. To avoid zero offers, accept
 # whitelisted trusted stores WITHOUT metrics when discount is strong enough.
-DESCONTO_SEM_METRICA = 25  # minimum discount when no stars or sales data
+DESCONTO_SEM_METRICA = int(os.getenv("DESCONTO_SEM_METRICA", "20"))  # minimum discount when no stars or sales data
 
 HISTORY_FILE = "offers_history.json"
 OFFERS_ENRICH_CONCURRENCY = max(1, min(int(os.getenv("OFFERS_ENRICH_CONCURRENCY", "4")), 8))
@@ -87,7 +87,10 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/roteador-e-repetidor/s/",
     # Chairs — gaming + office (this category surfaces both); relevant to heavy PC users.
     "/promocoes/cadeira-gamer/s/",
-    # Peripherals (mouse/teclado/headset) intentionally omitted — feed focuses on hardware.
+    # Peripherals — enabled for broader coverage
+    "/promocoes/teclado/s/",
+    "/promocoes/mouse/s/",
+    "/promocoes/headset/s/",
 ]
 
 # Full whitelist (for when all affiliate programs are active)
@@ -306,13 +309,13 @@ _PER_CAT_POST_LIMIT: dict[str, int] = {
     "Notebook": 2,
     "PC Gamer": 2,
     "Adaptadores e rede": 1,
-    "Teclado": 0,
-    "Mouse": 0,
-    "Headset": 0,
+    "Teclado": 1,
+    "Mouse": 1,
+    "Headset": 1,
     "Webcam": 0,
     "Mousepad": 0,
     "Mesa digitalizadora": 0,
-    "Hardware e periféricos": 0,
+    "Hardware e periféricos": 1,
     "Suporte e Acessórios": 0,
     "Cadeira": 1,
     "TV": 0,
@@ -325,9 +328,9 @@ _PER_CAT_POST_LIMIT: dict[str, int] = {
 # filters than the general rules (user request): 4.5+ rating, 100+ sales, 40%+ discount.
 # No "no metrics" exception — if Promobit lacks stars/sales, network items are skipped.
 CAT_REDE_NOME = "Adaptadores e rede"
-REDE_NOTA_MINIMA = 4.5
-REDE_VENDAS_MINIMAS = 100
-REDE_DESCONTO_MINIMO = 40
+REDE_NOTA_MINIMA = float(os.getenv("REDE_NOTA_MINIMA", "4.2"))
+REDE_VENDAS_MINIMAS = int(os.getenv("REDE_VENDAS_MINIMAS", "50"))
+REDE_DESCONTO_MINIMO = int(os.getenv("REDE_DESCONTO_MINIMO", "30"))
 # Keywords that identify a network adapter even in another category
 # (e.g. a USB Wi-Fi adapter listed under hardware-perifericos).
 REDE_KEYWORDS = (

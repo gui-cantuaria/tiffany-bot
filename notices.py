@@ -46,7 +46,7 @@ HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
-INTERVALO_NOTICIAS_MIN = 45  # interval between news cycles (minutes)
+INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "30"))  # interval between news cycles (minutes)
 
 # Clock-aligned schedule: every 45 min from 8:00 to before 18:00
 def _build_news_schedule():
@@ -61,25 +61,25 @@ def _build_news_schedule():
 _NEWS_SCHEDULE = _build_news_schedule()
 
 # --- Pipeline ---
-SCAN_POR_FEED = 5
-ENTRADAS_POR_FEED = 3
-MAX_IA_CALLS_POR_CICLO = 3
-MAX_VISION_CALLS_POR_CICLO = 2
-IA_COOLDOWN_SEC = 10
-POST_SPACING_SEC = 120
-MAX_POSTS_POR_CICLO = 2
+SCAN_POR_FEED = int(os.getenv("SCAN_POR_FEED", "8"))
+ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "4"))
+MAX_IA_CALLS_POR_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
+MAX_VISION_CALLS_POR_CICLO = int(os.getenv("MAX_VISION_CALLS_POR_CICLO", "4"))
+IA_COOLDOWN_SEC = int(os.getenv("IA_COOLDOWN_SEC", "10"))
+POST_SPACING_SEC = int(os.getenv("POST_SPACING_SEC", "90"))
+MAX_POSTS_POR_CICLO = int(os.getenv("MAX_POSTS_POR_CICLO", "4"))
 
 # --- Score thresholds ---
-NOTA_MIN_APROVACAO = 80
-NOTA_MIN_GAMES = 85
+NOTA_MIN_APROVACAO = int(os.getenv("NOTA_MIN_APROVACAO", "75"))
+NOTA_MIN_GAMES = int(os.getenv("NOTA_MIN_GAMES", "82"))
 NOTA_URGENTE = 90
 
 # --- Anti-dup ---
 SIMHASH_TTL_HORAS = 120
-SIMHASH_HAMMING_MAX = 6
+SIMHASH_HAMMING_MAX = int(os.getenv("SIMHASH_HAMMING_MAX", "5"))
 TITLE_IDX_TTL_HORAS = 72
 TOPIC_IDX_TTL_HORAS = 48
-MAX_IDADE_HORAS = 12
+MAX_IDADE_HORAS = int(os.getenv("MAX_IDADE_HORAS", "24"))
 
 HISTORY_FILE = "notices_history.json"
 METRICS_FILE = "notices_metrics.json"
@@ -237,7 +237,7 @@ COR_PADRAO = TIFFANY_PINK
 
 # --- Feed resilience ---
 FEED_COOLDOWN_MIN = 60
-MAX_CANDIDATOS_POR_FONTE = 2
+MAX_CANDIDATOS_POR_FONTE = int(os.getenv("MAX_CANDIDATOS_POR_FONTE", "3"))
 
 EMOJIS_CATEGORIA = {
     "Hardware": "🖥️",
@@ -613,7 +613,7 @@ def _extract_topic_keys(titulo: str) -> frozenset[str]:
 
 # ---- Entity-overlap dedup (replaces exact fingerprint match) ----
 # Stores entity groups per article; dedup when 2+ entities match
-_ENTITY_OVERLAP_MIN = 2  # minimum shared entities to consider duplicate
+_ENTITY_OVERLAP_MIN = int(os.getenv("ENTITY_OVERLAP_MIN", "3"))  # minimum shared entities to consider duplicate
 
 def _get_entity_groups(h: dict) -> list:
     """Return list of {keys: [str], ts: int} from recent articles."""
@@ -1825,7 +1825,7 @@ async def _verificar_feeds_inner():
             
             # PRE-FILTER: title too short/vague (before AI to save calls)
             palavras_titulo = [p for p in title.split() if p]
-            if len(palavras_titulo) < 8:
+            if len(palavras_titulo) < 5:
                 historico_set(history, link_norm, dedupe, "skipped", {"reason": "titulo_curto_prefiltro"})
                 total_prefiltrados += 1
                 log.info(f"  ✗ Short title pre-filter ({len(palavras_titulo)} words): [{nome_site}] {title[:60]}")
