@@ -53,13 +53,15 @@ def _build_offer_schedule():
 _OFFER_SCHEDULE = _build_offer_schedule()
 POST_SPACING_SEC = 180  # 3 min between posts
 MAX_POSTS_POR_CICLO = 5
-DESCONTO_MINIMO = int(os.getenv("DESCONTO_MINIMO", "15"))  # minimum discount percentage
+DESCONTO_MINIMO = int(os.getenv("DESCONTO_MINIMO", "25"))  # minimum discount percentage
 NOTA_MINIMA_ESTRELAS = float(os.getenv("NOTA_MINIMA_ESTRELAS", "4.0"))
 VENDAS_MINIMAS = int(os.getenv("VENDAS_MINIMAS", "15"))
 AVALIACOES_MINIMAS = int(os.getenv("AVALIACOES_MINIMAS", "5"))  # minimum user reviews (same field as sales_count)
 # Promobit rarely provides stars/sales. To avoid zero offers, accept
 # whitelisted trusted stores WITHOUT metrics when discount is strong enough.
-DESCONTO_SEM_METRICA = int(os.getenv("DESCONTO_SEM_METRICA", "20"))  # minimum discount when no stars or sales data
+DESCONTO_SEM_METRICA = int(os.getenv("DESCONTO_SEM_METRICA", "25"))  # minimum discount when no stars or sales data
+# Days a posted deal stays blocked from reposting (dedup window).
+DEDUP_DIAS = int(os.getenv("DEDUP_DIAS", "7"))
 
 HISTORY_FILE = "offers_history.json"
 OFFERS_ENRICH_CONCURRENCY = max(1, min(int(os.getenv("OFFERS_ENRICH_CONCURRENCY", "4")), 8))
@@ -91,6 +93,7 @@ CATEGORIAS_PROMOBIT = [
     "/promocoes/teclado/s/",
     "/promocoes/mouse/s/",
     "/promocoes/headset/s/",
+    "/promocoes/webcam/s/",
 ]
 
 # Full whitelist (for when all affiliate programs are active)
@@ -293,13 +296,13 @@ _PARTS_RESERVE_CATEGORIES = (
 _SYSTEM_RESERVE_CATEGORIES = ("Monitor", "Notebook", "PC Gamer")
 _ENRICH_CAP = 40
 _ENRICH_HARDWARE_CAP = 32
-# Max posts per category per cycle — hardware-first; peripherals disabled.
+# Max posts per category per cycle — hardware-first, peripherals + chairs enabled.
 _PER_CAT_POST_LIMIT: dict[str, int] = {
-    "Placa de Vídeo": 1,
-    "Memória RAM": 1,
-    "Processador": 1,
-    "Placa-mãe": 1,
-    "SSD": 1,
+    "Placa de Vídeo": 2,
+    "Memória RAM": 2,
+    "Processador": 2,
+    "Placa-mãe": 2,
+    "SSD": 2,
     "Gabinete": 1,
     "Pasta Térmica": 1,
     "Fonte": 1,
@@ -312,7 +315,7 @@ _PER_CAT_POST_LIMIT: dict[str, int] = {
     "Teclado": 1,
     "Mouse": 1,
     "Headset": 1,
-    "Webcam": 0,
+    "Webcam": 1,
     "Mousepad": 0,
     "Mesa digitalizadora": 0,
     "Hardware e periféricos": 1,
@@ -448,8 +451,8 @@ def _mark_posted(history: dict, url: str, title: str, orig_tkey: str = "", listi
 
 
 def _clean_history(history: dict) -> None:
-    """Remove entries older than 14 days."""
-    cutoff = time.time() - (14 * 24 * 3600)
+    """Remove entries older than DEDUP_DIAS (default 7)."""
+    cutoff = time.time() - (DEDUP_DIAS * 24 * 3600)
     deals = history.get("deals", {})
     to_remove = [k for k, v in deals.items() if v.get("ts", 0) < cutoff]
     for k in to_remove:
@@ -1456,7 +1459,7 @@ def _pick_enrichment_batch(candidates: list, cap: int = _ENRICH_CAP) -> list:
             cat == "Hardware e periféricos" and _title_has_parts_keyword(deal.get("title", ""))
         ):
             primary.append(deal)
-        elif cat in ("Adaptadores e rede", "Cadeira"):
+        elif cat in ("Adaptadores e rede", "Cadeira") or cat in _PERIPHERAL_CATEGORIES:
             secondary.append(deal)
 
     selected: list = []
@@ -1552,6 +1555,17 @@ def _select_diverse(deals: list, limit: int, max_per_cat: int = 2, max_per_store
     # Phase 5b: chairs (gaming/office — relevant to heavy PC users)
     if len(selected) < limit:
         _try_add("Cadeira")
+
+    # Phase 5c: peripherals (mouse/keyboard/headset/webcam — volume filler)
+    peripheral_cats = [c for c in by_cat if c in _PERIPHERAL_CATEGORIES]
+    progressed = True
+    while len(selected) < limit and progressed:
+        progressed = False
+        for cat in peripheral_cats:
+            if len(selected) >= limit:
+                break
+            if _try_add(cat):
+                progressed = True
 
     # Phase 6: fill leftover slots with best remaining hardware only
     fill_cats = list(_PARTS_RESERVE_CATEGORIES) + list(_SYSTEM_RESERVE_CATEGORIES) + parts_cats
@@ -2008,7 +2022,7 @@ async def _run_deals_cycle_inner() -> None:
         )
     )
     # Diversify by category: parts reserved first; monitors/peripherals capped lower.
-    approved = _select_diverse(approved, MAX_POSTS_POR_CICLO, max_per_cat=2)
+    approved = _select_diverse(approved, MAX_POSTS_POR_CICLO, max_per_cat=3)
     approved = _interleave_by_store(approved)
     parts_posted = sum(1 for d in approved if _is_pc_part_deal(d))
     systems_posted = sum(1 for d in approved if (d.get("category") or "") in _SYSTEM_HARDWARE_CATEGORIES)
