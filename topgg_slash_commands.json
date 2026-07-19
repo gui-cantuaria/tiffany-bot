@@ -1,0 +1,136 @@
+[
+  {
+    "name": "play",
+    "description": "Toca uma música (busca por nome ou URL)",
+    "options": [
+      {
+        "name": "query",
+        "description": "Nome ou URL da música",
+        "type": 3,
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "skip",
+    "description": "Pula a faixa atual (votação se 3+ pessoas)"
+  },
+  {
+    "name": "queue",
+    "description": "Mostra a fila e a música tocando agora"
+  },
+  {
+    "name": "nonstop",
+    "description": "Ativa ou desativa o modo 24/7 na call"
+  },
+  {
+    "name": "playlist",
+    "description": "Gerencia suas playlists salvas",
+    "options": [
+      {
+        "name": "action",
+        "description": "save/load/list/del",
+        "type": 3,
+        "required": false
+      },
+      {
+        "name": "name",
+        "description": "Nome da playlist",
+        "type": 3,
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "random",
+    "description": "Adiciona uma música aleatória à fila (sem repetir)"
+  },
+  {
+    "name": "chat",
+    "description": "Faz uma pergunta para a Inteligência Artificial",
+    "options": [
+      {
+        "name": "question",
+        "description": "Sua pergunta para a Tiffany",
+        "type": 3,
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "game",
+    "description": "Recomenda jogos da Steam baseados na sua busca",
+    "options": [
+      {
+        "name": "query",
+        "description": "Gênero, estilo ou nome (ex: RPG, multiplayer)",
+        "type": 3,
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "loop",
+    "description": "Ativa ou desativa o loop da música atual"
+  },
+  {
+    "name": "pause",
+    "description": "Pausa a música que está tocando"
+  },
+  {
+    "name": "resume",
+    "description": "Retoma a música pausada"
+  },
+  {
+    "name": "clear",
+    "description": "Limpa a fila, para a música e desconecta"
+  },
+  {
+    "name": "shuffle",
+    "description": "Embaralha as músicas da fila"
+  },
+  {
+    "name": "replay",
+    "description": "Repete a música que está tocando no momento"
+  },
+  {
+    "name": "autoplay",
+    "description": "Ativa ou desativa a reprodução automática"
+  },
+  {
+    "name": "lyrics",
+    "description": "Busca a letra da música",
+    "options": [
+      {
+        "name": "query",
+        "description": "Nome da música (opcional)",
+        "type": 3,
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "seek",
+    "description": "Avança ou retrocede o tempo da música",
+    "options": [
+      {
+        "name": "time_expr",
+        "description": "Tempo para pular (+30, -15, 1:30)",
+        "type": 3,
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "clip",
+    "description": "Grava e salva os últimos 30 segundos de áudio da call",
+    "options": [
+      {
+        "name": "fmt",
+        "description": "Formato do arquivo (mp3 ou wav)",
+        "type": 3,
+        "required": false
+      }
+    ]
+  }
+]

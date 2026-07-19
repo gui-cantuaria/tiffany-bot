@@ -7835,11 +7835,13 @@ def register_voice(bot: commands.Bot) -> None:
         except discord.HTTPException:
             await _ctx_reply(ctx, f"💬 {answer}")
 
-    @bot.command(
-        name="g",
-        aliases=["game", "games"],
+    @bot.hybrid_command(
+        name="game",
+        aliases=["g", "games"],
         help="Recomenda jogos por filtros: t!g / t!game <loja, gênero, preço, multiplayer...>",
+        description="Recomenda jogos da Steam baseados na sua busca",
     )
+    @app_commands.describe(query="Gênero, estilo ou nome (ex: RPG, multiplayer)")
     async def cmd_game(ctx: commands.Context, *, query: str = ""):
         if not await _require_dm_access(ctx):
             return
