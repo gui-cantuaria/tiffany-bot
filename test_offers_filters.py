@@ -14,7 +14,9 @@ def test_primary_hardware_categories():
     assert "Monitor" in offers_cog._PRIMARY_HARDWARE_CATEGORIES
     assert "Notebook" in offers_cog._PRIMARY_HARDWARE_CATEGORIES
     assert offers_cog._PER_CAT_POST_LIMIT.get("Monitor", 0) >= 1
-    assert offers_cog._PER_CAT_POST_LIMIT.get("Mouse", 99) == 0
+    # Peripherals are now enabled (volume); low-value ones stay off.
+    assert offers_cog._PER_CAT_POST_LIMIT.get("Mouse", 0) >= 1
+    assert offers_cog._PER_CAT_POST_LIMIT.get("Mousepad", 99) == 0
 
 
 def test_deal_score_prefers_hardware():
