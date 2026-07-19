@@ -2248,7 +2248,7 @@ async def on_close():
 # =========================
 # SLASH COMMAND: /status
 # =========================
-@discord_client.tree.command(name="status", description="Mostra se a Tiffany está funcionando normalmente")
+@discord_client.tree.command(name="status", description="Shows if Tiffany is working properly")
 async def cmd_status(interaction: discord.Interaction):
     """Simple friendly status: reports normal operation or instability.
     Available to all users. Admins see extra technical details."""

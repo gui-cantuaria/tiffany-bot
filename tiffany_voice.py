@@ -8858,7 +8858,7 @@ def register_voice(bot: commands.Bot) -> None:
     # SLASH COMMANDS
     # ============================
 
-    @bot.tree.command(name="about", description="Quem é a Tiffany e o que ela faz aqui")
+    @bot.tree.command(name="about", description="Who is Tiffany and what she does")
     async def slash_about(interaction: discord.Interaction):
         is_admin = bool(
             interaction.guild
@@ -8870,12 +8870,12 @@ def register_voice(bot: commands.Bot) -> None:
         view = invite_link_view(invite)
         await interaction.response.send_message(embed=em, view=view)
 
-    @bot.tree.command(name="help", description="Mostra todos os comandos da Tiffany")
+    @bot.tree.command(name="help", description="Shows all Tiffany commands")
     async def slash_help(interaction: discord.Interaction):
         em = locale_utils.build_help_embed(interaction.guild, pink=TIFFANY_PINK)
         await interaction.response.send_message(embed=em, ephemeral=True)
 
-    @bot.tree.command(name="queue", description="Mostra a fila de músicas")
+    @bot.tree.command(name="queue", description="Shows the music queue")
     async def slash_queue(interaction: discord.Interaction):
         if not interaction.guild:
             await _slash_reply(interaction, tr("pt", "slash.guild_only"))
@@ -8901,7 +8901,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await _slash_reply(interaction, q_em)
 
-    @bot.tree.command(name="player-status", description="Saúde da Tiffany (admin)")
+    @bot.tree.command(name="player-status", description="Tiffany health check (admin)")
     @app_commands.default_permissions(administrator=True)
     async def slash_player_status(interaction: discord.Interaction):
         lang = resolve_guild_lang(interaction.guild)
@@ -8913,7 +8913,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await _slash_reply(interaction, _format_status_embed(interaction.client, lang=lang))
 
-    @bot.tree.command(name="stats", description="Estatísticas da Tiffany")
+    @bot.tree.command(name="stats", description="Tiffany usage statistics")
     async def slash_stats(interaction: discord.Interaction):
         import time as _time
 
