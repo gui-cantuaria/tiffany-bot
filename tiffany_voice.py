@@ -8866,31 +8866,7 @@ def register_voice(bot: commands.Bot) -> None:
         em = locale_utils.build_help_embed(interaction.guild, pink=TIFFANY_PINK)
         await interaction.response.send_message(embed=em, ephemeral=True)
 
-    @bot.tree.command(name="queue", description="Shows the music queue")
-    async def slash_queue(interaction: discord.Interaction):
-        if not interaction.guild:
-            await _slash_reply(interaction, tr("pt", "slash.guild_only"))
-            return
-        lang = resolve_guild_lang(interaction.guild)
-        session, vc = await _resolve_guild_voice(
-            interaction.guild, text_channel_id=interaction.channel_id or 0,
-        )
-        if session and vc and vc.is_connected():
-            _revive_workers(interaction.guild.id, vc, session)
-        if not vc or not vc.is_connected():
-            if interaction.guild.me and interaction.guild.me.voice and interaction.guild.me.voice.channel:
-                await _slash_reply(interaction, tr(lang, "slash.queue.desync"))
-            else:
-                await _slash_reply(interaction, tr(lang, "slash.queue.not_in_voice"))
-            return
-        if not session:
-            await _slash_reply(interaction, tr(lang, "slash.queue.no_session"))
-            return
-        q_em = _format_queue_embed(session, lang)
-        if not q_em:
-            await _slash_reply(interaction, tr(lang, "slash.queue.empty"))
-            return
-        await _slash_reply(interaction, q_em)
+
 
     @bot.tree.command(name="player-status", description="Tiffany health check (admin)")
     @app_commands.default_permissions(administrator=True)
