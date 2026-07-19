@@ -1,11 +1,11 @@
 [
   {
     "name": "play",
-    "description": "Toca uma música (busca por nome ou URL)",
+    "description": "Plays a song (search by name or URL)",
     "options": [
       {
         "name": "query",
-        "description": "Nome ou URL da música",
+        "description": "Song name or URL",
         "type": 3,
         "required": true
       }
@@ -13,19 +13,19 @@
   },
   {
     "name": "skip",
-    "description": "Pula a faixa atual (votação se 3+ pessoas)"
+    "description": "Skips the current track (votes if 3+ people)"
   },
   {
     "name": "queue",
-    "description": "Mostra a fila e a música tocando agora"
+    "description": "Displays the queue and the currently playing song"
   },
   {
     "name": "nonstop",
-    "description": "Ativa ou desativa o modo 24/7 na call"
+    "description": "Toggles 24/7 mode in the voice channel"
   },
   {
     "name": "playlist",
-    "description": "Gerencia suas playlists salvas",
+    "description": "Manages your saved playlists",
     "options": [
       {
         "name": "action",
@@ -35,7 +35,7 @@
       },
       {
         "name": "name",
-        "description": "Nome da playlist",
+        "description": "Playlist name",
         "type": 3,
         "required": false
       }
@@ -43,15 +43,15 @@
   },
   {
     "name": "random",
-    "description": "Adiciona uma música aleatória à fila (sem repetir)"
+    "description": "Adds a random song to the queue (no repeats)"
   },
   {
     "name": "chat",
-    "description": "Faz uma pergunta para a Inteligência Artificial",
+    "description": "Ask the AI a question",
     "options": [
       {
         "name": "question",
-        "description": "Sua pergunta para a Tiffany",
+        "description": "Your question for Tiffany",
         "type": 3,
         "required": true
       }
@@ -59,11 +59,11 @@
   },
   {
     "name": "game",
-    "description": "Recomenda jogos da Steam baseados na sua busca",
+    "description": "Recommends Steam games based on your search",
     "options": [
       {
         "name": "query",
-        "description": "Gênero, estilo ou nome (ex: RPG, multiplayer)",
+        "description": "Genre, style, or name (e.g. RPG, multiplayer)",
         "type": 3,
         "required": true
       }
@@ -71,39 +71,39 @@
   },
   {
     "name": "loop",
-    "description": "Ativa ou desativa o loop da música atual"
+    "description": "Toggles loop for the current song"
   },
   {
     "name": "pause",
-    "description": "Pausa a música que está tocando"
+    "description": "Pauses the currently playing song"
   },
   {
     "name": "resume",
-    "description": "Retoma a música pausada"
+    "description": "Resumes the paused song"
   },
   {
     "name": "clear",
-    "description": "Limpa a fila, para a música e desconecta"
+    "description": "Clears the queue, stops the music, and disconnects"
   },
   {
     "name": "shuffle",
-    "description": "Embaralha as músicas da fila"
+    "description": "Shuffles the songs in the queue"
   },
   {
     "name": "replay",
-    "description": "Repete a música que está tocando no momento"
+    "description": "Replays the currently playing song from the beginning"
   },
   {
     "name": "autoplay",
-    "description": "Ativa ou desativa a reprodução automática"
+    "description": "Toggles autoplay mode"
   },
   {
     "name": "lyrics",
-    "description": "Busca a letra da música",
+    "description": "Searches for the song lyrics",
     "options": [
       {
         "name": "query",
-        "description": "Nome da música (opcional)",
+        "description": "Song name (optional)",
         "type": 3,
         "required": false
       }
@@ -111,11 +111,11 @@
   },
   {
     "name": "seek",
-    "description": "Avança ou retrocede o tempo da música",
+    "description": "Fast forwards or rewinds the song",
     "options": [
       {
         "name": "time_expr",
-        "description": "Tempo para pular (+30, -15, 1:30)",
+        "description": "Time to seek (+30, -15, 1:30)",
         "type": 3,
         "required": false
       }
@@ -123,11 +123,11 @@
   },
   {
     "name": "clip",
-    "description": "Grava e salva os últimos 30 segundos de áudio da call",
+    "description": "Records and saves the last 30 seconds of voice chat audio",
     "options": [
       {
         "name": "fmt",
-        "description": "Formato do arquivo (mp3 ou wav)",
+        "description": "File format (mp3 or wav)",
         "type": 3,
         "required": false
       }
