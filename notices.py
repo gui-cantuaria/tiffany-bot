@@ -67,7 +67,7 @@ MAX_IA_CALLS_POR_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
 MAX_VISION_CALLS_POR_CICLO = int(os.getenv("MAX_VISION_CALLS_POR_CICLO", "4"))
 IA_COOLDOWN_SEC = int(os.getenv("IA_COOLDOWN_SEC", "10"))
 POST_SPACING_SEC = int(os.getenv("POST_SPACING_SEC", "90"))
-MAX_POSTS_POR_CICLO = int(os.getenv("MAX_POSTS_POR_CICLO", "2"))
+MAX_POSTS_POR_CICLO = int(os.getenv("MAX_POSTS_POR_CICLO", "1"))
 
 # --- Score thresholds ---
 NOTA_MIN_APROVACAO = int(os.getenv("NOTA_MIN_APROVACAO", "75"))
