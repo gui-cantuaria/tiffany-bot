@@ -352,22 +352,22 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "welcome.desc": {
         "pt": (
-            "Valeu por me adicionar no **{guild}**.\n"
-            "Entra num canal de voz e manda **`/play`** (ou **`t!play`**) pra começar.\n"
-            "Agora eu suporto Slash Commands completos! Digite **`/`** para ver a lista.\n"
-            "Comandos: **`/help`** · Sobre mim: **`/about`**"
+            "Obrigada por me convidar para o **{guild}**! 💖\n\n"
+            "🎵 Para curtir música, basta entrar em um canal de voz e usar **`/play`**.\n"
+            "🤖 Você também pode bater papo comigo usando **`/chat`**!\n\n"
+            "Para ver tudo que eu posso fazer, digite **`/help`** ou **`/about`**."
         ),
         "en": (
-            "Thanks for adding me to **{guild}**.\n"
-            "Join a voice channel and send **`/play`** (or **`t!play`**) to get started.\n"
-            "I now fully support Slash Commands! Type **`/`** to see the list.\n"
-            "Commands: **`/help`** · About me: **`/about`**"
+            "Thanks for inviting me to **{guild}**! 💖\n\n"
+            "🎵 To listen to music, just join a voice channel and use **`/play`**.\n"
+            "🤖 You can also chat with me anytime using **`/chat`**!\n\n"
+            "To see everything I can do, type **`/help`** or **`/about`**."
         ),
         "es": (
-            "Gracias por agregarme a **{guild}**.\n"
-            "Entra a un canal de voz y manda **`/play`** (o **`t!play`**) para empezar.\n"
-            "¡Ahora soporto Slash Commands completos! Escribe **`/`** para ver la lista.\n"
-            "Comandos: **`/help`** · Sobre mí: **`/about`**"
+            "¡Gracias por invitarme a **{guild}**! 💖\n\n"
+            "🎵 Para escuchar música, solo entra a un canal de voz y usa **`/play`**.\n"
+            "🤖 ¡También puedes platicar conmigo usando **`/chat`**!\n\n"
+            "Para ver todo lo que puedo hacer, escribe **`/help`** o **`/about`**."
         ),
     },
     "help.title": {"pt": "Tiffany · Comandos", "en": "Tiffany · Commands", "es": "Tiffany · Comandos"},
