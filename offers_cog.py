@@ -1387,17 +1387,17 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if sales is not None and sales < AVALIACOES_MINIMAS:
         return False, f"reviews {sales} < {AVALIACOES_MINIMAS}"
 
-    # No quality data (Promobit lacked stars and sales): since the store
-    # already passed the whitelist (trusted), accept when discount is strong enough.
+    # No quality data (Promobit rarely provides stars/sales — especially for
+    # marketplaces). The store already passed the whitelist (trusted) and the
+    # inflated-price guard above (orig <= 3× 30-day low), so accept when the
+    # discount is solid. This is the main volume lever: without it, marketplace
+    # deals (Amazon/ML/Shopee/AliExpress) were ALWAYS rejected.
     if stars is None and sales is None:
-        max_disc = 50 if _is_marketplace(deal.get("store", "")) else DESCONTO_SEM_METRICA
         if disc > 70:
             return False, f"discount {disc}% > 70% without metrics (suspicious)"
-        if disc >= max_disc:
-            if _is_marketplace(deal.get("store", "")):
-                return False, f"marketplace without metrics and discount {disc}% >= {max_disc}%"
-            return True, "ok (no metrics, high discount)"
-        return False, f"no metrics and discount {disc}% < {max_disc}%"
+        if disc >= DESCONTO_SEM_METRICA:
+            return True, "ok (no metrics, strong discount)"
+        return False, f"no metrics and discount {disc}% < {DESCONTO_SEM_METRICA}%"
 
     return True, "ok"
 
