@@ -626,6 +626,50 @@ def _is_valid_coupon(code: str) -> bool:
     return bool(re.match(r'^[A-Za-z0-9\-_]+$', code))
 
 
+def _timestamp_in_past(val) -> bool:
+    """True only if *val* is a parseable date/epoch that is already in the past."""
+    try:
+        if isinstance(val, bool):
+            return False
+        if isinstance(val, (int, float)):
+            ts = float(val)
+            if ts > 1e12:  # milliseconds
+                ts /= 1000
+            return 0 < ts < time.time()
+        s = str(val).strip()
+        if not s:
+            return False
+        s = s.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            dt = datetime.fromisoformat(s[:10])  # date only
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt < datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+
+def _coupon_still_valid(coupon_obj) -> bool:
+    """Best-effort validity: reject only when the coupon clearly signals it's
+    over (explicit expired/inactive status or an expiration date in the past).
+    Plain string codes are trusted (the offer-level expiry is checked separately)."""
+    if not isinstance(coupon_obj, dict):
+        return True
+    status = str(
+        coupon_obj.get("status") or coupon_obj.get("couponStatus") or ""
+    ).strip().lower()
+    if status in ("expired", "expirado", "expirada", "inactive", "inativo", "invalid", "encerrado"):
+        return False
+    if coupon_obj.get("active") is False or coupon_obj.get("valid") is False:
+        return False
+    for f in ("expiration", "expiresAt", "expiredAt", "validUntil", "endDate", "couponExpiration", "expirationDate"):
+        if _timestamp_in_past(coupon_obj.get(f)):
+            return False
+    return True
+
+
 # =========================
 # SCRAPING PROMOBIT
 # =========================
@@ -939,17 +983,18 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # Coupon (may come as string, dict, or list)
-    coupon = server_offer.get("offerCoupon")
-    if coupon:
-        if isinstance(coupon, dict):
-            coupon = coupon.get("code") or coupon.get("name") or ""
-        elif isinstance(coupon, list):
-            coupon = coupon[0] if coupon else ""
-            if isinstance(coupon, dict):
-                coupon = coupon.get("code") or coupon.get("name") or ""
-        if isinstance(coupon, str) and _is_valid_coupon(coupon):
-            deal["coupon"] = coupon.strip()
+    # Coupon (may come as string, dict, or list). Only list it when the code is
+    # identifiable (real format) AND still valid at posting time (not expired).
+    coupon_obj = server_offer.get("offerCoupon")
+    if isinstance(coupon_obj, list):
+        coupon_obj = coupon_obj[0] if coupon_obj else None
+    code = ""
+    if isinstance(coupon_obj, dict):
+        code = coupon_obj.get("code") or coupon_obj.get("name") or ""
+    elif isinstance(coupon_obj, str):
+        code = coupon_obj
+    if code and _is_valid_coupon(code) and _coupon_still_valid(coupon_obj):
+        deal["coupon"] = code.strip()
 
     # Image (higher resolution)
     photo = server_offer.get("offerPhoto")
