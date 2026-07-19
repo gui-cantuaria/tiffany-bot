@@ -19,3 +19,12 @@ services:
         delay: 5s
         max_attempts: 10
         window: 120s
+
+  lavalink:
+    image: fredboat/lavalink:master
+    container_name: lavalink
+    restart: unless-stopped
+    ports:
+      - "2333:2333"
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml
