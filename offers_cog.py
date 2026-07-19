@@ -814,6 +814,33 @@ def _parse_price(text: str) -> Optional[float]:
         return None
 
 
+_DE_POR_RE = re.compile(r'de\s*R\$\s*([\d.,]+).{0,40}?por\s*R\$\s*([\d.,]+)', re.IGNORECASE | re.DOTALL)
+_DISCOUNT_BADGE_RE = re.compile(r'(\d{1,2})\s*%\s*(?:OFF|de\s+desconto)', re.IGNORECASE)
+
+
+def _discount_from_html(html: str) -> Optional[float]:
+    """Best-effort discount % from Promobit deal-page HTML when the structured
+    JSON lacks it (highPrice/offerOldPrice/offerDiscontPercentage all missing)."""
+    if not html:
+        return None
+    # 1) "de R$X ... por R$Y" — compute from the struck original vs current
+    m = _DE_POR_RE.search(html)
+    if m:
+        old = _parse_price(m.group(1))
+        new = _parse_price(m.group(2))
+        if old and new and old > new:
+            d = round((1 - new / old) * 100, 1)
+            if 1 <= d <= 95:
+                return d
+    # 2) "XX% OFF" / "XX% de desconto" badge
+    m = _DISCOUNT_BADGE_RE.search(html)
+    if m:
+        d = float(m.group(1))
+        if 1 <= d <= 95:
+            return d
+    return None
+
+
 async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     """Fetch the individual Promobit deal page and extract serverOffer (Next.js JSON)."""
     url = deal.get("url")
@@ -852,8 +879,13 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     if server_offer.get("storeName"):
         deal["store"] = server_offer["storeName"]
 
-    # Original price
-    old_price = server_offer.get("offerOldPrice")
+    # Original price (try several field-name variants Promobit uses)
+    old_price = (
+        server_offer.get("offerOldPrice") or server_offer.get("oldPrice")
+        or server_offer.get("offerListPrice") or server_offer.get("listPrice")
+        or server_offer.get("offerPriceFrom") or server_offer.get("priceFrom")
+        or server_offer.get("offerOriginalPrice")
+    )
     try:
         if old_price and float(old_price) > 0:
             deal["original_price"] = float(old_price)
@@ -875,11 +907,24 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         if deal.get("original_price") and deal.get("price") and deal["original_price"] > deal["price"]:
             deal["discount_pct"] = round((1 - deal["price"] / deal["original_price"]) * 100, 1)
         else:
-            disc = server_offer.get("offerDiscontPercentage")
+            disc = (
+                server_offer.get("offerDiscontPercentage")
+                or server_offer.get("offerDiscountPercentage")
+                or server_offer.get("discountPercentage")
+                or server_offer.get("offerDiscount")
+            )
             if disc:
                 deal["discount_pct"] = float(disc)
     except (ValueError, TypeError):
         pass
+
+    # HTML fallback (option B): if the structured data still has no discount,
+    # read the "% OFF" badge from the deal page HTML — Promobit shows it even
+    # when the JSON doesn't expose highPrice/discount.
+    if not deal.get("discount_pct"):
+        d = _discount_from_html(html)
+        if d:
+            deal["discount_pct"] = d
 
     # 30-day historical low — Promobit exposes this on some products
     lowest_raw = (server_offer.get("offerLowestPrice")
@@ -1354,10 +1399,16 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     if lowest and orig and orig > lowest * 3:
         return False, f"inflated was price: original R${orig:.0f} > 3× 30d_low R${lowest:.0f}"
 
-    # Discount must be >= 15% and <= 100% (reject absurd/negative values)
+    # Discount range. Coupon deals (option A) may lack a listed % — the coupon
+    # IS the deal — so they're allowed through here and judged by store/metrics.
     disc = deal.get("discount_pct", 0)
-    if not disc or disc < DESCONTO_MINIMO or disc > 100:
-        return False, f"discount {disc}% out of range ({DESCONTO_MINIMO}-100%)"
+    has_coupon = bool(deal.get("coupon"))
+    if disc and disc > 100:
+        return False, f"discount {disc}% > 100%"
+    if disc and disc < DESCONTO_MINIMO:
+        return False, f"discount {disc}% < {DESCONTO_MINIMO}%"
+    if not disc and not has_coupon:
+        return False, "no discount and no coupon"
 
     # Store must be on the whitelist
     if not _store_allowed(deal.get("store", "")):
@@ -1393,10 +1444,12 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
     # discount is solid. This is the main volume lever: without it, marketplace
     # deals (Amazon/ML/Shopee/AliExpress) were ALWAYS rejected.
     if stars is None and sales is None:
-        if disc > 70:
+        if disc and disc > 70:
             return False, f"discount {disc}% > 70% without metrics (suspicious)"
-        if disc >= DESCONTO_SEM_METRICA:
+        if disc and disc >= DESCONTO_SEM_METRICA:
             return True, "ok (no metrics, strong discount)"
+        if has_coupon:
+            return True, "ok (coupon deal, no listed discount)"
         return False, f"no metrics and discount {disc}% < {DESCONTO_SEM_METRICA}%"
 
     return True, "ok"
