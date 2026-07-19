@@ -46,7 +46,7 @@ HORA_INICIO = 8
 HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
-INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "30"))  # interval between news cycles (minutes)
+INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "60"))  # interval between news cycles (minutes)
 
 # Clock-aligned schedule: every 45 min from 8:00 to before 18:00
 def _build_news_schedule():
@@ -67,7 +67,7 @@ MAX_IA_CALLS_POR_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
 MAX_VISION_CALLS_POR_CICLO = int(os.getenv("MAX_VISION_CALLS_POR_CICLO", "4"))
 IA_COOLDOWN_SEC = int(os.getenv("IA_COOLDOWN_SEC", "10"))
 POST_SPACING_SEC = int(os.getenv("POST_SPACING_SEC", "90"))
-MAX_POSTS_POR_CICLO = int(os.getenv("MAX_POSTS_POR_CICLO", "4"))
+MAX_POSTS_POR_CICLO = int(os.getenv("MAX_POSTS_POR_CICLO", "2"))
 
 # --- Score thresholds ---
 NOTA_MIN_APROVACAO = int(os.getenv("NOTA_MIN_APROVACAO", "75"))
