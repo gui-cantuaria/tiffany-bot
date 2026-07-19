@@ -136,16 +136,8 @@ def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
 
-_KICKED_FROM_VC_MSGS: tuple[str, ...] = (
-    "Fui expulsa do canal de voz :(",
-    "Alguém me tirou da call… tudo bem, eu saio :(",
-    "Me removeram do canal de voz — chama de novo quando quiser!",
-    "Eita, fui kickada da call :(",
-    "Não fui eu que saí — me expulsaram do canal de voz :(",
-    "Alguém me botou pra fora da call. Volto quando chamarem!",
-    "Fui desconectada da call contra a minha vontade :(",
-    "Me tiraram do canal de voz… snif. Chama a Tiffany de volta?",
-)
+# As mensagens originais agora estão em locale_utils.py sob as chaves 'voice.kicked_0' até 'voice.kicked_7'
+_KICKED_FROM_VC_MSGS_KEYS: tuple[str, ...] = tuple(f"voice.kicked_{i}" for i in range(8))
 
 _voluntary_leave_guilds: set[int] = set()
 
@@ -162,9 +154,10 @@ def _consume_voluntary_leave(guild_id: int) -> bool:
     return False
 
 
-def _pick_kicked_msg() -> str:
+def _pick_kicked_msg(lang: GuildLang) -> str:
     import random
-    return random.choice(_KICKED_FROM_VC_MSGS)
+    msg_key = random.choice(_KICKED_FROM_VC_MSGS_KEYS)
+    return tr(lang, msg_key)
 
 
 async def _require_voice(ctx: commands.Context) -> bool:
@@ -177,6 +170,10 @@ async def _require_voice(ctx: commands.Context) -> bool:
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
+    if ctx.interaction and ctx.interaction.locale:
+        loc = str(ctx.interaction.locale.value).lower()
+        if loc.startswith("es"): return "es"
+        if not loc.startswith("pt"): return "en"
     return resolve_guild_lang(ctx.guild)
 
 
@@ -1193,7 +1190,7 @@ class _GuildVoiceSession:
     last_play_status_msg: Any = None
     last_play_status_query: str = ""
     now_playing_msg: Any = None  # current "Tocando agora" message (re-posted per track)
-    ytdl_probe_cache: dict[str, dict] = field(default_factory=dict)
+    ytdl_probe_cache: dict[str, dict] = field(default_dict=dict)
     prefetch_key: str = ""
     prefetch_bundle: Optional[tuple] = None  # YTSource bundle from _YTSource.from_query
     prefetch_task: Optional[asyncio.Task] = None
@@ -1922,7 +1919,7 @@ async def _summarize_url(
         return tr(lang, "err.summary_blocked")
 
     if not _url_is_safe_to_fetch(url):
-        return "Não consigo acessar esse endereço (apenas links públicos http/https são permitidos)."
+        return tr(lang, "summary.err.invalid_url")
 
     headers = {
         "User-Agent": (
@@ -1938,13 +1935,13 @@ async def _summarize_url(
                 session, url, headers=headers, timeout=_aiohttp.ClientTimeout(total=15),
             )
             if resp.status != 200:
-                return "Não consegui acessar a página. Verifique o link e tente de novo."
+                return tr(lang, "summary.err.fetch_failed")
             html = await resp.text(errors="replace")
     except ValueError:
-        return "Não consigo acessar esse endereço (redirecionamento bloqueado por segurança)."
+        return tr(lang, "summary.err.redirect_blocked")
     except Exception:
         log.exception("Failed to fetch URL for summary: %s", url)
-        return "Não consegui acessar a página. Verifique o link e tente de novo."
+        return tr(lang, "summary.err.fetch_failed")
 
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
@@ -1992,7 +1989,10 @@ async def _summarize_url(
                 timeout=30.0,
             )
         return resp.choices[0].message.content.strip()
-    except Exception:
+    except Exception as e:
+        err_str = str(e).lower()
+        if "402" in err_str or "insufficient" in err_str or "quota" in err_str or "balance" in err_str:
+            return tr(lang, "err.api_issue")
         log.exception("Failed to summarize URL with AI: %s", url)
         return tr(lang, "err.summary_failed")
 
@@ -3583,7 +3583,7 @@ def _blocking_ytdl_download(
                 dl_q = probe_entry.get("query") or q
                 if duration > MAX_SONG_DURATION_SEC:
                     dur_min = int(duration // 60)
-                    _last_error = f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)"
+                    _last_error = f"ERR_TOO_LONG:{dur_min}:{MAX_SONG_DURATION_SEC // 60}"
                     continue
                 log.info("yt-dlp downloading (probe cache): %s", dl_q)
             else:
@@ -3598,7 +3598,7 @@ def _blocking_ytdl_download(
                     title = _title_from_ytdl_info(info)
                     if duration > MAX_SONG_DURATION_SEC:
                         dur_min = int(duration // 60)
-                        _last_error = f"muito longo ({dur_min} min, máx {MAX_SONG_DURATION_SEC // 60} min)"
+                        _last_error = f"ERR_TOO_LONG:{dur_min}:{MAX_SONG_DURATION_SEC // 60}"
                         continue
                 dl_q = q
 
@@ -4278,6 +4278,8 @@ async def _run_game_recommendation(
         return _embed(tr(lang, "game.err.aiohttp"))
     if err == "api_unavailable":
         return _embed(tr(lang, "err.api_key"))
+    if err == "api_issue":
+        return _embed(tr(lang, "err.api_issue"))
     if err:
         return _embed(f"⚠️ {err}")
 
@@ -4724,12 +4726,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 ):
                     failed = session._failed_songs[:]
                     session._failed_songs.clear()
-                    msg = "📭 Fila encerrada! Adicione músicas com `t!p`."
+                    msg = tr(session.guild_lang, "music.queue.finished")
                     if failed:
                         lines = "\n".join(f"• {s}" for s in failed[:20])
                         if len(failed) > 20:
-                            lines += f"\n• ... e mais {len(failed) - 20}"
-                        msg += f"\n\n❌ **{len(failed)} música(s) não encontrada(s):**\n{lines}"
+                            lines += tr(session.guild_lang, "music.queue.failed_more", count=len(failed) - 20)
+                        msg += tr(session.guild_lang, "music.queue.failed_header", count=len(failed), lines=lines)
                     await _notify(bot, session.text_channel_id, msg)
                 # Leave call after 3 min with no music in queue (Jockie-style; t!247 disables)
                 if (
@@ -4828,17 +4830,19 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 if yt_source is None:
                     session.current_song = ""
                     session._failed_songs.append(display_name[:70])
-                    if info and "muito longo" in str(info):
+                    if info and "ERR_TOO_LONG" in str(info):
+                        parts = str(info).split(":")
+                        dur, max_dur = parts[1] if len(parts) > 1 else "?", parts[2] if len(parts) > 2 else "?"
                         _playlist_kw = re.search(
                             r"(playlist|top\s*\d+|mix\s+\d+|melhores|mais tocadas)",
                             display_name, re.IGNORECASE,
                         )
                         if _playlist_kw:
+                            err_msg = tr(session.guild_lang, "music.err.too_long", dur=dur, max=max_dur)
+                            tip_msg = tr(session.guild_lang, "music.tip.playlist")
                             await _notify(
                                 bot, session.text_channel_id,
-                                f"⚠️  `{display_name[:80]}` — {info}\n"
-                                "💡 **Dica:** parece que você quer uma playlist! Cole o **link** do Spotify ou YouTube.\n"
-                                "Ex: `t!p https://open.spotify.com/playlist/...`",
+                                f"⚠️  `{display_name[:80]}` — {err_msg}\n{tip_msg}",
                             )
                     continue
                 if not vc.is_connected():
@@ -6566,14 +6570,21 @@ def register_voice(bot: commands.Bot) -> None:
                 user_content = question
                 model = "google/gemini-3.1-flash-lite"
 
-            async with _ai_semaphore:
-                resp = await client.chat.completions.create(
-                    model=model,
-                    messages=[system_msg, *history_msgs, {"role": "user", "content": user_content}],
-                    max_tokens=280,
-                    temperature=0.2,
-                    timeout=20.0,
-                )
+            try:
+                async with _ai_semaphore:
+                    resp = await client.chat.completions.create(
+                        model=model,
+                        messages=[system_msg, *history_msgs, {"role": "user", "content": user_content}],
+                        max_tokens=280,
+                        temperature=0.2,
+                        timeout=20.0,
+                    )
+            except Exception as e:
+                err_str = str(e).lower()
+                if "402" in err_str or "insufficient" in err_str or "quota" in err_str or "balance" in err_str:
+                    return tr(lang, "err.api_issue")
+                log.exception("Chat AI call failed")
+                return tr(lang, "err.rate_limit")
             answer = resp.choices[0].message.content.strip()
             # Truncate if response is too long (Discord limit)
             if len(answer) > 1500:
@@ -6667,7 +6678,7 @@ def register_voice(bot: commands.Bot) -> None:
                     answer = await _answer_question(question, guild_id, session, vc, user_id=user_id)
                 except Exception:
                     log.exception("Error processing voice question guild=%s", guild_id)
-                    answer = "Desculpe, tive um problema ao processar sua pergunta. Tente de novo."
+                    answer = tr(session.guild_lang, "chat.err.process_failed")
                 finally:
                     session.question_queue.task_done()
                 # Resume music if paused (by worker or listen loop)
@@ -6965,7 +6976,7 @@ def register_voice(bot: commands.Bot) -> None:
         return session, vc
 
 
-    @bot.command(name="s", aliases=["skip"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas")
+    @bot.hybrid_command(name="skip", aliases=["s"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas", description="Pula a faixa atual (votação se 3+ pessoas)")
     async def cmd_pular(ctx: commands.Context, *, args: str = ""):
         if not await _require_voice(ctx):
             return
@@ -7039,7 +7050,7 @@ def register_voice(bot: commands.Bot) -> None:
                     song=session.current_song[:60], missing=required - current_votes,
                 )))
 
-    @bot.command(name="q", aliases=["queue", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue")
+    @bot.hybrid_command(name="queue", aliases=["q", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue", description="Mostra a fila e a música tocando agora")
     async def cmd_queue(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7056,7 +7067,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=q_em)
 
-    @bot.command(name="247", aliases=["nonstop"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)")
+    @bot.hybrid_command(name="nonstop", aliases=["247"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)", description="Ativa ou desativa o modo 24/7 na call")
     async def cmd_nonstop(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7074,7 +7085,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.nonstop_off")))
 
-    @bot.command(name="pl", aliases=["playlist"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>")
+    @bot.hybrid_command(name="playlist", aliases=["pl"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>", description="Gerencia suas playlists salvas (save, load, list, del)")
+    @app_commands.describe(action="Ação (save/load/list/del)", name="Nome da playlist")
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
         if not await _require_guild(ctx):
             return
@@ -7211,7 +7223,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_action")))
 
-    @bot.command(name="r", aliases=["random"], help="Música aleatória (sem repetir na fila/sessão): t!r")
+    @bot.hybrid_command(name="random", aliases=["r"], help="Música aleatória (sem repetir na fila/sessão): t!r", description="Adiciona uma música aleatória à fila (sem repetir)")
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not await _require_voice(ctx):
             return
@@ -7265,7 +7277,8 @@ def register_voice(bot: commands.Bot) -> None:
         _revive_workers(ctx.guild.id, vc, sess)
         await ctx.send(embed=_embed(tr(lang, "voice.random_added", display=display)))
 
-    @bot.command(name="p", aliases=["play"], help="Toca uma música: t!p / t!play <nome ou URL>")
+    @bot.hybrid_command(name="play", aliases=["p"], help="Toca uma música: t!p / t!play <nome ou URL>", description="Toca uma música (busca por nome ou URL)")
+    @app_commands.describe(query="Nome ou URL da música")
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not await _require_guild(ctx):
             return
@@ -7275,8 +7288,16 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.play.usage")))
             return
         query = query.strip()
-        # Cap query length to prevent abuse
         query = query[:500]
+        
+        # Security checks to prevent LFI and SSRF
+        if re.match(r"^(file|ftp|sftp)://", query, re.IGNORECASE):
+            await ctx.send(embed=_embed("⚠️ URLs locais ou de arquivo não são permitidas por segurança."))
+            return
+        if re.match(r"^https?://", query, re.IGNORECASE) and not _url_is_safe_to_fetch(query):
+            await ctx.send(embed=_embed("⚠️ Esse endereço foi bloqueado por segurança (SSRF)."))
+            return
+
         nested = _nested_command_hint(query)
         if nested:
             m = re.search(r"\bt!(c|chat)\s+(.*)", query, re.IGNORECASE | re.DOTALL)
@@ -7747,7 +7768,8 @@ def register_voice(bot: commands.Bot) -> None:
         sess.last_play_status_msg = status
         sess.last_play_status_query = _play_query_key(query)
 
-    @bot.command(name="c", aliases=["chat"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)")
+    @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", description="Faz uma pergunta para a Inteligência Artificial")
+    @app_commands.describe(question="Sua pergunta para a Tiffany")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not await _require_dm_access(ctx):
             return
@@ -7763,7 +7785,7 @@ def register_voice(bot: commands.Bot) -> None:
         ]
 
         if not (question and question.strip()) and not image_urls:
-            await _ctx_reply(ctx, "💬 Uso: `t!c <pergunta>` — ou anexe uma imagem.")
+            await _ctx_reply(ctx, tr(lang, "chat.usage.image"))
             return
         question = question.strip() if question else ""
 
@@ -7774,7 +7796,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         question = _normalize_chat_question(question)
         if not question and not image_urls:
-            await _ctx_reply(ctx, "💬 Uso: `t!c <pergunta>` — sem repetir meu nome.")
+            await _ctx_reply(ctx, tr(lang, "chat.usage.no_name"))
             return
 
         zoeira = _try_chat_zoeira_reply(question, user_id=ctx.author.id)
@@ -7857,7 +7879,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await _ctx_reply(ctx, result)
 
-    @bot.command(name="l", aliases=["loop", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop")
+    @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", description="Ativa ou desativa o loop da música atual")
     async def cmd_loop(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7888,7 +7910,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.off")))
             await _try_react_ok(ctx.message)
 
-    @bot.command(name="pa", aliases=["pause"], help="Pausa a música: t!pa / t!pause")
+    @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", description="Pausa a música que está tocando")
     async def cmd_pause(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7910,7 +7932,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.command(name="re", aliases=["resume"], help="Retoma a música pausada: t!re / t!resume")
+    @bot.hybrid_command(name="resume", aliases=["re"], help="Retoma a música pausada: t!re / t!resume", description="Retoma a música pausada")
     async def cmd_resume(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7932,7 +7954,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.resume.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.command(name="cl", aliases=["clear"], help="Para música, limpa fila e sai da call: t!cl / t!clear")
+    @bot.hybrid_command(name="clear", aliases=["cl"], help="Para música, limpa fila e sai da call: t!cl / t!clear", description="Limpa a fila, para a música e desconecta")
     async def cmd_clear(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -7985,7 +8007,7 @@ def register_voice(bot: commands.Bot) -> None:
             pass
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.clear.done")))
 
-    @bot.command(name="sh", aliases=["shuffle"], help="Embaralha a fila: t!sh / t!shuffle")
+    @bot.hybrid_command(name="shuffle", aliases=["sh"], help="Embaralha a fila: t!sh / t!shuffle", description="Embaralha as músicas da fila")
     async def cmd_shuffle(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -8060,7 +8082,7 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.done", count=len(session.queue_display))))
 
-    @bot.command(name="rp", aliases=["replay"], help="Repete a música atual: t!rp / t!replay")
+    @bot.hybrid_command(name="replay", aliases=["rp"], help="Repete a música atual: t!rp / t!replay", description="Repete a música que está tocando no momento")
     async def cmd_replay(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -8109,7 +8131,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.replaying", title=display[:80])))
 
-    @bot.command(name="ap", aliases=["autoplay"], help="Liga/desliga autoplay: t!ap / t!autoplay")
+    @bot.hybrid_command(name="autoplay", aliases=["ap"], help="Liga/desliga autoplay: t!ap / t!autoplay", description="Ativa ou desativa a reprodução automática (autoplay)")
     async def cmd_autoplay(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -8126,7 +8148,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.autoplay_off")))
 
-    @bot.command(name="ly", aliases=["lyrics"], help="Busca letra da música: t!ly / t!lyrics")
+    @bot.hybrid_command(name="lyrics", aliases=["ly"], help="Busca letra da música: t!ly / t!lyrics", description="Busca a letra da música atual ou de uma música específica")
+    @app_commands.describe(query="Nome da música (opcional, usa a música atual se vazio)")
     async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
         if not await _require_guild(ctx):
             return
@@ -8181,8 +8204,9 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + tr(lang, "cmd.lyrics.truncated")
         await status.edit(embed=_embed(tr(lang, "cmd.lyrics.result", name=search_term[:60], lyrics=lyrics)))
 
-    @bot.command(name="ff", aliases=["seek"], help="Pula na música: t!ff / t!seek +30, -15, 1:30")
-    async def cmd_seek(ctx: commands.Context, *, time_arg: str = ""):
+    @bot.hybrid_command(name="seek", aliases=["ff"], help="Pula na música: t!ff / t!seek +30, -15, 1:30", description="Avança ou retrocede o tempo da música (+30, -15, 1:30)")
+    @app_commands.describe(time_expr="Tempo para pular (+30, -15, 1:30)")
+    async def cmd_seek(ctx: commands.Context, time_expr: str = ""):
         if not await _require_guild(ctx):
             return
         _touch_activity(ctx.guild.id)
@@ -8196,7 +8220,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not _has_song:
             await ctx.send(embed=_embed(tr(lang, "cmd.seek.nothing")))
             return
-        if not time_arg:
+        if not time_expr:
             dur = session.current_duration
             dur_str = tr(lang, "cmd.seek.duration", time=f"{int(dur)//60}:{int(dur)%60:02d}") if dur > 0 else ""
             await ctx.send(embed=_embed(tr(lang, "cmd.seek.usage", dur=dur_str)))
@@ -8204,7 +8228,7 @@ def register_voice(bot: commands.Bot) -> None:
         # Compute current elapsed time
         elapsed = time.monotonic() - session.song_start_time if session.song_start_time else 0
         # Parse argument
-        time_arg = time_arg.strip()
+        time_arg = time_expr.strip()
         relative = False
         if time_arg.startswith("+") or time_arg.startswith("-"):
             relative = True
@@ -8274,53 +8298,17 @@ def register_voice(bot: commands.Bot) -> None:
             dur_str = f" / {dm}:{ds:02d}"
         await ctx.send(embed=_embed(tr(lang, "cmd.seek.jumped", pos=f"{tm:02d}:{ts:02d}{dur_str}")))
 
-    @bot.command(name="su", aliases=["summary"], help="Resume um link: t!su / t!summary <URL>")
+    @bot.command(name="su", aliases=["summary"], help="[DESATIVADO] Resume um link: t!su / t!summary <URL>")
     async def cmd_resumo(ctx: commands.Context, *, url: str = ""):
-        if not await _require_dm_access(ctx):
-            return
-        lang = _ctx_lang(ctx)
-        if not url or not re.match(r"^https?://", url):
-            await ctx.send(embed=_embed(tr(lang, "cmd.summary.usage")))
-            return
-        if _contains_blocked_content(url):
-            await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
-            return
-        allowed, remaining = _check_cooldown(ctx.author.id)
-        if not allowed:
-            await ctx.send(embed=_embed(tr(lang, "cmd.summary.cooldown", secs=remaining)))
-            return
-        gid, uid = _ai_rl_ids(ctx)
-        ok, reason = _ai_rate_limit_peek(gid, bucket="summary", user_id=uid)
-        if not ok:
-            await ctx.send(embed=_embed(_rate_limit_message(lang, reason)), delete_after=8)
-            return
-        _stats["commands_used"] += 1
-        if ctx.guild:
-            _touch_activity(ctx.guild.id)
-        if not os.getenv("OPENROUTER_API_KEY", "").strip():
-            await ctx.send(embed=_embed(tr(lang, "cmd.chat.ai_unavailable")))
-            return
-        status = await ctx.send(embed=_embed(tr(lang, "cmd.summary.reading")))
-        summary = await _summarize_url(
-            url, lang=lang, guild_id=gid, user_id=uid,
-        )
-        # Response summarizes untrusted external content -> full moderation (literal + AI)
-        if await _should_block_content(summary):
-            try:
-                await status.delete()
-            except discord.HTTPException:
-                pass
-            await _send_private_notice(ctx.author, ctx.channel, _pick_blocked_reply(lang))
-            return
-        await status.edit(embed=_embed(tr(lang, "cmd.summary.result", summary=summary)))
-        # Save to user context for future t!c reference
-        _add_to_context(ctx.author.id, f"Resuma este link: {url}", summary)
+        await _ctx_reply(ctx, "⚠️ Esse comando foi desativado por questões de segurança.", delete_after=15)
+        return
 
     # ============================
     # AUDIO CLIP
     # ============================
 
-    @bot.command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]")
+    @bot.hybrid_command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]", description="Grava e salva os últimos 30 segundos de áudio da call")
+    @app_commands.describe(fmt="Formato do arquivo (mp3 ou wav)")
     async def cmd_clip(ctx: commands.Context, fmt: str = "mp3"):
         if not await _require_guild(ctx):
             return
@@ -8439,7 +8427,7 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.tree.error
     async def _on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         log.exception("Slash command error /%s: %s", getattr(interaction.command, "name", "?"), error)
-        msg = "❌ Erro ao executar o comando. Tente de novo."
+        msg = tr(_ctx_lang(interaction), "cmd.error.generic")
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(embed=_embed(msg), ephemeral=True)
@@ -8563,7 +8551,8 @@ def register_voice(bot: commands.Bot) -> None:
                     text_ch = bot.get_channel(text_ch_id)
                     if text_ch and hasattr(text_ch, "send"):
                         try:
-                            await text_ch.send(embed=_embed(_pick_kicked_msg()))
+                            lang = resolve_guild_lang(gid)
+                            await text_ch.send(embed=_embed(_pick_kicked_msg(lang)))
                         except Exception:
                             pass
             elif before.channel and after.channel and before.channel.id != after.channel.id:

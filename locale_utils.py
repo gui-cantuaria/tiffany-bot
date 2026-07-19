@@ -205,60 +205,111 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "about.title": {"pt": "Tiffany", "en": "Tiffany", "es": "Tiffany"},
     "about.desc": {
         "pt": (
-            "Bot de **música**, **chat** e **utilidades** — comandos com prefixo **`t!`**.\n"
-            "Entra num canal de voz e manda **`t!p`** ou **`t!play`** que eu entro pra tocar.\n"
-            "No chat: **`t!c`** pra conversar, **`t!su`** pra resumir link, **`t!cp`** pra clipar a call."
+            "Bot de **música**, **chat** e **utilidades** — comandos com prefixo **`/`** (ou **`t!`**).\n"
+            "Entra num canal de voz e manda **`/play`** que eu entro pra tocar.\n"
+            "No chat: **`/chat`** pra conversar, **`/summary`** pra resumir link, **`/clip`** pra clipar a call."
         ),
         "en": (
-            "Bot for **music**, **chat**, and **utilities** — use the **`t!`** prefix.\n"
-            "Join a voice channel and send **`t!p`** or **`t!play`** — I'll join and play.\n"
-            "In chat: **`t!c`** to talk, **`t!su`** to summarize a link, **`t!cp`** to clip the call."
+            "Bot for **music**, **chat**, and **utilities** — use the **`/`** (or **`t!`**) prefix.\n"
+            "Join a voice channel and send **`/play`** — I'll join and play.\n"
+            "In chat: **`/chat`** to talk, **`/summary`** to summarize a link, **`/clip`** to clip the call."
         ),
         "es": (
-            "Bot de **música**, **chat** y **utilidades** — comandos con prefijo **`t!`**.\n"
-            "Entra a un canal de voz y manda **`t!p`** o **`t!play`** — entro a tocar.\n"
-            "En el chat: **`t!c`** para conversar, **`t!su`** para resumir un link, **`t!cp`** para clip de la call."
+            "Bot de **música**, **chat** y **utilidades** — comandos con prefijo **`/`** (o **`t!`**).\n"
+            "Entra a un canal de voz y manda **`/play`** — entro a tocar.\n"
+            "En el chat: **`/chat`** para conversar, **`/summary`** para resumir un link, **`/clip`** para clip de la call."
         ),
     },
     "about.music.title": {"pt": "Música", "en": "Music", "es": "Música"},
     "about.music.body": {
         "pt": (
             "Link, busca ou nome — YouTube, Spotify, Deezer, Apple Music, Amazon Music.\n"
-            "Fila, shuffle, loop, autoplay, playlists; `t!r` sorteia entre ~5000 hits.\n"
+            "Fila, shuffle, loop, autoplay, playlists; `/random` sorteia entre ~5000 hits.\n"
             "Na call: *«Tiffany, toca…»*, *«pula»*, *«pausa»*, *«fila»*."
         ),
         "en": (
             "Link, search, or song name — YouTube, Spotify, Deezer, Apple Music, Amazon Music.\n"
-            "Queue, shuffle, loop, autoplay, playlists; `t!r` picks from ~5000 hits.\n"
+            "Queue, shuffle, loop, autoplay, playlists; `/random` picks from ~5000 hits.\n"
             "In voice: *\"Tiffany, play…\"*, *\"skip\"*, *\"pause\"*, *\"queue\"*."
         ),
         "es": (
             "Link, búsqueda o nombre — YouTube, Spotify, Deezer, Apple Music, Amazon Music.\n"
-            "Cola, shuffle, loop, autoplay, playlists; `t!r` elige entre ~5000 hits.\n"
+            "Cola, shuffle, loop, autoplay, playlists; `/random` elige entre ~5000 hits.\n"
             "En voz: *«Tiffany, toca…»*, *«salta»*, *«pausa»*, *«cola»*."
         ),
     },
     "about.chat.title": {"pt": "Chat e extras", "en": "Chat & extras", "es": "Chat y extras"},
     "about.chat.body": {
         "pt": (
-            "`t!c` — conversa com memória (manda imagem se quiser)\n"
-            "`t!g` — recomenda jogos (loja, preço, estúdio, nota, gênero, tags…)\n"
-            "`t!su` — resume artigo ou link\n"
-            "`t!cp` — clipe MP3/WAV dos últimos 30 s da call"
+            "`/chat` — conversa com memória (manda imagem se quiser)\n"
+            "`/game` — recomenda jogos (loja, preço, estúdio, nota, gênero, tags…)\n"
+            "`/summary` — resume artigo ou link\n"
+            "`/clip` — clipe MP3/WAV dos últimos 30 s da call"
         ),
         "en": (
-            "`t!c` — chat with memory (images OK)\n"
-            "`t!g` — game picks (store, price, studio, rating, genre, tags…)\n"
-            "`t!su` — summarize an article or link\n"
-            "`t!cp` — MP3/WAV clip of the last 30 s in voice"
+            "`/chat` — chat with memory (images OK)\n"
+            "`/game` — recommends games (store, price, studio, rating, genre, tags…)\n"
+            "`/summary` — summarize article or link\n"
+            "`/clip` — MP3/WAV clip of the last 30s of the call"
         ),
         "es": (
-            "`t!c` — chat con memoria (imágenes OK)\n"
-            "`t!g` — recomienda juegos (tienda, precio, estudio, nota, género, tags…)\n"
-            "`t!su` — resume artículo o link\n"
-            "`t!cp` — clip MP3/WAV de los últimos 30 s de la call"
+            "`/chat` — conversa con memoria (imágenes OK)\n"
+            "`/game` — recomienda juegos (tienda, precio, estudio, nota, género, tags…)\n"
+            "`/summary` — resume artículo o link\n"
+            "`/clip` — clip MP3/WAV de los últimos 30s de la call"
         ),
     },
+    "about.invite_btn": {
+        "pt": "Adicionar em outro servidor",
+        "en": "Add to another server",
+        "es": "Añadir a otro servidor"
+    },
+    "cmd.error.generic": {
+        "pt": "❌ Erro ao executar o comando. Tente de novo.",
+        "en": "❌ Error executing command. Try again.",
+        "es": "❌ Error al ejecutar el comando. Intenta de nuevo."
+    },
+    "voice.kicked_0": {
+        "pt": "Fui expulsa do canal de voz :(",
+        "en": "I was kicked from the voice channel :(",
+        "es": "Me expulsaron del canal de voz :("
+    },
+    "voice.kicked_1": {
+        "pt": "Alguém me tirou da call… tudo bem, eu saio :(",
+        "en": "Someone kicked me from the call... it's okay, I'll leave :(",
+        "es": "Alguien me sacó de la llamada... está bien, me voy :("
+    },
+    "voice.kicked_2": {
+        "pt": "Me removeram do canal de voz — chama de novo quando quiser!",
+        "en": "They removed me from the voice channel — invite me again anytime!",
+        "es": "Me quitaron del canal de voz — invítame de nuevo cuando quieras!"
+    },
+    "voice.kicked_3": {
+        "pt": "Eita, fui kickada da call :(",
+        "en": "Ouch, I was kicked from the call :(",
+        "es": "Uy, me sacaron de la llamada :("
+    },
+    "voice.kicked_4": {
+        "pt": "Não fui eu que saí — me expulsaram do canal de voz :(",
+        "en": "I didn't leave on my own — they kicked me out of the voice channel :(",
+        "es": "Yo no salí por mi cuenta — me echaron del canal de voz :("
+    },
+    "voice.kicked_5": {
+        "pt": "Alguém me botou pra fora da call. Volto quando chamarem!",
+        "en": "Someone threw me out of the call. I'll be back when called!",
+        "es": "Alguien me sacó de la llamada. ¡Volveré cuando me llamen!"
+    },
+    "voice.kicked_6": {
+        "pt": "Fui desconectada da call contra a minha vontade :(",
+        "en": "I was disconnected from the call against my will :(",
+        "es": "Me desconectaron de la llamada contra mi voluntad :("
+    },
+    "voice.kicked_7": {
+        "pt": "Me tiraram do canal de voz… snif. Chama a Tiffany de volta?",
+        "en": "They kicked me from the voice channel... sniff. Call Tiffany back?",
+        "es": "Me sacaron del canal de voz... sniff. ¿Llamar de nuevo a Tiffany?"
+    },
+    "about.system.title": {"pt": "Sistema", "en": "System", "es": "Sistema"},
     "about.dice.title": {"pt": "Dados", "en": "Dice", "es": "Dados"},
     "about.dice.body": {
         "pt": "`d20`, `4d6`, `c50+50` no chat — tem botão de reroll.",
@@ -302,17 +353,20 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "welcome.desc": {
         "pt": (
             "Valeu por me adicionar no **{guild}**.\n"
-            "Entra num canal de voz e manda **`t!p`** ou **`t!play`** pra começar.\n"
+            "Entra num canal de voz e manda **`/play`** (ou **`t!play`**) pra começar.\n"
+            "Agora eu suporto Slash Commands completos! Digite **`/`** para ver a lista.\n"
             "Comandos: **`/help`** · Sobre mim: **`/about`**"
         ),
         "en": (
             "Thanks for adding me to **{guild}**.\n"
-            "Join a voice channel and send **`t!p`** or **`t!play`** to get started.\n"
+            "Join a voice channel and send **`/play`** (or **`t!play`**) to get started.\n"
+            "I now fully support Slash Commands! Type **`/`** to see the list.\n"
             "Commands: **`/help`** · About me: **`/about`**"
         ),
         "es": (
             "Gracias por agregarme a **{guild}**.\n"
-            "Entra a un canal de voz y manda **`t!p`** o **`t!play`** para empezar.\n"
+            "Entra a un canal de voz y manda **`/play`** (o **`t!play`**) para empezar.\n"
+            "¡Ahora soporto Slash Commands completos! Escribe **`/`** para ver la lista.\n"
             "Comandos: **`/help`** · Sobre mí: **`/about`**"
         ),
     },
@@ -448,6 +502,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "⚠️ Desculpe, não consigo agora — a chave da API não está configurada.",
         "en": "⚠️ Sorry, I can't do that right now — the API key isn't configured.",
         "es": "⚠️ Perdón, no puedo ahora — la clave de API no está configurada.",
+    },
+    "err.api_issue": {
+        "pt": "⚠️ Estou com alguns problemas técnicos no momento. Volto em instantes, desculpe pelo transtorno!",
+        "en": "⚠️ I'm having some technical issues right now. I'll be back shortly, sorry for the inconvenience!",
+        "es": "⚠️ Tengo algunos problemas técnicos en este momento. Volveré en unos instantes, ¡perdón por las molestias!",
     },
     "err.rate_limit": {
         "pt": "⏳ Desculpe, muitas requisições agora. Aguarde alguns segundos e tente de novo.",
@@ -1577,5 +1636,65 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "📄 **Resumo do link:**\n{summary}",
         "en": "📄 **Link summary:**\n{summary}",
         "es": "📄 **Resumen del link:**\n{summary}",
+    },
+    "summary.err.invalid_url": {
+        "pt": "Não consigo acessar esse endereço (apenas links públicos http/https são permitidos).",
+        "en": "I can't access this URL (only public http/https links are allowed).",
+        "es": "No puedo acceder a esta dirección (solo se permiten enlaces públicos http/https).",
+    },
+    "summary.err.fetch_failed": {
+        "pt": "Não consegui acessar a página. Verifique o link e tente de novo.",
+        "en": "I couldn't access the page. Check the link and try again.",
+        "es": "No pude acceder a la página. Verifica el enlace e intenta de nuevo.",
+    },
+    "summary.err.redirect_blocked": {
+        "pt": "Não consigo acessar esse endereço (redirecionamento bloqueado por segurança).",
+        "en": "I can't access this URL (redirect blocked for security).",
+        "es": "No puedo acceder a esta dirección (redirección bloqueada por seguridad).",
+    },
+    "chat.err.process_failed": {
+        "pt": "Desculpe, tive um problema ao processar sua pergunta. Tente de novo.",
+        "en": "Sorry, I had a problem processing your question. Try again.",
+        "es": "Lo siento, tuve un problema al procesar tu pregunta. Intenta de nuevo.",
+    },
+    "chat.err.no_answer": {
+        "pt": "Não consegui formular uma resposta agora. Tenta de novo?",
+        "en": "I couldn't formulate an answer right now. Try again?",
+        "es": "No pude formular una respuesta ahora. ¿Intentas de nuevo?",
+    },
+    "chat.usage.image": {
+        "pt": "💬 Uso: `t!c <pergunta>` — ou anexe uma imagem.",
+        "en": "💬 Usage: `t!c <question>` — or attach an image.",
+        "es": "💬 Uso: `t!c <pregunta>` — o adjunta una imagen.",
+    },
+    "chat.usage.no_name": {
+        "pt": "💬 Uso: `t!c <pergunta>` — sem repetir meu nome.",
+        "en": "💬 Usage: `t!c <question>` — without repeating my name.",
+        "es": "💬 Uso: `t!c <pregunta>` — sin repetir mi nombre.",
+    },
+    "music.err.too_long": {
+        "pt": "muito longo ({dur} min, máx {max} min)",
+        "en": "too long ({dur} min, max {max} min)",
+        "es": "demasiado largo ({dur} min, máx {max} min)",
+    },
+    "music.tip.playlist": {
+        "pt": "💡 **Dica:** parece que você quer uma playlist! Cole o **link** do Spotify ou YouTube.\nEx: `t!p https://open.spotify.com/playlist/...`",
+        "en": "💡 **Tip:** looks like you want a playlist! Paste the Spotify or YouTube **link**.\nEx: `t!p https://open.spotify.com/playlist/...`",
+        "es": "💡 **Consejo:** ¡parece que quieres una playlist! Pega el **enlace** de Spotify o YouTube.\nEj: `t!p https://open.spotify.com/playlist/...`",
+    },
+    "music.queue.finished": {
+        "pt": "📭 Fila encerrada! Adicione músicas com `t!p`.",
+        "en": "📭 Queue finished! Add music with `t!p`.",
+        "es": "📭 ¡Cola terminada! Añade música con `t!p`.",
+    },
+    "music.queue.failed_header": {
+        "pt": "\n\n❌ **{count} música(s) não encontrada(s):**\n{lines}",
+        "en": "\n\n❌ **{count} track(s) not found:**\n{lines}",
+        "es": "\n\n❌ **{count} canción(es) no encontrada(s):**\n{lines}",
+    },
+    "music.queue.failed_more": {
+        "pt": "\n• ... e mais {count}",
+        "en": "\n• ... and {count} more",
+        "es": "\n• ... y {count} más",
     },
 }

@@ -253,15 +253,9 @@ def _regex_parse_filters(text: str) -> GameFilters:
 
 
 def _search_term(filters: GameFilters) -> str:
+    # Do NOT include genres or multiplayer in the Steam search term!
+    # Steam storesearch uses this for exact name matching.
     parts: list[str] = []
-    for g in filters.genres:
-        gn = _norm(g)
-        if gn in HORROR_HINTS or gn == "terror":
-            parts.append("horror")
-        else:
-            parts.append(g)
-    if filters.multiplayer:
-        parts.append("multiplayer")
     parts.extend(filters.developers[:2])
     parts.extend(filters.tags[:2])
     seen: set[str] = set()
@@ -614,7 +608,10 @@ async def recommend_games(
 
     try:
         filters, ai_names = await _ai_parse(query, ai_client)
-    except Exception:
+    except Exception as e:
+        err_str = str(e).lower()
+        if "402" in err_str or "insufficient" in err_str or "quota" in err_str or "balance" in err_str:
+            return [], GameFilters(), "api_issue"
         log.debug("Game AI parse failed, regex fallback", exc_info=True)
         filters = _regex_parse_filters(query)
         ai_names = []
