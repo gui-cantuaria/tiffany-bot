@@ -1190,7 +1190,7 @@ class _GuildVoiceSession:
     last_play_status_msg: Any = None
     last_play_status_query: str = ""
     now_playing_msg: Any = None  # current "Tocando agora" message (re-posted per track)
-    ytdl_probe_cache: dict[str, dict] = field(default_dict=dict)
+    ytdl_probe_cache: dict[str, dict] = field(default_factory=dict)
     prefetch_key: str = ""
     prefetch_bundle: Optional[tuple] = None  # YTSource bundle from _YTSource.from_query
     prefetch_task: Optional[asyncio.Task] = None

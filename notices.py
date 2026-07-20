@@ -39,8 +39,20 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-CANAL_NOTICIAS_ID = int(os.getenv("CANAL_NOTICIAS_ID", "0"))
-ID_CARGO_PARA_MARCAR = int(os.getenv("ID_CARGO_PARA_MARCAR", "0"))
+try:
+    CANAL_NOTICIAS_ID = int(os.getenv("CANAL_NOTICIAS_ID", "0"))
+except ValueError:
+    CANAL_NOTICIAS_ID = 0
+
+try:
+    CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "0"))
+except ValueError:
+    CANAL_OFERTAS_ID = 0
+
+try:
+    ID_CARGO_PARA_MARCAR = int(os.getenv("ID_CARGO_PARA_MARCAR", "0"))
+except ValueError:
+    ID_CARGO_PARA_MARCAR = 0
 
 HORA_INICIO = 8
 HORA_FIM = 18
