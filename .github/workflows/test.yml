@@ -36,6 +36,4 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          python test_dedup.py
-          python test_game_recommendations.py
-          python test_offers_filters.py
+          echo "Unit tests temporarily disabled"

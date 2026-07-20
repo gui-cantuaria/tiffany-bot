@@ -3800,10 +3800,10 @@ _presence_rotation_task: asyncio.Task | None = None
 # Global Discord presence — short lines that read well after Discord's "Playing …"
 PRESENCE_LINES: tuple[str, ...] = (
     "/help · all commands",
-    "t!p · play music in voice",
-    "t!c · AI chat",
-    "t!g · find games on Steam/Epic",
-    "t!r · shuffle a random song",
+    "/play · play music in voice",
+    "/chat · AI chat",
+    "/game · find games on Steam/Epic",
+    "/random · shuffle a random song",
     "/about · what I can do",
 )
 
