@@ -453,7 +453,7 @@ async def search_steam_catalog(session, filters: GameFilters) -> list[GameMatch]
             detail = await _steam_app_details(session, aid)
         if not detail:
             return None
-        return _steam_to_match(detail, aid, filters)
+        return _steam_to_match(detail, aid, filters, strict_genre=False)
 
     results = await asyncio.gather(*[_fetch(aid) for aid in app_ids])
     return [r for r in results if r]
@@ -475,7 +475,7 @@ def _epic_price(offer: dict) -> tuple[bool, Optional[int], str]:
     return False, None, "—"
 
 
-def _epic_to_match(node: dict, filters: GameFilters) -> Optional[GameMatch]:
+def _epic_to_match(node: dict, filters: GameFilters, strict_genre: bool = True) -> Optional[GameMatch]:
     title = node.get("title") or node.get("name")
     slug = node.get("urlSlug") or node.get("productSlug")
     if not title or not slug:
@@ -485,7 +485,7 @@ def _epic_to_match(node: dict, filters: GameFilters) -> Optional[GameMatch]:
         return None
     tags_raw = node.get("tags") or node.get("offerTags") or []
     tags = [str(t.get("name") if isinstance(t, dict) else t) for t in tags_raw]
-    if not _genre_ok([], tags, filters, title=str(title)):
+    if strict_genre and not _genre_ok([], tags, filters, title=str(title)):
         return None
     if not _multiplayer_ok([], tags, filters):
         return None
@@ -534,14 +534,15 @@ async def search_epic_catalog(session, filters: GameFilters) -> list[GameMatch]:
     out: list[GameMatch] = []
     seen: set[str] = set()
     for node in nodes:
-        match = _epic_to_match(node, filters)
-        if not match:
-            continue
-        key = _norm(match.name)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(match)
+        if node.get("offerType") in ("BASE_GAME", "EDITION"):
+            match = _epic_to_match(node, filters, strict_genre=False)
+            if not match:
+                continue
+            key = _norm(match.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(match)
     return out
 
 
