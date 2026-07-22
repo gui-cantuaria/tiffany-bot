@@ -14,7 +14,7 @@ async def main():
     ai = tiffany_voice._get_openrouter_client()
     async with aiohttp.ClientSession() as session:
         resp = await ai.chat.completions.create(
-            model="google/gemini-2.5-flash",
+            model="google/gemini-3.1-flash-lite",
             messages=[
                 {"role": "system", "content": gr._RECOMMEND_SYSTEM},
                 {"role": "user", "content": 'horror, 30 reais, multiplayer, steam e epic'},

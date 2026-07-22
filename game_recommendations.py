@@ -581,7 +581,7 @@ def _merge_matches(*groups: list[GameMatch]) -> list[GameMatch]:
 
 async def _ai_parse(query: str, ai_client) -> tuple[GameFilters, list[str]]:
     resp = await ai_client.chat.completions.create(
-        model="google/gemini-2.5-flash",
+        model="google/gemini-3.1-flash-lite",
         messages=[
             {"role": "system", "content": _RECOMMEND_SYSTEM},
             {"role": "user", "content": query[:600]},
