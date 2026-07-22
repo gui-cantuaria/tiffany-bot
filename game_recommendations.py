@@ -19,7 +19,7 @@ STEAM_DETAILS = "https://store.steampowered.com/api/appdetails"
 EPIC_BROWSE = "https://store.epicgames.com/pt-BR/browse"
 
 MAX_RESULTS = 5
-STEAM_CANDIDATES = 20
+STEAM_CANDIDATES = 50
 STEAM_DETAIL_CONCURRENCY = 6
 EXTRA_MAX_LEN = 80
 
@@ -60,6 +60,7 @@ _RECOMMEND_SYSTEM = (
     f"Reply with ONLY valid JSON (no markdown). Schema:\n{_AI_FILTER_SCHEMA}\n\n"
     "Filter rules: default stores [\"steam\",\"epic\"]; price/grátis/multiplayer/genre/studio/rating/year/tags/exclude.\n"
     "Keep \"extra\" under 80 chars; omit if redundant with other fields.\n"
+    "CRITICAL: The games you suggest in \"games\" MUST strictly match the price limit (max_price_brl), free_only, and multiplayer rules! If the user asks for games under 30 BRL, suggest older or indie titles that are very cheap (e.g. Pacify, Devour, L4D2). DO NOT suggest games that normally cost more than 30 BRL.\n"
     f"Games: 3–{MAX_RESULTS} real titles in \"games\" — names ONLY, no price/URL.\n"
 )
 
@@ -258,6 +259,7 @@ def _search_term(filters: GameFilters) -> str:
     parts: list[str] = []
     parts.extend(filters.developers[:2])
     parts.extend(filters.tags[:2])
+    parts.extend(filters.genres[:2])
     seen: set[str] = set()
     out: list[str] = []
     for p in parts:
@@ -366,7 +368,7 @@ async def _steam_app_details(session, app_id: int) -> Optional[dict]:
     return data
 
 
-def _steam_to_match(detail: dict, app_id: int, filters: GameFilters) -> Optional[GameMatch]:
+def _steam_to_match(detail: dict, app_id: int, filters: GameFilters, strict_genre: bool = True) -> Optional[GameMatch]:
     is_free = bool(detail.get("is_free"))
     po = detail.get("price_overview") or {}
     cents = 0 if is_free else po.get("final")
@@ -376,7 +378,7 @@ def _steam_to_match(detail: dict, app_id: int, filters: GameFilters) -> Optional
     categories = detail.get("categories") or []
     tags = [c.get("description", "") for c in categories if c.get("description")]
     name = detail.get("name") or f"App {app_id}"
-    if not _genre_ok(genres, tags, filters, title=name):
+    if strict_genre and not _genre_ok(genres, tags, filters, title=name):
         return None
     if not _multiplayer_ok(categories, tags, filters):
         return None
@@ -400,7 +402,7 @@ def _steam_to_match(detail: dict, app_id: int, filters: GameFilters) -> Optional
     )
 
 
-async def _steam_search_name(session, name: str, filters: GameFilters) -> Optional[GameMatch]:
+async def _steam_search_name(session, name: str, filters: GameFilters, strict_genre: bool = True) -> Optional[GameMatch]:
     import aiohttp
 
     params = {"term": name[:80], "cc": "br", "l": "portuguese", "f": "games", "maxresults": 8}
@@ -422,7 +424,7 @@ async def _steam_search_name(session, name: str, filters: GameFilters) -> Option
             continue
         detail = await _steam_app_details(session, int(app_id))
         if detail:
-            match = _steam_to_match(detail, int(app_id), filters)
+            match = _steam_to_match(detail, int(app_id), filters, strict_genre=strict_genre)
             if match:
                 return match
     return None
@@ -552,7 +554,7 @@ async def _verify_ai_names(
     seen: set[str] = set()
     if "steam" in filters.stores:
         for name in names:
-            match = await _steam_search_name(session, name, filters)
+            match = await _steam_search_name(session, name, filters, strict_genre=False)
             if match and _norm(match.name) not in seen:
                 seen.add(_norm(match.name))
                 out.append(match)
@@ -578,11 +580,12 @@ def _merge_matches(*groups: list[GameMatch]) -> list[GameMatch]:
 
 async def _ai_parse(query: str, ai_client) -> tuple[GameFilters, list[str]]:
     resp = await ai_client.chat.completions.create(
-        model="google/gemini-3.1-flash-lite",
+        model="google/gemini-2.5-flash",
         messages=[
             {"role": "system", "content": _RECOMMEND_SYSTEM},
             {"role": "user", "content": query[:600]},
         ],
+        response_format={"type": "json_object"},
         max_tokens=420,
         temperature=0.25,
         timeout=25.0,

@@ -1824,13 +1824,13 @@ def _store_destination(deal: dict) -> Optional[str]:
     return _store_search_url(deal.get("store", ""), deal.get("title", ""))
 
 
-def _buy_url(deal: dict) -> str:
+def _buy_url(deal: dict, guild_tags: dict = None) -> str:
     """Final buy URL with affiliate, always pointing DIRECTLY to the store.
     Order: direct product → store search → no link (never falls back to Promobit)."""
     store = deal.get("store", "")
     dest = _store_destination(deal)
     if dest and dest.startswith("http"):
-        return affiliate_config.build_affiliate_url(store, dest)
+        return affiliate_config.build_affiliate_url(store, dest, guild_tags=guild_tags)
     return ""
 
 
@@ -1847,12 +1847,12 @@ def _cor_embed(deal: dict) -> int:
     return COR_OFERTA
 
 
-def _build_view(deal: dict) -> Optional[discord.ui.View]:
+def _build_view(deal: dict, guild_tags: dict = None) -> Optional[discord.ui.View]:
     """Real Discord buy button (link). Returns None when no valid URL exists
     — embed falls back to a text CTA field.
     Note: Discord always renders link buttons in gray (cannot be colored);
     emphasis comes from text (discount) + highlighted CTA in the embed body."""
-    buy_url = _buy_url(deal)
+    buy_url = _buy_url(deal, guild_tags=guild_tags)
     if not buy_url.startswith("http"):
         return None
     disc = deal.get("discount_pct") or 0
@@ -1867,7 +1867,7 @@ def _build_view(deal: dict) -> Optional[discord.ui.View]:
     return view
 
 
-def _build_embed(deal: dict) -> discord.Embed:
+def _build_embed(deal: dict, guild_tags: dict = None) -> discord.Embed:
     """Build the deal embed."""
     cor = _cor_embed(deal)
     category = deal.get("category") or "Oferta"
@@ -1883,7 +1883,7 @@ def _build_embed(deal: dict) -> discord.Embed:
     title = f"{EMOJI_FOGO} {clean_title}"
 
     desc = _format_description(deal)
-    buy_url = _buy_url(deal)
+    buy_url = _buy_url(deal, guild_tags=guild_tags)
 
     if len(desc) > 4096:
         desc = desc[:4093] + "..."
@@ -2130,51 +2130,94 @@ async def _run_deals_cycle_inner() -> None:
     )
 
     # Post
-    channel = _bot.get_channel(CANAL_OFERTAS_ID)
-    if not channel:
-        log.error(f"Channel {CANAL_OFERTAS_ID} not found!")
+    import guild_config
+    import random
+
+    guilds = guild_config.get_all_guilds_config()
+    targets = []
+
+    primary_channel = _bot.get_channel(CANAL_OFERTAS_ID)
+    if primary_channel:
+        targets.append({
+            "channel": primary_channel,
+            "is_primary": True,
+            "tags": {},
+            "categories": [],
+        })
+
+    for gid, conf in guilds.items():
+        ch_id = conf.get("offers_channel")
+        if not ch_id or ch_id == CANAL_OFERTAS_ID:
+            continue
+        ch = _bot.get_channel(ch_id)
+        if ch:
+            targets.append({
+                "channel": ch,
+                "is_primary": False,
+                "tags": conf.get("affiliate_tags", {}),
+                "categories": [c.lower() for c in conf.get("allowed_categories", [])]
+            })
+
+    if not targets:
+        log.error("No valid channels found to post offers!")
         return
 
     posted = 0
     for deal in approved[:MAX_POSTS_POR_CICLO]:
-        embed = _build_embed(deal)
-
-        # Download image and attach as file
-        file = None
+        # Download image once per deal
+        img_data = None
         if deal.get("image"):
             img_data = await _download_image(http_session, deal["image"])
+
+        deal_cat = deal.get("category", "").lower()
+        posted_any = False
+
+        for target in targets:
+            # Check category allowed
+            allowed = target["categories"]
+            if allowed and not any(a in deal_cat for a in allowed) and deal_cat not in allowed:
+                continue
+
+            # 50/50 Logic
+            use_tags = target["tags"]
+            if use_tags and random.random() < 0.5:
+                use_tags = {}
+
+            embed = _build_embed(deal, guild_tags=use_tags)
+            file = None
             if img_data:
                 file = discord.File(io.BytesIO(img_data), filename="oferta.jpg")
                 embed.set_image(url="attachment://oferta.jpg")
-            else:
-                # Fallback: try direct URL in embed
+            elif deal.get("image"):
                 embed.set_image(url=deal["image"])
 
-        try:
-            global _mention_count_ofertas, _mention_date_ofertas
             content = None
-            guild = getattr(channel, "guild", None)
-            # Ping role only on the first 3 ULTRA DEALS of the day
-            today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
-            if today_br != _mention_date_ofertas:
-                _mention_date_ofertas = today_br
-                _mention_count_ofertas = 0
-            
-            cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
-            is_ultra = deal.get("discount_pct", 0) >= DESCONTO_ULTRA_OFERTA
-            
-            if is_ultra and cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
-                content = f"<@&{cargo_id}>"
-                _mention_count_ofertas += 1
+            if target["is_primary"]:
+                global _mention_count_ofertas, _mention_date_ofertas
+                today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
+                if today_br != _mention_date_ofertas:
+                    _mention_date_ofertas = today_br
+                    _mention_count_ofertas = 0
+                
+                cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
+                is_ultra = deal.get("discount_pct", 0) >= DESCONTO_ULTRA_OFERTA
+                guild = getattr(target["channel"], "guild", None)
+                if is_ultra and cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
+                    content = f"<@&{cargo_id}>"
+                    _mention_count_ofertas += 1
 
-            view = _build_view(deal)
-            if view is not None:
-                msg = await channel.send(content=content, embed=embed, file=file, view=view)
-            else:
-                msg = await channel.send(content=content, embed=embed, file=file)
+            view = _build_view(deal, guild_tags=use_tags)
+            try:
+                if view is not None:
+                    await target["channel"].send(content=content, embed=embed, file=file, view=view)
+                else:
+                    await target["channel"].send(content=content, embed=embed, file=file)
+                posted_any = True
+            except Exception as e:
+                log.error(f"Failed to post deal in {target['channel'].id}: {e}")
 
-            # Mark as posted AFTER successful send
-            # Use original title key (pre-enrichment) for consistent cross-cycle dedup
+        if posted_any:
+            # Mark as posted
             _orig_tkey = deal.get("_orig_tkey") or _title_key(deal["title"])
             _listing = _deal_listing_key(deal)
             _mark_posted(history, deal["url"], deal["title"], orig_tkey=_orig_tkey, listing=_listing)
@@ -2187,9 +2230,6 @@ async def _run_deals_cycle_inner() -> None:
 
             if posted < MAX_POSTS_POR_CICLO:
                 await asyncio.sleep(POST_SPACING_SEC)
-
-        except Exception as e:
-            log.error(f"  Failed to post deal: {e}")
 
     log.info(f"=== Cycle finished: {posted} deals posted ===")
 

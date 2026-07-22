@@ -43,97 +43,113 @@ def _add_param(url: str, key: str, value: str) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
-def _awin_deeplink(url: str, advertiser_id: int) -> str:
+def _awin_deeplink(url: str, advertiser_id: int, publisher_id: str) -> str:
     """Build an Awin deeplink that redirects through Awin for commission."""
-    if not AWIN_PUBLISHER_ID:
+    if not publisher_id:
         return url
     from urllib.parse import quote
     return (
         f"https://www.awin1.com/cread.php"
         f"?awinmid={advertiser_id}"
-        f"&awinaffid={AWIN_PUBLISHER_ID}"
+        f"&awinaffid={publisher_id}"
         f"&ued={quote(url, safe='')}"
     )
 
 
-def _lomadee_deeplink(url: str) -> str:
+def _lomadee_deeplink(url: str, source_id: str) -> str:
     """Build a Lomadee deeplink that redirects through Lomadee for commission."""
-    if not LOMADEE_SOURCE_ID:
+    if not source_id:
         return url
     from urllib.parse import quote
     return (
         f"https://redir.lomadee.com/v2/deeplink"
-        f"?sourceId={LOMADEE_SOURCE_ID}"
+        f"?sourceId={source_id}"
         f"&url={quote(url, safe='')}"
     )
 
 
-def _magalu_url(url: str) -> str:
+def _magalu_url(url: str, slug: str) -> str:
     """Convert a Magalu product URL to the partner storefront URL."""
-    if not MAGALU_SLUG:
+    if not slug:
         return url
     parsed = urlparse(url)
     path = parsed.path
-    return f"https://www.magazinevoce.com.br/{MAGALU_SLUG}{path}"
+    return f"https://www.magazinevoce.com.br/{slug}{path}"
 
 
-def build_affiliate_url(store_name: str, real_url: str) -> str:
+def build_affiliate_url(store_name: str, real_url: str, guild_tags: dict = None) -> str:
     """Given store name and real URL (post-redirect), return the affiliate URL."""
     if not real_url:
         return real_url
+
+    guild_tags = guild_tags or {}
+    
+    def _t(key: str, default: str) -> str:
+        return guild_tags.get(key) or default
+
+    amz_tag = _t("amazon_tag", AMAZON_TAG)
+    ml_id = _t("mercadolivre_id", MERCADOLIVRE_ID)
+    ml_tool_id = _t("mercadolivre_tool_id", MERCADOLIVRE_TOOL_ID)
+    awin_pub_id = _t("awin_publisher_id", AWIN_PUBLISHER_ID)
+    magalu_slug = _t("magalu_slug", MAGALU_SLUG)
+    tera_id = _t("terabyte_id", TERABYTE_ID)
+    shopinfo_id = _t("shopinfo_id", SHOPINFO_ID)
+    aliex_id = _t("aliexpress_id", ALIEXPRESS_ID)
+    shopee_id = _t("shopee_id", SHOPEE_ID)
+    loma_id = _t("lomadee_source_id", LOMADEE_SOURCE_ID)
 
     norm = store_name.lower().strip() if store_name else ""
     domain = urlparse(real_url).netloc.lower()
 
     # --- Amazon ---
-    if "amazon" in domain and AMAZON_TAG:
-        return _add_param(real_url, "tag", AMAZON_TAG)
+    if "amazon" in domain and amz_tag:
+        return _add_param(real_url, "tag", amz_tag)
 
     # --- KaBuM (via Awin) ---
-    if "kabum" in domain and AWIN_PUBLISHER_ID:
-        return _awin_deeplink(real_url, AWIN_ADVERTISER_KABUM)
+    if "kabum" in domain and awin_pub_id:
+        return _awin_deeplink(real_url, AWIN_ADVERTISER_KABUM, awin_pub_id)
 
     # --- Mercado Livre (matt_tool = tracking id, matt_word = label) ---
-    if "mercadolivre" in domain and (MERCADOLIVRE_TOOL_ID or MERCADOLIVRE_ID):
+    if "mercadolivre" in domain and (ml_tool_id or ml_id):
         out = real_url
-        if MERCADOLIVRE_ID:
-            out = _add_param(out, "matt_word", MERCADOLIVRE_ID)
-        if MERCADOLIVRE_TOOL_ID:
-            out = _add_param(out, "matt_tool", MERCADOLIVRE_TOOL_ID)
+        if ml_id:
+            out = _add_param(out, "matt_word", ml_id)
+        if ml_tool_id:
+            out = _add_param(out, "matt_tool", ml_tool_id)
         return out
 
     # --- Magazine Luiza / Magalu ---
-    if ("magazineluiza" in domain or "magalu" in domain) and MAGALU_SLUG:
-        return _magalu_url(real_url)
+    if ("magazineluiza" in domain or "magalu" in domain) and magalu_slug:
+        return _magalu_url(real_url, magalu_slug)
 
     # --- Terabyte (Lomadee > Awin > direct param) ---
     if "terabyte" in domain:
-        if LOMADEE_SOURCE_ID:
-            return _lomadee_deeplink(real_url)
-        if AWIN_PUBLISHER_ID:
-            return _awin_deeplink(real_url, AWIN_ADVERTISER_TERABYTE)
-        if TERABYTE_ID:
-            return _add_param(real_url, "p", TERABYTE_ID)
+        if loma_id:
+            return _lomadee_deeplink(real_url, loma_id)
+        if awin_pub_id:
+            return _awin_deeplink(real_url, AWIN_ADVERTISER_TERABYTE, awin_pub_id)
+        if tera_id:
+            return _add_param(real_url, "p", tera_id)
 
     # --- Pichau (via Awin) ---
-    if "pichau" in domain and AWIN_PUBLISHER_ID:
-        return _awin_deeplink(real_url, AWIN_ADVERTISER_PICHAU)
+    if "pichau" in domain and awin_pub_id:
+        return _awin_deeplink(real_url, AWIN_ADVERTISER_PICHAU, awin_pub_id)
 
     # --- ShopInfo (Lomadee > direct param) ---
     if "shopinfo" in domain:
-        if LOMADEE_SOURCE_ID:
-            return _lomadee_deeplink(real_url)
-        if SHOPINFO_ID:
-            return _add_param(real_url, SHOPINFO_PARAM, SHOPINFO_ID)
+        if loma_id:
+            return _lomadee_deeplink(real_url, loma_id)
+        if shopinfo_id:
+            return _add_param(real_url, SHOPINFO_PARAM, shopinfo_id)
 
     # --- AliExpress (simple param fallback) ---
-    if "aliexpress" in domain and ALIEXPRESS_ID:
-        return _add_param(real_url, "aff_fcid", ALIEXPRESS_ID)
+    if "aliexpress" in domain and aliex_id:
+        return _add_param(real_url, "aff_fcid", aliex_id)
 
     # --- Shopee (redirect with aff_id) ---
-    if "shopee" in domain and SHOPEE_ID:
+    if "shopee" in domain and shopee_id:
         from urllib.parse import quote
-        return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&aff_id={SHOPEE_ID}"
+        return f"https://s.shopee.com.br/an_redir?origin_link={quote(real_url, safe='')}&aff_id={shopee_id}"
 
     # No affiliate program configured for this store
     return real_url

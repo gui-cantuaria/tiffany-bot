@@ -33,6 +33,7 @@ from discord.ext import commands
 
 import game_recommendations
 import locale_utils
+import guild_config
 from locale_utils import GuildLang, resolve_guild_lang, tr
 
 try:
@@ -161,12 +162,21 @@ def _pick_kicked_msg(lang: GuildLang) -> str:
 
 
 async def _require_voice(ctx: commands.Context) -> bool:
-    """Return False and notify user when VOICE_ENABLED=0."""
-    if _voice_enabled():
-        return True
-    lang = _ctx_lang(ctx)
-    await ctx.send(embed=_embed(tr(lang, "voice.module_disabled")))
-    return False
+    """Return False and notify user when VOICE_ENABLED=0 or missing DJ role."""
+    if not _voice_enabled():
+        lang = _ctx_lang(ctx)
+        await ctx.send(embed=_embed(tr(lang, "voice.module_disabled")))
+        return False
+        
+    if ctx.guild:
+        dj_id = guild_config.get_dj_role(ctx.guild.id)
+        if dj_id and not ctx.author.guild_permissions.administrator:
+            role = ctx.guild.get_role(dj_id)
+            if role and role not in ctx.author.roles:
+                await ctx.send(embed=_embed(f"⚠️ Apenas membros com o cargo **{role.name}** podem controlar a música.", error=True))
+                return False
+                
+    return True
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -760,18 +770,26 @@ async def _ai_content_is_blocked(text: str) -> bool:
 _CHAT_GREETINGS = frozenset({
     "oi", "ola", "olá", "hi", "hey", "hello", "hola", "eae", "eai", "e aí",
     "salve", "bom dia", "boa tarde", "boa noite", "yo", "sup", "opa",
+    "bonjour", "salut", "coucou", "hallo", "guten tag", "hihi"
 })
 
 
-async def _should_block_content(text: str) -> bool:
+async def _should_block_content(text: str, guild_id: int = None) -> bool:
     """Combined block: literal list (fast) + AI moderation (euphemisms)."""
     if not text or not text.strip():
         return False
     norm = _strip_accents_lower(text.strip())
     if norm in _CHAT_GREETINGS:
         return False
+        
+    strict = True
+    if guild_id:
+        strict = guild_config.is_strict_filter_enabled(guild_id)
+        
     if _contains_blocked_content(text):
-        return True
+        return strict
+    if not strict:
+        return False
     return await _ai_content_is_blocked(text)
 
 
@@ -1792,8 +1810,11 @@ def _load_stats() -> dict[str, int]:
         for k in defaults:
             if k not in data or not isinstance(data[k], int):
                 data[k] = defaults[k]
+        if "user_songs" not in data:
+            data["user_songs"] = {}
         return data
     except Exception:
+        defaults["user_songs"] = {}
         return defaults
 
 def _save_stats_now() -> None:
@@ -1804,6 +1825,20 @@ def _save_stats_now() -> None:
     except Exception:
         pass
 
+def _track_user_song(user_id: int, song_title: str) -> None:
+    if not user_id or not song_title: return
+    uid_str = str(user_id)
+    if "user_songs" not in _stats:
+        _stats["user_songs"] = {}
+    if uid_str not in _stats["user_songs"]:
+        _stats["user_songs"][uid_str] = {"total": 0, "top": {}}
+    
+    _stats["user_songs"][uid_str]["total"] += 1
+    
+    artist = song_title.split(" - ")[0].strip() if " - " in song_title else song_title.strip()
+    
+    _stats["user_songs"][uid_str]["top"][artist] = _stats["user_songs"][uid_str]["top"].get(artist, 0) + 1
+    _save_stats()
 
 _last_stats_save: float = 0.0
 
@@ -2136,6 +2171,9 @@ _WAKE_ALIASES = frozenset({
     "tiffney", "tifney", "tiffney", "tiffnee",
     "tiffiny", "tifiny",
     "tiffeny", "tifeny",
+    # --- FR/DE: European variants ---
+    "typhanie", "tiphanie", "tiffanie", "stephanie", "stefanie", 
+    "tiffi", "diffani"
 })
 
 
@@ -3799,11 +3837,11 @@ _presence_rotation_task: asyncio.Task | None = None
 
 # Global Discord presence — short lines that read well after Discord's "Playing …"
 PRESENCE_LINES: tuple[str, ...] = (
-    "/help · all commands",
+    "/help · High-Quality Audio",
     "/play · play music in voice",
-    "/chat · AI chat",
+    "/chat · AI & Chatbot",
     "/game · find games on Steam/Epic",
-    "/random · shuffle a random song",
+    "/rewind · check your stats",
     "/about · what I can do",
 )
 
@@ -4029,6 +4067,51 @@ def _embed_now_playing(*, source_label: str, track_title: str, lang: GuildLang =
     return em
 
 
+class PlayerControlView(discord.ui.View):
+    def __init__(self, session: "_GuildVoiceSession", bot: discord.Client):
+        super().__init__(timeout=None)
+        self.session = session
+        self.bot = bot
+
+    @discord.ui.button(label="Autoplay", emoji="🤖", style=discord.ButtonStyle.secondary, custom_id="tiffany_autoplay")
+    async def toggle_autoplay(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.session.autoplay = not getattr(self.session, "autoplay", False)
+        button.style = discord.ButtonStyle.success if self.session.autoplay else discord.ButtonStyle.secondary
+        status = "ativado" if self.session.autoplay else "desativado"
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(f"🤖 Autoplay {status}! A festa não vai parar.", ephemeral=True)
+
+    @discord.ui.button(label="Nightcore", emoji="🌙", style=discord.ButtonStyle.secondary, custom_id="tiffany_nightcore")
+    async def toggle_nightcore(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if not vc or not _is_wavelink_player(vc):
+            await interaction.response.send_message("Efeitos não suportados no modo atual.", ephemeral=True)
+            return
+        
+        try:
+            import wavelink
+            # Wavelink 3.x Filters
+            current = getattr(vc, "filters", None)
+            
+            # Simple toggle check based on button style
+            if button.style == discord.ButtonStyle.success:
+                filters = wavelink.Filters()
+                await vc.set_filters(filters)
+                button.style = discord.ButtonStyle.secondary
+                msg = "Filtro Nightcore desativado!"
+            else:
+                filters = wavelink.Filters()
+                filters.timescale.set(pitch=1.2, speed=1.1, rate=1.0)
+                await vc.set_filters(filters)
+                button.style = discord.ButtonStyle.success
+                msg = "Filtro Nightcore ativado!"
+                
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(msg, ephemeral=True)
+        except Exception as e:
+            log.error(f"Filter error: {e}")
+            await interaction.response.send_message("Erro ao aplicar o filtro.", ephemeral=True)
+
 async def _post_now_playing(
     bot: discord.Client,
     session: "_GuildVoiceSession",
@@ -4042,6 +4125,12 @@ async def _post_now_playing(
     lang = resolve_guild_lang(getattr(ch, "guild", None))
     src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
     em = _embed_now_playing(source_label=src, track_title=track_title, lang=lang)
+    view = PlayerControlView(session, bot)
+    
+    # Check current Autoplay state
+    if getattr(session, "autoplay", False):
+        view.children[0].style = discord.ButtonStyle.success
+        
     q_key = _play_query_key(query)
     prev_np = session.now_playing_msg
     # Case 1 — this track has its own fresh command bubble ("🔎 Procurando" /
@@ -4049,7 +4138,7 @@ async def _post_now_playing(
     status_msg = session.last_play_status_msg
     if status_msg is not None and session.last_play_status_query == q_key:
         try:
-            await status_msg.edit(embed=em)
+            await status_msg.edit(embed=em, view=view)
             session.now_playing_msg = status_msg
             session.last_play_status_msg = None
             session.last_play_status_query = ""
@@ -4068,7 +4157,7 @@ async def _post_now_playing(
     if not ch or not hasattr(ch, "send"):
         return
     try:
-        sent = await ch.send(embed=em)
+        sent = await ch.send(embed=em, view=view)
     except discord.HTTPException:
         log.warning("Failed to send now playing in channel %s", session.text_channel_id)
         return
@@ -4558,6 +4647,13 @@ async def _enforce_guidelines(
             await ctx.message.delete()
         except discord.HTTPException:
             pass
+            
+    if ctx.guild:
+        em = discord.Embed(title="Aviso Automático de Moderação", description=f"O usuário **{ctx.author}** (`{ctx.author.id}`) tentou usar conteúdo bloqueado.", color=0xFF0000)
+        em.add_field(name="Motivo", value=reason, inline=False)
+        em.add_field(name="Canal", value=ctx.channel.mention, inline=False)
+        await guild_config.log_mod_action(ctx.guild, em)
+        
     await _send_private_notice(
         ctx.author, ctx.channel, reason, interaction=interaction,
     )
@@ -6421,6 +6517,8 @@ def register_voice(bot: commands.Bot) -> None:
     async def _global_cmd_rate_limit(ctx: commands.Context) -> bool:
         if ctx.author.bot or not ctx.command:
             return True
+        if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
+            return False # Blacklisted users are silently ignored
         ok, wait = _check_cmd_rate_limit(ctx.author.id, ctx.command.name)
         if not ok:
             raise TiffanyRateLimited(wait, ctx.command.name)
@@ -7768,6 +7866,33 @@ def register_voice(bot: commands.Bot) -> None:
         sess.last_play_status_msg = status
         sess.last_play_status_query = _play_query_key(query)
 
+    @bot.hybrid_command(name="language", aliases=["lang", "idioma"], help="Muda o idioma da Tiffany: t!lang / t!language", description="Abre o painel para selecionar o idioma da Tiffany")
+    async def cmd_language(ctx: commands.Context):
+        if not await _require_dm_access(ctx):
+            return
+        _stats["commands_used"] += 1
+        lang = _ctx_lang(ctx)
+        
+        embed = locale_utils.build_language_select_embed(lang, pink=_BRAND_COLOR)
+        view = locale_utils.LanguageSelectView(lang)
+        
+        msg = await ctx.send(embed=embed, view=view)
+        # Assuming we don't strictly need to track view.message, timeout is 300s.
+
+    @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], help="Abre o painel de moderação da Tiffany (Admins): t!mod / t!mod-panel", description="Abre o painel de configuração da moderação")
+    @commands.has_permissions(administrator=True)
+    async def cmd_mod_panel(ctx: commands.Context):
+        if not await _require_guild(ctx):
+            return
+        _stats["commands_used"] += 1
+        lang = _ctx_lang(ctx)
+        
+        import mod_panel
+        embed = mod_panel.build_mod_panel_embed(ctx.guild, lang, pink=_BRAND_COLOR)
+        view = mod_panel.ModPanelMainView(ctx.guild, lang, pink=_BRAND_COLOR)
+        msg = await ctx.send(embed=embed, view=view)
+        view.message = msg
+
     @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", description="Faz uma pergunta para a Inteligência Artificial")
     @app_commands.describe(question="Sua pergunta para a Tiffany")
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
@@ -8920,6 +9045,39 @@ def register_voice(bot: commands.Bot) -> None:
         em.add_field(name=tr(lang, "stats.offers_today"), value=str(offers_hoje), inline=True)
         await interaction.response.send_message(embed=em, ephemeral=True)
 
+    @bot.tree.command(name="rewind", description="Your personal Tiffany Rewind!")
+    async def slash_rewind(interaction: discord.Interaction):
+        uid = str(interaction.user.id)
+        user_stats = _stats.get("user_songs", {}).get(uid)
+        
+        if not user_stats or user_stats.get("total", 0) == 0:
+            em = discord.Embed(
+                title="🎧 Tiffany Rewind",
+                description="Você ainda não tem um histórico com a Tiffany. Peça mais músicas para gerar o seu Rewind!",
+                color=TIFFANY_PINK
+            )
+            await interaction.response.send_message(embed=em, ephemeral=True)
+            return
+
+        total = user_stats["total"]
+        top_artists = sorted(user_stats.get("top", {}).items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        desc = f"**Você já pediu {total} músicas!**\n\n**Seus artistas/canais favoritos:**\n"
+        for i, (artist, count) in enumerate(top_artists, 1):
+            desc += f"{i}️⃣ **{artist}** ({count} plays)\n"
+            
+        em = discord.Embed(
+            title=f"🎧 O Rewind de {interaction.user.display_name}",
+            description=desc,
+            color=TIFFANY_PINK
+        )
+        if interaction.user.avatar:
+            em.set_thumbnail(url=interaction.user.avatar.url)
+            
+        em.set_footer(text="Continue ouvindo com a Tiffany para atualizar suas estatísticas!")
+        
+        await interaction.response.send_message(embed=em, ephemeral=False)
+
     # ============================
     # WAVELINK EVENT LISTENERS
     # ============================
@@ -8946,6 +9104,9 @@ def register_voice(bot: commands.Bot) -> None:
             session.song_start_time = time.monotonic()
             log.info("Lavalink playing: %s (%.0fs)", track.title, session.current_duration)
             src = _track_source_label(uri) if uri else "YouTube"
+            
+            _track_user_song(session.current_requester_id, track.title)
+            
             asyncio.create_task(_post_now_playing(
                 bot, session, track_title=track.title or "Desconhecido", query=uri,
             ))
