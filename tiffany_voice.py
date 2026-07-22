@@ -8862,6 +8862,9 @@ def register_voice(bot: commands.Bot) -> None:
             )
 
         asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
+        
+        # Start the presence rotation to show /help · High-Quality Audio
+        await start_presence_rotation(bot)
         state = _load_voice_state()
         if not state:
             return
