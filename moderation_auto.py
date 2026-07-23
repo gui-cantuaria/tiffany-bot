@@ -107,6 +107,8 @@ async def _ai_chat_moderation(text: str) -> tuple[bool, str]:
         return False, reason[:120]
     except Exception as e:
         log.debug("AI chat moderation failed: %s", e)
+        if _SCAM_RE.search(text):
+            return True, "Link ou texto suspeito (golpe/phishing)."
         return False, ""
 
 
@@ -132,8 +134,6 @@ def register(bot: commands.Bot) -> None:
     @bot.listen("on_message")
     async def _auto_moderation(message: discord.Message):
         if message.author.bot or not message.guild:
-            return
-        if guild_config.is_blacklisted(message.guild.id, message.author.id):
             return
 
         content = message.content or ""
@@ -193,6 +193,12 @@ def register(bot: commands.Bot) -> None:
         if not guild_config.is_strict_filter_enabled(guild_id):
             return
         if not _needs_ai_scan(content):
+            return
+
+        import tiffany_voice as tv
+        if not tv._ai_rate_limit_consume(
+            guild_id, bucket="moderation", user_id=message.author.id,
+        ):
             return
 
         blocked, reason = await _ai_chat_moderation(content)

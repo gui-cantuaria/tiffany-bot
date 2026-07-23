@@ -73,6 +73,16 @@ def get_blacklist(guild_id: int) -> List[int]:
 def is_blacklisted(guild_id: int, user_id: int) -> bool:
     return user_id in get_blacklist(guild_id)
 
+
+def is_user_blacklisted_anywhere(user_id: int) -> bool:
+    """True if user_id appears on any guild blacklist (used for DM / cross-guild checks)."""
+    _load()
+    uid = int(user_id)
+    for cfg in _cache.values():
+        if uid in cfg.get("blacklist", []):
+            return True
+    return False
+
 def get_offers_channel(guild_id: int) -> Optional[int]:
     return get_guild_config(guild_id).get("offers_channel")
 

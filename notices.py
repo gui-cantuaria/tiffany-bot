@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from locale_utils import slash_ephemeral
 import updates as tiffany_updates
 import owner_dashboard
+import guild_config
 
 try:
     import tiffany_voice
@@ -141,6 +142,11 @@ intents.message_content = True
 intents.members = True
 class _TiffanyCommandTree(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
+        uid = interaction.user.id
+        if interaction.guild and guild_config.is_blacklisted(interaction.guild.id, uid):
+            return False
+        if not interaction.guild and guild_config.is_user_blacklisted_anywhere(uid):
+            return False
         if _voice_available and tiffany_voice:
             return await tiffany_voice.slash_rate_limit_check(interaction)
         return True
@@ -156,6 +162,17 @@ discord_client = commands.Bot(
     # User mentions stay on (intended for the "@author" reply in voice/reroll).
     allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
 )
+
+
+@discord_client.check
+async def _notices_blacklist_check(ctx: commands.Context) -> bool:
+    if ctx.author.bot:
+        return True
+    if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
+        return False
+    if not ctx.guild and guild_config.is_user_blacklisted_anywhere(ctx.author.id):
+        return False
+    return True
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     if OPENROUTER_API_KEY
@@ -2370,7 +2387,17 @@ async def cmd_stats_prefix(ctx: commands.Context):
     if not owner_dashboard.is_bot_owner(ctx.author.id):
         return
     em = owner_dashboard.build_owner_stats_embed(discord_client)
-    await ctx.send(embed=em)
+    try:
+        await ctx.author.send(embed=em)
+        if ctx.guild:
+            await ctx.send("📊 Painel enviado na sua DM.", delete_after=8)
+    except discord.Forbidden:
+        await ctx.send(
+            embed=discord.Embed(
+                description="Não consigo te enviar DM. Ative mensagens privadas ou use `/stats`.",
+                color=0xED4245,
+            ),
+        )
 
 
 @discord_client.command(name="status")

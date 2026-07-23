@@ -15,7 +15,7 @@ from discord.ext import commands
 log = logging.getLogger("tiffany-bot")
 
 BRAND_PINK = 0xFF69B4
-_STATE_FILE = "guild_embeds.json"
+_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guild_embeds.json")
 _cache: dict[str, dict[str, dict[str, Any]]] = {}
 _loaded = False
 
@@ -234,7 +234,8 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="preview", aliases=["pv", "show"])
     async def emb_preview(ctx: commands.Context, name: str):
-        if not ctx.guild:
+        if not _perm_check(ctx):
+            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
             return
         name = (name or "").strip().lower()
         data = _guild_bucket(ctx.guild.id).get(name)
@@ -262,7 +263,8 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="list", aliases=["ls"])
     async def emb_list(ctx: commands.Context):
-        if not ctx.guild:
+        if not _perm_check(ctx):
+            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
             return
         names = sorted(_guild_bucket(ctx.guild.id).keys())
         if not names:

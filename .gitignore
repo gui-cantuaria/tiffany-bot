@@ -31,6 +31,10 @@ offers_history.json
 price_monitors.json
 playlists.json
 dice_macros.json
+user_lang_prefs.json
+guild_embeds.json
+giveaways.json
+guild_config.json
 
 # Editor / local tooling
 .claude/

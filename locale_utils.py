@@ -23,7 +23,7 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
     ("de", "de"),
 )
 
-_USER_LANG_FILE = "user_lang_prefs.json"
+_USER_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_lang_prefs.json")
 _user_lang_cache: dict[str, GuildLang] = {}
 
 

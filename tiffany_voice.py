@@ -245,6 +245,8 @@ async def _require_dm_access(ctx: commands.Context) -> bool:
     """DM: chat/game/summary/dice — require at least one shared server (anti-abuse)."""
     if ctx.guild:
         return True
+    if guild_config.is_user_blacklisted_anywhere(ctx.author.id):
+        return False
     if not _dm_require_shared_guild():
         return True
     if await _user_shares_guild_with_bot(ctx.bot, ctx.author.id):
@@ -1399,6 +1401,11 @@ async def slash_rate_limit_check(interaction: discord.Interaction) -> bool:
     """Global slash rate limit — use via CommandTree.interaction_check override (discord.py 2.5+)."""
     if interaction.user.bot or not interaction.command:
         return True
+    uid = interaction.user.id
+    if interaction.guild and guild_config.is_blacklisted(interaction.guild.id, uid):
+        return False
+    if not interaction.guild and guild_config.is_user_blacklisted_anywhere(uid):
+        return False
     name = interaction.command.name
     ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
     if not ok:
@@ -1492,6 +1499,7 @@ _AI_BUCKET_MAX: dict[str, int] = {
     "summary": 4,
     "voice": 6,
     "song": 4,
+    "moderation": 12,
 }
 _bucket_ai_calls: dict[str, collections.deque] = {
     name: collections.deque() for name in _AI_BUCKET_MAX
@@ -6615,11 +6623,13 @@ def register_voice(bot: commands.Bot) -> None:
     async def _global_cmd_rate_limit(ctx: commands.Context) -> bool:
         if ctx.author.bot or not ctx.command:
             return True
+        if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
+            return False  # Blacklisted users are silently ignored
+        if not ctx.guild and guild_config.is_user_blacklisted_anywhere(ctx.author.id):
+            return False
         # Hybrid slash path is already limited in CommandTree.interaction_check.
         if ctx.interaction is not None:
             return True
-        if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
-            return False # Blacklisted users are silently ignored
         ok, wait = _check_cmd_rate_limit(ctx.author.id, ctx.command.name)
         if not ok:
             raise TiffanyRateLimited(wait, ctx.command.name, slash=False)

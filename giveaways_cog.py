@@ -19,7 +19,8 @@ from discord.ext import commands, tasks
 log = logging.getLogger("tiffany-bot")
 
 BRAND_PINK = 0xFF69B4
-_STATE_FILE = "giveaways.json"
+_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giveaways.json")
+_MAX_ENTRIES_PER_GW = 10_000
 _state: dict[str, Any] = {"active": {}, "ended": {}}
 _loaded = False
 
@@ -110,6 +111,9 @@ class GiveawayEnterView(discord.ui.View):
         self.add_item(btn)
 
     async def _enter_callback(self, interaction: discord.Interaction):
+        if interaction.user.bot:
+            await interaction.response.send_message("Bots não podem participar.", ephemeral=True)
+            return
         _load_state()
         gw = _state["active"].get(self.giveaway_id)
         if not gw:
@@ -124,6 +128,11 @@ class GiveawayEnterView(discord.ui.View):
         entries = gw.setdefault("entries", [])
         if uid in entries:
             await interaction.response.send_message("Você já está participando! 🎀", ephemeral=True)
+            return
+        if len(entries) >= _MAX_ENTRIES_PER_GW:
+            await interaction.response.send_message(
+                "Este sorteio atingiu o limite de participantes.", ephemeral=True,
+            )
             return
         entries.append(uid)
         _save_state()

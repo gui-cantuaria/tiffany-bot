@@ -16,12 +16,19 @@ TIFFANY_PINK = 0xFF69B4
 _BASE = os.path.dirname(os.path.abspath(__file__))
 
 
-def bot_owner_id() -> int:
-    return int(os.getenv("BOT_OWNER_ID", "842799130630815754"))
+def bot_owner_id() -> Optional[int]:
+    raw = os.getenv("BOT_OWNER_ID", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def is_bot_owner(user_id: int) -> bool:
-    return int(user_id) == bot_owner_id()
+    oid = bot_owner_id()
+    return oid is not None and int(user_id) == oid
 
 
 def _read_json(path: str) -> dict[str, Any]:
