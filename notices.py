@@ -27,7 +27,11 @@ try:
     _voice_available = True
 except Exception as _ve:
     import logging as _log_tmp
-    _log_tmp.getLogger("tiffany-bot").warning("tiffany_voice failed to load (%s) — voice commands disabled.", _ve)
+    _log_tmp.getLogger("tiffany-bot").warning(
+        "tiffany_voice failed to load (%s) — voice commands disabled.",
+        _ve,
+        exc_info=True,
+    )
     tiffany_voice = None
     _voice_available = False
 
@@ -149,8 +153,6 @@ discord_client = commands.Bot(
     # User mentions stay on (intended for the "@author" reply in voice/reroll).
     allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
 )
-if _voice_available and tiffany_voice:
-    tiffany_voice.register_voice(discord_client)
 ai_client = (
     AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
     if OPENROUTER_API_KEY
@@ -2192,6 +2194,8 @@ async def on_message(message: discord.Message):
 @discord_client.event
 async def on_guild_join(guild: discord.Guild):
     """Welcome message when a new server adds Tiffany — highlights value for admins."""
+    if not _voice_available or not tiffany_voice:
+        return
     try:
         em = tiffany_voice.build_welcome_embed(guild, discord_client)
         invite = tiffany_voice.bot_invite_url(discord_client)
@@ -2213,7 +2217,17 @@ async def on_guild_join(guild: discord.Guild):
 
 @discord_client.event
 async def on_ready():
+    global _voice_available
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
+    if _voice_available and tiffany_voice:
+        try:
+            tiffany_voice.register_voice(discord_client)
+            log.info("Voice commands registered (t! + slash).")
+        except Exception:
+            log.exception("register_voice failed — voice/prefix/slash commands disabled.")
+            _voice_available = False
+    else:
+        log.warning("Voice module unavailable — t! commands and /help will not work.")
     if _voice_available and tiffany_voice:
         await tiffany_voice.start_presence_rotation(discord_client)
     else:
@@ -2314,8 +2328,8 @@ async def cmd_status(interaction: discord.Interaction):
         conexao_txt = f"instável ({lat_ms} ms)"
 
     em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
-    em.add_field(name="🎵 Música & comandos", value="Disponíveis", inline=True)
     if _voice_available and tiffany_voice:
+        em.add_field(name="🎵 Música & comandos", value="Disponíveis", inline=True)
         warp_ok = tiffany_voice.check_warp_proxy_ok()
         em.add_field(
             name="🌐 WARP (YouTube)",
@@ -2324,6 +2338,12 @@ async def cmd_status(interaction: discord.Interaction):
                 if warp_ok
                 else "Offline — música pode falhar"
             ),
+            inline=True,
+        )
+    else:
+        em.add_field(
+            name="🎵 Música & comandos",
+            value="Indisponíveis — módulo de voz não carregou (reinicie após deploy)",
             inline=True,
         )
     em.add_field(
