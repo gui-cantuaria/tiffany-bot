@@ -35,5 +35,4 @@ jobs:
       - name: Run unit tests
         env:
           PYTHONUTF8: '1'
-        run: |
-          echo "Unit tests temporarily disabled"
+        run: python -m unittest test_smoke -v

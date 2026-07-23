@@ -180,11 +180,8 @@ async def _require_voice(ctx: commands.Context) -> bool:
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
-    if ctx.interaction and ctx.interaction.locale:
-        loc = str(ctx.interaction.locale.value).lower()
-        if loc.startswith("es"): return "es"
-        if not loc.startswith("pt"): return "en"
-    return resolve_guild_lang(ctx.guild)
+    user_id = ctx.author.id if ctx.author else None
+    return locale_utils.resolve_lang(ctx.guild, user_id)
 
 
 def _ctx_guild_id(ctx: commands.Context) -> int:
@@ -2928,6 +2925,11 @@ _MUSIC_PLATFORM_OEMBED = {
     "music.youtube.com": None,  # convert to youtube.com and treat as direct YouTube URL
     "music.amazon": None,  # no oEmbed, resolve via URL parsing
     "amazon.com/music": None,
+    "tidal.com": None,
+    "listen.tidal.com": None,
+    "music.yandex": None,
+    "yandex.ru/music": None,
+    "yandex.com/music": None,
 }
 
 
@@ -3135,6 +3137,40 @@ async def _amazon_music_url_to_search(url: str) -> Optional[str]:
     return None
 
 
+async def _scrape_og_title_search(url: str, *, label: str) -> Optional[str]:
+    """Scrape og:title from a music page and return ytsearch query."""
+    try:
+        import aiohttp as _aiohttp
+        async with _aiohttp.ClientSession() as sess:
+            async with sess.get(
+                url,
+                timeout=_aiohttp.ClientTimeout(total=5),
+                headers={"User-Agent": "Mozilla/5.0"},
+            ) as r:
+                if r.status != 200:
+                    return None
+                html = await r.text()
+                og = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html)
+                if not og:
+                    return None
+                raw = og.group(1).strip()
+                if len(raw) < 3:
+                    return None
+                log.info("%s scraping: %s → %s", label, url[:60], raw[:80])
+                return f"ytsearch1:{raw}"
+    except Exception as e:
+        log.debug("%s scraping failed: %s", label, e)
+    return None
+
+
+async def _tidal_url_to_search(url: str) -> Optional[str]:
+    return await _scrape_og_title_search(url, label="Tidal")
+
+
+async def _yandex_music_url_to_search(url: str) -> Optional[str]:
+    return await _scrape_og_title_search(url, label="Yandex Music")
+
+
 def _is_playlist_url(url: str) -> bool:
     """Detect whether URL is a playlist (YouTube, Spotify, Deezer).
     Ignores YouTube Radio/Mix (list=RD...) which are auto-generated."""
@@ -3311,6 +3347,11 @@ async def _music_platform_to_search(url: str) -> Optional[str]:
     # Amazon Music: no oEmbed, extract from URL
     if "amazon" in platform:
         return await _amazon_music_url_to_search(url)
+    # Tidal / Yandex Music: scrape og:title → YouTube search
+    if "tidal" in platform:
+        return await _tidal_url_to_search(url)
+    if "yandex" in platform and "music" in url.lower():
+        return await _yandex_music_url_to_search(url)
 
     import aiohttp as _aiohttp
 
@@ -3759,7 +3800,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("cl", ["clear"], "t!cl / t!clear — limpar fila"),
     ("l", ["loop", "lo"], "t!l / t!loop — loop on/off"),
     ("sh", ["shuffle"], "t!sh / t!shuffle — embaralhar fila"),
-    ("rp", ["replay"], "t!rp / t!replay — repetir do início"),
+    ("rpl", ["replay"], "t!replay — repetir do início"),
     ("q", ["queue", "np"], "t!q / t!queue — fila + música tocando agora"),
     ("r", ["random"], "t!r / t!random — música aleatória (sem repetir na fila/sessão)"),
     ("pl", ["playlist"], "t!pl save|load|list|del <nome>"),
@@ -3771,6 +3812,9 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
+    ("gw", ["giveaway"], "t!gw create|end|reroll|list — sorteios"),
+    ("emb", ["embed"], "t!emb create|edit|send|list — embeds customizados"),
+    ("rp", ["roleplay"], "t!rp / t!roleplay <mensagem> — conversa casual com personalidade"),
 ]
 
 def build_about_embed(
@@ -3970,6 +4014,10 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
             return "Apple Music"
         if "amazon" in p:
             return "Amazon Music"
+        if "tidal" in p:
+            return "Tidal"
+        if "yandex" in p and "music" in q:
+            return "Yandex Music"
         if "music.youtube" in p:
             return "YouTube Music"
         return "Streaming"
@@ -3980,6 +4028,12 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
         return "YouTube"
     if "soundcloud" in q or q.startswith("scsearch"):
         return "SoundCloud"
+    if "bandcamp.com" in q:
+        return "Bandcamp"
+    if "tidal.com" in q or "listen.tidal.com" in q:
+        return "Tidal"
+    if "music.yandex" in q or "yandex.ru/music" in q or "yandex.com/music" in q:
+        return "Yandex Music"
     return "YouTube"
 
 
@@ -3992,6 +4046,9 @@ _PLATFORM_ICON_DOMAINS: dict[str, str] = {
     "Apple Music": "music.apple.com",
     "Amazon Music": "music.amazon.com",
     "SoundCloud": "soundcloud.com",
+    "Bandcamp": "bandcamp.com",
+    "Tidal": "tidal.com",
+    "Yandex Music": "music.yandex.ru",
 }
 
 # Platform label -> inline emoji (Discord descriptions can't render logo images;
@@ -4004,6 +4061,9 @@ _PLATFORM_EMOJI: dict[str, str] = {
     "Apple Music": "🍎",
     "Amazon Music": "🛒",
     "SoundCloud": "☁️",
+    "Bandcamp": "🎸",
+    "Tidal": "🌊",
+    "Yandex Music": "🇷🇺",
 }
 
 
@@ -7873,7 +7933,7 @@ def register_voice(bot: commands.Bot) -> None:
         _stats["commands_used"] += 1
         lang = _ctx_lang(ctx)
         
-        embed = locale_utils.build_language_select_embed(lang, pink=_BRAND_COLOR)
+        embed = locale_utils.build_language_select_embed(lang, pink=TIFFANY_PINK)
         view = locale_utils.LanguageSelectView(lang)
         
         msg = await ctx.send(embed=embed, view=view)
@@ -7888,8 +7948,8 @@ def register_voice(bot: commands.Bot) -> None:
         lang = _ctx_lang(ctx)
         
         import mod_panel
-        embed = mod_panel.build_mod_panel_embed(ctx.guild, lang, pink=_BRAND_COLOR)
-        view = mod_panel.ModPanelMainView(ctx.guild, lang, pink=_BRAND_COLOR)
+        embed = mod_panel.build_mod_panel_embed(ctx.guild, lang, pink=TIFFANY_PINK)
+        view = mod_panel.ModPanelMainView(ctx.guild, lang, pink=TIFFANY_PINK)
         msg = await ctx.send(embed=embed, view=view)
         view.message = msg
 
@@ -7959,6 +8019,93 @@ def register_voice(bot: commands.Bot) -> None:
                 await _ctx_reply(ctx, f"💬 {answer}")
         except discord.HTTPException:
             await _ctx_reply(ctx, f"💬 {answer}")
+
+    @bot.hybrid_command(
+        name="roleplay",
+        aliases=["rp"],
+        help="Conversa casual com a Tiffany (personalidade roleplay): t!rp / t!roleplay <mensagem>",
+        description="Conversa casual com a Tiffany em modo roleplay",
+    )
+    @app_commands.describe(message="O que você quer dizer para a Tiffany")
+    async def cmd_roleplay(ctx: commands.Context, *, message: str = ""):
+        if not await _require_dm_access(ctx):
+            return
+        _stats["commands_used"] += 1
+        if ctx.guild:
+            _touch_activity(ctx.guild.id)
+        lang = _ctx_lang(ctx)
+
+        if not (message and message.strip()):
+            await _ctx_reply(
+                ctx,
+                "💬 **`t!rp <mensagem>`** — a Tiffany responde num tom casual, como pessoa.\n"
+                "Exemplo: `t!rp e aí, o que você acha desse jogo?`",
+            )
+            return
+
+        message = message.strip()
+        nested = _nested_command_hint(message)
+        if nested:
+            await _ctx_reply(ctx, nested, delete_after=18)
+            return
+
+        if _contains_blocked_content(message) or await _should_block_content(message, ctx.guild.id if ctx.guild else None):
+            await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
+            return
+
+        allowed, remaining = _check_cooldown(ctx.author.id)
+        if not allowed:
+            await _ctx_reply(ctx, f"⏳ Aguarde {remaining}s antes de usar de novo.")
+            return
+        gid, uid = _ai_rl_ids(ctx)
+        ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid)
+        if not ok:
+            await _ctx_reply(ctx, _rate_limit_message(lang, reason), delete_after=8)
+            return
+
+        thinking = await _ctx_reply(ctx, tr(lang, "roleplay.thinking"))
+        client = _get_openrouter_client()
+        if client is None:
+            await _ctx_reply(ctx, tr(lang, "err.api_key"))
+            return
+        if not _ai_rate_limit_consume(gid, bucket="chat", user_id=uid):
+            await _ctx_reply(ctx, tr(lang, "err.rate_limit"))
+            return
+
+        system_prompt = locale_utils.roleplay_system_prompt(lang)
+        try:
+            async with _ai_semaphore:
+                resp = await client.chat.completions.create(
+                    model="google/gemini-3.1-flash-lite",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message[:800]},
+                    ],
+                    max_tokens=320,
+                    temperature=0.85,
+                    timeout=20.0,
+                )
+        except Exception:
+            log.exception("Roleplay AI call failed")
+            await _ctx_reply(ctx, tr(lang, "err.rate_limit"))
+            return
+
+        answer = (resp.choices[0].message.content or "").strip()
+        if not answer:
+            answer = "Hmm… perdi o fio da meada. Manda de novo?"
+        if len(answer) > 1500:
+            answer = answer[:1497].rsplit(" ", 1)[0] + "…"
+        if await _should_block_content(answer, ctx.guild.id if ctx.guild else None):
+            await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
+            return
+
+        try:
+            if thinking:
+                await thinking.edit(embed=_embed(f"🎭 {answer}"))
+            else:
+                await _ctx_reply(ctx, f"🎭 {answer}")
+        except discord.HTTPException:
+            await _ctx_reply(ctx, f"🎭 {answer}")
 
     @bot.hybrid_command(
         name="game",
@@ -8209,7 +8356,7 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.done", count=len(session.queue_display))))
 
-    @bot.hybrid_command(name="replay", aliases=["rp"], help="Repete a música atual: t!rp / t!replay", description="Repete a música que está tocando no momento")
+    @bot.hybrid_command(name="replay", aliases=["rpl"], help="Repete a música atual: t!replay / t!rpl", description="Repete a música que está tocando no momento")
     async def cmd_replay(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
@@ -8991,7 +9138,9 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(name="help", description="Shows all Tiffany commands")
     async def slash_help(interaction: discord.Interaction):
-        em = locale_utils.build_help_embed(interaction.guild, pink=TIFFANY_PINK)
+        em = locale_utils.build_help_embed(
+            interaction.guild, interaction.user.id, pink=TIFFANY_PINK,
+        )
         await interaction.response.send_message(embed=em, ephemeral=True)
 
 
@@ -9191,3 +9340,8 @@ def register_voice(bot: commands.Bot) -> None:
     log.info("Voice commands registered (/help, /about, t!play, t!shuffle, t!roll, ...)")
     if not _voice_enabled():
         log.warning("VOICE_ENABLED=0 — music/voice commands will reject until .env is updated.")
+    try:
+        import moderation_auto
+        moderation_auto.register(bot)
+    except Exception:
+        log.exception("Failed to register auto-moderation listener")

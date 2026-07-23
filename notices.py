@@ -2150,9 +2150,10 @@ async def _verificar_feeds_inner():
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "loop", "play", "chat", "seek", "nonstop", "queue", "language", "mod-panel", "modpanel",
-    "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rp", "ap", "ly", "cp", "l",
-    "lang", "mod",
+    "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
+    "embed",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
+    "lang", "mod", "gw", "emb", "rp", "roleplay",
     "247",
     "s", "c", "p", "r", "q", "g",
 )
@@ -2224,6 +2225,14 @@ async def on_ready():
             log.info("🛒 Offers Cog loaded successfully.")
         except Exception as e:
             log.error(f"❌ Failed to load Offers Cog: {e}")
+    for ext in ("giveaways_cog", "embed_builder_cog"):
+        cog_name = {"giveaways_cog": "GiveawaysCog", "embed_builder_cog": "EmbedBuilderCog"}[ext]
+        if not discord_client.get_cog(cog_name):
+            try:
+                await discord_client.load_extension(ext)
+                log.info("%s loaded successfully.", ext)
+            except Exception as e:
+                log.error("Failed to load %s: %s", ext, e)
     # Sync slash commands (Discord builds the profile "Commands" tab from these)
     try:
         # Remove legacy guild-specific duplicates

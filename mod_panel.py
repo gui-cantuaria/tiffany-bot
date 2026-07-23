@@ -29,6 +29,21 @@ def build_mod_panel_embed(guild: discord.Guild, lang: GuildLang, *, pink: int) -
     
     return embed
 
+
+def _is_panel_admin(interaction: discord.Interaction) -> bool:
+    if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        return False
+    return interaction.user.guild_permissions.administrator
+
+
+async def _deny_panel_admin(interaction: discord.Interaction) -> None:
+    msg = "Precisa da permissão **Administrador** para usar o painel de moderação."
+    if interaction.response.is_done():
+        await interaction.followup.send(msg, ephemeral=True)
+    else:
+        await interaction.response.send_message(msg, ephemeral=True)
+
+
 class ModPanelMainView(View):
     def __init__(self, guild: discord.Guild, lang: GuildLang, *, pink: int):
         super().__init__(timeout=300)
@@ -64,6 +79,12 @@ class ModPanelMainView(View):
         btn_affiliates = Button(label="Tags de Afiliado", style=discord.ButtonStyle.success, row=3)
         btn_affiliates.callback = self.config_affiliates
         self.add_item(btn_affiliates)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_panel_admin(interaction):
+            return True
+        await _deny_panel_admin(interaction)
+        return False
 
     async def _update(self, interaction: discord.Interaction):
         guild_config.save_guild_config(self.guild.id, self.config)
@@ -104,6 +125,12 @@ class RoleSelectView(View):
     def __init__(self, parent_view: ModPanelMainView):
         super().__init__(timeout=120)
         self.parent = parent_view
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_panel_admin(interaction):
+            return True
+        await _deny_panel_admin(interaction)
+        return False
         
     @discord.ui.select(cls=RoleSelect, placeholder="Selecione o cargo de DJ")
     async def select_role(self, interaction: discord.Interaction, select: RoleSelect):
@@ -122,6 +149,12 @@ class ChannelSelectView(View):
     def __init__(self, parent_view: ModPanelMainView):
         super().__init__(timeout=120)
         self.parent = parent_view
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_panel_admin(interaction):
+            return True
+        await _deny_panel_admin(interaction)
+        return False
         
     @discord.ui.select(cls=ChannelSelect, channel_types=[discord.ChannelType.text], placeholder="Selecione o canal de logs")
     async def select_channel(self, interaction: discord.Interaction, select: ChannelSelect):
@@ -140,6 +173,12 @@ class BlacklistView(View):
     def __init__(self, parent_view: ModPanelMainView):
         super().__init__(timeout=120)
         self.parent = parent_view
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_panel_admin(interaction):
+            return True
+        await _deny_panel_admin(interaction)
+        return False
         
     @discord.ui.select(cls=UserSelect, placeholder="Selecione usuários para dar/remover blacklist", max_values=5)
     async def select_users(self, interaction: discord.Interaction, select: UserSelect):
@@ -154,8 +193,8 @@ class BlacklistView(View):
                 bl.append(user.id)
                 added.append(user.display_name)
         self.parent.config["blacklist"] = bl
-        msg = "Blacklist atualizada:\\n"
-        if added: msg += f"Adicionados: {', '.join(added)}\\n"
+        msg = "Blacklist atualizada:\n"
+        if added: msg += f"Adicionados: {', '.join(added)}\n"
         if removed: msg += f"Removidos: {', '.join(removed)}"
         await interaction.response.send_message(msg, ephemeral=True)
         await self.parent._update(interaction)
@@ -164,6 +203,12 @@ class OffersChannelSelectView(View):
     def __init__(self, parent_view: ModPanelMainView):
         super().__init__(timeout=120)
         self.parent = parent_view
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_panel_admin(interaction):
+            return True
+        await _deny_panel_admin(interaction)
+        return False
         
     @discord.ui.select(cls=ChannelSelect, channel_types=[discord.ChannelType.text], placeholder="Selecione o canal de Ofertas")
     async def select_channel(self, interaction: discord.Interaction, select: ChannelSelect):
@@ -196,6 +241,9 @@ class AffiliateModal(discord.ui.Modal, title="Configurar Tags de Afiliado"):
         self.shopee.default = tags.get("shopee_id", "")
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not _is_panel_admin(interaction):
+            await _deny_panel_admin(interaction)
+            return
         tags = self.parent.config.get("affiliate_tags", {})
         
         def _set(key, val):

@@ -36,8 +36,7 @@ jobs:
       - name: Run unit tests
         env:
           PYTHONUTF8: '1'
-        run: |
-          echo "Unit tests temporarily disabled"
+        run: python -m unittest test_smoke -v
 
   deploy:
     needs: test
@@ -70,4 +69,4 @@ jobs:
             -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \
-            root@"$VPS_HOST" "export DEPLOY_MODE=docker && bash /opt/tiffany-bot/scripts/deploy.sh"
+            root@"$VPS_HOST" "export DEPLOY_MODE=systemd && bash /opt/tiffany-bot/scripts/deploy.sh"

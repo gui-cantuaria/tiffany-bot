@@ -294,6 +294,57 @@ _PARTS_RESERVE_CATEGORIES = (
     "Gabinete",
 )
 _SYSTEM_RESERVE_CATEGORIES = ("Monitor", "Notebook", "PC Gamer")
+
+# Mod-panel tokens (guild_config allowed_categories) → real deal category names
+_GUILD_PANEL_CATEGORY_MAP: dict[str, frozenset[str]] = {
+    "hardware": _PARTS_CATEGORIES | _SYSTEM_HARDWARE_CATEGORIES | frozenset({
+        "Hardware PC", "Hardware e periféricos",
+    }),
+    "monitores": frozenset({"Monitor"}),
+    "monitor": frozenset({"Monitor"}),
+    "periféricos": _PERIPHERAL_CATEGORIES,
+    "perifericos": _PERIPHERAL_CATEGORIES,
+    "acessórios": frozenset({"Suporte e Acessórios", "Mousepad", "Cadeira"}),
+    "acessorios": frozenset({"Suporte e Acessórios", "Mousepad", "Cadeira"}),
+    "jogos": frozenset(),
+    "outros": frozenset({"Adaptadores e rede", "TV", "Tablet", "Celular", "Cadeira"}),
+}
+
+
+def _deal_matches_guild_categories(deal_category: str, allowed_tokens: list) -> bool:
+    """True when deal category matches guild panel tokens (empty list = post all)."""
+    if not allowed_tokens:
+        return True
+    deal_cat = (deal_category or "").strip()
+    if not deal_cat:
+        return False
+    deal_lower = deal_cat.lower()
+    for token in allowed_tokens:
+        t = (token or "").strip().lower()
+        if not t:
+            continue
+        if t in deal_lower or deal_lower in t:
+            return True
+        mapped = _GUILD_PANEL_CATEGORY_MAP.get(t)
+        if mapped and deal_cat in mapped:
+            return True
+    return False
+
+
+async def _resolve_offers_channel(channel_id: int):
+    """Resolve text channel by ID (cache first, then fetch)."""
+    if not channel_id or _bot is None:
+        return None
+    ch = _bot.get_channel(channel_id)
+    if ch:
+        return ch
+    try:
+        return await _bot.fetch_channel(channel_id)
+    except Exception as e:
+        log.error("Offers channel %s not found: %s", channel_id, e)
+        return None
+
+
 _ENRICH_CAP = 40
 _ENRICH_HARDWARE_CAP = 32
 # Max posts per category per cycle — hardware-first, peripherals + chairs enabled.
@@ -2136,7 +2187,7 @@ async def _run_deals_cycle_inner() -> None:
     guilds = guild_config.get_all_guilds_config()
     targets = []
 
-    primary_channel = _bot.get_channel(CANAL_OFERTAS_ID)
+    primary_channel = await _resolve_offers_channel(CANAL_OFERTAS_ID)
     if primary_channel:
         targets.append({
             "channel": primary_channel,
@@ -2149,13 +2200,13 @@ async def _run_deals_cycle_inner() -> None:
         ch_id = conf.get("offers_channel")
         if not ch_id or ch_id == CANAL_OFERTAS_ID:
             continue
-        ch = _bot.get_channel(ch_id)
+        ch = await _resolve_offers_channel(int(ch_id))
         if ch:
             targets.append({
                 "channel": ch,
                 "is_primary": False,
                 "tags": conf.get("affiliate_tags", {}),
-                "categories": [c.lower() for c in conf.get("allowed_categories", [])]
+                "categories": [c.lower() for c in conf.get("allowed_categories", [])],
             })
 
     if not targets:
@@ -2169,13 +2220,12 @@ async def _run_deals_cycle_inner() -> None:
         if deal.get("image"):
             img_data = await _download_image(http_session, deal["image"])
 
-        deal_cat = deal.get("category", "").lower()
+        deal_cat = deal.get("category", "")
         posted_any = False
 
         for target in targets:
-            # Check category allowed
             allowed = target["categories"]
-            if allowed and not any(a in deal_cat for a in allowed) and deal_cat not in allowed:
+            if not _deal_matches_guild_categories(deal_cat, allowed):
                 continue
 
             # 50/50 Logic
@@ -2231,6 +2281,11 @@ async def _run_deals_cycle_inner() -> None:
             if posted < MAX_POSTS_POR_CICLO:
                 await asyncio.sleep(POST_SPACING_SEC)
 
+    if approved and posted == 0:
+        log.error(
+            "Approved %d deals but posted 0 — check CANAL_OFERTAS_ID, guild offers_channel, or category filters",
+            len(approved),
+        )
     log.info(f"=== Cycle finished: {posted} deals posted ===")
 
 

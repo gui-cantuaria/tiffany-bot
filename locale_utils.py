@@ -144,6 +144,31 @@ def chat_system_prompt(lang: GuildLang) -> str:
     )
 
 
+def roleplay_system_prompt(lang: GuildLang) -> str:
+    """Casual persona for t!rp / /roleplay — warmer than t!c, still safe."""
+    if lang == "pt":
+        default_lang = "Brazilian Portuguese (PT-BR)"
+    elif lang == "es":
+        default_lang = "Spanish"
+    elif lang == "fr":
+        default_lang = "French"
+    elif lang == "de":
+        default_lang = "German"
+    else:
+        default_lang = "English"
+    return (
+        "You are Tiffany — a friendly, witty young woman chatting casually on Discord.\n"
+        "ROLEPLAY MODE: talk like a real person hanging out, not like a formal assistant.\n"
+        "- Short messages (1-3 sentences). Light humor ok. Emojis sparingly (0-1).\n"
+        f"- Reply in {default_lang} unless the user writes in another language.\n"
+        "- Stay in character as Tiffany; you love games, tech, music and memes.\n"
+        "- Never claim to be human or deny being a bot if asked directly — be playful but honest.\n"
+        "- Refuse sexual content, hate, scams, illegal stuff, slurs, dictators/glorification.\n"
+        "- No commands list unless user asks for bot help — then mention t!p, t!g, /help briefly.\n"
+        "- Creator is Tuffine only if asked.\n"
+    )
+
+
 def summary_system_prompt(lang: GuildLang) -> str:
     if lang == "pt":
         out = "Brazilian Portuguese"
@@ -292,6 +317,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- Dice in chat (no prefix): d20, D20+7, 4d6, c50+50, adv, stats\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
     "- Slash: /help, /about, /queue, /status, /stats, /player-status, /language, /mod-panel\n"
+    "- /giveaway (t!gw) — sorteios · /embed (t!emb) — embeds customizados · /roleplay (t!rp) — chat casual\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
     "'Tiffany, [question]' (music pauses while answering)\n"
@@ -547,6 +573,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "\n\n_(respuesta acortada — pide más detalle si hace falta)_",
         "fr": "_(réponse abrégée — demandez plus de détails si nécessaire)_",
         "pt": "\n\n_(resposta encurtada — peça mais detalhes se precisar)_",
+    },
+    "roleplay.thinking": {
+        "de": "💭 Moment…",
+        "en": "💭 One sec…",
+        "es": "💭 Un momento…",
+        "fr": "💭 Un instant…",
+        "pt": "💭 Só um instantinho…",
     },
     "chat.usage.image": {
         "de": "💬 Verwendung: `t!c <Frage>` — oder fügen Sie ein Bild bei.",
