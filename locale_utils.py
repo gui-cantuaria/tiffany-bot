@@ -10,6 +10,11 @@ import discord
 
 GuildLang = Literal["en", "es", "pt", "fr", "de"]
 
+
+def slash_ephemeral(interaction: discord.Interaction) -> bool:
+    """Ephemeral in guild channels; normal send in DMs (already private)."""
+    return interaction.guild is not None
+
 # Discord locale prefix → Tiffany language
 _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
     ("pt", "pt"),
@@ -290,7 +295,10 @@ class LanguageSelect(discord.ui.Select):
             return
         new_lang = self.values[0]
         set_user_lang(interaction.user.id, new_lang)  # type: ignore
-        await interaction.response.send_message(tr(new_lang, "lang.changed"), ephemeral=True)
+        await interaction.response.send_message(
+            tr(new_lang, "lang.changed"),
+            ephemeral=slash_ephemeral(interaction),
+        )
 
 
 class LanguageSelectView(discord.ui.View):
@@ -316,7 +324,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- Dice in chat (no prefix): d20, D20+7, 4d6, c50+50, adv, stats\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
-    "- Slash: /help, /about, /queue, /status, /stats, /player-status, /language, /mod-panel\n"
+    "- Slash: /help, /about, /queue, /status, /stats, /updates, /player-status, /language, /mod-panel\n"
     "- /giveaway (t!gw) — sorteios · /embed (t!emb) — embeds customizados · /roleplay (t!rp) — chat casual\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
@@ -1522,19 +1530,29 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎮 **Uso:** `t!g` ou `t!game` <filtros em linguagem natural>",
     },
     "help.chat.body": {
-        "de": "`/chat` — Frag die KI (Bilder OK)\n" "`/game` — Spiele (Steam/Epic)\n" "`/summary` — Einen Link zusammenfassen",
-        "en": "`/chat` — Ask anything (images OK)\n" "`/game` — Game finder (Steam/Epic)\n" "`/summary` — Summarize a link",
-        "es": "`/chat` — Pregunta a la IA (imágenes OK)\n" "`/game` — Juegos (Steam/Epic)\n" "`/summary` — Resumir un link",
-        "fr": "`/chat` — Demandez à l'IA (images OK)\n" "`/game` — Jeux (Steam/Epic)\n" "`/summary` — Résumer un lien",
-        "pt": "`/chat` — Pergunte à IA (imagens OK)\n" "`/game` — Jogos (Steam/Epic)\n" "`/summary` — Resumir um link",
+        "de": "`/chat` — KI-Fragen (Bilder OK)\n" "`/roleplay` — lockerer Chat\n" "`/game` — Spiele (Steam/Epic)",
+        "en": "`/chat` — AI questions (images OK)\n" "`/roleplay` — casual chat\n" "`/game` — games (Steam/Epic)",
+        "es": "`/chat` — IA (imágenes OK)\n" "`/roleplay` — chat casual\n" "`/game` — juegos (Steam/Epic)",
+        "fr": "`/chat` — IA (images OK)\n" "`/roleplay` — chat décontracté\n" "`/game` — jeux (Steam/Epic)",
+        "pt": "`/chat` — pergunte à IA (imagens OK)\n" "`/roleplay` — conversa casual\n" "`/game` — jogos (Steam/Epic)",
     },
     "help.chat.title": {"de": "💬 Chat & AI", "en": "💬 Chat & AI", "es": "💬 Chat & AI", "fr": "💬 Chat & AI", "pt": "💬 Chat & AI"},
     "help.desc": {
-        "de": "🎶 High-Quality Audio & AI Bot.\nVerwende das Präfix **`t!`** oder **`/`**. Tritt dem Voice bei → **`/play`**.",
-        "en": "🎶 High-Quality Audio & AI Bot.\nUse **`t!`** or **`/`** prefix. Join voice → **`/play`**.",
-        "es": "🎶 High-Quality Audio & AI Bot.\nUsa prefijo **`t!`** o **`/`**. Entra en voz → **`/play`**.",
-        "fr": "🎶 High-Quality Audio & AI Bot.\nUtilisez le préfixe **`t!`** ou **`/`**. Rejoignez le vocal → **`/play`**.",
-        "pt": "🎶 Áudio de Alta Qualidade e Inteligência Artificial.\nUse prefixo **`t!`** ou **`/`**. Entre na voz → **`/play`**.",
+        "de": "Musik im Voice, KI-Chat, Würfel und Tech-News.\n"
+        "Präfix **`t!`** oder **`/`** · Voice beitreten → **`/play`**.\n"
+        "**`/status`** = läuft alles? · **`/stats`** = Nutzungszahlen · **`/updates`** = Changelog",
+        "en": "Music in voice, AI chat, dice, and tech news.\n"
+        "Prefix **`t!`** or **`/`** · join voice → **`/play`**.\n"
+        "**`/status`** = is she healthy? · **`/stats`** = usage counters · **`/updates`** = changelog",
+        "es": "Música en voz, chat IA, dados y noticias tech.\n"
+        "Prefijo **`t!`** o **`/`** · entra en voz → **`/play`**.\n"
+        "**`/status`** = ¿está bien? · **`/stats`** = números de uso · **`/updates`** = novedades",
+        "fr": "Musique en vocal, chat IA, dés et actu tech.\n"
+        "Préfixe **`t!`** ou **`/`** · rejoins le vocal → **`/play`**.\n"
+        "**`/status`** = tout va bien ? · **`/stats`** = chiffres d'usage · **`/updates`** = nouveautés",
+        "pt": "Música na call, IA, dados e notícias/ofertas de tech.\n"
+        "Use **`t!`** ou **`/`** · entre na voz → **`/play`**.\n"
+        "**`/status`** = ela está bem? · **`/updates`** = novidades",
     },
     "help.dice.body": {
         "de": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
@@ -1575,11 +1593,31 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "help.music.title": {"de": "🎵 Music", "en": "🎵 Music", "es": "🎵 Music", "fr": "🎵 Music", "pt": "🎵 Music"},
     "help.settings.body": {
-        "de": "`/language` — Meine Sprache ändern\n" "`/mod-panel` — Moderation (Admin)\n" "`/about` · `/status` · `/stats`",
-        "en": "`/language` — Change my language\n" "`/mod-panel` — Moderation (admin)\n" "`/about` · `/status` · `/stats`",
-        "es": "`/language` — Cambiar mi idioma\n" "`/mod-panel` — Moderación (admin)\n" "`/about` · `/status` · `/stats`",
-        "fr": "`/language` — Changer ma langue\n" "`/mod-panel` — Modération (admin)\n" "`/about` · `/status` · `/stats`",
-        "pt": "`/language` — Mudar meu idioma\n" "`/mod-panel` — Moderação (admin)\n" "`/about` · `/status` · `/stats`",
+        "de": "`/language` — Sprache wählen\n"
+        "`/status` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n"
+        "`/stats` — **Nutzung** (Songs, IA, Befehle, Posts heute)\n"
+        "`/updates` — **Changelog** (neue Features & Fixes)\n"
+        "`/about` · `/rewind` · `/mod-panel` (Admin)",
+        "en": "`/language` — pick your language\n"
+        "`/status` — **bot health** (ping, music, news, WARP)\n"
+        "`/stats` — **usage counters** (songs, AI, commands, posts today)\n"
+        "`/updates` — **changelog** (new features & fixes)\n"
+        "`/about` · `/rewind` · `/mod-panel` (admin)",
+        "es": "`/language` — elegir idioma\n"
+        "`/status` — **salud del bot** (ping, música, noticias, WARP)\n"
+        "`/stats` — **uso acumulado** (canciones, IA, comandos, posts hoy)\n"
+        "`/updates` — **novedades** (features y correcciones)\n"
+        "`/about` · `/rewind` · `/mod-panel` (admin)",
+        "fr": "`/language` — choisir la langue\n"
+        "`/status` — **santé du bot** (ping, musique, actus, WARP)\n"
+        "`/stats` — **compteurs d'usage** (sons, IA, commandes, posts du jour)\n"
+        "`/updates` — **nouveautés** (features et correctifs)\n"
+        "`/about` · `/rewind` · `/mod-panel` (admin)",
+        "pt": "`/language` — mudar meu idioma\n"
+        "`/status` — **saúde do bot** (conexão, música, notícias, WARP)\n"
+        "`/stats` — **números de uso** (músicas, IA, comandos, posts hoje)\n"
+        "`/updates` — **novidades** (features e correções recentes)\n"
+        "`/about` · `/rewind` · `/mod-panel` (admin)",
     },
     "help.settings.title": {
         "de": "⚙️ Settings & Tools",
@@ -1589,11 +1627,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "⚙️ Settings & Tools",
     },
     "help.title": {
-        "de": "Tiffany · Commands",
-        "en": "Tiffany · Commands",
-        "es": "Tiffany · Commands",
-        "fr": "Tiffany · Commands",
-        "pt": "Tiffany · Commands",
+        "de": "Tiffany · Befehle & Hilfe",
+        "en": "Tiffany · Commands & help",
+        "es": "Tiffany · Comandos y ayuda",
+        "fr": "Tiffany · Commandes et aide",
+        "pt": "Tiffany · Comandos e ajuda",
     },
     "hint.did_you_mean": {
         "de": "**`t!{w}`** existiert nicht. Meinten Sie **`t!{target}`** ?\n{usage}",
@@ -2005,11 +2043,61 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎵 Músicas tocadas",
     },
     "stats.title": {
-        "de": "Tiffany · Statistiken",
-        "en": "Tiffany · Statistics",
-        "es": "Tiffany · Estadísticas",
-        "fr": "Tiffany · Statistiques",
-        "pt": "Tiffany · Estatísticas",
+        "de": "Tiffany · Nutzungsstatistik",
+        "en": "Tiffany · Usage statistics",
+        "es": "Tiffany · Estadísticas de uso",
+        "fr": "Tiffany · Statistiques d'usage",
+        "pt": "Tiffany · Estatísticas de uso",
+    },
+    "stats.desc": {
+        "de": "Akumulierte Nutzung und heutige Posts — kein Gesundheitscheck (dafür **`/status`**).",
+        "en": "Lifetime usage and today's posts — not a health check (use **`/status`** for that).",
+        "es": "Uso acumulado y posts de hoy — no es diagnóstico (usa **`/status`**).",
+        "fr": "Usage cumulé et posts du jour — pas un diagnostic (voir **`/status`**).",
+        "pt": "Uso acumulado e posts de hoje — não é diagnóstico do bot (use **`/status`**).",
+    },
+    "updates.default_entry_title": {
+        "de": "Update",
+        "en": "Update",
+        "es": "Actualización",
+        "fr": "Mise à jour",
+        "pt": "Atualização",
+    },
+    "updates.empty_body": {
+        "de": "Noch keine Einträge — schau bald wieder vorbei!",
+        "en": "No entries yet — check back soon!",
+        "es": "Sin entradas aún — vuelve pronto.",
+        "fr": "Pas encore d'entrées — revenez bientôt !",
+        "pt": "Nenhuma novidade cadastrada ainda — volte em breve!",
+    },
+    "updates.empty_title": {
+        "de": "📭 Leer",
+        "en": "📭 Empty",
+        "es": "📭 Vacío",
+        "fr": "📭 Vide",
+        "pt": "📭 Vazio",
+    },
+    "updates.footer": {
+        "de": "Tiffany wird laufend verbessert · /updates",
+        "en": "Tiffany is always improving · /updates",
+        "es": "Tiffany mejora constantemente · /updates",
+        "fr": "Tiffany s'améliore en continu · /updates",
+        "pt": "A Tiffany melhora o tempo todo — use /updates para acompanhar 💖",
+    },
+    "updates.intro": {
+        "de": "Neueste Verbesserungen (**{version}**). Tiffany wird aktiv weiterentwickelt.",
+        "en": "Latest improvements (**{version}**). Tiffany is actively maintained.",
+        "es": "Últimas mejoras (**{version}**). Tiffany se actualiza con frecuencia.",
+        "fr": "Dernières améliorations (**{version}**). Tiffany évolue en continu.",
+        "pt": "Últimas melhorias (**{version}**). A Tiffany recebe updates frequentes — "
+        "fique por dentro do que mudou:",
+    },
+    "updates.title": {
+        "de": "✨ Tiffany · Updates",
+        "en": "✨ Tiffany · Updates",
+        "es": "✨ Tiffany · Novedades",
+        "fr": "✨ Tiffany · Nouveautés",
+        "pt": "✨ Tiffany · Novidades",
     },
     "status.channel_value": {
         "de": "{channel} · {humans} Person(en)",

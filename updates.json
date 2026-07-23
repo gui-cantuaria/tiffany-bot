@@ -1,0 +1,53 @@
+{
+  "version_label": "Jul 2026",
+  "entries": [
+    {
+      "date": "2026-07-22",
+      "title": "Comandos, DM e transparência",
+      "items": [
+        "Correção crítica: comandos t! e slash voltam a carregar de forma confiável após deploy",
+        "/language funciona na DM; comandos de call e moderação ficam só no servidor",
+        "Respostas ephemeral apenas no servidor — na DM, sem aviso “só você pode ver”",
+        "Novos /help, /status e /stats com descrições mais claras",
+        "Novo /updates — este painel de novidades"
+      ]
+    },
+    {
+      "date": "2026-07-22",
+      "title": "Sorteios, embeds e moderação",
+      "items": [
+        "/giveaway (t!gw) — sorteios customizáveis com botão de participar",
+        "/embed (t!emb) — criador de embeds com modal de edição",
+        "Moderação automática por IA (fase B) integrada ao painel admin",
+        "Correções de segurança P0 no painel de mod e nos sorteios"
+      ]
+    },
+    {
+      "date": "2026-07-21",
+      "title": "Ofertas e resolvers de música",
+      "items": [
+        "Correção: bot de ofertas voltou a postar em servidores configurados",
+        "Suporte a links Tidal e Yandex Music no player",
+        "t!rp /roleplay — conversa casual com personalidade da Tiffany"
+      ]
+    },
+    {
+      "date": "2026-07-20",
+      "title": "Jogos e presença",
+      "items": [
+        "t!g usa Gemini 3.1 Flash Lite — recomendações mais rápidas",
+        "Status “Jogando …” rotaciona a cada 10s mostrando comandos úteis",
+        "Correção em buscas amplas de jogos que retornavam vazio"
+      ]
+    },
+    {
+      "date": "2026-07-18",
+      "title": "Multi-servidor e Rewind",
+      "items": [
+        "Tags de afiliado por servidor (Mercado Livre, Amazon, etc.)",
+        "/rewind — suas estatísticas pessoais de música",
+        "Filtros de áudio e melhorias de qualidade na call"
+      ]
+    }
+  ]
+}

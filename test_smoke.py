@@ -27,6 +27,15 @@ class TestResolveLang(unittest.TestCase):
             locale_utils._user_lang_cache.pop("999001", None)
 
 
+class TestUpdatesEmbed(unittest.TestCase):
+    def test_build_updates_embed_has_title(self):
+        import updates as upd
+
+        upd.reload_updates_cache()
+        em = upd.build_updates_embed(None, 12345, pink=0xFF69B4)
+        self.assertTrue(em.title)
+
+
 class TestOffersCategoryFilter(unittest.TestCase):
     def test_panel_token_matches_category(self):
         import offers_cog as oc

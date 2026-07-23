@@ -9,6 +9,7 @@ import re
 from typing import Any, Optional
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 log = logging.getLogger("tiffany-bot")
@@ -151,7 +152,9 @@ async def setup(bot: commands.Bot):
         aliases=["emb"],
         invoke_without_command=True,
         description="Cria e envia embeds personalizados (estilo painel)",
+        dm_permission=False,
     )
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_embed(ctx: commands.Context):
         await ctx.send(
             embed=discord.Embed(

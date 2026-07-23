@@ -21,6 +21,9 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+from locale_utils import slash_ephemeral
+import updates as tiffany_updates
+import owner_dashboard
 
 try:
     import tiffany_voice
@@ -1342,7 +1345,7 @@ CYBERSECURITY: Prioritize critical CVE, ransomware, data breach, zero-day. Score
 
 Source: {nome_site}
 Original Title: {titulo_original}
-Article Text: {texto_base[:8000]}
+Article Text: {texto_base[:5000]}
 """
 
     modelo_principal = "google/gemini-3.1-flash-lite"
@@ -1367,6 +1370,7 @@ Article Text: {texto_base[:8000]}
                     )},
                     {"role": "user", "content": prompt},
                 ],
+                max_tokens=1800,
                 temperature=0.4,
                 timeout=60.0,
             )
@@ -2153,7 +2157,8 @@ _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "loop", "play", "chat", "seek", "nonstop", "queue", "language", "mod-panel", "modpanel",
     "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
-    "embed",
+    "embed", "status", "stats", "updates", "novidades", "about", "help", "rewind",
+    "estatisticas", "metricas", "player-status", "playerstatus",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
     "lang", "mod", "gw", "emb", "rp", "roleplay",
     "247",
@@ -2282,40 +2287,27 @@ async def on_close():
 
 
 # =========================
-# SLASH COMMAND: /status
+# PUBLIC / OWNER STATUS & STATS
 # =========================
-@discord_client.tree.command(name="status", description="Shows if Tiffany is working properly")
-async def cmd_status(interaction: discord.Interaction):
-    """Simple friendly status: reports normal operation or instability.
-    Available to all users. Admins see extra technical details."""
+def _build_public_status_embed() -> discord.Embed:
     agora = datetime.now(FUSO_HORARIO_BR)
-    em_horario = HORA_INICIO <= agora.hour < HORA_FIM
-
-    # Discord connection health (gateway latency in ms)
-    lat = discord_client.latency  # seconds; may be nan right after boot
+    lat = discord_client.latency
     lat_ms = int(lat * 1000) if (lat == lat and lat not in (float("inf"), float("-inf"))) else None
-
-    # Temporarily unavailable news sources
-    feeds_cooldown = [nome for nome in FONTES_RSS if _feed_em_cooldown(nome)]
-    frac_cooldown = len(feeds_cooldown) / (len(FONTES_RSS) or 1)
-
+    voice_ok = bool(_voice_available and tiffany_voice)
+    chat_ok = voice_ok and bool(os.getenv("OPENROUTER_API_KEY", "").strip())
     conexao_ruim = (lat_ms is None) or (lat_ms > 1000)
     conexao_lenta = (lat_ms is not None) and (400 < lat_ms <= 1000)
-    fontes_criticas = em_horario and frac_cooldown >= 0.5
-    fontes_lentas = em_horario and len(feeds_cooldown) > 0
-
-    if conexao_ruim or fontes_criticas:
+    recursos_ok = voice_ok and chat_ok
+    if conexao_ruim or not recursos_ok:
         nivel, titulo, cor = "🔴", "Com instabilidades", 0xED4245
-        msg = "Estou instável agora. Tente de novo em alguns minutos. 🙏"
-    elif conexao_lenta or fontes_lentas:
+        msg = "Estou com problemas agora. Tenta de novo em alguns minutos. 🙏"
+    elif conexao_lenta:
         nivel, titulo, cor = "🟡", "Pequenas instabilidades", 0xFEE75C
         msg = "Funcionando, com leve lentidão."
     else:
         nivel, titulo, cor = "🟢", "Funcionando normalmente", 0x57F287
         msg = "Tá tudo certo por aqui! 💖"
-
     em = discord.Embed(title=f"{nivel} Tiffany — {titulo}", description=msg, color=cor, timestamp=agora)
-
     if lat_ms is None:
         conexao_txt = "conectando..."
     elif lat_ms <= 200:
@@ -2326,61 +2318,88 @@ async def cmd_status(interaction: discord.Interaction):
         conexao_txt = f"lenta ({lat_ms} ms)"
     else:
         conexao_txt = f"instável ({lat_ms} ms)"
-
-    em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
-    if _voice_available and tiffany_voice:
-        em.add_field(name="🎵 Música & comandos", value="Disponíveis", inline=True)
-        warp_ok = tiffany_voice.check_warp_proxy_ok()
-        em.add_field(
-            name="🌐 WARP (YouTube)",
-            value=(
-                "Online (música OK)"
-                if warp_ok
-                else "Offline — música pode falhar"
-            ),
-            inline=True,
-        )
+    if voice_ok and chat_ok:
+        recursos_txt = "Disponíveis"
+    elif voice_ok:
+        recursos_txt = "Música OK · chat indisponível"
     else:
-        em.add_field(
-            name="🎵 Música & comandos",
-            value="Indisponíveis — módulo de voz não carregou (reinicie após deploy)",
-            inline=True,
-        )
-    em.add_field(
-        name="📰 Notícias",
-        value="Ativas (8h–18h)" if em_horario else "Em standby (fora do horário)",
-        inline=True,
+        recursos_txt = "Indisponíveis no momento"
+    em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
+    em.add_field(name="🎵 Música & chat", value=recursos_txt, inline=True)
+    em.add_field(name="🛒 Ofertas automáticas", value="Ativas", inline=True)
+    em.set_footer(text="Tiffany 💖 · use /updates para novidades")
+    return em
+
+
+@discord_client.tree.command(
+    name="status",
+    description="A Tiffany está funcionando? Conexão e recursos disponíveis",
+)
+@discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def cmd_status(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        embed=_build_public_status_embed(),
+        ephemeral=slash_ephemeral(interaction),
     )
 
-    # Technical details for admins only (does not clutter regular user view)
-    is_admin = bool(
-        interaction.guild
-        and isinstance(interaction.user, discord.Member)
-        and interaction.user.guild_permissions.administrator
-    )
-    if is_admin:
-        metrics = load_metrics()
-        queue = load_queue()
-        em.add_field(
-            name="🔧 Admin · hoje",
-            value=(
-                f"Posts: {metrics.get('posts_hoje', 0)} · "
-                f"IA: {metrics.get('ia_calls_hoje', 0)} · "
-                f"✅ {metrics.get('ia_aprovadas_hoje', 0)} / ❌ {metrics.get('ia_rejeitadas_hoje', 0)}"
+
+# =========================
+# /stats — owner only (always ephemeral)
+# =========================
+@discord_client.tree.command(
+    name="stats",
+    description="Painel privado do dono — uso e custos da Tiffany",
+)
+@discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def cmd_stats(interaction: discord.Interaction):
+    if not owner_dashboard.is_bot_owner(interaction.user.id):
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                description="⚠️ Sem permissão para este comando.",
+                color=0xED4245,
             ),
-            inline=False,
+            ephemeral=True,
         )
-        em.add_field(
-            name="🔧 Admin · operação",
-            value=(
-                f"Fila: {len(queue)} · Último ciclo: {_last_cycle_time}\n"
-                f"Feeds em cooldown: {', '.join(feeds_cooldown) if feeds_cooldown else 'Nenhum'}"
-            )[:1024],
-            inline=False,
-        )
-
-    em.set_footer(text="Tiffany 💖")
+        return
+    em = owner_dashboard.build_owner_stats_embed(discord_client)
     await interaction.response.send_message(embed=em, ephemeral=True)
+
+
+@discord_client.command(name="stats", aliases=["estatisticas", "metricas"])
+async def cmd_stats_prefix(ctx: commands.Context):
+    if not owner_dashboard.is_bot_owner(ctx.author.id):
+        return
+    em = owner_dashboard.build_owner_stats_embed(discord_client)
+    await ctx.send(embed=em)
+
+
+@discord_client.command(name="status")
+async def cmd_status_prefix(ctx: commands.Context):
+    await ctx.send(embed=_build_public_status_embed())
+
+
+# =========================
+# SLASH COMMAND: /updates
+# =========================
+TIFFANY_PINK = 0xFF69B4
+
+
+@discord_client.tree.command(
+    name="updates",
+    description="Novidades e melhorias recentes da Tiffany",
+)
+@discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def cmd_updates(interaction: discord.Interaction):
+    """Public changelog — works in DMs and guilds even if voice module is down."""
+    em = tiffany_updates.build_updates_embed(
+        interaction.guild,
+        interaction.user.id,
+        pink=TIFFANY_PINK,
+    )
+    await interaction.response.send_message(
+        embed=em,
+        ephemeral=slash_ephemeral(interaction),
+    )
 
 
 async def _shutdown_cleanup():

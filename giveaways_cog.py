@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
 log = logging.getLogger("tiffany-bot")
@@ -231,7 +232,9 @@ async def setup(bot: commands.Bot):
         aliases=["gw"],
         invoke_without_command=True,
         description="Sorteios customizáveis da Tiffany",
+        dm_permission=False,
     )
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_giveaway(ctx: commands.Context):
         await ctx.send(
             embed=discord.Embed(
