@@ -64,6 +64,26 @@ def _fmt_date(raw: str) -> str:
     return raw[:10]
 
 
+def _localized_field(entry: dict[str, Any], key: str, lang: str) -> str:
+    """Read title/items from entry — supports plain string or {pt, en, ...} dict."""
+    raw = entry.get(key)
+    if isinstance(raw, dict):
+        return str(raw.get(lang) or raw.get("pt") or raw.get("en") or "").strip()
+    return str(raw or "").strip()
+
+
+def _localized_items(entry: dict[str, Any], lang: str) -> list[str]:
+    raw = entry.get("items") or entry.get("highlights") or []
+    if isinstance(raw, dict):
+        bucket = raw.get(lang) or raw.get("pt") or raw.get("en") or []
+        if isinstance(bucket, list):
+            return [str(x).strip() for x in bucket if str(x).strip()]
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return []
+
+
 def build_updates_embed(
     guild: Optional[discord.Guild],
     user_id: Optional[int],
@@ -93,16 +113,9 @@ def build_updates_embed(
         return em
 
     for entry in entries:
-        title = str(entry.get("title") or tr(lang, "updates.default_entry_title")).strip()
+        title = _localized_field(entry, "title", lang) or tr(lang, "updates.default_entry_title")
         when = _fmt_date(str(entry.get("date") or ""))
-        raw_items = entry.get("items") or entry.get("highlights") or []
-        if not isinstance(raw_items, list):
-            raw_items = []
-        bullets = [
-            str(item).strip()
-            for item in raw_items[:_MAX_ITEMS]
-            if str(item).strip()
-        ]
+        bullets = _localized_items(entry, lang)[:_MAX_ITEMS]
         body = "\n".join(f"• {line}" for line in bullets) if bullets else "• …"
         em.add_field(
             name=f"📅 {when} · {title}"[:256],

@@ -47,6 +47,43 @@ class TestOffersCategoryFilter(unittest.TestCase):
             oc._deal_matches_guild_categories("Placa de Vídeo", ["jogos"])
         )
 
+    def test_offer_posting_reserve_blocks_duplicate(self):
+        import offers_cog as oc
+
+        history: dict = {"deals": {}}
+        deal = {"url": "https://promobit.com.br/x", "title": "GPU Test"}
+        self.assertTrue(oc._try_reserve_deal(history, deal))
+        self.assertFalse(oc._try_reserve_deal(history, deal))
+        self.assertTrue(oc._is_duplicate(history, deal["url"]))
+        oc._release_deal_posting(history, deal)
+        self.assertFalse(oc._is_duplicate(history, deal["url"]))
+
+
+class TestSlashLocalizations(unittest.TestCase):
+    def test_slash_desc_has_localizations(self):
+        kw = locale_utils.slash_desc_kwargs("slash.cmd.play")
+        self.assertIn("description", kw)
+        self.assertIn("description_localizations", kw)
+        self.assertGreaterEqual(len(kw["description_localizations"]), 4)
+
+
+class TestRoleplayHistory(unittest.TestCase):
+    def test_isolated_history_roundtrip(self):
+        import roleplay_config as rp
+
+        uid = 999002
+        rp.clear_history(uid)
+        try:
+            self.assertEqual(rp.get_history_messages(uid), [])
+            rp.add_history_turn(uid, "oi", "e aí!")
+            msgs = rp.get_history_messages(uid)
+            self.assertEqual(len(msgs), 2)
+            self.assertEqual(msgs[0]["content"], "oi")
+            rp.clear_history(uid)
+            self.assertEqual(rp.get_history_messages(uid), [])
+        finally:
+            rp.clear_history(uid)
+
 
 if __name__ == "__main__":
     unittest.main()

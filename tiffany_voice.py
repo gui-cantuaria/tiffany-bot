@@ -34,7 +34,7 @@ from discord.ext import commands
 import game_recommendations
 import locale_utils
 import guild_config
-from locale_utils import GuildLang, resolve_guild_lang, tr
+from locale_utils import GuildLang, resolve_guild_lang, tr, slash_desc_kwargs, slash_param
 
 try:
     from discord.ext import voice_recv as voice_recv
@@ -7229,7 +7229,7 @@ def register_voice(bot: commands.Bot) -> None:
         return session, vc
 
 
-    @bot.hybrid_command(name="skip", aliases=["s"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas", description="Skip the current track (vote if 3+ listeners)", dm_permission=False)
+    @bot.hybrid_command(name="skip", aliases=["s"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas", dm_permission=False, **slash_desc_kwargs("slash.cmd.skip"))
     @_guild_slash
     async def cmd_pular(ctx: commands.Context, *, args: str = ""):
         if not await _require_voice(ctx):
@@ -7304,7 +7304,7 @@ def register_voice(bot: commands.Bot) -> None:
                     song=session.current_song[:60], missing=required - current_votes,
                 )))
 
-    @bot.hybrid_command(name="queue", aliases=["q", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue", description="Show the queue and now playing", dm_permission=False)
+    @bot.hybrid_command(name="queue", aliases=["q", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue", dm_permission=False, **slash_desc_kwargs("slash.cmd.queue"))
     @_guild_slash
     async def cmd_queue(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -7322,7 +7322,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=q_em)
 
-    @bot.hybrid_command(name="nonstop", aliases=["247"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)", description="Toggle 24/7 mode in voice channel", dm_permission=False)
+    @bot.hybrid_command(name="nonstop", aliases=["247"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)", dm_permission=False, **slash_desc_kwargs("slash.cmd.nonstop"))
     @_guild_slash
     async def cmd_nonstop(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -7341,8 +7341,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.nonstop_off")))
 
-    @bot.hybrid_command(name="playlist", aliases=["pl"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>", description="Manage saved playlists (save, load, list, del)", dm_permission=False)
-    @app_commands.describe(action="Ação (save/load/list/del)", name="Nome da playlist")
+    @bot.hybrid_command(name="playlist", aliases=["pl"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>", dm_permission=False, **slash_desc_kwargs("slash.cmd.playlist"))
+    @app_commands.describe(action=slash_param("slash.param.playlist_action"), name=slash_param("slash.param.playlist_name"))
     @_guild_slash
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
         if not await _require_guild(ctx):
@@ -7480,7 +7480,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_action")))
 
-    @bot.hybrid_command(name="random", aliases=["r"], help="Música aleatória (sem repetir na fila/sessão): t!r", description="Add a random song to the queue", dm_permission=False)
+    @bot.hybrid_command(name="random", aliases=["r"], help="Música aleatória (sem repetir na fila/sessão): t!r", dm_permission=False, **slash_desc_kwargs("slash.cmd.random"))
     @_guild_slash
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not await _require_voice(ctx):
@@ -7535,8 +7535,8 @@ def register_voice(bot: commands.Bot) -> None:
         _revive_workers(ctx.guild.id, vc, sess)
         await ctx.send(embed=_embed(tr(lang, "voice.random_added", display=display)))
 
-    @bot.hybrid_command(name="play", aliases=["p"], help="Toca uma música: t!p / t!play <nome ou URL>", description="Play a song by name or URL", dm_permission=False)
-    @app_commands.describe(query="Nome ou URL da música")
+    @bot.hybrid_command(name="play", aliases=["p"], help="Toca uma música: t!p / t!play <nome ou URL>", dm_permission=False, **slash_desc_kwargs("slash.cmd.play"))
+    @app_commands.describe(query=slash_param("slash.param.query"))
     @_guild_slash
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
         if not await _require_guild(ctx):
@@ -8027,7 +8027,7 @@ def register_voice(bot: commands.Bot) -> None:
         sess.last_play_status_msg = status
         sess.last_play_status_query = _play_query_key(query)
 
-    @bot.hybrid_command(name="language", aliases=["lang", "idioma"], help="Muda o idioma da Tiffany: t!lang / t!language", description="Open language selection panel")
+    @bot.hybrid_command(name="language", aliases=["lang", "idioma"], help="Muda o idioma da Tiffany: t!lang / t!language", **slash_desc_kwargs("slash.cmd.language"))
     @_dm_slash
     async def cmd_language(ctx: commands.Context):
         _stats["commands_used"] += 1
@@ -8038,7 +8038,7 @@ def register_voice(bot: commands.Bot) -> None:
         ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
         await ctx.send(embed=embed, view=view, ephemeral=ephem)
 
-    @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], help="Abre o painel de moderação da Tiffany (Admins): t!mod / t!mod-panel", description="Open moderation settings panel (admins)", dm_permission=False)
+    @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], help="Abre o painel de moderação da Tiffany (Admins): t!mod / t!mod-panel", dm_permission=False, **slash_desc_kwargs("slash.cmd.mod_panel"))
     @commands.has_permissions(administrator=True)
     @_guild_slash
     async def cmd_mod_panel(ctx: commands.Context):
@@ -8053,8 +8053,8 @@ def register_voice(bot: commands.Bot) -> None:
         msg = await ctx.send(embed=embed, view=view)
         view.message = msg
 
-    @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", description="Ask Tiffany AI a question (images OK)")
-    @app_commands.describe(question="Your question for Tiffany")
+    @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", **slash_desc_kwargs("slash.cmd.chat"))
+    @app_commands.describe(question=slash_param("slash.param.question"))
     @_dm_slash
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not await _require_dm_access(ctx):
@@ -8129,9 +8129,9 @@ def register_voice(bot: commands.Bot) -> None:
         name="roleplay",
         aliases=["rp"],
         help="Conversa casual com a Tiffany (personalidade roleplay): t!rp / t!roleplay <mensagem>",
-        description="Casual chat with Tiffany (configure personality first)",
+        **slash_desc_kwargs("slash.cmd.roleplay"),
     )
-    @app_commands.describe(message="What you want to say to Tiffany")
+    @app_commands.describe(message=slash_param("slash.param.message"))
     @_dm_slash
     async def cmd_roleplay(ctx: commands.Context, *, message: str = ""):
         import roleplay_config as rp_cfg
@@ -8198,12 +8198,14 @@ def register_voice(bot: commands.Bot) -> None:
             return
 
         system_prompt = rp_cfg.build_roleplay_prompt(lang, profile)
+        history_msgs = rp_cfg.get_history_messages(uid)
         try:
             async with _ai_semaphore:
                 resp = await client.chat.completions.create(
                     model="google/gemini-3.1-flash-lite",
                     messages=[
                         {"role": "system", "content": system_prompt},
+                        *history_msgs,
                         {"role": "user", "content": message[:800]},
                     ],
                     max_tokens=320,
@@ -8224,6 +8226,8 @@ def register_voice(bot: commands.Bot) -> None:
             await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
             return
 
+        rp_cfg.add_history_turn(uid, message, answer)
+
         try:
             if thinking:
                 await thinking.delete()
@@ -8235,10 +8239,10 @@ def register_voice(bot: commands.Bot) -> None:
         name="game",
         aliases=["g", "games"],
         help="Recomenda jogos por filtros: t!g / t!game <loja, gênero, preço, multiplayer...>",
-        description="Recommend Steam/Epic games from your query",
         dm_permission=True,
+        **slash_desc_kwargs("slash.cmd.game"),
     )
-    @app_commands.describe(query="Genre, style, or name (e.g. RPG, multiplayer)")
+    @app_commands.describe(query=slash_param("slash.param.game_query"))
     @_dm_slash
     async def cmd_game(ctx: commands.Context, *, query: str = ""):
         if not await _require_dm_access(ctx):
@@ -8279,7 +8283,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await _ctx_reply(ctx, result)
 
-    @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", description="Toggle loop for the current track", dm_permission=False)
+    @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", dm_permission=False, **slash_desc_kwargs("slash.cmd.loop"))
     @_guild_slash
     async def cmd_loop(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8311,7 +8315,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.off")))
             await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", description="Pause the current track", dm_permission=False)
+    @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", dm_permission=False, **slash_desc_kwargs("slash.cmd.pause"))
     @_guild_slash
     async def cmd_pause(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8334,7 +8338,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="resume", aliases=["re"], help="Retoma a música pausada: t!re / t!resume", description="Resume paused playback", dm_permission=False)
+    @bot.hybrid_command(name="resume", aliases=["re"], help="Retoma a música pausada: t!re / t!resume", dm_permission=False, **slash_desc_kwargs("slash.cmd.resume"))
     @_guild_slash
     async def cmd_resume(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8357,7 +8361,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.resume.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="clear", aliases=["cl"], help="Para música, limpa fila e sai da call: t!cl / t!clear", description="Stop music, clear queue, and leave voice", dm_permission=False)
+    @bot.hybrid_command(name="clear", aliases=["cl"], help="Para música, limpa fila e sai da call: t!cl / t!clear", dm_permission=False, **slash_desc_kwargs("slash.cmd.clear"))
     @_guild_slash
     async def cmd_clear(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8411,7 +8415,7 @@ def register_voice(bot: commands.Bot) -> None:
             pass
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.clear.done")))
 
-    @bot.hybrid_command(name="shuffle", aliases=["sh"], help="Embaralha a fila: t!sh / t!shuffle", description="Shuffle the queue", dm_permission=False)
+    @bot.hybrid_command(name="shuffle", aliases=["sh"], help="Embaralha a fila: t!sh / t!shuffle", dm_permission=False, **slash_desc_kwargs("slash.cmd.shuffle"))
     @_guild_slash
     async def cmd_shuffle(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8487,7 +8491,7 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.done", count=len(session.queue_display))))
 
-    @bot.hybrid_command(name="replay", aliases=["rpl"], help="Repete a música atual: t!replay / t!rpl", description="Replay the current track", dm_permission=False)
+    @bot.hybrid_command(name="replay", aliases=["rpl"], help="Repete a música atual: t!replay / t!rpl", dm_permission=False, **slash_desc_kwargs("slash.cmd.replay"))
     @_guild_slash
     async def cmd_replay(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8537,7 +8541,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.replaying", title=display[:80])))
 
-    @bot.hybrid_command(name="autoplay", aliases=["ap"], help="Liga/desliga autoplay: t!ap / t!autoplay", description="Toggle autoplay", dm_permission=False)
+    @bot.hybrid_command(name="autoplay", aliases=["ap"], help="Liga/desliga autoplay: t!ap / t!autoplay", dm_permission=False, **slash_desc_kwargs("slash.cmd.autoplay"))
     @_guild_slash
     async def cmd_autoplay(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8555,8 +8559,8 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.autoplay_off")))
 
-    @bot.hybrid_command(name="lyrics", aliases=["ly"], help="Busca letra da música: t!ly / t!lyrics", description="Look up lyrics for current or specified song", dm_permission=False)
-    @app_commands.describe(query="Nome da música (opcional, usa a música atual se vazio)")
+    @bot.hybrid_command(name="lyrics", aliases=["ly"], help="Busca letra da música: t!ly / t!lyrics", dm_permission=False, **slash_desc_kwargs("slash.cmd.lyrics"))
+    @app_commands.describe(query=slash_param("slash.param.lyrics_query"))
     @_guild_slash
     async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
         if not await _require_guild(ctx):
@@ -8612,8 +8616,8 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + tr(lang, "cmd.lyrics.truncated")
         await status.edit(embed=_embed(tr(lang, "cmd.lyrics.result", name=search_term[:60], lyrics=lyrics)))
 
-    @bot.hybrid_command(name="seek", aliases=["ff"], help="Pula na música: t!ff / t!seek +30, -15, 1:30", description="Seek forward or backward (+30, -15, 1:30)", dm_permission=False)
-    @app_commands.describe(time_expr="Tempo para pular (+30, -15, 1:30)")
+    @bot.hybrid_command(name="seek", aliases=["ff"], help="Pula na música: t!ff / t!seek +30, -15, 1:30", dm_permission=False, **slash_desc_kwargs("slash.cmd.seek"))
+    @app_commands.describe(time_expr=slash_param("slash.param.time_expr"))
     @_guild_slash
     async def cmd_seek(ctx: commands.Context, time_expr: str = ""):
         if not await _require_guild(ctx):
@@ -8716,8 +8720,8 @@ def register_voice(bot: commands.Bot) -> None:
     # AUDIO CLIP
     # ============================
 
-    @bot.hybrid_command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]", description="Save the last 30 seconds of voice audio", dm_permission=False)
-    @app_commands.describe(fmt="Formato do arquivo (mp3 ou wav)")
+    @bot.hybrid_command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]", dm_permission=False, **slash_desc_kwargs("slash.cmd.clip"))
+    @app_commands.describe(fmt=slash_param("slash.param.fmt"))
     @_guild_slash
     async def cmd_clip(ctx: commands.Context, fmt: str = "mp3"):
         if not await _require_guild(ctx):
@@ -9265,7 +9269,7 @@ def register_voice(bot: commands.Bot) -> None:
     # SLASH COMMANDS
     # ============================
 
-    @bot.tree.command(name="about", description="Who is Tiffany and what she does")
+    @bot.tree.command(name="about", **slash_desc_kwargs("slash.cmd.about"))
     @_dm_slash
     async def slash_about(interaction: discord.Interaction):
         is_admin = bool(
@@ -9280,7 +9284,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="help",
-        description="List all commands: music, AI, stats, giveaways, settings",
+        **slash_desc_kwargs("slash.cmd.help"),
     )
     @_dm_slash
     async def slash_help(interaction: discord.Interaction):
@@ -9291,7 +9295,7 @@ def register_voice(bot: commands.Bot) -> None:
             embed=em, ephemeral=locale_utils.slash_ephemeral(interaction),
         )
 
-    @bot.tree.command(name="player-status", description="Tiffany health check (admin)")
+    @bot.tree.command(name="player-status", **slash_desc_kwargs("slash.cmd.player_status"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     @_guild_slash
@@ -9305,7 +9309,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await _slash_reply(interaction, _format_status_embed(interaction.client, lang=lang))
 
-    @bot.tree.command(name="rewind", description="Your personal Tiffany Rewind!")
+    @bot.tree.command(name="rewind", **slash_desc_kwargs("slash.cmd.rewind"))
     @_dm_slash
     async def slash_rewind(interaction: discord.Interaction):
         uid = str(interaction.user.id)

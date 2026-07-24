@@ -2,52 +2,172 @@
   "version_label": "Jul 2026",
   "entries": [
     {
-      "date": "2026-07-22",
-      "title": "Comandos, DM e transparência",
-      "items": [
-        "Correção crítica: comandos t! e slash voltam a carregar de forma confiável após deploy",
-        "/language funciona na DM; comandos de call e moderação ficam só no servidor",
-        "Respostas ephemeral apenas no servidor — na DM, sem aviso “só você pode ver”",
-        "Novos /help, /status e /stats com descrições mais claras",
-        "Novo /updates — este painel de novidades"
-      ]
+      "date": "2026-07-23",
+      "title": {
+        "pt": "Chat, roleplay e estabilidade",
+        "en": "Chat, roleplay & stability",
+        "es": "Chat, roleplay y estabilidad",
+        "fr": "Chat, roleplay et stabilité",
+        "de": "Chat, Roleplay & Stabilität"
+      },
+      "items": {
+        "pt": [
+          "**/status** — qualquer um vê se a Tiffany está online (sem dados secretos do servidor)",
+          "**/stats** — painel **privado** só do dono do bot (não é o mesmo que /status)",
+          "**/chat** / **t!c** — a IA responde no **mesmo idioma** da sua mensagem",
+          "**/roleplay** / **t!rp** — resposta em **texto normal** (sem embed); escolha a personalidade ou use aleatório",
+          "Trava extra para evitar notícias e ofertas duplicadas"
+        ],
+        "en": [
+          "**/status** — anyone can see if Tiffany is online (no secret server data)",
+          "**/stats** — **private** owner-only panel (not the same as /status)",
+          "**/chat** / **t!c** — AI replies in the **same language** as your message",
+          "**/roleplay** / **t!rp** — plain **text** replies (no embed); pick a personality or random",
+          "Extra guard to reduce duplicate news and deal posts"
+        ],
+        "es": [
+          "**/status** — todos ven si Tiffany está en línea (sin datos secretos)",
+          "**/stats** — panel **privado** solo del dueño (no es lo mismo que /status)",
+          "**/chat** / **t!c** — la IA responde en el **mismo idioma** que tu mensaje",
+          "**/roleplay** / **t!rp** — respuestas en **texto plano**; elige personalidad o aleatoria",
+          "Protección extra contra noticias y ofertas duplicadas"
+        ],
+        "fr": [
+          "**/status** — tout le monde voit si Tiffany est en ligne",
+          "**/stats** — panneau **privé** réservé au propriétaire du bot",
+          "**/chat** / **t!c** — l'IA répond dans la **même langue** que votre message",
+          "**/roleplay** / **t!rp** — réponses en **texte simple** ; personnalité ou aléatoire",
+          "Protection contre les doublons de news et offres"
+        ],
+        "de": [
+          "**/status** — jeder sieht, ob Tiffany online ist",
+          "**/stats** — **privates** Owner-Panel (nicht dasselbe wie /status)",
+          "**/chat** / **t!c** — KI antwortet in der **Sprache** Ihrer Nachricht",
+          "**/roleplay** / **t!rp** — Antworten als **Klartext** ; Persönlichkeit oder Zufall",
+          "Schutz gegen doppelte News- und Deal-Posts"
+        ]
+      }
     },
     {
       "date": "2026-07-22",
-      "title": "Sorteios, embeds e moderação",
-      "items": [
-        "/giveaway (t!gw) — sorteios customizáveis com botão de participar",
-        "/embed (t!emb) — criador de embeds com modal de edição",
-        "Moderação automática por IA (fase B) integrada ao painel admin",
-        "Correções de segurança P0 no painel de mod e nos sorteios"
-      ]
+      "title": {
+        "pt": "Comandos, DM e novidades",
+        "en": "Commands, DMs & new features",
+        "es": "Comandos, DM y novedades",
+        "fr": "Commandes, DM et nouveautés",
+        "de": "Befehle, DM & Neues"
+      },
+      "items": {
+        "pt": [
+          "Comandos **t!** e **/** voltam a funcionar de forma estável após deploy",
+          "**/language** funciona na DM — música e moderação ficam no servidor",
+          "No servidor, respostas privadas avisam “só você”; na DM isso não aparece",
+          "Novos: **/giveaway** (t!gw), **/embed** (t!emb), moderação automática no painel admin",
+          "**/updates** — este changelog (use de novo quando quiser)"
+        ],
+        "en": [
+          "**t!** and **/** commands load reliably again after deploy",
+          "**/language** works in DMs — music and moderation stay in servers",
+          "In servers, private replies show “only you”; in DMs that notice is hidden",
+          "New: **/giveaway** (t!gw), **/embed** (t!emb), auto-mod in the admin panel",
+          "**/updates** — this changelog (check anytime)"
+        ],
+        "es": [
+          "Comandos **t!** y **/** estables tras el deploy",
+          "**/language** en DM — música y moderación en el servidor",
+          "En el servidor, respuestas privadas avisan “solo tú”; en DM no",
+          "Nuevo: **/giveaway**, **/embed**, moderación automática",
+          "**/updates** — este changelog"
+        ],
+        "fr": [
+          "Commandes **t!** et **/** stables après déploiement",
+          "**/language** en DM — musique et modération sur le serveur",
+          "Sur le serveur, réponses privées avec “vous seul” ; pas en DM",
+          "Nouveau : **/giveaway**, **/embed**, modération auto",
+          "**/updates** — ce changelog"
+        ],
+        "de": [
+          "**t!**- und **/**-Befehle stabil nach Deploy",
+          "**/language** in DMs — Musik & Moderation nur auf Servern",
+          "Auf Servern: private Antworten mit Hinweis ; in DMs nicht",
+          "Neu: **/giveaway**, **/embed**, Auto-Moderation",
+          "**/updates** — dieses Changelog"
+        ]
+      }
     },
     {
       "date": "2026-07-21",
-      "title": "Ofertas e resolvers de música",
-      "items": [
-        "Correção: bot de ofertas voltou a postar em servidores configurados",
-        "Suporte a links Tidal e Yandex Music no player",
-        "t!rp /roleplay — conversa casual com personalidade da Tiffany"
-      ]
-    },
-    {
-      "date": "2026-07-20",
-      "title": "Jogos e presença",
-      "items": [
-        "t!g usa Gemini 3.1 Flash Lite — recomendações mais rápidas",
-        "Status “Jogando …” rotaciona a cada 10s mostrando comandos úteis",
-        "Correção em buscas amplas de jogos que retornavam vazio"
-      ]
+      "title": {
+        "pt": "Música e ofertas",
+        "en": "Music & deals",
+        "es": "Música y ofertas",
+        "fr": "Musique et offres",
+        "de": "Musik & Angebote"
+      },
+      "items": {
+        "pt": [
+          "Ofertas voltam a postar nos canais configurados por servidor",
+          "Player aceita links **Tidal** e **Yandex Music**",
+          "**/game** (t!g) — recomendações de jogos mais rápidas"
+        ],
+        "en": [
+          "Deal posts work again on each server's configured channel",
+          "Player supports **Tidal** and **Yandex Music** links",
+          "**/game** (t!g) — faster game recommendations"
+        ],
+        "es": [
+          "Ofertas publicadas en canales configurados",
+          "Enlaces **Tidal** y **Yandex Music** en el reproductor",
+          "**/game** (t!g) — recomendaciones más rápidas"
+        ],
+        "fr": [
+          "Offres republiées sur les salons configurés",
+          "Liens **Tidal** et **Yandex Music**",
+          "**/game** (t!g) — recommandations plus rapides"
+        ],
+        "de": [
+          "Angebote posten wieder in konfigurierten Kanälen",
+          "**Tidal**- und **Yandex Music**-Links",
+          "**/game** (t!g) — schnellere Spielempfehlungen"
+        ]
+      }
     },
     {
       "date": "2026-07-18",
-      "title": "Multi-servidor e Rewind",
-      "items": [
-        "Tags de afiliado por servidor (Mercado Livre, Amazon, etc.)",
-        "/rewind — suas estatísticas pessoais de música",
-        "Filtros de áudio e melhorias de qualidade na call"
-      ]
+      "title": {
+        "pt": "Servidor e estatísticas",
+        "en": "Server tools & stats",
+        "es": "Servidor y estadísticas",
+        "fr": "Serveur et stats",
+        "de": "Server & Statistiken"
+      },
+      "items": {
+        "pt": [
+          "Tags de afiliado por servidor (Mercado Livre, Amazon, etc.)",
+          "**/rewind** — suas estatísticas pessoais de música na Tiffany",
+          "Status **Jogando…** em inglês, rotacionando dicas a cada 10 s"
+        ],
+        "en": [
+          "Affiliate tags per server (Mercado Livre, Amazon, etc.)",
+          "**/rewind** — your personal Tiffany music stats",
+          "**Playing…** status in English, rotating tips every 10 s"
+        ],
+        "es": [
+          "Etiquetas de afiliado por servidor",
+          "**/rewind** — tus estadísticas de música",
+          "Estado **Playing…** en inglés, rotando cada 10 s"
+        ],
+        "fr": [
+          "Tags d'affiliation par serveur",
+          "**/rewind** — vos stats musique",
+          "Statut **Playing…** en anglais, rotation toutes les 10 s"
+        ],
+        "de": [
+          "Affiliate-Tags pro Server",
+          "**/rewind** — persönliche Musik-Statistik",
+          "**Playing…**-Status auf Englisch, alle 10 s"
+        ]
+      }
     }
   ]
 }

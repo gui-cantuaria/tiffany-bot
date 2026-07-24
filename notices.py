@@ -21,7 +21,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from locale_utils import slash_ephemeral
+from locale_utils import slash_ephemeral, slash_desc_kwargs
 import updates as tiffany_updates
 import owner_dashboard
 import guild_config
@@ -556,23 +556,53 @@ def _hist_payload(status: str, extra: Optional[dict] = None) -> dict:
         payload.update(extra)
     return payload
 
+_POSTING_STALE_SEC = 300  # stale "posting" locks allow retry after 5 min
+_history_post_lock = asyncio.Lock()
+
+
+def _entry_blocks_dedup(entry: object) -> bool:
+    """Return True if history entry should block repost/retry."""
+    if not isinstance(entry, dict):
+        return True
+    status = entry.get("status")
+    if status == "posting":
+        return (time.time() - entry.get("ts", 0)) < _POSTING_STALE_SEC
+    if status == "failed":
+        return (time.time() - entry.get("ts", 0)) < 60
+    return True
+
+
 def historico_check(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool:
     """Return True if already processed (dedup by URL or hash)."""
-    # Check V17 format (L: / H:)
-    if _hist_key_link(link_norm) in h:
+    if link_norm in h and _entry_blocks_dedup(h[link_norm]):
+        return True
+    if _hist_key_link(link_norm) in h and _entry_blocks_dedup(h[_hist_key_link(link_norm)]):
         return True
     if dedupe_hash and _hist_key_hash(dedupe_hash) in h:
-        return True
-    # Backward-compat: check bare URL (V16 format)
-    if link_norm in h:
-        return True
+        if _entry_blocks_dedup(h[_hist_key_hash(dedupe_hash)]):
+            return True
     return False
+
 
 def historico_set(h: dict, link_norm: str, dedupe_hash: Optional[str], status: str, extra: Optional[dict] = None) -> None:
     payload = _hist_payload(status, extra)
     h[_hist_key_link(link_norm)] = payload
     if dedupe_hash:
         h[_hist_key_hash(dedupe_hash)] = payload
+
+
+def historico_release_posting(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> None:
+    """Remove in-flight posting lock after a failed channel.send."""
+    for key in (_hist_key_link(link_norm), _hist_key_hash(dedupe_hash) if dedupe_hash else None):
+        if not key:
+            continue
+        entry = h.get(key)
+        if isinstance(entry, dict) and entry.get("status") == "posting":
+            h.pop(key, None)
+    if link_norm in h:
+        entry = h.get(link_norm)
+        if isinstance(entry, dict) and entry.get("status") == "posting":
+            h.pop(link_norm, None)
 
 def make_dedupe_hash(titulo: str, published_ts: int) -> str:
     # No hour bucket — same title = same hash regardless of publish time
@@ -1552,20 +1582,30 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
     """Post a news item to the channel. Returns True if posted successfully."""
     link_norm = noticia.get("link_norm") or ""
     dedupe = noticia.get("dedupe")
-    if historico_check(history, link_norm, dedupe):
-        log.info("Skip duplicate news (history): %s", (noticia.get("titulo") or "")[:60])
-        return False
+
+    async with _history_post_lock:
+        if historico_check(history, link_norm, dedupe):
+            log.info("Skip duplicate news (history): %s", (noticia.get("titulo") or "")[:60])
+            return False
+        historico_set(history, link_norm, dedupe, "posting")
+        save_history(history)
 
     # Safety lock: never post without image
     img_url = noticia.get("imagem")
     if not img_url:
         log.error(f"Attempt to post without image, aborting: {noticia.get('titulo', '')[:60]}")
+        async with _history_post_lock:
+            historico_release_posting(history, link_norm, dedupe)
+            save_history(history)
         return False
 
     # Download image for attachment (avoids hotlink protection / URLs Discord won't load)
     img_data = await _baixar_imagem(img_url)
     if not img_data:
         log.warning(f"Failed to download image, aborting post: {noticia.get('titulo', '')[:60]}")
+        async with _history_post_lock:
+            historico_release_posting(history, link_norm, dedupe)
+            save_history(history)
         return False
 
     img_bytes, img_ext = img_data
@@ -1640,6 +1680,9 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         return True
     except Exception as e:
         log.error(f"  Error posting: {e}")
+        async with _history_post_lock:
+            historico_set(history, link_norm, dedupe, "failed", {"reason": "send_error"})
+            save_history(history)
         return False
 
 # =========================
@@ -2356,7 +2399,7 @@ def _build_public_status_embed() -> discord.Embed:
 
 @discord_client.tree.command(
     name="status",
-    description="Is Tiffany online? Connection and available features",
+    **slash_desc_kwargs("slash.cmd.status"),
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_status(interaction: discord.Interaction):
@@ -2371,7 +2414,7 @@ async def cmd_status(interaction: discord.Interaction):
 # =========================
 @discord_client.tree.command(
     name="stats",
-    description="Owner-only usage and AI cost panel",
+    **slash_desc_kwargs("slash.cmd.stats"),
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_stats(interaction: discord.Interaction):
@@ -2419,7 +2462,7 @@ TIFFANY_PINK = 0xFF69B4
 
 @discord_client.tree.command(
     name="updates",
-    description="Recent Tiffany updates and improvements",
+    **slash_desc_kwargs("slash.cmd.updates"),
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_updates(interaction: discord.Interaction):

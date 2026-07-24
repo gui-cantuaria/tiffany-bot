@@ -12,6 +12,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from locale_utils import slash_desc_kwargs
+
 log = logging.getLogger("tiffany-bot")
 
 BRAND_PINK = 0xFF69B4
@@ -151,8 +153,8 @@ async def setup(bot: commands.Bot):
         name="embed",
         aliases=["emb"],
         invoke_without_command=True,
-        description="Create and send custom embeds",
         dm_permission=False,
+        **slash_desc_kwargs("slash.cmd.embed"),
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_embed(ctx: commands.Context):

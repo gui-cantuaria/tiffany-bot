@@ -16,6 +16,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from locale_utils import slash_desc_kwargs
+
 log = logging.getLogger("tiffany-bot")
 
 BRAND_PINK = 0xFF69B4
@@ -240,8 +242,8 @@ async def setup(bot: commands.Bot):
         name="giveaway",
         aliases=["gw"],
         invoke_without_command=True,
-        description="Customizable Tiffany giveaways",
         dm_permission=False,
+        **slash_desc_kwargs("slash.cmd.giveaway"),
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_giveaway(ctx: commands.Context):

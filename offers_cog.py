@@ -397,6 +397,10 @@ REDE_KEYWORDS = (
 # HISTORY / DEDUP
 # =========================
 
+_POSTING_STALE_SEC = 300
+_offers_post_lock = asyncio.Lock()
+
+
 def _load_history() -> dict:
     if os.path.exists(HISTORY_FILE):
         try:
@@ -462,7 +466,61 @@ def _deal_listing_key(deal: dict) -> str:
 
 def _is_duplicate(history: dict, url: str) -> bool:
     h = _deal_hash(url)
-    return h in history.get("deals", {})
+    entry = history.get("deals", {}).get(h)
+    if not entry:
+        return False
+    return _deal_entry_blocks(entry)
+
+
+def _deal_entry_blocks(entry: object) -> bool:
+    """Return True if deal history entry should block repost."""
+    if not isinstance(entry, dict):
+        return True
+    status = entry.get("status")
+    if status == "posting":
+        return (time.time() - entry.get("ts", 0)) < _POSTING_STALE_SEC
+    if status == "failed":
+        return (time.time() - entry.get("ts", 0)) < 60
+    return True
+
+
+def _try_reserve_deal(history: dict, deal: dict) -> bool:
+    """Mark deal as posting before channel.send — prevents duplicate cycles."""
+    url = deal.get("url") or ""
+    if not url:
+        return False
+    h = _deal_hash(url)
+    deals = history.setdefault("deals", {})
+    existing = deals.get(h)
+    if existing and _deal_entry_blocks(existing):
+        return False
+    orig_tkey = deal.get("_orig_tkey") or _title_key(deal.get("title") or "")
+    listing = _deal_listing_key(deal)
+    entry: dict = {
+        "url": url,
+        "title": (deal.get("title") or "")[:100],
+        "ts": time.time(),
+        "status": "posting",
+    }
+    if orig_tkey:
+        entry["tkey"] = orig_tkey
+    if listing:
+        entry["listing"] = listing
+    deals[h] = entry
+    _save_history(history)
+    return True
+
+
+def _release_deal_posting(history: dict, deal: dict) -> None:
+    """Remove in-flight posting lock after a failed send cycle."""
+    url = deal.get("url") or ""
+    if not url:
+        return
+    h = _deal_hash(url)
+    entry = history.get("deals", {}).get(h)
+    if isinstance(entry, dict) and entry.get("status") == "posting":
+        del history["deals"][h]
+        _save_history(history)
 
 
 def _is_title_key_in_history(history: dict, key: str) -> bool:
@@ -470,7 +528,7 @@ def _is_title_key_in_history(history: dict, key: str) -> bool:
     if not key:
         return False
     for v in history.get("deals", {}).values():
-        if isinstance(v, dict) and v.get("tkey") == key:
+        if isinstance(v, dict) and v.get("tkey") == key and _deal_entry_blocks(v):
             return True
     return False
 
@@ -479,7 +537,7 @@ def _is_listing_in_history(history: dict, listing: str) -> bool:
     if not listing:
         return False
     for v in history.get("deals", {}).values():
-        if isinstance(v, dict) and v.get("listing") == listing:
+        if isinstance(v, dict) and v.get("listing") == listing and _deal_entry_blocks(v):
             return True
     return False
 
@@ -2218,6 +2276,11 @@ async def _run_deals_cycle_inner() -> None:
 
     posted = 0
     for deal in approved[:MAX_POSTS_POR_CICLO]:
+        async with _offers_post_lock:
+            if not _try_reserve_deal(history, deal):
+                log.info("Skip duplicate/reserved offer: %s", (deal.get("title") or "")[:60])
+                continue
+
         # Download image once per deal
         img_data = None
         if deal.get("image"):
@@ -2283,6 +2346,10 @@ async def _run_deals_cycle_inner() -> None:
 
             if posted < MAX_POSTS_POR_CICLO:
                 await asyncio.sleep(POST_SPACING_SEC)
+        else:
+            async with _offers_post_lock:
+                _release_deal_posting(history, deal)
+            log.warning("Deal reserved but not posted to any channel: %s", (deal.get("title") or "")[:60])
 
     if approved and posted == 0:
         log.error(

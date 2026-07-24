@@ -7,6 +7,7 @@ import json
 from typing import Literal, Optional
 
 import discord
+from discord import app_commands
 
 GuildLang = Literal["en", "es", "pt", "fr", "de"]
 
@@ -91,6 +92,48 @@ def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
         return key
     text = bucket.get(lang) or bucket.get("en") or key
     return text.format(**kwargs) if kwargs else text
+
+
+# Discord native slash localizations (description_localizations / locale_str)
+_SLASH_LOCALE_BY_LANG: dict[GuildLang, tuple[discord.Locale, ...]] = {
+    "pt": (discord.Locale.brazil_portuguese,),
+    "es": (discord.Locale.spain_spanish, discord.Locale.latin_american_spanish),
+    "fr": (discord.Locale.french,),
+    "de": (discord.Locale.german,),
+}
+
+
+def _slash_localizations(bucket: dict[str, str]) -> dict[discord.Locale, str]:
+    locs: dict[discord.Locale, str] = {}
+    for lang, locales in _SLASH_LOCALE_BY_LANG.items():
+        text = bucket.get(lang)
+        if text:
+            for locale in locales:
+                locs[locale] = text
+    return locs
+
+
+def slash_desc_kwargs(key: str) -> dict[str, object]:
+    """Kwargs for @tree.command / @hybrid_command with Discord description_localizations."""
+    bucket = _STRINGS.get(key)
+    if not bucket:
+        return {"description": key}
+    en = bucket.get("en") or key
+    locs = _slash_localizations(bucket)
+    out: dict[str, object] = {"description": en}
+    if locs:
+        out["description_localizations"] = locs
+    return out
+
+
+def slash_param(key: str) -> app_commands.locale_str:
+    """Localized parameter description for @app_commands.describe."""
+    bucket = _STRINGS.get(key)
+    if not bucket:
+        return app_commands.locale_str(key)
+    en = bucket.get("en") or key
+    locs = _slash_localizations(bucket)
+    return app_commands.locale_str(en, localizations=locs)
 
 
 def chat_system_prompt(lang: GuildLang, *, user_message: str = "") -> str:
@@ -2053,6 +2096,279 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "⚠️ Ya respondí. Insistir no desbloquea nada.",
         "fr": "⚠️ Déjà répondu. Insister ne débloquera rien.",
         "pt": "⚠️ Já respondi. Insistir não desbloqueia nada.",
+    },
+    "slash.cmd.about": {
+        "de": "Wer Tiffany ist und was sie kann",
+        "en": "Who is Tiffany and what she does",
+        "es": "Quién es Tiffany y qué hace",
+        "fr": "Qui est Tiffany et ce qu'elle fait",
+        "pt": "Quem é a Tiffany e o que ela faz",
+    },
+    "slash.cmd.autoplay": {
+        "de": "Autoplay ein-/ausschalten",
+        "en": "Toggle autoplay",
+        "es": "Activar o desactivar autoplay",
+        "fr": "Activer/désactiver la lecture auto",
+        "pt": "Liga/desliga autoplay",
+    },
+    "slash.cmd.chat": {
+        "de": "Stelle Tiffany AI eine Frage (Bilder OK)",
+        "en": "Ask Tiffany AI a question (images OK)",
+        "es": "Pregunta a la IA de Tiffany (imágenes OK)",
+        "fr": "Pose une question à l'IA Tiffany (images OK)",
+        "pt": "Pergunta à IA da Tiffany (aceita imagens)",
+    },
+    "slash.cmd.clear": {
+        "de": "Musik stoppen, Warteschlange leeren und Voice verlassen",
+        "en": "Stop music, clear queue, and leave voice",
+        "es": "Detener música, vaciar cola y salir del canal de voz",
+        "fr": "Arrêter la musique, vider la file et quitter le vocal",
+        "pt": "Para a música, limpa a fila e sai da call",
+    },
+    "slash.cmd.clip": {
+        "de": "Die letzten 30 Sekunden Audio aus dem Voice speichern",
+        "en": "Save the last 30 seconds of voice audio",
+        "es": "Guardar los últimos 30 s de audio del canal de voz",
+        "fr": "Enregistrer les 30 dernières secondes du vocal",
+        "pt": "Salva os últimos 30 s de áudio da call",
+    },
+    "slash.cmd.embed": {
+        "de": "Eigene Embeds erstellen und senden",
+        "en": "Create and send custom embeds",
+        "es": "Crear y enviar embeds personalizados",
+        "fr": "Créer et envoyer des embeds personnalisés",
+        "pt": "Cria e envia embeds personalizados",
+    },
+    "slash.cmd.game": {
+        "de": "Steam/Epic-Spiele aus deiner Anfrage empfehlen",
+        "en": "Recommend Steam/Epic games from your query",
+        "es": "Recomienda juegos de Steam/Epic según tu búsqueda",
+        "fr": "Recommande des jeux Steam/Epic selon ta recherche",
+        "pt": "Recomenda jogos Steam/Epic a partir da sua busca",
+    },
+    "slash.cmd.giveaway": {
+        "de": "Anpassbare Tiffany-Giveaways",
+        "en": "Customizable Tiffany giveaways",
+        "es": "Sorteos personalizables de Tiffany",
+        "fr": "Giveaways Tiffany personnalisables",
+        "pt": "Sorteios personalizáveis da Tiffany",
+    },
+    "slash.cmd.help": {
+        "de": "Alle Befehle: Musik, KI, Stats, Giveaways, Einstellungen",
+        "en": "List all commands: music, AI, stats, giveaways, settings",
+        "es": "Lista de comandos: música, IA, stats, sorteos, ajustes",
+        "fr": "Liste des commandes : musique, IA, stats, giveaways, réglages",
+        "pt": "Lista de comandos: música, IA, stats, sorteios, ajustes",
+    },
+    "slash.cmd.language": {
+        "de": "Sprachauswahl öffnen",
+        "en": "Open language selection panel",
+        "es": "Abrir panel de idioma",
+        "fr": "Ouvrir le panneau de langue",
+        "pt": "Abre o painel de idioma",
+    },
+    "slash.cmd.loop": {
+        "de": "Loop für den aktuellen Track umschalten",
+        "en": "Toggle loop for the current track",
+        "es": "Activar/desactivar repetición de la pista actual",
+        "fr": "Activer/désactiver la boucle du morceau actuel",
+        "pt": "Liga/desliga loop da faixa atual",
+    },
+    "slash.cmd.lyrics": {
+        "de": "Songtext für aktuellen oder angegebenen Titel suchen",
+        "en": "Look up lyrics for current or specified song",
+        "es": "Buscar letra de la canción actual o indicada",
+        "fr": "Chercher les paroles du morceau actuel ou indiqué",
+        "pt": "Busca letra da música atual ou informada",
+    },
+    "slash.cmd.mod_panel": {
+        "de": "Moderations-Einstellungen öffnen (Admins)",
+        "en": "Open moderation settings panel (admins)",
+        "es": "Abrir panel de moderación (admins)",
+        "fr": "Ouvrir le panneau de modération (admins)",
+        "pt": "Abre o painel de moderação (admins)",
+    },
+    "slash.cmd.nonstop": {
+        "de": "24/7-Modus im Voice-Kanal umschalten",
+        "en": "Toggle 24/7 mode in voice channel",
+        "es": "Activar/desactivar modo 24/7 en el canal de voz",
+        "fr": "Activer/désactiver le mode 24/7 dans le vocal",
+        "pt": "Liga/desliga modo 24/7 na call",
+    },
+    "slash.cmd.pause": {
+        "de": "Aktuellen Track pausieren",
+        "en": "Pause the current track",
+        "es": "Pausar la pista actual",
+        "fr": "Mettre en pause le morceau actuel",
+        "pt": "Pausa a faixa atual",
+    },
+    "slash.cmd.play": {
+        "de": "Song per Name oder URL abspielen",
+        "en": "Play a song by name or URL",
+        "es": "Reproducir una canción por nombre o URL",
+        "fr": "Lire un morceau par nom ou URL",
+        "pt": "Toca uma música por nome ou URL",
+    },
+    "slash.cmd.player_status": {
+        "de": "Tiffany-Gesundheitscheck (Admin)",
+        "en": "Tiffany health check (admin)",
+        "es": "Diagnóstico de Tiffany (admin)",
+        "fr": "Diagnostic Tiffany (admin)",
+        "pt": "Diagnóstico da Tiffany (admin)",
+    },
+    "slash.cmd.playlist": {
+        "de": "Gespeicherte Playlists verwalten (save, load, list, del)",
+        "en": "Manage saved playlists (save, load, list, del)",
+        "es": "Gestionar playlists guardadas (save, load, list, del)",
+        "fr": "Gérer les playlists enregistrées (save, load, list, del)",
+        "pt": "Gerencia playlists salvas (save, load, list, del)",
+    },
+    "slash.cmd.queue": {
+        "de": "Warteschlange und aktuellen Track anzeigen",
+        "en": "Show the queue and now playing",
+        "es": "Mostrar cola y reproducción actual",
+        "fr": "Afficher la file et le morceau en cours",
+        "pt": "Mostra a fila e o que está tocando",
+    },
+    "slash.cmd.random": {
+        "de": "Zufälligen Song zur Warteschlange hinzufügen",
+        "en": "Add a random song to the queue",
+        "es": "Añadir una canción aleatoria a la cola",
+        "fr": "Ajouter un morceau aléatoire à la file",
+        "pt": "Adiciona uma música aleatória à fila",
+    },
+    "slash.cmd.replay": {
+        "de": "Aktuellen Track erneut abspielen",
+        "en": "Replay the current track",
+        "es": "Repetir la pista actual",
+        "fr": "Rejouer le morceau actuel",
+        "pt": "Repete a faixa atual",
+    },
+    "slash.cmd.resume": {
+        "de": "Pausierte Wiedergabe fortsetzen",
+        "en": "Resume paused playback",
+        "es": "Reanudar reproducción pausada",
+        "fr": "Reprendre la lecture en pause",
+        "pt": "Retoma a reprodução pausada",
+    },
+    "slash.cmd.rewind": {
+        "de": "Dein persönliches Tiffany Rewind!",
+        "en": "Your personal Tiffany Rewind!",
+        "es": "¡Tu Tiffany Rewind personal!",
+        "fr": "Ton Tiffany Rewind personnel !",
+        "pt": "Seu Tiffany Rewind pessoal!",
+    },
+    "slash.cmd.roleplay": {
+        "de": "Lockerer Chat mit Tiffany (Persönlichkeit zuerst einrichten)",
+        "en": "Casual chat with Tiffany (configure personality first)",
+        "es": "Chat casual con Tiffany (configura personalidad antes)",
+        "fr": "Chat décontracté avec Tiffany (configure d'abord la personnalité)",
+        "pt": "Chat casual com a Tiffany (configure a personalidade antes)",
+    },
+    "slash.cmd.seek": {
+        "de": "Vor-/Zurückspulen (+30, -15, 1:30)",
+        "en": "Seek forward or backward (+30, -15, 1:30)",
+        "es": "Avanzar o retroceder (+30, -15, 1:30)",
+        "fr": "Avancer ou reculer (+30, -15, 1:30)",
+        "pt": "Pula na faixa (+30, -15, 1:30)",
+    },
+    "slash.cmd.shuffle": {
+        "de": "Warteschlange mischen",
+        "en": "Shuffle the queue",
+        "es": "Mezclar la cola",
+        "fr": "Mélanger la file d'attente",
+        "pt": "Embaralha a fila",
+    },
+    "slash.cmd.skip": {
+        "de": "Aktuellen Track überspringen (Abstimmung ab 3 Hörern)",
+        "en": "Skip the current track (vote if 3+ listeners)",
+        "es": "Saltar la pista actual (voto si hay 3+ oyentes)",
+        "fr": "Passer le morceau actuel (vote si 3+ auditeurs)",
+        "pt": "Pula a faixa atual (votação se 3+ na call)",
+    },
+    "slash.cmd.stats": {
+        "de": "Nur Owner: Nutzung und KI-Kosten",
+        "en": "Owner-only usage and AI cost panel",
+        "es": "Solo owner: uso y costos de IA",
+        "fr": "Owner uniquement : usage et coûts IA",
+        "pt": "Só o dono: uso e custos de IA",
+    },
+    "slash.cmd.status": {
+        "de": "Ist Tiffany online? Verbindung und Funktionen",
+        "en": "Is Tiffany online? Connection and available features",
+        "es": "¿Tiffany en línea? Conexión y funciones disponibles",
+        "fr": "Tiffany en ligne ? Connexion et fonctions disponibles",
+        "pt": "A Tiffany está online? Conexão e recursos disponíveis",
+    },
+    "slash.cmd.updates": {
+        "de": "Neueste Tiffany-Updates und Verbesserungen",
+        "en": "Recent Tiffany updates and improvements",
+        "es": "Novedades y mejoras recientes de Tiffany",
+        "fr": "Dernières mises à jour et améliorations Tiffany",
+        "pt": "Novidades e melhorias recentes da Tiffany",
+    },
+    "slash.param.fmt": {
+        "de": "Dateiformat (mp3 oder wav)",
+        "en": "File format (mp3 or wav)",
+        "es": "Formato de archivo (mp3 o wav)",
+        "fr": "Format de fichier (mp3 ou wav)",
+        "pt": "Formato do arquivo (mp3 ou wav)",
+    },
+    "slash.param.game_query": {
+        "de": "Genre, Stil oder Name (z. B. RPG, Multiplayer)",
+        "en": "Genre, style, or name (e.g. RPG, multiplayer)",
+        "es": "Género, estilo o nombre (ej. RPG, multijugador)",
+        "fr": "Genre, style ou nom (ex. RPG, multijoueur)",
+        "pt": "Gênero, estilo ou nome (ex.: RPG, multiplayer)",
+    },
+    "slash.param.lyrics_query": {
+        "de": "Songname (optional, sonst aktueller Track)",
+        "en": "Song name (optional, uses current track if empty)",
+        "es": "Nombre de la canción (opcional, usa la actual si vacío)",
+        "fr": "Nom du morceau (optionnel, morceau actuel si vide)",
+        "pt": "Nome da música (opcional; usa a atual se vazio)",
+    },
+    "slash.param.message": {
+        "de": "Was du Tiffany sagen möchtest",
+        "en": "What you want to say to Tiffany",
+        "es": "Lo que quieres decirle a Tiffany",
+        "fr": "Ce que tu veux dire à Tiffany",
+        "pt": "O que você quer dizer para a Tiffany",
+    },
+    "slash.param.playlist_action": {
+        "de": "Aktion (save/load/list/del)",
+        "en": "Action (save/load/list/del)",
+        "es": "Acción (save/load/list/del)",
+        "fr": "Action (save/load/list/del)",
+        "pt": "Ação (save/load/list/del)",
+    },
+    "slash.param.playlist_name": {
+        "de": "Name der Playlist",
+        "en": "Playlist name",
+        "es": "Nombre de la playlist",
+        "fr": "Nom de la playlist",
+        "pt": "Nome da playlist",
+    },
+    "slash.param.question": {
+        "de": "Deine Frage an Tiffany",
+        "en": "Your question for Tiffany",
+        "es": "Tu pregunta para Tiffany",
+        "fr": "Ta question pour Tiffany",
+        "pt": "Sua pergunta para a Tiffany",
+    },
+    "slash.param.query": {
+        "de": "Songname oder URL",
+        "en": "Song name or URL",
+        "es": "Nombre de la canción o URL",
+        "fr": "Nom du morceau ou URL",
+        "pt": "Nome ou URL da música",
+    },
+    "slash.param.time_expr": {
+        "de": "Zeit zum Springen (+30, -15, 1:30)",
+        "en": "Time to seek (+30, -15, 1:30)",
+        "es": "Tiempo para saltar (+30, -15, 1:30)",
+        "fr": "Temps pour avancer (+30, -15, 1:30)",
+        "pt": "Tempo para pular (+30, -15, 1:30)",
     },
     "slash.guild_only": {
         "de": "⚠️ Verwenden Sie dies in einem Server.",
