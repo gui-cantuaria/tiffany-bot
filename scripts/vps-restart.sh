@@ -1,79 +1,40 @@
 #!/bin/bash
-# Reinicia o Tiffany Bot na VPS (mata só processos com cwd em /opt/tiffany-bot).
-# Uso: bash scripts/vps-restart.sh
+# Reinicia o Tiffany Bot na VPS — SOMENTE via systemd (nunca nohup).
+# Uso: bash /opt/tiffany-bot/scripts/vps-restart.sh
 set -e
 TIFFANY_DIR="/opt/tiffany-bot"
 cd "$TIFFANY_DIR"
 
-_kill_by_cwd() {
-  local pattern="$1"
-  local pid cwd
-  for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do
-    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || echo "")
-    if [ "$cwd" = "$TIFFANY_DIR" ]; then
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-  done
-}
-
-_count_by_cwd() {
-  local pattern="$1"
-  local n=0 pid cwd
-  for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do
-    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || echo "")
-    if [ "$cwd" = "$TIFFANY_DIR" ]; then
-      n=$((n + 1))
-    fi
-  done
-  echo "$n"
-}
-
 echo "==> Atualizando arquivos do GitHub..."
 git fetch origin main
-git checkout origin/main -- launcher.py notices.py tiffany_voice.py scripts/vps-restart.sh affiliate_config.py offers_cog.py 2>/dev/null || \
-  git checkout origin/main -- launcher.py notices.py tiffany_voice.py scripts/vps-restart.sh
+git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py \
+  scripts/vps-restart.sh scripts/kill-orphans.sh scripts/tiffany-bot.service scripts/run.sh 2>/dev/null || true
 
-echo "==> Parando instâncias antigas (cwd $TIFFANY_DIR)..."
-for _ in 1 2 3; do
-  _kill_by_cwd "launcher.py"
-  _kill_by_cwd "notices.py"
-  _kill_by_cwd "offers.py"
-  sleep 2
-  REMAIN=$(_count_by_cwd "launcher.py")
-  [ "$REMAIN" -eq 0 ] && break
-  echo "    ainda há $REMAIN launcher(s), tentando de novo..."
-done
-rm -f /tmp/tiffany_launcher.lock
-echo '{}' > voice_state.json
+echo "==> Matando instâncias duplicadas..."
+bash "$TIFFANY_DIR/scripts/kill-orphans.sh"
 
-if [ "$(_count_by_cwd "launcher.py")" -gt 0 ]; then
-  echo "ERRO — não consegui parar todos os launchers. Rode:"
-  echo "  pgrep -af launcher.py"
-  exit 1
-fi
+echo "==> Recarregando unit systemd..."
+cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
+systemctl daemon-reload
 
-echo "==> Aguardando 3s..."
-sleep 3
-
-echo "==> Iniciando launcher..."
-export PYTHONUNBUFFERED=1
-nohup python3 launcher.py >> bot.log 2>&1 &
+echo "==> Iniciando tiffany-bot (1 instância)..."
+systemctl start tiffany-bot
 sleep 5
 
-N=$(_count_by_cwd "launcher.py")
-if [ "$N" -eq 1 ]; then
-  PID=$(pgrep -f "launcher.py" | while read -r p; do
-    cwd=$(readlink -f "/proc/$p/cwd" 2>/dev/null || echo "")
-    [ "$cwd" = "$TIFFANY_DIR" ] && echo "$p" && break
-  done)
-  echo "OK — launcher rodando (PID ${PID:-?}, total: $N)"
-  tail -3 logs/notices.log 2>/dev/null | grep -E "Online|ERROR|Traceback" || true
-elif [ "$N" -eq 0 ]; then
-  echo "ERRO — nenhum launcher rodando. Últimas linhas:"
-  tail -25 logs/notices.log 2>/dev/null || tail -25 bot.log 2>/dev/null || true
-  exit 1
-else
-  echo "ERRO — $N launchers ainda ativos (deveria ser 1):"
-  pgrep -af "launcher.py" || true
+if ! systemctl is-active --quiet tiffany-bot; then
+  echo "ERRO — service inativo. Logs:"
+  journalctl -u tiffany-bot -n 30 --no-pager
   exit 1
 fi
+
+N=$(pgrep -f "launcher.py" 2>/dev/null | wc -l)
+echo "Launchers ativos: $N"
+pgrep -af "launcher.py|notices.py" || true
+
+if [ "$N" -ne 1 ]; then
+  echo "ERRO — deveria haver exatamente 1 launcher. Rode: bash scripts/kill-orphans.sh && systemctl restart tiffany-bot"
+  exit 1
+fi
+
+echo "OK — Tiffany rodando via systemd."
+journalctl -u tiffany-bot -n 15 --no-pager

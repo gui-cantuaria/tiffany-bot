@@ -24,7 +24,7 @@ git checkout origin/main -- \
   giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
   updates.py updates.json owner_dashboard.py roleplay_config.py \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
-git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service \
+git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh \
   scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
   scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
   CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md 2>/dev/null || true
@@ -84,25 +84,15 @@ fi
 
 _stop_systemd() {
     echo "[deploy] Parando systemd e processos órfãos..."
-    systemctl stop tiffany-bot 2>/dev/null || true
-    sleep 2
-    pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
-    pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
-    pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
-    rm -f /tmp/tiffany_launcher.lock
-    sleep 2
-    KILL_ATTEMPTS=0
-    while pgrep -f "/opt/tiffany-bot/(launcher|notices|offers).py" > /dev/null 2>&1; do
-        KILL_ATTEMPTS=$((KILL_ATTEMPTS + 1))
-        if [ $KILL_ATTEMPTS -ge 5 ]; then
-            echo "[deploy] AVISO: processos systemd ainda vivos após 5 tentativas."
-            break
-        fi
-        pkill -9 -f "/opt/tiffany-bot/launcher.py" 2>/dev/null || true
-        pkill -9 -f "/opt/tiffany-bot/notices.py" 2>/dev/null || true
-        pkill -9 -f "/opt/tiffany-bot/offers.py" 2>/dev/null || true
-        sleep 3
-    done
+    if [ -x scripts/kill-orphans.sh ]; then
+        bash scripts/kill-orphans.sh || true
+    else
+        systemctl stop tiffany-bot 2>/dev/null || true
+        pkill -9 -f '[l]auncher.py' 2>/dev/null || true
+        pkill -9 -f '[n]otices.py' 2>/dev/null || true
+        pkill -9 -f '[o]ffers.py' 2>/dev/null || true
+        rm -f /tmp/tiffany_launcher.lock
+    fi
 }
 
 if [ "$USE_DOCKER" -eq 1 ]; then

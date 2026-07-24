@@ -10,7 +10,7 @@ Wants=warp-svc.service
 Type=simple
 User=root
 WorkingDirectory=/opt/tiffany-bot
-ExecStartPre=/bin/bash -c '/usr/bin/pkill -9 -f "/opt/tiffany-bot/[l]auncher.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/[n]otices.py" 2>/dev/null; /usr/bin/pkill -9 -f "/opt/tiffany-bot/[o]ffers.py" 2>/dev/null; sleep 2; rm -f /tmp/tiffany_launcher.lock; exit 0'
+ExecStartPre=/bin/bash /opt/tiffany-bot/scripts/kill-orphans.sh --pre-start
 # run.sh prefers the venv (Python 3.11+) and falls back to system python3.
 ExecStart=/bin/bash /opt/tiffany-bot/scripts/run.sh
 Restart=on-failure
