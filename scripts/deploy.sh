@@ -121,7 +121,7 @@ fi
 
 echo "[deploy] Modo systemd..."
 cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
-chmod +x scripts/run.sh scripts/warp-setup.sh scripts/warp-healthcheck.sh 2>/dev/null || true
+chmod +x scripts/run.sh scripts/kill-orphans.sh scripts/vps-restart.sh scripts/warp-setup.sh scripts/warp-healthcheck.sh 2>/dev/null || true
 systemctl daemon-reload
 
 # Ensure WARP healthcheck timer is installed (idempotent).
@@ -151,8 +151,13 @@ echo "[deploy] Aguardando estabilização (10s)..."
 sleep 10
 
 if systemctl is-active --quiet tiffany-bot; then
-    echo "[deploy] Bot reiniciado com sucesso e estável!"
-    pgrep -a python3 || true
+    LAUNCHERS=$(pgrep -f "launcher.py" 2>/dev/null | wc -l)
+    echo "[deploy] Bot reiniciado — launchers ativos: $LAUNCHERS"
+    pgrep -af "launcher.py|notices.py" 2>/dev/null || true
+    if [ "$LAUNCHERS" -gt 1 ]; then
+        echo "[deploy] AVISO: mais de 1 launcher — rode: bash scripts/kill-orphans.sh && systemctl restart tiffany-bot"
+        exit 1
+    fi
 else
     echo "[deploy] Serviço não está ativo após 10s! Últimos logs:"
     journalctl -u tiffany-bot -n 40 --no-pager || true

@@ -65,7 +65,21 @@ Na VPS (opcional):
 
 ```bash
 systemctl status tiffany-bot
+pgrep -af "launcher.py|notices.py"   # deve ser 1 launcher + 1 notices
 ```
+
+## Processos duplicados (notícias/ofertas 2x)
+
+**Nunca** rode `nohup python launcher.py` nem `python notices.py` manualmente — use só systemd.
+
+Se suspeitar de instância fantasma:
+
+```bash
+bash /opt/tiffany-bot/scripts/kill-orphans.sh
+systemctl restart tiffany-bot
+```
+
+O `tiffany-bot.service` executa `kill-orphans.sh --pre-start` antes de cada start (mata `[l]auncher.py` / `[n]otices.py` **sem exigir path no argv**). O deploy chama o mesmo script ao reiniciar.
 
 ## Runtime JSON state
 
