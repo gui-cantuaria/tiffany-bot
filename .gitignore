@@ -35,6 +35,7 @@ user_lang_prefs.json
 guild_embeds.json
 giveaways.json
 guild_config.json
+roleplay_profiles.json
 
 # Editor / local tooling
 .claude/

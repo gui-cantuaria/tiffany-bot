@@ -151,7 +151,7 @@ async def setup(bot: commands.Bot):
         name="embed",
         aliases=["emb"],
         invoke_without_command=True,
-        description="Cria e envia embeds personalizados (estilo painel)",
+        description="Create and send custom embeds",
         dm_permission=False,
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)

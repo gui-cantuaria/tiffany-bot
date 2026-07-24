@@ -2186,9 +2186,11 @@ async def _run_deals_cycle_inner() -> None:
 
     guilds = guild_config.get_all_guilds_config()
     targets = []
+    seen_channel_ids: set[int] = set()
 
     primary_channel = await _resolve_offers_channel(CANAL_OFERTAS_ID)
     if primary_channel:
+        seen_channel_ids.add(primary_channel.id)
         targets.append({
             "channel": primary_channel,
             "is_primary": True,
@@ -2201,7 +2203,8 @@ async def _run_deals_cycle_inner() -> None:
         if not ch_id or ch_id == CANAL_OFERTAS_ID:
             continue
         ch = await _resolve_offers_channel(int(ch_id))
-        if ch:
+        if ch and ch.id not in seen_channel_ids:
+            seen_channel_ids.add(ch.id)
             targets.append({
                 "channel": ch,
                 "is_primary": False,

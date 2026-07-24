@@ -240,7 +240,7 @@ async def setup(bot: commands.Bot):
         name="giveaway",
         aliases=["gw"],
         invoke_without_command=True,
-        description="Sorteios customizáveis da Tiffany",
+        description="Customizable Tiffany giveaways",
         dm_permission=False,
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)

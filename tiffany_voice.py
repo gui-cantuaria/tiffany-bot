@@ -137,6 +137,19 @@ def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
 
+def _voice_stt_enabled() -> bool:
+    """Wake-word voice commands (STT). Off by default — music via t! only; chat via t!c."""
+    return os.getenv("VOICE_STT_ENABLED", "0").strip() == "1"
+
+
+def _is_bot_owner(user_id: int) -> bool:
+    try:
+        import owner_dashboard as od
+        return od.is_bot_owner(int(user_id))
+    except Exception:
+        return False
+
+
 # As mensagens originais agora estão em locale_utils.py sob as chaves 'voice.kicked_0' até 'voice.kicked_7'
 _KICKED_FROM_VC_MSGS_KEYS: tuple[str, ...] = tuple(f"voice.kicked_{i}" for i in range(8))
 
@@ -1381,6 +1394,8 @@ def _cmd_rate_sec(cmd_name: str) -> float:
 
 def _check_cmd_rate_limit(user_id: int, cmd_name: str) -> tuple[bool, float]:
     """Return (allowed, seconds_remaining)."""
+    if _is_bot_owner(user_id):
+        return True, 0.0
     sec = _cmd_rate_sec(cmd_name)
     key = (user_id, cmd_name)
     now = time.monotonic()
@@ -1422,6 +1437,8 @@ async def slash_rate_limit_check(interaction: discord.Interaction) -> bool:
 
 def _check_cooldown(user_id: int) -> tuple[bool, int]:
     """Return (allowed, seconds_remaining). Uses sliding window and abuse blocking."""
+    if _is_bot_owner(user_id):
+        return True, 0
     now = time.monotonic()
     if user_id not in _user_rl_data:
         _user_rl_data[user_id] = {"history": [], "blocked_until": 0.0}
@@ -1591,6 +1608,8 @@ def _ai_rate_limit_peek(
     user_id: int = 0,
 ) -> tuple[bool, str]:
     """Check global/server/bucket/DM-user AI limits without recording a call."""
+    if user_id and _is_bot_owner(user_id):
+        return True, ""
     now = time.monotonic()
     while _global_ai_calls and (now - _global_ai_calls[0]) > _GLOBAL_RL_WINDOW:
         _global_ai_calls.popleft()
@@ -3921,16 +3940,16 @@ _presence_rotation_task: asyncio.Task | None = None
 # Global Discord presence — short lines after Discord's "Playing …" (Jogando … in PT clients)
 PRESENCE_ROTATE_SEC = 10
 PRESENCE_LINES: tuple[str, ...] = (
-    "/help — todos os comandos",
-    "/play — música na call",
-    "/chat — pergunte qualquer coisa",
-    "/language — escolha seu idioma",
-    "/game — jogos Steam e Epic",
-    "/rewind — suas estatísticas",
-    "/roleplay — chat casual comigo",
-    "/about — o que eu faço",
-    "/status — estou online?",
-    "/updates — novidades recentes",
+    "/help — all commands",
+    "/play — music in voice",
+    "/chat — ask me anything",
+    "/language — pick your language",
+    "/game — Steam & Epic deals",
+    "/rewind — your stats",
+    "/roleplay — casual chat",
+    "/about — what I do",
+    "/status — am I online?",
+    "/updates — recent changes",
 )
 
 
@@ -5247,6 +5266,34 @@ async def _tts_speak_quick(vc, text: str) -> None:
             vc.resume()
     except Exception as e:
         log.debug("_tts_speak_quick failed: %s", e)
+
+
+def _attach_voice_stt(
+    session: _GuildVoiceSession,
+    guild_id: int,
+    vc,
+    bot: discord.Client,
+) -> None:
+    """Start microphone STT workers only when VOICE_STT_ENABLED=1."""
+    session.listen_task = None
+    session.question_task = None
+    if not _voice_stt_enabled():
+        return
+    if _is_wavelink_player(vc) or not getattr(vc, "listen", None):
+        return
+    try:
+        sink = _PCMBufferSink(session)
+        vc.listen(sink)
+        session.listen_task = asyncio.create_task(
+            _voice_listen_loop(guild_id, vc, bot),
+            name=f"tiffany-voice-{guild_id}",
+        )
+        session.question_task = asyncio.create_task(
+            _question_worker(guild_id, vc, bot),
+            name=f"tiffany-question-{guild_id}",
+        )
+    except Exception as e:
+        log.warning("Failed to start STT listeners guild=%s: %s", guild_id, e)
 
 
 async def _voice_listen_loop(
@@ -6728,7 +6775,10 @@ def register_voice(bot: commands.Bot) -> None:
 
     async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
         """Answer question using AI. If image_urls provided, uses vision model."""
-        lang = resolve_guild_lang(bot.get_guild(guild_id) if guild_id else None)
+        lang = locale_utils.resolve_lang(
+            bot.get_guild(guild_id) if guild_id else None,
+            user_id or None,
+        )
         try:
             _ctx_id = user_id or guild_id
             
@@ -6756,6 +6806,8 @@ def register_voice(bot: commands.Bot) -> None:
                 if _ctx_id:
                     _add_to_context(_ctx_id, question, zoeira)
                 return zoeira
+            if question and locale_utils.is_chat_nonsense(question):
+                return tr(lang, "chat.nonsense")
 
             client = _get_openrouter_client()
             if client is None:
@@ -6768,7 +6820,12 @@ def register_voice(bot: commands.Bot) -> None:
             ):
                 return tr(lang, "err.rate_limit")
 
-            system_msg = {"role": "system", "content": locale_utils.chat_system_prompt(lang)}
+            system_msg = {
+                "role": "system",
+                "content": locale_utils.chat_system_prompt(
+                    lang, user_message=question if not image_urls else "",
+                ),
+            }
             _ctx_id = user_id or guild_id
             history_msgs = _get_context_messages(_ctx_id) if _ctx_id else []
 
@@ -6929,11 +6986,16 @@ def register_voice(bot: commands.Bot) -> None:
                     _play_worker(gid, vc, bot), name=f"tiffany-music-{gid}"
                 )
             if session.question_task is None or session.question_task.done():
-                log.warning("Question worker dead — reviving via command guild=%s", gid)
-                session.question_task = asyncio.create_task(
-                    _question_worker(gid, vc, bot), name=f"tiffany-question-{gid}"
-                )
-            if (session.listen_task is None or session.listen_task.done()) and not _is_wavelink_player(vc):
+                if _voice_stt_enabled():
+                    log.warning("Question worker dead — reviving via command guild=%s", gid)
+                    session.question_task = asyncio.create_task(
+                        _question_worker(gid, vc, bot), name=f"tiffany-question-{gid}"
+                    )
+            if (
+                _voice_stt_enabled()
+                and (session.listen_task is None or session.listen_task.done())
+                and not _is_wavelink_player(vc)
+            ):
                 try:
                     import voice_recv  # noqa: F401
                     if getattr(vc, "listen", None):
@@ -6959,25 +7021,7 @@ def register_voice(bot: commands.Bot) -> None:
                 _play_worker(guild_id, vc, bot),
                 name=f"tiffany-music-{guild_id}",
             )
-        session.question_task = asyncio.create_task(
-            _question_worker(guild_id, vc, bot),
-            name=f"tiffany-question-{guild_id}",
-        )
-        if not _is_wavelink_player(vc):
-            try:
-                import voice_recv  # noqa: F401
-                if getattr(vc, "listen", None):
-                    sink = _PCMBufferSink(session)
-                    try:
-                        vc.listen(sink)
-                    except Exception:
-                        pass
-                    session.listen_task = asyncio.create_task(
-                        _voice_listen_loop(guild_id, vc, bot),
-                        name=f"tiffany-voice-{guild_id}",
-                    )
-            except Exception:
-                session.listen_task = None
+            _attach_voice_stt(session, guild_id, vc, bot)
         _sessions[guild_id] = session
         log.info("Voice session recreated guild=%s", guild_id)
         return session
@@ -7104,55 +7148,58 @@ def register_voice(bot: commands.Bot) -> None:
                 use_lavalink = False
 
         if not use_lavalink:
-            # yt-dlp mode: connect with VoiceRecvClient (music + voice/STT)
-            try:
-                vc = await asyncio.wait_for(
-                    _join_voice_recv_client(guild, channel),
-                    timeout=timeout,
-                )
-                voice_recv_ok = _VOICE_RECV_AVAILABLE
-            except asyncio.TimeoutError:
-                log.warning("VoiceRecvClient timeout — using default VoiceClient (music only).")
+            if _voice_stt_enabled() and _VOICE_RECV_AVAILABLE:
                 try:
-                    existing = guild.voice_client
-                    if existing:
-                        try:
-                            await existing.disconnect(force=True)
-                        except Exception:
-                            pass
-                        await asyncio.sleep(0.05)
                     vc = await asyncio.wait_for(
-                        channel.connect(self_deaf=False),
+                        _join_voice_recv_client(guild, channel),
                         timeout=timeout,
                     )
+                    voice_recv_ok = True
+                except asyncio.TimeoutError:
+                    log.warning("VoiceRecvClient timeout — using default VoiceClient (music only).")
+                    try:
+                        existing = guild.voice_client
+                        if existing:
+                            try:
+                                await existing.disconnect(force=True)
+                            except Exception:
+                                pass
+                            await asyncio.sleep(0.05)
+                        vc = await asyncio.wait_for(
+                            channel.connect(self_deaf=False),
+                            timeout=timeout,
+                        )
+                    except Exception:
+                        log.exception("Failed to connect to voice channel guild=%s", guild.id)
+                        await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
+                        return None, None
                 except Exception:
                     log.exception("Failed to connect to voice channel guild=%s", guild.id)
                     await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
                     return None, None
-            except Exception:
-                log.exception("Failed to connect to voice channel guild=%s", guild.id)
-                await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
-                return None, None
+            else:
+                try:
+                    vc = await asyncio.wait_for(
+                        channel.connect(self_deaf=False),
+                        timeout=timeout,
+                    )
+                    voice_recv_ok = False
+                except Exception:
+                    log.exception("Failed to connect to voice channel guild=%s", guild.id)
+                    await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.join.failed")))
+                    return None, None
 
         # Create session
         session = _GuildVoiceSession(text_channel_id=ctx.channel.id)
         if voice_recv_ok and not use_lavalink:
-            sink = _PCMBufferSink(session)
-            try:
-                vc.listen(sink)
-                session.listen_task = asyncio.create_task(
-                    _voice_listen_loop(gid, vc, bot),
-                    name=f"tiffany-voice-{gid}",
-                )
-            except Exception as e:
-                log.warning("Failed to start listening: %s", e)
-                session.listen_task = None
+            _attach_voice_stt(session, gid, vc, bot)
         else:
             if use_lavalink:
-                log.info("Lavalink mode — voice listening disabled, music via Lavalink.")
+                log.info("Lavalink mode — STT disabled, music via Lavalink.")
+            elif not _voice_stt_enabled():
+                log.info("VOICE_STT_ENABLED=0 — music only (use t!p, t!skip, t!c for chat).")
             else:
-                log.warning("voice_recv unavailable — voice listening disabled, music active.")
-            session.listen_task = None
+                log.warning("voice_recv unavailable — STT disabled, music active.")
 
         # Music worker: only needed in yt-dlp mode (Lavalink uses event listeners)
         if not use_lavalink:
@@ -7162,12 +7209,6 @@ def register_voice(bot: commands.Bot) -> None:
             )
         else:
             session.music_task = None
-
-        # Start question worker
-        session.question_task = asyncio.create_task(
-            _question_worker(gid, vc, bot),
-            name=f"tiffany-question-{gid}",
-        )
 
         _sessions[gid] = session
 
@@ -7188,7 +7229,7 @@ def register_voice(bot: commands.Bot) -> None:
         return session, vc
 
 
-    @bot.hybrid_command(name="skip", aliases=["s"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas", description="Pula a faixa atual (votação se 3+ pessoas)", dm_permission=False)
+    @bot.hybrid_command(name="skip", aliases=["s"], help="Pula a faixa atual: t!s / t!skip — votação se 3+ pessoas", description="Skip the current track (vote if 3+ listeners)", dm_permission=False)
     @_guild_slash
     async def cmd_pular(ctx: commands.Context, *, args: str = ""):
         if not await _require_voice(ctx):
@@ -7263,7 +7304,7 @@ def register_voice(bot: commands.Bot) -> None:
                     song=session.current_song[:60], missing=required - current_votes,
                 )))
 
-    @bot.hybrid_command(name="queue", aliases=["q", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue", description="Mostra a fila e a música tocando agora", dm_permission=False)
+    @bot.hybrid_command(name="queue", aliases=["q", "np", "nowplaying"], help="Fila + música tocando agora: t!q / t!queue", description="Show the queue and now playing", dm_permission=False)
     @_guild_slash
     async def cmd_queue(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -7281,7 +7322,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=q_em)
 
-    @bot.hybrid_command(name="nonstop", aliases=["247"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)", description="Ativa ou desativa o modo 24/7 na call", dm_permission=False)
+    @bot.hybrid_command(name="nonstop", aliases=["247"], help="Modo 24/7 na call: t!247 / t!nonstop (liga/desliga)", description="Toggle 24/7 mode in voice channel", dm_permission=False)
     @_guild_slash
     async def cmd_nonstop(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -7300,7 +7341,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.nonstop_off")))
 
-    @bot.hybrid_command(name="playlist", aliases=["pl"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>", description="Gerencia suas playlists salvas (save, load, list, del)", dm_permission=False)
+    @bot.hybrid_command(name="playlist", aliases=["pl"], help="Playlists salvas: t!pl / t!playlist save|load|list|del <nome>", description="Manage saved playlists (save, load, list, del)", dm_permission=False)
     @app_commands.describe(action="Ação (save/load/list/del)", name="Nome da playlist")
     @_guild_slash
     async def cmd_playlist(ctx: commands.Context, action: str = "", *, name: str = ""):
@@ -7439,7 +7480,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_action")))
 
-    @bot.hybrid_command(name="random", aliases=["r"], help="Música aleatória (sem repetir na fila/sessão): t!r", description="Adiciona uma música aleatória à fila (sem repetir)", dm_permission=False)
+    @bot.hybrid_command(name="random", aliases=["r"], help="Música aleatória (sem repetir na fila/sessão): t!r", description="Add a random song to the queue", dm_permission=False)
     @_guild_slash
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not await _require_voice(ctx):
@@ -7494,7 +7535,7 @@ def register_voice(bot: commands.Bot) -> None:
         _revive_workers(ctx.guild.id, vc, sess)
         await ctx.send(embed=_embed(tr(lang, "voice.random_added", display=display)))
 
-    @bot.hybrid_command(name="play", aliases=["p"], help="Toca uma música: t!p / t!play <nome ou URL>", description="Toca uma música (busca por nome ou URL)", dm_permission=False)
+    @bot.hybrid_command(name="play", aliases=["p"], help="Toca uma música: t!p / t!play <nome ou URL>", description="Play a song by name or URL", dm_permission=False)
     @app_commands.describe(query="Nome ou URL da música")
     @_guild_slash
     async def cmd_play(ctx: commands.Context, *, query: str = ""):
@@ -7986,7 +8027,7 @@ def register_voice(bot: commands.Bot) -> None:
         sess.last_play_status_msg = status
         sess.last_play_status_query = _play_query_key(query)
 
-    @bot.hybrid_command(name="language", aliases=["lang", "idioma"], help="Muda o idioma da Tiffany: t!lang / t!language", description="Abre o painel para selecionar o idioma da Tiffany")
+    @bot.hybrid_command(name="language", aliases=["lang", "idioma"], help="Muda o idioma da Tiffany: t!lang / t!language", description="Open language selection panel")
     @_dm_slash
     async def cmd_language(ctx: commands.Context):
         _stats["commands_used"] += 1
@@ -7997,7 +8038,7 @@ def register_voice(bot: commands.Bot) -> None:
         ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
         await ctx.send(embed=embed, view=view, ephemeral=ephem)
 
-    @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], help="Abre o painel de moderação da Tiffany (Admins): t!mod / t!mod-panel", description="Abre o painel de configuração da moderação", dm_permission=False)
+    @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], help="Abre o painel de moderação da Tiffany (Admins): t!mod / t!mod-panel", description="Open moderation settings panel (admins)", dm_permission=False)
     @commands.has_permissions(administrator=True)
     @_guild_slash
     async def cmd_mod_panel(ctx: commands.Context):
@@ -8012,8 +8053,8 @@ def register_voice(bot: commands.Bot) -> None:
         msg = await ctx.send(embed=embed, view=view)
         view.message = msg
 
-    @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", description="Faz uma pergunta para a Inteligência Artificial")
-    @app_commands.describe(question="Sua pergunta para a Tiffany")
+    @bot.hybrid_command(name="chat", aliases=["c"], help="Pergunta à IA: t!c / t!chat <pergunta> (aceita imagens)", description="Ask Tiffany AI a question (images OK)")
+    @app_commands.describe(question="Your question for Tiffany")
     @_dm_slash
     async def cmd_chat(ctx: commands.Context, *, question: str = ""):
         if not await _require_dm_access(ctx):
@@ -8050,6 +8091,10 @@ def register_voice(bot: commands.Bot) -> None:
             _add_to_context(ctx.author.id, question, zoeira)
             return
 
+        if question and locale_utils.is_chat_nonsense(question):
+            await _ctx_reply(ctx, tr(lang, "chat.nonsense"))
+            return
+
         if question and await _should_block_content(question):
             await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
@@ -8084,23 +8129,42 @@ def register_voice(bot: commands.Bot) -> None:
         name="roleplay",
         aliases=["rp"],
         help="Conversa casual com a Tiffany (personalidade roleplay): t!rp / t!roleplay <mensagem>",
-        description="Conversa casual com a Tiffany em modo roleplay",
+        description="Casual chat with Tiffany (configure personality first)",
     )
-    @app_commands.describe(message="O que você quer dizer para a Tiffany")
+    @app_commands.describe(message="What you want to say to Tiffany")
     @_dm_slash
     async def cmd_roleplay(ctx: commands.Context, *, message: str = ""):
+        import roleplay_config as rp_cfg
+
         if not await _require_dm_access(ctx):
             return
         _stats["commands_used"] += 1
         if ctx.guild:
             _touch_activity(ctx.guild.id)
         lang = _ctx_lang(ctx)
+        uid = ctx.author.id
+        msg = (message or "").strip().lower()
+
+        if msg in ("config", "setup", "configure", "configurar"):
+            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+            view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
+            await ctx.send(embed=em, view=view)
+            return
+
+        profile = rp_cfg.get_profile(uid)
+        if not profile:
+            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+            view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
+            if not (message and message.strip()):
+                await ctx.send(embed=em, view=view)
+                return
+            await ctx.send(tr(lang, "roleplay.profile.required"), embed=em, view=view)
+            return
 
         if not (message and message.strip()):
-            await _ctx_reply(
-                ctx,
-                "💬 **`t!rp <mensagem>`** — a Tiffany responde num tom casual, como pessoa.\n"
-                "Exemplo: `t!rp e aí, o que você acha desse jogo?`",
+            await ctx.send(
+                tr(lang, "roleplay.profile.saved").replace("!", " — ")
+                + " `t!rp config` to change.",
             )
             return
 
@@ -8118,8 +8182,8 @@ def register_voice(bot: commands.Bot) -> None:
         if not allowed:
             await _ctx_reply(ctx, f"⏳ Aguarde {remaining}s antes de usar de novo.")
             return
-        gid, uid = _ai_rl_ids(ctx)
-        ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid)
+        gid, uid_rl = _ai_rl_ids(ctx)
+        ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid_rl)
         if not ok:
             await _ctx_reply(ctx, _rate_limit_message(lang, reason), delete_after=8)
             return
@@ -8129,11 +8193,11 @@ def register_voice(bot: commands.Bot) -> None:
         if client is None:
             await _ctx_reply(ctx, tr(lang, "err.api_key"))
             return
-        if not _ai_rate_limit_consume(gid, bucket="chat", user_id=uid):
+        if not _ai_rate_limit_consume(gid, bucket="chat", user_id=uid_rl):
             await _ctx_reply(ctx, tr(lang, "err.rate_limit"))
             return
 
-        system_prompt = locale_utils.roleplay_system_prompt(lang)
+        system_prompt = rp_cfg.build_roleplay_prompt(lang, profile)
         try:
             async with _ai_semaphore:
                 resp = await client.chat.completions.create(
@@ -8153,7 +8217,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         answer = (resp.choices[0].message.content or "").strip()
         if not answer:
-            answer = "Hmm… perdi o fio da meada. Manda de novo?"
+            answer = "Hmm… lost the thread. Try again?"
         if len(answer) > 1500:
             answer = answer[:1497].rsplit(" ", 1)[0] + "…"
         if _contains_blocked_content(answer):
@@ -8162,20 +8226,19 @@ def register_voice(bot: commands.Bot) -> None:
 
         try:
             if thinking:
-                await thinking.edit(embed=_embed(f"🎭 {answer}"))
-            else:
-                await _ctx_reply(ctx, f"🎭 {answer}")
+                await thinking.delete()
+            await ctx.send(answer)
         except discord.HTTPException:
-            await _ctx_reply(ctx, f"🎭 {answer}")
+            await ctx.send(answer)
 
     @bot.hybrid_command(
         name="game",
         aliases=["g", "games"],
         help="Recomenda jogos por filtros: t!g / t!game <loja, gênero, preço, multiplayer...>",
-        description="Recomenda jogos da Steam baseados na sua busca",
+        description="Recommend Steam/Epic games from your query",
         dm_permission=True,
     )
-    @app_commands.describe(query="Gênero, estilo ou nome (ex: RPG, multiplayer)")
+    @app_commands.describe(query="Genre, style, or name (e.g. RPG, multiplayer)")
     @_dm_slash
     async def cmd_game(ctx: commands.Context, *, query: str = ""):
         if not await _require_dm_access(ctx):
@@ -8216,7 +8279,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await _ctx_reply(ctx, result)
 
-    @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", description="Ativa ou desativa o loop da música atual", dm_permission=False)
+    @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", description="Toggle loop for the current track", dm_permission=False)
     @_guild_slash
     async def cmd_loop(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8248,7 +8311,7 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.off")))
             await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", description="Pausa a música que está tocando", dm_permission=False)
+    @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", description="Pause the current track", dm_permission=False)
     @_guild_slash
     async def cmd_pause(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8271,7 +8334,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.pause.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="resume", aliases=["re"], help="Retoma a música pausada: t!re / t!resume", description="Retoma a música pausada", dm_permission=False)
+    @bot.hybrid_command(name="resume", aliases=["re"], help="Retoma a música pausada: t!re / t!resume", description="Resume paused playback", dm_permission=False)
     @_guild_slash
     async def cmd_resume(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8294,7 +8357,7 @@ def register_voice(bot: commands.Bot) -> None:
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.resume.done")))
         await _try_react_ok(ctx.message)
 
-    @bot.hybrid_command(name="clear", aliases=["cl"], help="Para música, limpa fila e sai da call: t!cl / t!clear", description="Limpa a fila, para a música e desconecta", dm_permission=False)
+    @bot.hybrid_command(name="clear", aliases=["cl"], help="Para música, limpa fila e sai da call: t!cl / t!clear", description="Stop music, clear queue, and leave voice", dm_permission=False)
     @_guild_slash
     async def cmd_clear(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8348,7 +8411,7 @@ def register_voice(bot: commands.Bot) -> None:
             pass
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.clear.done")))
 
-    @bot.hybrid_command(name="shuffle", aliases=["sh"], help="Embaralha a fila: t!sh / t!shuffle", description="Embaralha as músicas da fila", dm_permission=False)
+    @bot.hybrid_command(name="shuffle", aliases=["sh"], help="Embaralha a fila: t!sh / t!shuffle", description="Shuffle the queue", dm_permission=False)
     @_guild_slash
     async def cmd_shuffle(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8424,7 +8487,7 @@ def register_voice(bot: commands.Bot) -> None:
         _touch_activity(ctx.guild.id)
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.done", count=len(session.queue_display))))
 
-    @bot.hybrid_command(name="replay", aliases=["rpl"], help="Repete a música atual: t!replay / t!rpl", description="Repete a música que está tocando no momento", dm_permission=False)
+    @bot.hybrid_command(name="replay", aliases=["rpl"], help="Repete a música atual: t!replay / t!rpl", description="Replay the current track", dm_permission=False)
     @_guild_slash
     async def cmd_replay(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8474,7 +8537,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "voice.replaying", title=display[:80])))
 
-    @bot.hybrid_command(name="autoplay", aliases=["ap"], help="Liga/desliga autoplay: t!ap / t!autoplay", description="Ativa ou desativa a reprodução automática (autoplay)", dm_permission=False)
+    @bot.hybrid_command(name="autoplay", aliases=["ap"], help="Liga/desliga autoplay: t!ap / t!autoplay", description="Toggle autoplay", dm_permission=False)
     @_guild_slash
     async def cmd_autoplay(ctx: commands.Context):
         if not await _require_guild(ctx):
@@ -8492,7 +8555,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(_lang, "voice.autoplay_off")))
 
-    @bot.hybrid_command(name="lyrics", aliases=["ly"], help="Busca letra da música: t!ly / t!lyrics", description="Busca a letra da música atual ou de uma música específica", dm_permission=False)
+    @bot.hybrid_command(name="lyrics", aliases=["ly"], help="Busca letra da música: t!ly / t!lyrics", description="Look up lyrics for current or specified song", dm_permission=False)
     @app_commands.describe(query="Nome da música (opcional, usa a música atual se vazio)")
     @_guild_slash
     async def cmd_lyrics(ctx: commands.Context, *, query: str = ""):
@@ -8549,7 +8612,7 @@ def register_voice(bot: commands.Bot) -> None:
             lyrics = lyrics[:3800] + tr(lang, "cmd.lyrics.truncated")
         await status.edit(embed=_embed(tr(lang, "cmd.lyrics.result", name=search_term[:60], lyrics=lyrics)))
 
-    @bot.hybrid_command(name="seek", aliases=["ff"], help="Pula na música: t!ff / t!seek +30, -15, 1:30", description="Avança ou retrocede o tempo da música (+30, -15, 1:30)", dm_permission=False)
+    @bot.hybrid_command(name="seek", aliases=["ff"], help="Pula na música: t!ff / t!seek +30, -15, 1:30", description="Seek forward or backward (+30, -15, 1:30)", dm_permission=False)
     @app_commands.describe(time_expr="Tempo para pular (+30, -15, 1:30)")
     @_guild_slash
     async def cmd_seek(ctx: commands.Context, time_expr: str = ""):
@@ -8653,11 +8716,17 @@ def register_voice(bot: commands.Bot) -> None:
     # AUDIO CLIP
     # ============================
 
-    @bot.hybrid_command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]", description="Grava e salva os últimos 30 segundos de áudio da call", dm_permission=False)
+    @bot.hybrid_command(name="clip", aliases=["cp"], help="Salva os últimos 30s de áudio da call: t!cp / t!clip [mp3|wav]", description="Save the last 30 seconds of voice audio", dm_permission=False)
     @app_commands.describe(fmt="Formato do arquivo (mp3 ou wav)")
     @_guild_slash
     async def cmd_clip(ctx: commands.Context, fmt: str = "mp3"):
         if not await _require_guild(ctx):
+            return
+        if not _voice_stt_enabled():
+            await ctx.send(embed=_embed(
+                "🎙️ Voice clip needs microphone capture (`VOICE_STT_ENABLED=1`). "
+                "Music works with `t!p`, `t!skip`, etc.",
+            ))
             return
         fmt = (fmt or "mp3").strip().lower().lstrip(".")
         if fmt in ("mp", "m4a"):
@@ -9082,7 +9151,7 @@ def register_voice(bot: commands.Bot) -> None:
                 log.warning("Lavalink unavailable (%s) — using yt-dlp as fallback.", e)
         elif _WAVELINK_AVAILABLE:
             log.info(
-                "Lavalink disabled (LAVALINK_ENABLED=0) — yt-dlp + voice listening (Alexa) mode."
+                "Lavalink disabled (LAVALINK_ENABLED=0) — yt-dlp music mode (STT off unless VOICE_STT_ENABLED=1)."
             )
 
         asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
@@ -9114,29 +9183,24 @@ def register_voice(bot: commands.Bot) -> None:
                     continue
                 text_channel_id = info.get("text_channel_id", 0)
                 await _ensure_opus()
-                vc = await asyncio.wait_for(
-                    _join_voice_recv_client(guild, channel),
-                    timeout=25.0,
-                )
-                voice_recv_ok = _VOICE_RECV_AVAILABLE
+                if _voice_stt_enabled() and _VOICE_RECV_AVAILABLE:
+                    vc = await asyncio.wait_for(
+                        _join_voice_recv_client(guild, channel),
+                        timeout=25.0,
+                    )
+                    voice_recv_ok = True
+                else:
+                    vc = await asyncio.wait_for(
+                        channel.connect(self_deaf=False),
+                        timeout=25.0,
+                    )
+                    voice_recv_ok = False
                 session = _GuildVoiceSession(text_channel_id=text_channel_id)
                 if voice_recv_ok:
-                    sink = _PCMBufferSink(session)
-                    try:
-                        vc.listen(sink)
-                        session.listen_task = asyncio.create_task(
-                            _voice_listen_loop(gid, vc, bot),
-                            name=f"tiffany-voice-{gid}",
-                        )
-                    except Exception as e:
-                        log.warning("Failed to start listening on rejoin: %s", e)
+                    _attach_voice_stt(session, gid, vc, bot)
                 session.music_task = asyncio.create_task(
                     _play_worker(gid, vc, bot),
                     name=f"tiffany-music-{gid}",
-                )
-                session.question_task = asyncio.create_task(
-                    _question_worker(gid, vc, bot),
-                    name=f"tiffany-question-{gid}",
                 )
                 _sessions[gid] = session
                 log.info("Auto-reconnected guild=%s channel=%s", gid, channel.name)
@@ -9216,7 +9280,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="help",
-        description="Lista comandos: música, IA, dados, sorteios e configurações",
+        description="List all commands: music, AI, stats, giveaways, settings",
     )
     @_dm_slash
     async def slash_help(interaction: discord.Interaction):

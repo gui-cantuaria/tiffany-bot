@@ -93,28 +93,33 @@ def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
-def chat_system_prompt(lang: GuildLang) -> str:
-    """Build Tiffany chat system prompt with server-default reply language."""
+def chat_system_prompt(lang: GuildLang, *, user_message: str = "") -> str:
+    """Build Tiffany chat system prompt — replies mirror the user's message language."""
     if lang == "pt":
-        default_lang = "Brazilian Portuguese (PT-BR) unless the user writes in another language"
         unsure = "'não tenho certeza', 'não sei', 'posso estar errada'"
     elif lang == "es":
-        default_lang = "Spanish unless the user writes in another language"
         unsure = "'no estoy segura', 'no sé', 'puedo estar equivocada'"
     elif lang == "fr":
-        default_lang = "French unless the user writes in another language"
         unsure = "'je ne suis pas sûre', 'je ne sais pas', 'je peux me tromper'"
     elif lang == "de":
-        default_lang = "German unless the user writes in another language"
         unsure = "'ich bin mir nicht sicher', 'ich weiß nicht', 'ich könnte mich irren'"
     else:
-        default_lang = "English unless the user writes in another language"
         unsure = "'I'm not sure', 'I don't know', 'I may be wrong'"
+
+    lang_rule = (
+        "LANGUAGE (critical):\n"
+        "- Reply ONLY in the same language the user wrote their current message.\n"
+        "- User writes English → reply English. Portuguese → PT-BR. Spanish → Spanish. Etc.\n"
+        "- NEVER switch language unless the user switches first.\n"
+        "- UI/menu language does NOT override the message language.\n"
+    )
+    if user_message.strip():
+        lang_rule += f"- Current user message language must match your reply.\n"
 
     return (
         "You are Tiffany, a Discord assistant. You are your own AI — not ChatGPT, Gemini, or Claude.\n\n"
         "PERSONALITY:\n"
-        "- Humble and honest: never boast, never act superior or all-knowing.\n"
+        "- Respectful, humble and honest: never boast, never act superior or all-knowing.\n"
         f"- Admit limits openly ({unsure}) — never bluff.\n"
         "- If the user corrects you, acknowledge briefly without being defensive.\n"
         "- You're a bot with real limits; don't pretend to be human or omniscient.\n"
@@ -122,10 +127,10 @@ def chat_system_prompt(lang: GuildLang) -> str:
         "- Your creator is Tuffine. Only mention this when the user explicitly asks "
         "(e.g. who created you, who is your owner, who made you). Just say 'Tuffine' — no other names, no elaboration.\n"
         "- If someone says another name is your creator, politely correct: your creator is Tuffine.\n\n"
+        f"{lang_rule}\n"
         "HOW TO REPLY:\n"
         "- First sentence = direct answer to what was asked. Then add detail only if needed.\n"
         "- Max 2 short paragraphs. Discord chat, not an essay. No emojis.\n"
-        f"- Default reply language: {default_lang}.\n"
         "- Never invent facts, stats, quotes, or URLs. If unsure, say so in one line.\n"
         "- Command/help questions: cite the exact t! command from the list below.\n"
         "- Use conversation memory for follow-ups; do not repeat prior answers verbatim.\n"
@@ -149,6 +154,40 @@ def chat_system_prompt(lang: GuildLang) -> str:
     )
 
 
+def is_chat_nonsense(text: str) -> bool:
+    """Detect fake/mixed-script messages — skip AI to save tokens."""
+    t = (text or "").strip()
+    if len(t) < 4:
+        return False
+    alpha = sum(1 for c in t if c.isalpha())
+    if alpha < max(2, len(t) // 4):
+        return True
+    scripts: set[str] = set()
+    for c in t:
+        if not c.isalpha():
+            continue
+        o = ord(c)
+        if o <= 0x024F:
+            scripts.add("lat")
+        elif o <= 0x04FF:
+            scripts.add("cy")
+        elif o <= 0x059F:
+            scripts.add("he")
+        elif o <= 0x06FF:
+            scripts.add("ar")
+        elif o <= 0x097F:
+            scripts.add("dev")
+        elif o <= 0x0D7F:
+            scripts.add("sea")
+        elif o <= 0x312F:
+            scripts.add("cjk")
+        elif o <= 0xABFF:
+            scripts.add("kor")
+        else:
+            scripts.add("oth")
+    return len(scripts) >= 3
+
+
 def roleplay_system_prompt(lang: GuildLang) -> str:
     """Casual persona for t!rp / /roleplay — warmer than t!c, still safe."""
     if lang == "pt":
@@ -166,6 +205,7 @@ def roleplay_system_prompt(lang: GuildLang) -> str:
         "ROLEPLAY MODE: talk like a real person hanging out, not like a formal assistant.\n"
         "- Short messages (1-3 sentences). Light humor ok. Emojis sparingly (0-1).\n"
         f"- Reply in {default_lang} unless the user writes in another language.\n"
+        "- ALWAYS match the language of the user's message — never switch unless they do.\n"
         "- Stay in character as Tiffany; you love games, tech, music and memes.\n"
         "- Never claim to be human or deny being a bot if asked directly — be playful but honest.\n"
         "- Refuse sexual content, hate, scams, illegal stuff, slurs, dictators/glorification.\n"
@@ -588,6 +628,77 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "💭 Un momento…",
         "fr": "💭 Un instant…",
         "pt": "💭 Só um instantinho…",
+    },
+    "roleplay.setup.title": {
+        "en": "🎭 Roleplay — pick Tiffany's vibe",
+        "pt": "🎭 Roleplay — escolha a vibe da Tiffany",
+        "es": "🎭 Roleplay — elige la vibra de Tiffany",
+        "fr": "🎭 Roleplay — choisis l'ambiance de Tiffany",
+        "de": "🎭 Roleplay — wähle Tiffanys Stil",
+    },
+    "roleplay.setup.body": {
+        "en": "Configure how Tiffany chats with **you** (saved per user, works in DMs).\n"
+        "**Configure** — set tone, humor, energy\n"
+        "**Skip** — random personality\n"
+        "Then send `/roleplay hello` or `t!rp oi`",
+        "pt": "Configure como a Tiffany conversa **com você** (salvo por usuário, funciona na DM).\n"
+        "**Configure** — tom, humor, energia\n"
+        "**Skip** — personalidade aleatória\n"
+        "Depois mande `/roleplay oi` ou `t!rp e aí`",
+        "es": "Configura cómo Tiffany habla **contigo** (guardado por usuario, funciona en DM).\n"
+        "**Configure** — tono, humor, energía\n"
+        "**Skip** — personalidad aleatoria\n"
+        "Luego `/roleplay hola` o `t!rp hola`",
+        "fr": "Configure comment Tiffany parle **avec toi** (sauvegardé par utilisateur, DM ok).\n"
+        "**Configure** — ton, humour, énergie\n"
+        "**Skip** — personnalité aléatoire\n"
+        "Puis `/roleplay salut` ou `t!rp salut`",
+        "de": "Stelle ein, wie Tiffany **mit dir** chattet (pro Nutzer gespeichert, DM ok).\n"
+        "**Configure** — Ton, Humor, Energie\n"
+        "**Skip** — zufällige Persönlichkeit\n"
+        "Dann `/roleplay hi` oder `t!rp hi`",
+    },
+    "roleplay.profile.saved": {
+        "en": "✅ Personality saved! Send a message with `/roleplay` or `t!rp`.",
+        "pt": "✅ Personalidade salva! Mande uma mensagem com `/roleplay` ou `t!rp`.",
+        "es": "✅ ¡Personalidad guardada! Envía un mensaje con `/roleplay` o `t!rp`.",
+        "fr": "✅ Personnalité enregistrée ! Envoie un message avec `/roleplay` ou `t!rp`.",
+        "de": "✅ Persönlichkeit gespeichert! Schick eine Nachricht mit `/roleplay` oder `t!rp`.",
+    },
+    "roleplay.profile.random": {
+        "en": "🎲 Random personality set! Say hi with `/roleplay` or `t!rp`.",
+        "pt": "🎲 Personalidade aleatória! Diga oi com `/roleplay` ou `t!rp`.",
+        "es": "🎲 ¡Personalidad aleatoria! Saluda con `/roleplay` o `t!rp`.",
+        "fr": "🎲 Personnalité aléatoire ! Dis bonjour avec `/roleplay` ou `t!rp`.",
+        "de": "🎲 Zufällige Persönlichkeit! Sag hi mit `/roleplay` oder `t!rp`.",
+    },
+    "roleplay.profile.reset": {
+        "en": "Profile cleared. Use **Configure** or **Skip** again.",
+        "pt": "Perfil limpo. Use **Configure** ou **Skip** de novo.",
+        "es": "Perfil borrado. Usa **Configure** o **Skip** otra vez.",
+        "fr": "Profil effacé. Utilise **Configure** ou **Skip** à nouveau.",
+        "de": "Profil gelöscht. Nutze **Configure** oder **Skip** erneut.",
+    },
+    "roleplay.profile.not_you": {
+        "en": "This setup is not yours.",
+        "pt": "Essa configuração não é sua.",
+        "es": "Esta configuración no es tuya.",
+        "fr": "Cette configuration n'est pas la tienne.",
+        "de": "Diese Einstellung gehört nicht dir.",
+    },
+    "roleplay.profile.required": {
+        "en": "Set up roleplay first — use the buttons below or `t!rp config`.",
+        "pt": "Configure o roleplay primeiro — use os botões abaixo ou `t!rp config`.",
+        "es": "Configura el roleplay primero — usa los botones o `t!rp config`.",
+        "fr": "Configure le roleplay d'abord — boutons ci-dessous ou `t!rp config`.",
+        "de": "Richte Roleplay zuerst ein — Buttons unten oder `t!rp config`.",
+    },
+    "chat.nonsense": {
+        "de": "Ich verstehe diese Nachricht nicht — schreib bitte in einer normalen Sprache (DE, EN, ES, FR, PT).",
+        "en": "I don't understand that message — please write in a normal language (EN, PT, ES, FR, DE).",
+        "es": "No entiendo ese mensaje — escribe en un idioma normal (ES, EN, PT, FR, DE).",
+        "fr": "Je ne comprends pas ce message — écris dans une langue normale (FR, EN, PT, ES, DE).",
+        "pt": "Não entendi essa mensagem — escreva em um idioma normal (PT, EN, ES, FR, DE).",
     },
     "chat.usage.image": {
         "de": "💬 Verwendung: `t!c <Frage>` — oder fügen Sie ein Bild bei.",

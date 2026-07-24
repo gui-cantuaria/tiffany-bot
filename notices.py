@@ -1550,6 +1550,12 @@ async def _baixar_imagem(url: str, retries: int = 3) -> Optional[tuple[bytes, st
 
 async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) -> bool:
     """Post a news item to the channel. Returns True if posted successfully."""
+    link_norm = noticia.get("link_norm") or ""
+    dedupe = noticia.get("dedupe")
+    if historico_check(history, link_norm, dedupe):
+        log.info("Skip duplicate news (history): %s", (noticia.get("titulo") or "")[:60])
+        return False
+
     # Safety lock: never post without image
     img_url = noticia.get("imagem")
     if not img_url:
@@ -2350,7 +2356,7 @@ def _build_public_status_embed() -> discord.Embed:
 
 @discord_client.tree.command(
     name="status",
-    description="A Tiffany está funcionando? Conexão e recursos disponíveis",
+    description="Is Tiffany online? Connection and available features",
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_status(interaction: discord.Interaction):
@@ -2365,7 +2371,7 @@ async def cmd_status(interaction: discord.Interaction):
 # =========================
 @discord_client.tree.command(
     name="stats",
-    description="Painel privado do dono — uso e custos da Tiffany",
+    description="Owner-only usage and AI cost panel",
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_stats(interaction: discord.Interaction):
@@ -2413,7 +2419,7 @@ TIFFANY_PINK = 0xFF69B4
 
 @discord_client.tree.command(
     name="updates",
-    description="Novidades e melhorias recentes da Tiffany",
+    description="Recent Tiffany updates and improvements",
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_updates(interaction: discord.Interaction):
