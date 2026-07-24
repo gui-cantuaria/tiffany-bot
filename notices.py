@@ -2223,10 +2223,11 @@ _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
     "loop", "play", "chat", "seek", "nonstop", "queue", "language", "mod-panel", "modpanel",
     "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
+    "volume", "vol",
     "embed", "status", "stats", "updates", "novidades", "about", "help", "rewind",
     "estatisticas", "metricas", "player-status", "playerstatus",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
-    "lang", "mod", "gw", "emb", "rp", "roleplay",
+    "lang", "mod", "gw", "emb", "rp", "roleplay", "v",
     "247",
     "s", "c", "p", "r", "q", "g",
 )

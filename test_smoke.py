@@ -85,5 +85,21 @@ class TestRoleplayHistory(unittest.TestCase):
             rp.clear_history(uid)
 
 
+class TestVolumeHelpers(unittest.TestCase):
+    def test_volume_mappings(self):
+        import tiffany_voice as tv
+
+        self.assertAlmostEqual(tv.volume_to_ffmpeg(100), 0.35)
+        self.assertAlmostEqual(tv.volume_to_ffmpeg(50), 0.175)
+        self.assertEqual(tv.volume_to_lavalink(100), 1000)
+        self.assertEqual(tv.volume_to_lavalink(150), 1500)
+
+
+class TestVolumeEmbed(unittest.TestCase):
+    def test_build_volume_embed(self):
+        em = locale_utils.build_volume_embed("pt", current=80, pink=0xFF69B4)
+        self.assertIn("80", em.description or "")
+
+
 if __name__ == "__main__":
     unittest.main()

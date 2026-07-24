@@ -359,6 +359,23 @@ def build_help_embed(guild: Optional[discord.Guild], user_id: Optional[int], *, 
     return em
 
 
+def build_volume_embed(lang: GuildLang, *, current: int, pink: int) -> discord.Embed:
+    """Stream volume embed + instructions for per-user Discord client volume."""
+    pct = max(0, min(150, int(current)))
+    em = discord.Embed(
+        title=tr(lang, "volume.title"),
+        description=tr(lang, "volume.global", pct=pct),
+        color=pink,
+    )
+    em.add_field(
+        name=tr(lang, "volume.client_title"),
+        value=tr(lang, "volume.client_body"),
+        inline=False,
+    )
+    em.set_footer(text=tr(lang, "volume.footer"))
+    return em
+
+
 class LanguageSelect(discord.ui.Select):
     def __init__(self, lang: GuildLang):
         options = [
@@ -401,7 +418,8 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!s / t!skip — skip track · t!pa / t!pause · t!re / t!resume\n"
     "- t!cl / t!clear — stop and leave voice · t!l / t!loop · t!sh / t!shuffle · t!rp / t!replay\n"
     "- t!q / t!queue — now playing + queue · t!r / t!random · t!ap / t!autoplay\n"
-    "- t!pl save|load|list|del <name> — playlists · t!ff / t!seek +30,-15,1:30\n"
+    "- t!ff / t!seek +30,-15,1:30\n"
+    "- t!v / t!volume [0-150] — stream volume (everyone in the call)\n"
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
     "- t!g / t!game <filters> — game picks (store, price, studio, rating, genre, tags, year…)\n"
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
@@ -2306,6 +2324,96 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Novedades y mejoras recientes de Tiffany",
         "fr": "Dernières mises à jour et améliorations Tiffany",
         "pt": "Novidades e melhorias recentes da Tiffany",
+    },
+    "slash.cmd.volume": {
+        "de": "Lautstärke des Streams ändern (0–150 %)",
+        "en": "Change Tiffany's stream volume (0–150%)",
+        "es": "Cambiar el volumen del stream (0–150 %)",
+        "fr": "Changer le volume du stream (0–150 %)",
+        "pt": "Ajustar o volume do stream (0–150 %)",
+    },
+    "slash.param.volume_level": {
+        "de": "Lautstärke 0–150 (leer = aktuell anzeigen)",
+        "en": "Volume 0–150 (empty = show current)",
+        "es": "Volumen 0–150 (vacío = ver actual)",
+        "fr": "Volume 0–150 (vide = afficher l'actuel)",
+        "pt": "Volume 0–150 (vazio = mostrar atual)",
+    },
+    "volume.client_body": {
+        "de": "**Nur für dich leiser/lauter (Discord-Client):**\n"
+        "• **Desktop:** Rechtsklick auf **Tiffany** im Sprachkanal → **Benutzer-Lautstärke**\n"
+        "• **Handy:** Tippe auf **Tiffany** in der Voice-UI → Lautstärke-Symbol\n\n"
+        "Das ändert nur deine Wiedergabe — andere hören weiterhin den Stream oben.",
+        "en": "**Hear Tiffany quieter/louder just for you (Discord client):**\n"
+        "• **Desktop:** Right-click **Tiffany** in the voice channel → **User Volume**\n"
+        "• **Mobile:** Tap **Tiffany** in the voice UI → volume icon\n\n"
+        "This only changes your playback — others still hear the stream level above.",
+        "es": "**Solo para ti (cliente Discord):**\n"
+        "• **PC:** Clic derecho en **Tiffany** en voz → **Volumen de usuario**\n"
+        "• **Móvil:** Toca **Tiffany** en la UI de voz → icono de volumen\n\n"
+        "Solo cambia tu escucha — los demás oyen el nivel del stream arriba.",
+        "fr": "**Pour toi seul (client Discord) :**\n"
+        "• **PC :** Clic droit sur **Tiffany** dans le vocal → **Volume utilisateur**\n"
+        "• **Mobile :** Appuie sur **Tiffany** → icône volume\n\n"
+        "Ça n'affecte que ton écoute — les autres entendent le stream ci-dessus.",
+        "pt": "**Só para você ouvir mais baixo/alto (cliente Discord):**\n"
+        "• **Desktop:** Clique direito na **Tiffany** na call → **Volume do usuário**\n"
+        "• **Celular:** Toque na **Tiffany** na UI de voz → ícone de volume\n\n"
+        "Isso muda só a sua escuta — os outros continuam ouvindo o nível do stream acima.",
+    },
+    "volume.client_title": {
+        "de": "🔈 Dein persönliches Volume",
+        "en": "🔈 Your personal volume",
+        "es": "🔈 Tu volumen personal",
+        "fr": "🔈 Ton volume personnel",
+        "pt": "🔈 Seu volume pessoal",
+    },
+    "volume.footer": {
+        "de": "Stream-Lautstärke gilt für alle in der Voice — Client-Regler nur für dich.",
+        "en": "Stream volume affects everyone in voice — client slider is just for you.",
+        "es": "El volumen del stream afecta a todos en voz — el control del cliente es solo para ti.",
+        "fr": "Le volume stream concerne tout le vocal — le curseur client est pour toi seul.",
+        "pt": "Volume do stream vale para todos na call — o controle do cliente é só para você.",
+    },
+    "volume.global": {
+        "de": "Tiffanys **Stream-Lautstärke** ist jetzt **{pct}%**.\n"
+        "Das gilt für **alle** in diesem Sprachkanal.",
+        "en": "Tiffany's **stream volume** is now **{pct}%**.\n"
+        "This applies to **everyone** in this voice channel.",
+        "es": "El **volumen del stream** de Tiffany es **{pct}%**.\n"
+        "Aplica a **todos** en este canal de voz.",
+        "fr": "Le **volume du stream** de Tiffany est à **{pct}%**.\n"
+        "Cela concerne **tout le monde** dans ce salon vocal.",
+        "pt": "O **volume do stream** da Tiffany está em **{pct}%**.\n"
+        "Vale para **todos** nesta call.",
+    },
+    "volume.need_voice": {
+        "de": "⚠️ Tiffany muss in einem Sprachkanal sein.",
+        "en": "⚠️ Tiffany must be in a voice channel.",
+        "es": "⚠️ Tiffany debe estar en un canal de voz.",
+        "fr": "⚠️ Tiffany doit être dans un salon vocal.",
+        "pt": "⚠️ A Tiffany precisa estar em um canal de voz.",
+    },
+    "volume.out_of_range": {
+        "de": "⚠️ Volume muss zwischen **0** und **150** liegen.",
+        "en": "⚠️ Volume must be between **0** and **150**.",
+        "es": "⚠️ El volumen debe estar entre **0** y **150**.",
+        "fr": "⚠️ Le volume doit être entre **0** et **150**.",
+        "pt": "⚠️ O volume deve ser entre **0** e **150**.",
+    },
+    "volume.title": {
+        "de": "🔊 Volume",
+        "en": "🔊 Volume",
+        "es": "🔊 Volumen",
+        "fr": "🔊 Volume",
+        "pt": "🔊 Volume",
+    },
+    "volume.ytdlp_note": {
+        "de": "_Hinweis: Bei yt-dlp-Modus gilt die neue Lautstärke ab dem nächsten Track._",
+        "en": "_Note: In yt-dlp mode, the new level applies from the next track._",
+        "es": "_Nota: en modo yt-dlp, el nuevo nivel aplica desde la próxima pista._",
+        "fr": "_Note : en mode yt-dlp, le nouveau niveau s'applique à la piste suivante._",
+        "pt": "_No modo yt-dlp, o novo nível vale a partir da próxima faixa._",
     },
     "slash.param.fmt": {
         "de": "Dateiformat (mp3 oder wav)",

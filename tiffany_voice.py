@@ -1167,6 +1167,42 @@ def _is_wavelink_player(vc) -> bool:
     return isinstance(vc, wavelink.Player)
 
 
+VOLUME_MIN = 0
+VOLUME_MAX = 150
+VOLUME_DEFAULT = 100
+_FFMPEG_VOLUME_BASE = 0.35  # legacy default at 100% UI level
+
+
+def volume_to_ffmpeg(pct: int) -> float:
+    """Map 0–150 UI volume to FFmpeg volume filter (100 = historical default)."""
+    clamped = max(VOLUME_MIN, min(VOLUME_MAX, int(pct)))
+    return _FFMPEG_VOLUME_BASE * (clamped / 100.0)
+
+
+def volume_to_lavalink(pct: int) -> int:
+    """Lavalink volume is permille (1000 = 100%)."""
+    clamped = max(VOLUME_MIN, min(VOLUME_MAX, int(pct)))
+    return int(clamped * 10)
+
+
+def _session_ffmpeg_volume(session: "_GuildVoiceSession") -> float:
+    return volume_to_ffmpeg(getattr(session, "volume_pct", VOLUME_DEFAULT))
+
+
+async def _apply_stream_volume(vc, session: "_GuildVoiceSession") -> None:
+    """Apply guild stream volume (Lavalink immediate; yt-dlp on next track)."""
+    if not vc or not session:
+        return
+    if _is_wavelink_player(vc):
+        vol = volume_to_lavalink(session.volume_pct)
+        vc.volume = vol
+        if hasattr(vc, "apply_volume"):
+            try:
+                await vc.apply_volume()
+            except Exception:
+                log.debug("apply_volume failed", exc_info=True)
+
+
 @dataclass
 class _GuildVoiceSession:
     text_channel_id: int
@@ -1204,6 +1240,7 @@ class _GuildVoiceSession:
     random_picked: set[str] = field(default_factory=set)  # keys already picked by t!r this session
     autoplay: bool = False  # autoplay: play similar songs when queue ends
     stay_24_7: bool = False  # 24/7 mode: do not disconnect on inactivity
+    volume_pct: int = VOLUME_DEFAULT  # stream volume 0–150 (everyone in VC)
     bitrate_kbps: int = 128  # Opus encode bitrate — matches the voice channel's cap (boost-aware)
     # Restore seek (playback position to restore after restart)
     restore_seek_sec: float = 0.0
@@ -1367,6 +1404,7 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "r": 1.5, "random": 1.5,
     "c": 1.5, "chat": 1.5,
     "ff": 2.0, "seek": 2.0,
+    "v": 1.0, "volume": 1.0, "vol": 1.0,
     "rp": 2.0, "replay": 2.0,
     "ly": 2.0, "lyrics": 2.0,
     "g": 2.0, "game": 2.0, "games": 2.0,
@@ -2112,6 +2150,7 @@ def _snapshot_voice_entry(guild_id: int, channel_id: int, text_channel_id: int, 
         entry["queue_queries"] = queue_queries
         entry["queue_displays"] = queue_displays
         entry["history"] = list(session.history)[-20:]
+        entry["volume_pct"] = max(VOLUME_MIN, min(VOLUME_MAX, int(getattr(session, "volume_pct", VOLUME_DEFAULT))))
         if session.song_start_time > 0:
             entry["current_seek_sec"] = max(0.0, time.monotonic() - session.song_start_time)
         else:
@@ -3107,6 +3146,7 @@ async def _prefetch_track(
             bundle = await _YTSource.from_query(
                 query, display=display, probe_entry=probe_entry,
                 bitrate_kbps=session.bitrate_kbps,
+                volume=_session_ffmpeg_volume(session),
             )
             if session.prefetch_key == key:
                 session.prefetch_bundle = bundle
@@ -3863,6 +3903,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("r", ["random"], "t!r / t!random — música aleatória (sem repetir na fila/sessão)"),
     ("pl", ["playlist"], "t!pl save|load|list|del <nome>"),
     ("ff", ["seek"], "t!ff / t!seek +30, -15, 1:30"),
+    ("v", ["volume", "vol"], "t!v / t!volume [0-150] — volume do stream"),
     ("ap", ["autoplay"], "t!ap / t!autoplay"),
     ("ly", ["lyrics"], "t!ly / t!lyrics — letra"),
     ("c", ["chat"], "t!c / t!chat <pergunta>"),
@@ -5026,7 +5067,11 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     and session._loop_cache_file
                     and os.path.isfile(session._loop_cache_file)
                 ):
-                    yt_source = await _YTSource.from_file(session._loop_cache_file, bitrate_kbps=session.bitrate_kbps)
+                    yt_source = await _YTSource.from_file(
+                        session._loop_cache_file,
+                        bitrate_kbps=session.bitrate_kbps,
+                        volume=_session_ffmpeg_volume(session),
+                    )
                     if yt_source:
                         dl_fp = session._loop_cache_file
                         dl_tmpdir = session._loop_cache_tmpdir
@@ -5037,6 +5082,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             _YTSource.from_query(
                                 query, display=display_name, probe_entry=probe_entry,
                                 bitrate_kbps=session.bitrate_kbps,
+                                volume=_session_ffmpeg_volume(session),
                             ),
                             timeout=120.0,
                         )
@@ -5090,7 +5136,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 if _restore_seek > 0 and dl_fp and dl_duration > 10:
                     capped = min(_restore_seek, dl_duration - 5.0)
                     if capped > 5:
-                        seek_src = await _YTSource.from_file(dl_fp, seek_sec=capped, bitrate_kbps=session.bitrate_kbps)
+                        seek_src = await _YTSource.from_file(
+                            dl_fp, seek_sec=capped, bitrate_kbps=session.bitrate_kbps,
+                            volume=_session_ffmpeg_volume(session),
+                        )
                         if seek_src:
                             yt_source.cleanup()
                             yt_source = seek_src
@@ -5718,7 +5767,10 @@ async def _voice_listen_loop(
                     dur = session.current_duration
                     if dur > 0 and target >= dur:
                         target = dur - 5
-                    new_src = await _YTSource.from_file(session.current_file, seek_sec=target, bitrate_kbps=session.bitrate_kbps)
+                    new_src = await _YTSource.from_file(
+                        session.current_file, seek_sec=target, bitrate_kbps=session.bitrate_kbps,
+                        volume=_session_ffmpeg_volume(session),
+                    )
                     if new_src:
                         session.seeking = True
                         vc.stop()
@@ -6652,6 +6704,41 @@ class DiceRerollView(discord.ui.View):
 
 
 _voice_registered = False
+
+
+class VolumeAdjustView(discord.ui.View):
+    """Quick ±10 stream volume controls."""
+
+    def __init__(self, guild_id: int, lang: GuildLang, *, pink: int):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.lang = lang
+        self.pink = pink
+
+    async def _adjust(self, interaction: discord.Interaction, delta: int) -> None:
+        guild = interaction.guild
+        if not guild or guild.id != self.guild_id:
+            await interaction.response.send_message(tr(self.lang, "volume.need_voice"), ephemeral=True)
+            return
+        session = _sessions.get(self.guild_id)
+        vc = guild.voice_client
+        if not session or not vc or not vc.is_connected():
+            await interaction.response.send_message(tr(self.lang, "volume.need_voice"), ephemeral=True)
+            return
+        session.volume_pct = max(VOLUME_MIN, min(VOLUME_MAX, session.volume_pct + delta))
+        await _apply_stream_volume(vc, session)
+        em = locale_utils.build_volume_embed(self.lang, current=session.volume_pct, pink=self.pink)
+        if not _is_wavelink_player(vc):
+            em.description = (em.description or "") + f"\n\n{tr(self.lang, 'volume.ytdlp_note')}"
+        await interaction.response.edit_message(embed=em, view=self)
+
+    @discord.ui.button(label="−10", style=discord.ButtonStyle.secondary)
+    async def minus_ten(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._adjust(interaction, -10)
+
+    @discord.ui.button(label="+10", style=discord.ButtonStyle.secondary)
+    async def plus_ten(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._adjust(interaction, 10)
 
 
 def register_voice(bot: commands.Bot) -> None:
@@ -7782,6 +7869,7 @@ def register_voice(bot: commands.Bot) -> None:
 
             if not player.playing:
                 await player.play(track)
+                await _apply_stream_volume(player, sess)
                 sess.current_song = track_display
                 sess.current_query = getattr(track, "uri", None) or search_query or query
                 sess.current_duration = track_dur_sec
@@ -8315,6 +8403,45 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.loop.off")))
             await _try_react_ok(ctx.message)
 
+    async def _reply_volume_panel(ctx: commands.Context, session: _GuildVoiceSession, vc) -> None:
+        lang = _ctx_lang(ctx)
+        em = locale_utils.build_volume_embed(lang, current=session.volume_pct, pink=TIFFANY_PINK)
+        if not _is_wavelink_player(vc):
+            em.description = (em.description or "") + f"\n\n{tr(lang, 'volume.ytdlp_note')}"
+        view = VolumeAdjustView(ctx.guild.id, lang, pink=TIFFANY_PINK)
+        ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
+        await ctx.send(embed=em, view=view, ephemeral=ephem)
+
+    @bot.hybrid_command(
+        name="volume",
+        aliases=["v", "vol"],
+        help="Volume do stream da Tiffany (0–150): t!v / t!volume [nível]",
+        dm_permission=False,
+        **slash_desc_kwargs("slash.cmd.volume"),
+    )
+    @app_commands.describe(level=slash_param("slash.param.volume_level"))
+    @_guild_slash
+    async def cmd_volume(ctx: commands.Context, level: Optional[int] = None):
+        if not await _require_guild(ctx):
+            return
+        if not await _require_voice(ctx):
+            return
+        _stats["commands_used"] += 1
+        _touch_activity(ctx.guild.id)
+        lang = _ctx_lang(ctx)
+        vc = ctx.guild.voice_client
+        session = _sessions.get(ctx.guild.id)
+        if not vc or not vc.is_connected() or not session:
+            await ctx.send(embed=_embed(tr(lang, "volume.need_voice")))
+            return
+        if level is not None:
+            if level < VOLUME_MIN or level > VOLUME_MAX:
+                await ctx.send(embed=_embed(tr(lang, "volume.out_of_range")))
+                return
+            session.volume_pct = int(level)
+            await _apply_stream_volume(vc, session)
+        await _reply_volume_panel(ctx, session, vc)
+
     @bot.hybrid_command(name="pause", aliases=["pa"], help="Pausa a música: t!pa / t!pause", dm_permission=False, **slash_desc_kwargs("slash.cmd.pause"))
     @_guild_slash
     async def cmd_pause(ctx: commands.Context):
@@ -8685,7 +8812,10 @@ def register_voice(bot: commands.Bot) -> None:
                 return
         else:
             # yt-dlp: recreate source with FFmpeg -ss
-            new_source = await _YTSource.from_file(session.current_file, seek_sec=target_sec, bitrate_kbps=session.bitrate_kbps)
+            new_source = await _YTSource.from_file(
+                session.current_file, seek_sec=target_sec, bitrate_kbps=session.bitrate_kbps,
+                volume=_session_ffmpeg_volume(session),
+            )
             if not new_source:
                 await ctx.send(embed=_embed(tr(lang, "cmd.seek.file_gone")))
                 return
@@ -9143,7 +9273,7 @@ def register_voice(bot: commands.Bot) -> None:
         if _lavalink_enabled() and _WAVELINK_AVAILABLE:
             lava_host = os.getenv("LAVALINK_HOST", "localhost")
             lava_port = int(os.getenv("LAVALINK_PORT", "2333"))
-            lava_pass = os.getenv("LAVALINK_PASSWORD", "")
+            lava_pass = os.getenv("LAVALINK_PASSWORD", "") or "tiffany_lavalink_2026"
             try:
                 node = wavelink.Node(
                     uri=f"http://{lava_host}:{lava_port}",
@@ -9231,6 +9361,10 @@ def register_voice(bot: commands.Bot) -> None:
                 saved_queries = info.get("queue_queries", [])
                 saved_displays = info.get("queue_displays", [])
                 session.history = info.get("history", [])
+                session.volume_pct = max(
+                    VOLUME_MIN,
+                    min(VOLUME_MAX, int(info.get("volume_pct", VOLUME_DEFAULT))),
+                )
                 # Restore playback position (saved seek_sec + restart elapsed time)
                 raw_seek = info.get("current_seek_sec", 0.0)
                 if raw_seek > 0 and current_q:
@@ -9371,6 +9505,7 @@ def register_voice(bot: commands.Bot) -> None:
                 session.current_query = uri
             session.current_duration = (track.length or 0) / 1000.0
             session.song_start_time = time.monotonic()
+            await _apply_stream_volume(player, session)
             log.info("Lavalink playing: %s (%.0fs)", track.title, session.current_duration)
             src = _track_source_label(uri) if uri else "YouTube"
             
