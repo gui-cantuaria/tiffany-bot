@@ -104,5 +104,25 @@ class TestVolumeEmbed(unittest.TestCase):
         self.assertIn("80", em.description or "")
 
 
+class TestNewsHistoryDedup(unittest.TestCase):
+    def test_queued_allows_post_but_blocks_collection(self):
+        import notices
+
+        h: dict = {}
+        link = "https://example.com/news-1"
+        dedupe = "abc123"
+        notices.historico_set(h, link, dedupe, "queued")
+        self.assertTrue(notices.historico_check(h, link, dedupe))
+        self.assertFalse(notices.historico_blocks_post(h, link, dedupe))
+
+    def test_posted_blocks_post(self):
+        import notices
+
+        h: dict = {}
+        link = "https://example.com/news-2"
+        notices.historico_set(h, link, None, "posted")
+        self.assertTrue(notices.historico_blocks_post(h, link, None))
+
+
 if __name__ == "__main__":
     unittest.main()

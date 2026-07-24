@@ -572,6 +572,19 @@ def _entry_blocks_dedup(entry: object) -> bool:
     return True
 
 
+def _entry_blocks_post(entry: object) -> bool:
+    """Return True if history entry should block channel.send (not RSS collection)."""
+    if not isinstance(entry, dict):
+        return False
+    status = entry.get("status")
+    if status == "posted":
+        return True
+    if status == "posting":
+        return (time.time() - entry.get("ts", 0)) < _POSTING_STALE_SEC
+    # queued / skipped / failed — allow post path (collection uses historico_check instead)
+    return False
+
+
 def historico_check(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool:
     """Return True if already processed (dedup by URL or hash)."""
     if link_norm in h and _entry_blocks_dedup(h[link_norm]):
@@ -580,6 +593,18 @@ def historico_check(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool
         return True
     if dedupe_hash and _hist_key_hash(dedupe_hash) in h:
         if _entry_blocks_dedup(h[_hist_key_hash(dedupe_hash)]):
+            return True
+    return False
+
+
+def historico_blocks_post(h: dict, link_norm: str, dedupe_hash: Optional[str]) -> bool:
+    """Return True if send should be skipped (already posted or in-flight posting lock)."""
+    if link_norm in h and _entry_blocks_post(h[link_norm]):
+        return True
+    if _hist_key_link(link_norm) in h and _entry_blocks_post(h[_hist_key_link(link_norm)]):
+        return True
+    if dedupe_hash and _hist_key_hash(dedupe_hash) in h:
+        if _entry_blocks_post(h[_hist_key_hash(dedupe_hash)]):
             return True
     return False
 
@@ -1584,7 +1609,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
     dedupe = noticia.get("dedupe")
 
     async with _history_post_lock:
-        if historico_check(history, link_norm, dedupe):
+        if historico_blocks_post(history, link_norm, dedupe):
             log.info("Skip duplicate news (history): %s", (noticia.get("titulo") or "")[:60])
             return False
         historico_set(history, link_norm, dedupe, "posting")
@@ -1702,6 +1727,21 @@ async def verificar_feeds():
         await _verificar_feeds_inner()
     except Exception as e:
         log.exception(f"Fatal error in news cycle: {e}")
+
+
+@verificar_feeds.before_loop
+async def _before_verificar_feeds():
+    await discord_client.wait_until_ready()
+    now_br = datetime.now(FUSO_HORARIO_BR)
+    if HORA_INICIO <= now_br.hour < HORA_FIM:
+        log.info("News bot ready — running first cycle now.")
+        try:
+            await _verificar_feeds_inner()
+        except Exception as e:
+            log.exception(f"News first cycle error: {e}")
+    else:
+        log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
+
 
 async def _verificar_feeds_inner():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
