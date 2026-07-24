@@ -61,10 +61,13 @@ class TestOffersCategoryFilter(unittest.TestCase):
 
 class TestSlashLocalizations(unittest.TestCase):
     def test_slash_desc_has_localizations(self):
+        from discord import app_commands
+
         kw = locale_utils.slash_desc_kwargs("slash.cmd.play")
         self.assertIn("description", kw)
-        self.assertIn("description_localizations", kw)
-        self.assertGreaterEqual(len(kw["description_localizations"]), 4)
+        desc = kw["description"]
+        self.assertIsInstance(desc, app_commands.locale_str)
+        self.assertEqual(str(desc), locale_utils.tr("en", "slash.cmd.play"))
 
 
 class TestRoleplayHistory(unittest.TestCase):

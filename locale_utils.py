@@ -114,16 +114,16 @@ def _slash_localizations(bucket: dict[str, str]) -> dict[discord.Locale, str]:
 
 
 def slash_desc_kwargs(key: str) -> dict[str, object]:
-    """Kwargs for @tree.command / @hybrid_command with Discord description_localizations."""
+    """Kwargs for @tree.command / @hybrid_command with localized slash descriptions."""
     bucket = _STRINGS.get(key)
     if not bucket:
         return {"description": key}
     en = bucket.get("en") or key
     locs = _slash_localizations(bucket)
-    out: dict[str, object] = {"description": en}
     if locs:
-        out["description_localizations"] = locs
-    return out
+        # tree.command only accepts description=locale_str (not description_localizations).
+        return {"description": app_commands.locale_str(en, localizations=locs)}
+    return {"description": en}
 
 
 def slash_param(key: str) -> app_commands.locale_str:
