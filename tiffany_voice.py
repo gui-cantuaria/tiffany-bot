@@ -272,6 +272,9 @@ async def _require_dm_access(ctx: commands.Context) -> bool:
     if ctx.guild:
         return True
     if guild_config.is_user_blacklisted_anywhere(ctx.author.id):
+        if ctx.interaction is None:
+            lang = _ctx_lang(ctx)
+            await ctx.send(embed=_embed(tr(lang, "blocked.1")), delete_after=8)
         return False
     if not _dm_require_shared_guild():
         return True
@@ -1470,8 +1473,20 @@ async def slash_rate_limit_check(interaction: discord.Interaction) -> bool:
         return True
     uid = interaction.user.id
     if interaction.guild and guild_config.is_blacklisted(interaction.guild.id, uid):
+        if not interaction.response.is_done():
+            lang = locale_utils.resolve_lang(interaction.guild, uid)
+            await interaction.response.send_message(
+                embed=_embed(tr(lang, "blocked.1")),
+                ephemeral=True,
+            )
         return False
     if not interaction.guild and guild_config.is_user_blacklisted_anywhere(uid):
+        if not interaction.response.is_done():
+            lang = locale_utils.resolve_lang(None, uid)
+            await interaction.response.send_message(
+                embed=_embed(tr(lang, "blocked.1")),
+                ephemeral=True,
+            )
         return False
     name = interaction.command.name
     ok, wait = _check_cmd_rate_limit(interaction.user.id, name)
@@ -3907,6 +3922,14 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("gw", ["giveaway"], "t!gw create|end|reroll|list — sorteios"),
     ("emb", ["embed"], "t!emb create|edit|send|list — embeds customizados"),
     ("rp", ["roleplay"], "t!rp / t!roleplay <mensagem> — conversa casual com personalidade"),
+    ("help", [], "t!help / /help — lista de comandos"),
+    ("about", [], "t!about / /about — o que a Tiffany faz"),
+    ("rewind", [], "t!rewind / /rewind — suas estatísticas"),
+    ("updates", ["novidades"], "t!updates / /updates — novidades do bot"),
+    ("stats", ["estatisticas", "metricas"], "t!stats / /stats — saúde do bot"),
+    ("lang", ["language", "idioma"], "t!lang / /language — idioma"),
+    ("mod", ["modpanel", "mod-panel"], "t!mod / /mod-panel — painel admin"),
+    ("playerstatus", ["player-status"], "t!playerstatus — diagnóstico de player (admin)"),
 ]
 
 def build_about_embed(
@@ -3983,7 +4006,7 @@ PRESENCE_LINES: tuple[str, ...] = (
     "/rewind — your stats",
     "/roleplay — casual chat",
     "/about — what I do",
-    "/status — am I online?",
+    "/stats — am I online?",
     "/updates — recent changes",
 )
 
@@ -6868,13 +6891,18 @@ def register_voice(bot: commands.Bot) -> None:
     async def _global_cmd_rate_limit(ctx: commands.Context) -> bool:
         if ctx.author.bot or not ctx.command:
             return True
-        if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
-            return False  # Blacklisted users are silently ignored
-        if not ctx.guild and guild_config.is_user_blacklisted_anywhere(ctx.author.id):
-            return False
-        # Hybrid slash path is already limited in CommandTree.interaction_check.
+        # Hybrid slash: blacklist + rate limit run in CommandTree.interaction_check.
         if ctx.interaction is not None:
             return True
+        uid = ctx.author.id
+        if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, uid):
+            lang = _ctx_lang(ctx)
+            await ctx.send(embed=_embed(tr(lang, "blocked.1")), delete_after=8)
+            return False
+        if not ctx.guild and guild_config.is_user_blacklisted_anywhere(uid):
+            lang = _ctx_lang(ctx)
+            await ctx.send(embed=_embed(tr(lang, "blocked.1")), delete_after=8)
+            return False
         ok, wait = _check_cmd_rate_limit(ctx.author.id, ctx.command.name)
         if not ok:
             raise TiffanyRateLimited(wait, ctx.command.name, slash=False)
@@ -9150,22 +9178,7 @@ def register_voice(bot: commands.Bot) -> None:
             except Exception:
                 pass
 
-    # Slash command error handler (app_commands don't trigger on_command_error)
-    @bot.tree.error
-    async def _on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-        log.exception("Slash command error /%s: %s", getattr(interaction.command, "name", "?"), error)
-        msg = tr(
-            locale_utils.resolve_lang(interaction.guild, interaction.user.id),
-            "cmd.error.generic",
-        )
-        try:
-            ephem = locale_utils.slash_ephemeral(interaction)
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=_embed(msg), ephemeral=ephem)
-            else:
-                await interaction.response.send_message(embed=_embed(msg), ephemeral=ephem)
-        except Exception:
-            pass
+    # Slash errors handled globally in notices._slash_command_error (always registered).
 
     # --- Easter egg: thank whoever gives the bot a pink-coloured role ---
     _PINK_THANKED_GUILDS: set[int] = set()
@@ -9586,64 +9599,66 @@ def register_voice(bot: commands.Bot) -> None:
                 log.warning("Failed to reconnect guild %s on on_ready: %s", gid_str, e)
 
     # ============================
-    # SLASH COMMANDS
+    # SLASH + PREFIX (hybrid where noted)
     # ============================
 
-    @bot.tree.command(name="about", **slash_desc_kwargs("slash.cmd.about"))
+    @bot.hybrid_command(name="about", **hybrid_desc_kwargs("slash.cmd.about"))
     @_dm_slash
-    async def slash_about(interaction: discord.Interaction):
+    async def cmd_about(ctx: commands.Context):
         is_admin = bool(
-            interaction.guild
-            and isinstance(interaction.user, discord.Member)
-            and interaction.user.guild_permissions.administrator
+            ctx.guild
+            and isinstance(ctx.author, discord.Member)
+            and ctx.author.guild_permissions.administrator
         )
-        lang = interaction_lang(interaction)
+        lang = _ctx_lang(ctx)
         em = build_about_embed(
             bot,
             for_admin=is_admin,
-            guild=interaction.guild,
+            guild=ctx.guild,
             lang=lang,
-            user_id=interaction.user.id if interaction.user else None,
+            user_id=ctx.author.id if ctx.author else None,
         )
         invite = bot_invite_url(bot) if bot.user else ""
         view = invite_link_view(invite, lang)
-        await interaction.response.send_message(embed=em, view=view)
+        await ctx.send(embed=em, view=view)
 
-    @bot.tree.command(
+    @bot.hybrid_command(
         name="help",
-        **slash_desc_kwargs("slash.cmd.help"),
+        **hybrid_desc_kwargs("slash.cmd.help"),
     )
     @_dm_slash
-    async def slash_help(interaction: discord.Interaction):
+    async def cmd_help(ctx: commands.Context):
         em = locale_utils.build_help_embed(
-            interaction.guild, interaction.user.id, pink=TIFFANY_PINK,
+            ctx.guild, ctx.author.id if ctx.author else None, pink=TIFFANY_PINK,
         )
-        await interaction.response.send_message(
-            embed=em, ephemeral=locale_utils.slash_ephemeral(interaction),
-        )
+        ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
+        await ctx.send(embed=em, ephemeral=ephem)
 
-    @bot.tree.command(name="player-status", **slash_desc_kwargs("slash.cmd.player_status"))
+    @bot.hybrid_command(
+        name="player-status",
+        dm_permission=False,
+        **hybrid_desc_kwargs("slash.cmd.player_status"),
+    )
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     @_guild_slash
-    async def slash_player_status(interaction: discord.Interaction):
-        lang = interaction_lang(interaction)
-        if not interaction.guild:
-            await _slash_reply(interaction, tr(lang, "slash.guild_only"))
+    async def cmd_player_status(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
+        if not ctx.guild:
+            await ctx.send(embed=_embed(tr(lang, "slash.guild_only")))
             return
-        if isinstance(interaction.user, discord.Member) and not interaction.user.guild_permissions.administrator:
-            await _slash_reply(interaction, tr(lang, "slash.player_status.admin_only"))
+        if isinstance(ctx.author, discord.Member) and not ctx.author.guild_permissions.administrator:
+            await ctx.send(embed=_embed(tr(lang, "slash.player_status.admin_only")))
             return
-        await _slash_reply(interaction, _format_status_embed(interaction.client, lang=lang))
+        await ctx.send(embed=_format_status_embed(ctx.bot, lang=lang))
 
-    @bot.tree.command(name="rewind", **slash_desc_kwargs("slash.cmd.rewind"))
+    @bot.hybrid_command(name="rewind", **hybrid_desc_kwargs("slash.cmd.rewind"))
     @_dm_slash
-    async def slash_rewind(interaction: discord.Interaction):
-        lang = interaction_lang(interaction)
-        em = build_rewind_embed(interaction.user, lang=lang)
-        await interaction.response.send_message(
-            embed=em, ephemeral=locale_utils.slash_ephemeral(interaction),
-        )
+    async def cmd_rewind(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
+        em = build_rewind_embed(ctx.author, lang=lang)
+        ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
+        await ctx.send(embed=em, ephemeral=ephem)
 
     # ============================
     # WAVELINK EVENT LISTENERS

@@ -1,6 +1,6 @@
 {
   "help.title": "Tiffany · Comandi e aiuto",
-  "help.desc": "Musica, chat IA, dadi, tech news e offerte.\n\nPrefisso **`t!`** o **`/`** · entra in voce → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.desc": "Musica, chat IA, dadi, tech news e offerte.\n\nPrefisso **\t!** o **/** · entra in voce → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Musica",
   "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10.000 hit) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 Chat e IA",
@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 Dadi",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <nome> <expr>`\n\nSenza prefisso in chat — pulsante reroll incluso.",
   "help.settings.title": "⚙️ Impostazioni e strumenti",
-  "help.settings.body": "`/language` — scegli lingua\n\n`/status` — **salute bot** (ping, musica, news, WARP)\n\n`/stats` — **utilizzo** (solo owner, privato)\n\n`/updates` — **novità**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.settings.body": "/language — scegli lingua\n\n/stats — **salute bot** (ping, musica, news, WARP)\n\n/updates — **novità**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
   "help.footer": "🎙️ In voce: «Tiffany, suona [brano]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 lingue: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
   "slash.cmd.help": "Comandi: musica (10k hit), IA, dadi, giveaway, impostazioni"
 }

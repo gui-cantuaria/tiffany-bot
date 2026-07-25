@@ -1,6 +1,6 @@
 {
   "help.title": "Tiffany · Kommandon och hjälp",
-  "help.desc": "Musik, AI-chatt, tärningar, tech-nyheter och erbjudanden.\n\nPrefix **`t!`** eller **`/`** · gå med i röst → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.desc": "Musik, AI-chatt, tärningar, tech-nyheter och erbjudanden.\n\nPrefix **\t!** eller **/** · gå med i röst → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Musik",
   "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 Chatt och AI",
@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 Tärning",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <namn> <expr>`\n\nInget prefix i chatten — reroll-knapp ingår.",
   "help.settings.title": "⚙️ Inställningar och verktyg",
-  "help.settings.body": "`/language` — välj språk\n\n`/status` — **bot-hälsa** (ping, musik, nyheter, WARP)\n\n`/stats` — **användning** (endast owner, privat)\n\n`/updates` — **ändringslogg**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.settings.body": "/language — välj språk\n\n/stats — **bot-hälsa** (ping, musik, nyheter, WARP)\n\n/updates — **ändringslogg**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
   "help.footer": "🎙️ I röst: «Tiffany, spela [låt]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 språk: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
   "slash.cmd.help": "Kommandon: musik (10k hits), AI, tärning, giveaways, inställningar"
 }

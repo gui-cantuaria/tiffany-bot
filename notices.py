@@ -25,6 +25,7 @@ from locale_utils import slash_ephemeral, slash_desc_kwargs, interaction_lang, b
 import updates as tiffany_updates
 import owner_dashboard
 import guild_config
+from brand_colors import TIFFANY_PINK, TIFFANY_RED
 
 try:
     import tiffany_voice
@@ -144,8 +145,20 @@ class _TiffanyCommandTree(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         uid = interaction.user.id
         if interaction.guild and guild_config.is_blacklisted(interaction.guild.id, uid):
+            if not interaction.response.is_done():
+                lang = resolve_lang(interaction.guild, uid)
+                await interaction.response.send_message(
+                    embed=discord.Embed(description=tr(lang, "blocked.1"), color=TIFFANY_RED),
+                    ephemeral=True,
+                )
             return False
         if not interaction.guild and guild_config.is_user_blacklisted_anywhere(uid):
+            if not interaction.response.is_done():
+                lang = resolve_lang(None, uid)
+                await interaction.response.send_message(
+                    embed=discord.Embed(description=tr(lang, "blocked.1"), color=TIFFANY_RED),
+                    ephemeral=True,
+                )
             return False
         if _voice_available and tiffany_voice:
             return await tiffany_voice.slash_rate_limit_check(interaction)
@@ -164,13 +177,47 @@ discord_client = commands.Bot(
 )
 
 
+@discord_client.tree.error
+async def _slash_command_error(
+    interaction: discord.Interaction,
+    error: discord.app_commands.AppCommandError,
+) -> None:
+    """Always respond on slash failures — avoids Discord 'application did not respond'."""
+    cmd_name = getattr(interaction.command, "name", "?")
+    log.exception("Slash command error /%s: %s", cmd_name, error)
+    lang = resolve_lang(interaction.guild, interaction.user.id if interaction.user else None)
+    msg = tr(lang, "cmd.error.generic")
+    embed = discord.Embed(description=msg, color=TIFFANY_RED)
+    try:
+        ephem = slash_ephemeral(interaction)
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=ephem)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=ephem)
+    except Exception:
+        pass
+
+
 @discord_client.check
 async def _notices_blacklist_check(ctx: commands.Context) -> bool:
     if ctx.author.bot:
         return True
-    if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, ctx.author.id):
+    if ctx.interaction is not None:
+        return True  # slash: handled in _TiffanyCommandTree.interaction_check
+    uid = ctx.author.id
+    if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, uid):
+        lang = resolve_lang(ctx.guild, uid)
+        await ctx.send(
+            embed=discord.Embed(description=tr(lang, "blocked.1"), color=TIFFANY_RED),
+            delete_after=8,
+        )
         return False
-    if not ctx.guild and guild_config.is_user_blacklisted_anywhere(ctx.author.id):
+    if not ctx.guild and guild_config.is_user_blacklisted_anywhere(uid):
+        lang = resolve_lang(None, uid)
+        await ctx.send(
+            embed=discord.Embed(description=tr(lang, "blocked.1"), color=TIFFANY_RED),
+            delete_after=8,
+        )
         return False
     return True
 ai_client = (
@@ -249,7 +296,6 @@ FONTES_INGLES = {
 # =========================
 # CATEGORIES
 # =========================
-from brand_colors import TIFFANY_PINK, TIFFANY_RED
 CORES_CATEGORIA = {
     "Hardware": TIFFANY_PINK,
     "Inteligência Artificial": TIFFANY_PINK,
@@ -2419,43 +2465,37 @@ def _build_public_status_embed(lang=None) -> discord.Embed:
 
 
 @discord_client.tree.command(
-    name="status",
-    **slash_desc_kwargs("slash.cmd.status"),
-)
-@discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def cmd_status(interaction: discord.Interaction):
-    lang = interaction_lang(interaction)
-    await interaction.response.send_message(
-        embed=_build_public_status_embed(lang),
-        ephemeral=slash_ephemeral(interaction),
-    )
-
-
-# =========================
-# /stats — owner only (always ephemeral)
-# =========================
-@discord_client.tree.command(
     name="stats",
     **slash_desc_kwargs("slash.cmd.stats"),
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_stats(interaction: discord.Interaction):
-    lang = interaction_lang(interaction)
-    if not owner_dashboard.is_bot_owner(interaction.user.id):
+    """Public bot health — connection, music, news, WARP."""
+    try:
+        lang = interaction_lang(interaction)
         await interaction.response.send_message(
-            embed=discord.Embed(
-                description=tr(lang, "err.missing_perms"),
-                color=TIFFANY_RED,
-            ),
-            ephemeral=True,
+            embed=_build_public_status_embed(lang),
+            ephemeral=slash_ephemeral(interaction),
         )
-        return
-    em = owner_dashboard.build_owner_stats_embed(discord_client)
-    await interaction.response.send_message(embed=em, ephemeral=True)
+    except Exception:
+        log.exception("cmd_stats failed")
+        if not interaction.response.is_done():
+            lang = resolve_lang(interaction.guild, interaction.user.id if interaction.user else None)
+            await interaction.response.send_message(
+                embed=discord.Embed(description=tr(lang, "cmd.error.generic"), color=TIFFANY_RED),
+                ephemeral=slash_ephemeral(interaction),
+            )
 
 
 @discord_client.command(name="stats", aliases=["estatisticas", "metricas"])
 async def cmd_stats_prefix(ctx: commands.Context):
+    lang = resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
+    await ctx.send(embed=_build_public_status_embed(lang))
+
+
+@discord_client.command(name="status")
+async def cmd_status_prefix(ctx: commands.Context):
+    """Owner-only usage panel — prefix only (hidden from slash command list)."""
     if not owner_dashboard.is_bot_owner(ctx.author.id):
         return
     em = owner_dashboard.build_owner_stats_embed(discord_client)
@@ -2466,16 +2506,10 @@ async def cmd_stats_prefix(ctx: commands.Context):
     except discord.Forbidden:
         await ctx.send(
             embed=discord.Embed(
-                description="Não consigo te enviar DM. Ative mensagens privadas ou use `/stats`.",
+                description="Não consigo te enviar DM. Ative mensagens privadas ou use `t!status` na DM.",
                 color=TIFFANY_RED,
             ),
         )
-
-
-@discord_client.command(name="status")
-async def cmd_status_prefix(ctx: commands.Context):
-    lang = resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
-    await ctx.send(embed=_build_public_status_embed(lang))
 
 
 # =========================
@@ -2498,6 +2532,16 @@ async def cmd_updates(interaction: discord.Interaction):
         embed=em,
         ephemeral=slash_ephemeral(interaction),
     )
+
+
+@discord_client.command(name="updates", aliases=["novidades"])
+async def cmd_updates_prefix(ctx: commands.Context):
+    em = tiffany_updates.build_updates_embed(
+        ctx.guild,
+        ctx.author.id if ctx.author else None,
+        pink=TIFFANY_PINK,
+    )
+    await ctx.send(embed=em)
 
 
 async def _shutdown_cleanup():

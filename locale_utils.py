@@ -757,7 +757,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- Dice in chat (no prefix): d20, D20+7, 4d6, c50+50, adv, stats\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
-    "- Slash: /help, /about, /queue, /status, /stats, /updates, /player-status, /language, /mod-panel\n"
+    "- Slash: /help, /about, /queue, /stats, /updates, /player-status, /language, /mod-panel\n"
     "- /giveaway (t!gw) — sorteios · /embed (t!emb) — embeds customizados · /roleplay (t!rp) — chat casual\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
@@ -770,20 +770,20 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "de": "Berechtigungen: **Verbinden**, **Sprechen**, **Nachrichten senden**, **Links "
         "einbetten**.\n"
         "Tritt einem Sprachkanal bei → **`/play [Lied]`**.\n"
-        "Diagnose: **`/player-status`** (Admin) · **`/status`** (Allgemein).",
+        "Diagnose: **`/player-status`** (Admin) · **`/stats`** (Allgemein).",
         "en": "Permissions: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\n"
         "Join a voice channel → **`/play [song]`**.\n"
-        "Diagnostics: **`/player-status`** (admin) · **`/status`** (general).",
+        "Diagnostics: **`/player-status`** (admin) · **`/stats`** (general).",
         "es": "Permisos: **Conectar**, **Hablar**, **Enviar mensajes**, **Incrustar enlaces**.\n"
         "Entra a un canal de voz → **`/play [música]`**.\n"
-        "Diagnóstico: **`/player-status`** (admin) · **`/status`** (general).",
+        "Diagnóstico: **`/player-status`** (admin) · **`/stats`** (general).",
         "fr": "Permissions : **Connecter**, **Parler**, **Envoyer des messages**, **Intégrer des "
         "liens**.\n"
         "Rejoins un salon vocal → **`/play [musique]`**.\n"
-        "Diagnostics : **`/player-status`** (admin) · **`/status`** (général).",
+        "Diagnostics : **`/player-status`** (admin) · **`/stats`** (général).",
         "pt": "Permissões: **Conectar**, **Falar**, **Enviar mensagens**, **Embeds**.\n"
         "Entra num canal de voz → **`/play [música]`**.\n"
-        "Diagnóstico: **`/player-status`** (admin) · **`/status`** (geral).",
+        "Diagnóstico: **`/player-status`** (admin) · **`/stats`** (geral).",
     },
     "about.admin.title": {
         "de": "Setup (Admin)",
@@ -2309,19 +2309,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.desc": {
         "de": "Musik, KI-Chat, Würfel, Tech-News und Angebote.\n\n"
         "Präfix **`t!`** oder **`/`** · Sprachkanal → **`/play`**.\n\n"
-        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "**`/language`** · **`/stats`** · **`/updates`**",
         "en": "Music, AI chat, dice, tech news, and deals.\n\n"
         "Prefix **`t!`** or **`/`** · join voice → **`/play`**.\n\n"
-        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "**`/language`** · **`/stats`** · **`/updates`**",
         "es": "Música, chat IA, dados, noticias tech y ofertas.\n\n"
         "Prefijo **`t!`** o **`/`** · entra en voz → **`/play`**.\n\n"
-        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "**`/language`** · **`/stats`** · **`/updates`**",
         "fr": "Musique, chat IA, dés, actu tech et bons plans.\n\n"
         "Préfixe **`t!`** ou **`/`** · rejoins le vocal → **`/play`**.\n\n"
-        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "**`/language`** · **`/stats`** · **`/updates`**",
         "pt": "Música na call, IA, dados, notícias e ofertas tech.\n\n"
         "Use **`t!`** ou **`/`** · entre na voz → **`/play`**.\n\n"
-        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "**`/language`** · **`/stats`** · **`/updates`**",
     },
     "help.dice.body": {
         "de": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
@@ -2400,36 +2400,31 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "help.settings.body": {
         "de": "`/language` — Sprache wählen\n\n"
-        "`/status` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n\n"
-        "`/stats` — **Nutzung** (Owner, privat)\n\n"
+        "`/stats` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n\n"
         "`/updates` — **Changelog**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
         "`/mod-panel` (Admin) · `/player-status` (Admin)",
         "en": "`/language` — pick your language\n\n"
-        "`/status` — **bot health** (ping, music, news, WARP)\n\n"
-        "`/stats` — **usage counters** (owner only, private)\n\n"
+        "`/stats` — **bot health** (ping, music, news, WARP)\n\n"
         "`/updates` — **changelog**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
         "`/mod-panel` (admin) · `/player-status` (admin)",
         "es": "`/language` — elegir idioma\n\n"
-        "`/status` — **salud del bot** (ping, música, noticias, WARP)\n\n"
-        "`/stats` — **uso acumulado** (solo owner, privado)\n\n"
+        "`/stats` — **salud del bot** (ping, música, noticias, WARP)\n\n"
         "`/updates` — **novedades**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
         "`/mod-panel` (admin) · `/player-status` (admin)",
         "fr": "`/language` — choisir la langue\n\n"
-        "`/status` — **santé du bot** (ping, musique, actus, WARP)\n\n"
-        "`/stats` — **compteurs d'usage** (owner, privé)\n\n"
+        "`/stats` — **santé du bot** (ping, musique, actus, WARP)\n\n"
         "`/updates` — **nouveautés**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
         "`/mod-panel` (admin) · `/player-status` (admin)",
         "pt": "`/language` — mudar meu idioma\n\n"
-        "`/status` — **saúde do bot** (conexão, música, notícias, WARP)\n\n"
-        "`/stats` — **números de uso** (só dono, privado)\n\n"
+        "`/stats` — **saúde do bot** (conexão, música, notícias, WARP)\n\n"
         "`/updates` — **novidades**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
@@ -2981,11 +2976,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Pula a faixa atual (votação se 3+ na call)",
     },
     "slash.cmd.stats": {
-        "de": "Nur Owner: Nutzung und KI-Kosten",
-        "en": "Owner-only usage and AI cost panel",
-        "es": "Solo owner: uso y costos de IA",
-        "fr": "Owner uniquement : usage et coûts IA",
-        "pt": "Só o dono: uso e custos de IA",
+        "de": "Ist Tiffany online? Verbindung und Funktionen",
+        "en": "Is Tiffany online? Connection and available features",
+        "es": "¿Tiffany en línea? Conexión y funciones disponibles",
+        "fr": "Tiffany en ligne ? Connexion et fonctions disponibles",
+        "pt": "A Tiffany está online? Conexão e recursos disponíveis",
     },
     "slash.cmd.summary": {
         "de": "[DEAKTIVIERT] Link zusammenfassen",
@@ -2995,11 +2990,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "[DESATIVADO] Resume um link",
     },
     "slash.cmd.status": {
-        "de": "Ist Tiffany online? Verbindung und Funktionen",
-        "en": "Is Tiffany online? Connection and available features",
-        "es": "¿Tiffany en línea? Conexión y funciones disponibles",
-        "fr": "Tiffany en ligne ? Connexion et fonctions disponibles",
-        "pt": "A Tiffany está online? Conexão e recursos disponíveis",
+        "de": "Nur Owner: Nutzung und KI-Kosten (nur t!status)",
+        "en": "Owner-only usage and AI cost panel (t!status prefix only)",
+        "es": "Solo owner: uso y costos de IA (solo prefijo t!status)",
+        "fr": "Owner uniquement : usage et coûts IA (préfixe t!status)",
+        "pt": "Só o dono: uso e custos de IA (apenas prefixo t!status)",
     },
     "slash.cmd.updates": {
         "de": "Neueste Tiffany-Updates und Verbesserungen",
@@ -3268,11 +3263,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Tiffany · Estatísticas de uso",
     },
     "stats.desc": {
-        "de": "Akumulierte Nutzung und heutige Posts — kein Gesundheitscheck (dafür **`/status`**).",
-        "en": "Lifetime usage and today's posts — not a health check (use **`/status`** for that).",
-        "es": "Uso acumulado y posts de hoy — no es diagnóstico (usa **`/status`**).",
-        "fr": "Usage cumulé et posts du jour — pas un diagnostic (voir **`/status`**).",
-        "pt": "Uso acumulado e posts de hoje — não é diagnóstico do bot (use **`/status`**).",
+        "de": "Verbindung, Musik, News und WARP — öffentlicher Gesundheitscheck.",
+        "en": "Connection, music, news and WARP — public health check.",
+        "es": "Conexión, música, noticias y WARP — chequeo público de salud.",
+        "fr": "Connexion, musique, actus et WARP — contrôle public de santé.",
+        "pt": "Conexão, música, notícias e WARP — diagnóstico público do bot.",
     },
     "updates.default_entry_title": {
         "de": "Update",

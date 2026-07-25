@@ -1,6 +1,6 @@
 {
   "help.title": "Tiffany · 명령어 및 도움말",
-  "help.desc": "음악, AI 채팅, 주사위, 테크 뉴스, 할인 정보.\n\n접두사 **`t!`** 또는 **`/`** · 보이스 참가 → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.desc": "음악, AI 채팅, 주사위, 테크 뉴스, 할인 정보.\n\n접두사 **\t!** 또는 **/** · 보이스 참가 → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 음악",
   "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000곡) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 채팅 및 AI",
@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 주사위",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <이름> <식>`\n\n채팅에서 접두사 없음 — 리롤 버튼 포함.",
   "help.settings.title": "⚙️ 설정 및 도구",
-  "help.settings.body": "`/language` — 언어 선택\n\n`/status` — **봇 상태** (ping, 음악, 뉴스, WARP)\n\n`/stats` — **사용 통계** (오너만, 비공개)\n\n`/updates` — **변경 기록**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.settings.body": "/language — 언어 선택\n\n/stats — **봇 상태** (ping, 음악, 뉴스, WARP)\n\n/updates — **변경 기록**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
   "help.footer": "🎙️ 보이스: «Tiffany, [노래] 재생» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13개 언어: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
   "slash.cmd.help": "명령: 음악(10k), AI, 주사위, Giveaway, 설정"
 }

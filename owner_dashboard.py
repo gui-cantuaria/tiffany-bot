@@ -1,4 +1,4 @@
-"""Owner-only usage and cost dashboard for /stats and t!stats."""
+"""Owner-only usage and cost dashboard — t!status prefix (hidden from slash list)."""
 
 from __future__ import annotations
 

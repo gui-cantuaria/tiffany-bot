@@ -1,6 +1,6 @@
 {
   "help.title": "Tiffany · الأوامر والمساعدة",
-  "help.desc": "موسيقى، دردشة AI، نرد، أخبار تقنية وعروض.\n\nالبادئة **`t!`** أو **`/`** · انضم للصوت → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.desc": "موسيقى، دردشة AI، نرد، أخبار تقنية وعروض.\n\nالبادئة **\t!** أو **/** · انضم للصوت → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 موسيقى",
   "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000 أغنية) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 دردشة وAI",
@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 نرد",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <اسم> <expr>`\n\nبدون بادئة في الشات — زر reroll مضمّن.",
   "help.settings.title": "⚙️ إعدادات وأدوات",
-  "help.settings.body": "`/language` — اختر اللغة\n\n`/status` — **صحة البوت** (ping، موسيقى، أخبار، WARP)\n\n`/stats` — **الاستخدام** (owner فقط، خاص)\n\n`/updates` — **سجل التغييرات**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.settings.body": "/language — اختر اللغة\n\n/stats — **صحة البوت** (ping، موسيقى، أخبار، WARP)\n\n/updates — **سجل التغييرات**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
   "help.footer": "🎙️ بالصوت: «Tiffany، شغّل [أغنية]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 لغة: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
   "slash.cmd.help": "الأوامر: موسيقى (10k)، AI، نرد، giveaways، إعدادات"
 }
