@@ -22,7 +22,7 @@ git checkout origin/main -- \
   launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py game_recommendations.py \
   affiliate_config.py random_songs.py requirements.txt \
   giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
-  updates.py updates.json owner_dashboard.py roleplay_config.py \
+  updates.py updates.json owner_dashboard.py roleplay_config.py roleplay_i18n.py \
   infra/ schema/ locales/ \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh scripts/start-lavalink.sh \

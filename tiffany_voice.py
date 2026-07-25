@@ -4867,6 +4867,58 @@ async def _ctx_reply_ai(
     return await ctx.send(embed=embed, delete_after=delete_after, **kwargs)
 
 
+def _roleplay_is_private(ctx: commands.Context) -> bool:
+    """True when guild RP replies should be ephemeral/DM-only."""
+    if not ctx.guild:
+        return False
+    import roleplay_config as rp_cfg
+    return rp_cfg.get_visibility(ctx.author.id) == "private"
+
+
+async def _ctx_send_roleplay(
+    ctx: commands.Context,
+    text: str,
+    *,
+    private: bool,
+    delete_after: Optional[float] = None,
+) -> Optional[discord.Message]:
+    """Send plain-text roleplay reply — public in channel or private (ephemeral/DM)."""
+    if not private or not ctx.guild:
+        return await ctx.send(text, delete_after=delete_after)
+
+    if ctx.interaction is not None:
+        kwargs: dict = {"ephemeral": True}
+        if delete_after:
+            kwargs["delete_after"] = delete_after
+        try:
+            if ctx.interaction.response.is_done():
+                return await ctx.followup.send(text, **kwargs)
+            return await ctx.send(text, **kwargs)
+        except discord.HTTPException:
+            return None
+
+    try:
+        return await ctx.author.send(text, delete_after=delete_after)
+    except (discord.Forbidden, discord.HTTPException):
+        await _send_private_notice(
+            ctx.author, ctx.channel, text, interaction=None, delete_after=delete_after,
+        )
+        return None
+
+
+async def _ctx_reply_roleplay(
+    ctx: commands.Context,
+    content: str | discord.Embed,
+    *,
+    private: bool,
+    **kwargs,
+) -> Optional[discord.Message]:
+    """Embed reply for roleplay — respects public/private in guilds."""
+    if private and ctx.guild:
+        return await _ctx_reply_ai(ctx, content, **kwargs)
+    return await _ctx_reply(ctx, content, **kwargs)
+
+
 async def _ensure_opus() -> None:
     if discord.opus.is_loaded():
         return
@@ -8236,45 +8288,20 @@ def register_voice(bot: commands.Bot) -> None:
         except discord.HTTPException:
             await _ctx_reply_ai(ctx, f"💬 {answer}")
 
-    async def _run_roleplay(ctx: commands.Context, *, message: str = "") -> None:
+    async def _run_roleplay_core(ctx: commands.Context, *, message: str) -> None:
         import roleplay_config as rp_cfg
 
-        if not await _require_dm_access(ctx):
-            return
+        private = _roleplay_is_private(ctx)
         _stats["commands_used"] += 1
         if ctx.guild:
             _touch_activity(ctx.guild.id)
         lang = _ctx_lang(ctx)
         uid = ctx.author.id
-        msg = (message or "").strip().lower()
-
-        if msg in ("config", "setup", "configure", "configurar"):
-            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
-            view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
-            await ctx.send(embed=em, view=view)
-            return
-
-        profile = rp_cfg.get_profile(uid)
-        if not profile:
-            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
-            view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
-            if not (message and message.strip()):
-                await ctx.send(embed=em, view=view)
-                return
-            await ctx.send(tr(lang, "roleplay.profile.required"), embed=em, view=view)
-            return
-
-        if not (message and message.strip()):
-            await ctx.send(
-                tr(lang, "roleplay.profile.saved").replace("!", " — ")
-                + " `t!rp config` to change.",
-            )
-            return
-
         message = message.strip()
+
         nested = _nested_command_hint(message)
         if nested:
-            await _ctx_reply(ctx, nested, delete_after=18)
+            await _ctx_reply_roleplay(ctx, nested, private=private, delete_after=18)
             return
 
         if _contains_blocked_content(message) or await _should_block_content(message, ctx.guild.id if ctx.guild else None):
@@ -8283,23 +8310,26 @@ def register_voice(bot: commands.Bot) -> None:
 
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
-            await _ctx_reply(ctx, tr(lang, "roleplay.cooldown", remaining=remaining))
+            await _ctx_reply_roleplay(ctx, tr(lang, "roleplay.cooldown", remaining=remaining), private=private)
             return
         gid, uid_rl = _ai_rl_ids(ctx)
         ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid_rl)
         if not ok:
-            await _ctx_reply(ctx, _rate_limit_message(lang, reason), delete_after=8)
+            await _ctx_reply_roleplay(
+                ctx, _rate_limit_message(lang, reason), private=private, delete_after=8,
+            )
             return
 
-        thinking = await _ctx_reply(ctx, tr(lang, "roleplay.thinking"))
+        thinking = await _ctx_reply_roleplay(ctx, tr(lang, "roleplay.thinking"), private=private)
         client = _get_openrouter_client()
         if client is None:
-            await _ctx_reply(ctx, tr(lang, "err.api_key"))
+            await _ctx_reply_roleplay(ctx, tr(lang, "err.api_key"), private=private)
             return
         if not _ai_rate_limit_consume(gid, bucket="chat", user_id=uid_rl):
-            await _ctx_reply(ctx, tr(lang, "err.rate_limit"))
+            await _ctx_reply_roleplay(ctx, tr(lang, "err.rate_limit"), private=private)
             return
 
+        profile = rp_cfg.get_profile(uid)
         system_prompt = rp_cfg.build_roleplay_prompt(lang, profile)
         history_msgs = rp_cfg.get_history_messages(uid)
         try:
@@ -8317,12 +8347,12 @@ def register_voice(bot: commands.Bot) -> None:
                 )
         except Exception:
             log.exception("Roleplay AI call failed")
-            await _ctx_reply(ctx, tr(lang, "err.rate_limit"))
+            await _ctx_reply_roleplay(ctx, tr(lang, "err.rate_limit"), private=private)
             return
 
         answer = (resp.choices[0].message.content or "").strip()
         if not answer:
-            answer = "Hmm… lost the thread. Try again?"
+            answer = tr(lang, "roleplay.err.empty")
         if len(answer) > 1500:
             answer = answer[:1497].rsplit(" ", 1)[0] + "…"
         if _contains_blocked_content(answer):
@@ -8334,9 +8364,89 @@ def register_voice(bot: commands.Bot) -> None:
         try:
             if thinking:
                 await thinking.delete()
-            await ctx.send(answer)
         except discord.HTTPException:
-            await ctx.send(answer)
+            pass
+        await _ctx_send_roleplay(ctx, answer, private=private)
+
+    async def _send_roleplay_setup(ctx: commands.Context, uid: int, lang: GuildLang) -> None:
+        import roleplay_config as rp_cfg
+
+        em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+        view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
+        msg = await ctx.send(embed=em, view=view)
+        view.bind_message(msg)
+
+    async def _run_roleplay(ctx: commands.Context, *, message: str = "") -> None:
+        import roleplay_config as rp_cfg
+
+        if not await _require_dm_access(ctx):
+            return
+        lang = _ctx_lang(ctx)
+        uid = ctx.author.id
+        msg = (message or "").strip().lower()
+
+        _RP_CONFIG = frozenset({
+            "config", "setup", "configure", "configurar",
+            "ayar", "ayarla", "konfigurera", "inställningar", "impostazioni", "configura",
+            "instellen", "configureer", "настройка", "настройки",
+        })
+        _RP_RESET = frozenset({
+            "reset", "reiniciar", "limpar", "clear", "borrar",
+            "sıfırla", "sifirla", "återställ", "aterstall", "reimposta", "resetten",
+            "сброс", "sbros",
+        })
+        _RP_RANDOM = frozenset({
+            "random", "aleatorio", "aleatório", "azar", "rand",
+            "rastgele", "slumpa", "casuale", "willekeurig", "случайно", "sluchayno",
+        })
+
+        if msg in _RP_CONFIG:
+            await _send_roleplay_setup(ctx, uid, lang)
+            return
+
+        if msg in _RP_RESET:
+            rp_cfg.reset_profile(uid)
+            await ctx.send(tr(lang, "roleplay.profile.reset"))
+            await _send_roleplay_setup(ctx, uid, lang)
+            return
+
+        if msg in _RP_RANDOM:
+            rp_cfg.apply_random_profile(uid)
+            await ctx.send(tr(lang, "roleplay.profile.random"))
+            return
+
+        profile = rp_cfg.get_profile(uid)
+        if not profile:
+            if not (message and message.strip()):
+                await _send_roleplay_setup(ctx, uid, lang)
+                return
+            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+            view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
+            msg_out = await ctx.send(tr(lang, "roleplay.profile.required"), embed=em, view=view)
+            view.bind_message(msg_out)
+            return
+
+        if not (message and message.strip()):
+            await ctx.send(tr(lang, "roleplay.usage.hint"))
+            return
+
+        # In guilds: ask public vs private once (DMs skip — only the user sees anyway).
+        if ctx.guild and rp_cfg.get_visibility(uid) is None:
+            em = rp_cfg.visibility_prompt_embed(lang, pink=TIFFANY_PINK)
+            view = rp_cfg.RoleplayVisibilityView(
+                uid,
+                lang,
+                ctx,
+                pending_message=message.strip(),
+                on_continue=_run_roleplay_core,
+            )
+            if ctx.interaction is not None:
+                await ctx.interaction.response.send_message(embed=em, view=view, ephemeral=True)
+            else:
+                await ctx.send(embed=em, view=view)
+            return
+
+        await _run_roleplay_core(ctx, message=message)
 
     @bot.hybrid_command(
         name="roleplay",

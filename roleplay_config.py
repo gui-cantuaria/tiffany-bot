@@ -145,6 +145,46 @@ def set_profile(user_id: int, profile: dict[str, Any]) -> None:
     _save()
 
 
+def get_visibility(user_id: int) -> Optional[str]:
+    """Guild roleplay visibility: 'public' (channel) or 'private' (ephemeral/DM). None = not chosen."""
+    profile = get_profile(user_id)
+    if not profile:
+        return None
+    vis = profile.get("visibility")
+    return vis if vis in ("public", "private") else None
+
+
+def set_visibility(user_id: int, visibility: str) -> None:
+    if visibility not in ("public", "private"):
+        return
+    profile = get_profile(user_id) or {}
+    profile["visibility"] = visibility
+    set_profile(user_id, profile)
+
+
+def reset_profile(user_id: int) -> None:
+    """Clear personality + history (visibility preference is cleared too)."""
+    _load()
+    _cache.pop(str(user_id), None)
+    _save()
+    clear_history(user_id)
+
+
+def apply_random_profile(user_id: int) -> None:
+    """Set random preset while keeping visibility preference if set."""
+    vis = get_visibility(user_id)
+    set_profile(user_id, random_profile())
+    if vis:
+        set_visibility(user_id, vis)
+
+
+def _merge_profile(user_id: int, profile: dict[str, Any]) -> None:
+    vis = get_visibility(user_id)
+    set_profile(user_id, profile)
+    if vis:
+        set_visibility(user_id, vis)
+
+
 def random_profile() -> dict[str, Any]:
     p = dict(random.choice(PRESETS))
     p["source"] = "random"
@@ -167,41 +207,53 @@ def build_roleplay_prompt(lang: GuildLang, profile: Optional[dict[str, Any]] = N
     )
     if note:
         extra += f"- User note: {note}\n"
-    extra += "- Match the user's message language (never switch unless they do).\n"
     return base + extra
 
 
-class RoleplayConfigModal(ui.Modal, title="Roleplay personality"):
-    tone = ui.TextInput(
-        label="Tone (playful, chill, witty…)",
-        placeholder="playful",
-        max_length=40,
-        required=False,
-    )
-    humor = ui.TextInput(
-        label="Humor (low, medium, high)",
-        placeholder="medium",
-        max_length=20,
-        required=False,
-    )
-    energy = ui.TextInput(
-        label="Energy (calm, bubbly, sharp…)",
-        placeholder="bubbly",
-        max_length=40,
-        required=False,
-    )
-    note = ui.TextInput(
-        label="Extra (optional)",
-        style=discord.TextStyle.paragraph,
-        placeholder="e.g. talk like a gamer friend who loves RPGs",
-        max_length=200,
-        required=False,
-    )
+async def _disable_setup_view(interaction: discord.Interaction) -> None:
+    """Remove buttons from the setup embed so expired menus do not fail silently."""
+    if not interaction.message:
+        return
+    try:
+        await interaction.message.edit(view=None)
+    except discord.HTTPException:
+        pass
 
+
+class RoleplayConfigModal(ui.Modal):
     def __init__(self, user_id: int, lang: GuildLang):
-        super().__init__()
+        super().__init__(title=tr(lang, "roleplay.modal.title")[:45])
         self.user_id = user_id
         self.lang = lang
+        self.tone = ui.TextInput(
+            label=tr(lang, "roleplay.modal.tone")[:45],
+            placeholder="playful",
+            max_length=40,
+            required=False,
+        )
+        self.humor = ui.TextInput(
+            label=tr(lang, "roleplay.modal.humor")[:45],
+            placeholder="medium",
+            max_length=20,
+            required=False,
+        )
+        self.energy = ui.TextInput(
+            label=tr(lang, "roleplay.modal.energy")[:45],
+            placeholder="bubbly",
+            max_length=40,
+            required=False,
+        )
+        self.note = ui.TextInput(
+            label=tr(lang, "roleplay.modal.note")[:45],
+            style=discord.TextStyle.paragraph,
+            placeholder=tr(lang, "roleplay.modal.note_ph")[:100],
+            max_length=200,
+            required=False,
+        )
+        self.add_item(self.tone)
+        self.add_item(self.humor)
+        self.add_item(self.energy)
+        self.add_item(self.note)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         profile = {
@@ -211,47 +263,183 @@ class RoleplayConfigModal(ui.Modal, title="Roleplay personality"):
             "note": (self.note.value or "").strip()[:200],
             "source": "custom",
         }
-        set_profile(self.user_id, profile)
+        _merge_profile(self.user_id, profile)
         await interaction.response.send_message(tr(self.lang, "roleplay.profile.saved"), ephemeral=True)
+
+
+class RoleplayVisibilityView(ui.View):
+    """Ask guild users whether RP replies are public or private (once, until changed in config)."""
+
+    def __init__(
+        self,
+        user_id: int,
+        lang: GuildLang,
+        ctx: Any,
+        *,
+        pending_message: str = "",
+        on_continue: Any = None,
+    ):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.lang = lang
+        self.ctx = ctx
+        self.pending_message = (pending_message or "").strip()
+        self.on_continue = on_continue
+
+        pub = ui.Button(
+            label=tr(lang, "roleplay.visibility.btn_public")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="👥",
+        )
+        pub.callback = self._on_public
+        self.add_item(pub)
+
+        priv = ui.Button(
+            label=tr(lang, "roleplay.visibility.btn_private")[:80],
+            style=discord.ButtonStyle.primary,
+            emoji="🔒",
+        )
+        priv.callback = self._on_private
+        self.add_item(priv)
+
+    async def _choose(self, interaction: discord.Interaction, visibility: str) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                tr(self.lang, "roleplay.profile.not_you"), ephemeral=True
+            )
+            return
+        set_visibility(self.user_id, visibility)
+        key = (
+            "roleplay.visibility.saved_public"
+            if visibility == "public"
+            else "roleplay.visibility.saved_private"
+        )
+        await interaction.response.send_message(tr(self.lang, key), ephemeral=True)
+        if self.on_continue and self.pending_message:
+            await self.on_continue(self.ctx, message=self.pending_message)
+
+    async def _on_public(self, interaction: discord.Interaction) -> None:
+        await self._choose(interaction, "public")
+
+    async def _on_private(self, interaction: discord.Interaction) -> None:
+        await self._choose(interaction, "private")
 
 
 class RoleplaySetupView(ui.View):
     def __init__(self, user_id: int, lang: GuildLang, *, pink: int):
-        super().__init__(timeout=120)
+        super().__init__(timeout=600)
         self.user_id = user_id
         self.lang = lang
         self.pink = pink
+        self._host_message: Optional[discord.Message] = None
 
-    @ui.button(label="Configure", style=discord.ButtonStyle.primary, emoji="⚙️")
-    async def configure(self, interaction: discord.Interaction, button: ui.Button) -> None:
+        cfg = ui.Button(
+            label=tr(lang, "roleplay.btn.configure")[:80],
+            style=discord.ButtonStyle.primary,
+            emoji="⚙️",
+            row=0,
+        )
+        cfg.callback = self._on_configure
+        self.add_item(cfg)
+
+        rnd = ui.Button(
+            label=tr(lang, "roleplay.btn.random")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="🎲",
+            row=0,
+        )
+        rnd.callback = self._on_random
+        self.add_item(rnd)
+
+        reset = ui.Button(
+            label=tr(lang, "roleplay.btn.reset")[:80],
+            style=discord.ButtonStyle.danger,
+            emoji="🗑️",
+            row=0,
+        )
+        reset.callback = self._on_reset
+        self.add_item(reset)
+
+        pub = ui.Button(
+            label=tr(lang, "roleplay.visibility.btn_public")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="👥",
+            row=1,
+        )
+        pub.callback = self._on_vis_public
+        self.add_item(pub)
+
+        priv = ui.Button(
+            label=tr(lang, "roleplay.visibility.btn_private")[:80],
+            style=discord.ButtonStyle.primary,
+            emoji="🔒",
+            row=1,
+        )
+        priv.callback = self._on_vis_private
+        self.add_item(priv)
+
+    def bind_message(self, message: discord.Message) -> None:
+        self._host_message = message
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        if self._host_message:
+            try:
+                await self._host_message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+    async def _on_configure(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
             return
         await interaction.response.send_modal(RoleplayConfigModal(self.user_id, self.lang))
 
-    @ui.button(label="Skip — random", style=discord.ButtonStyle.secondary, emoji="🎲")
-    async def skip_random(self, interaction: discord.Interaction, button: ui.Button) -> None:
+    async def _on_random(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
             return
-        set_profile(self.user_id, random_profile())
+        apply_random_profile(self.user_id)
         await interaction.response.send_message(tr(self.lang, "roleplay.profile.random"), ephemeral=True)
+        await _disable_setup_view(interaction)
 
-    @ui.button(label="Reset profile", style=discord.ButtonStyle.danger, emoji="🗑️")
-    async def reset(self, interaction: discord.Interaction, button: ui.Button) -> None:
+    async def _on_reset(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
             return
-        _load()
-        _cache.pop(str(self.user_id), None)
-        _save()
-        clear_history(self.user_id)
+        reset_profile(self.user_id)
         await interaction.response.send_message(tr(self.lang, "roleplay.profile.reset"), ephemeral=True)
+        await _disable_setup_view(interaction)
+
+    async def _on_vis_public(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
+            return
+        set_visibility(self.user_id, "public")
+        await interaction.response.send_message(tr(self.lang, "roleplay.visibility.saved_public"), ephemeral=True)
+
+    async def _on_vis_private(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
+            return
+        set_visibility(self.user_id, "private")
+        await interaction.response.send_message(tr(self.lang, "roleplay.visibility.saved_private"), ephemeral=True)
+
+
+def visibility_prompt_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
+    return discord.Embed(
+        title=tr(lang, "roleplay.visibility.title"),
+        description=tr(lang, "roleplay.visibility.body"),
+        color=pink,
+    )
 
 
 def setup_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
-    return discord.Embed(
+    em = discord.Embed(
         title=tr(lang, "roleplay.setup.title"),
         description=tr(lang, "roleplay.setup.body"),
         color=pink,
     )
+    em.set_footer(text=tr(lang, "roleplay.setup.footer"))
+    return em

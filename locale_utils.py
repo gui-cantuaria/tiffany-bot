@@ -121,6 +121,30 @@ _SLASH_LOCALE_BY_LANG: dict[GuildLang, tuple[discord.Locale, ...]] = {
     "es": (discord.Locale.spain_spanish, discord.Locale.latin_american_spanish),
     "fr": (discord.Locale.french,),
     "de": (discord.Locale.german,),
+    "tr": (discord.Locale.turkish,),
+    "sv": (discord.Locale.swedish,),
+    "it": (discord.Locale.italian,),
+    "nl": (discord.Locale.dutch,),
+    "ja": (discord.Locale.japanese,),
+    "ko": (discord.Locale.korean,),
+    "ru": (discord.Locale.russian,),
+}
+
+
+_RP_DEFAULT_LANG: dict[GuildLang, str] = {
+    "en": "English",
+    "pt": "Brazilian Portuguese (PT-BR)",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "tr": "Turkish",
+    "sv": "Swedish",
+    "it": "Italian",
+    "nl": "Dutch",
+    "ar": "Arabic",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ru": "Russian",
 }
 
 
@@ -254,22 +278,13 @@ def is_chat_nonsense(text: str) -> bool:
 
 def roleplay_system_prompt(lang: GuildLang) -> str:
     """Casual persona for t!rp / /roleplay — warmer than t!c, still safe."""
-    if lang == "pt":
-        default_lang = "Brazilian Portuguese (PT-BR)"
-    elif lang == "es":
-        default_lang = "Spanish"
-    elif lang == "fr":
-        default_lang = "French"
-    elif lang == "de":
-        default_lang = "German"
-    else:
-        default_lang = "English"
+    default_lang = _RP_DEFAULT_LANG.get(lang, "English")
     return (
         "You are Tiffany — a friendly, witty young woman chatting casually on Discord.\n"
         "ROLEPLAY MODE: talk like a real person hanging out, not like a formal assistant.\n"
         "- Short messages (1-3 sentences). Light humor ok. Emojis sparingly (0-1).\n"
-        f"- Reply in {default_lang} unless the user writes in another language.\n"
-        "- ALWAYS match the language of the user's message — never switch unless they do.\n"
+        f"- Reply in {default_lang} by default (user's Tiffany language setting).\n"
+        "- Switch language only when the user clearly writes in another language.\n"
         "- Stay in character as Tiffany; you love games, tech, music and memes.\n"
         "- Never claim to be human or deny being a bot if asked directly — be playful but honest.\n"
         "- Refuse sexual content, hate, scams, illegal stuff, slurs, dictators/glorification.\n"
@@ -849,25 +864,104 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "roleplay.setup.body": {
         "en": "Configure how Tiffany chats with **you** (saved per user, works in DMs).\n"
-        "**Configure** — set tone, humor, energy\n"
-        "**Skip** — random personality\n"
-        "Then send `/roleplay hello` or `t!rp oi`",
+        "Use the buttons below or type `t!rp config` anytime for a **new** menu.\n"
+        "Commands: `t!rp random` · `t!rp reset` · `t!rp config`",
         "pt": "Configure como a Tiffany conversa **com você** (salvo por usuário, funciona na DM).\n"
-        "**Configure** — tom, humor, energia\n"
-        "**Skip** — personalidade aleatória\n"
-        "Depois mande `/roleplay oi` ou `t!rp e aí`",
+        "Use os botões abaixo ou `t!rp config` a qualquer hora para um menu **novo**.\n"
+        "Comandos: `t!rp random` · `t!rp reset` · `t!rp config`",
         "es": "Configura cómo Tiffany habla **contigo** (guardado por usuario, funciona en DM).\n"
-        "**Configure** — tono, humor, energía\n"
-        "**Skip** — personalidad aleatoria\n"
-        "Luego `/roleplay hola` o `t!rp hola`",
+        "Usa los botones abajo o `t!rp config` cuando quieras un menú **nuevo**.\n"
+        "Comandos: `t!rp random` · `t!rp reset` · `t!rp config`",
         "fr": "Configure comment Tiffany parle **avec toi** (sauvegardé par utilisateur, DM ok).\n"
-        "**Configure** — ton, humour, énergie\n"
-        "**Skip** — personnalité aléatoire\n"
-        "Puis `/roleplay salut` ou `t!rp salut`",
+        "Boutons ci-dessous ou `t!rp config` pour un menu **neuf**.\n"
+        "Commandes : `t!rp random` · `t!rp reset` · `t!rp config`",
         "de": "Stelle ein, wie Tiffany **mit dir** chattet (pro Nutzer gespeichert, DM ok).\n"
-        "**Configure** — Ton, Humor, Energie\n"
-        "**Skip** — zufällige Persönlichkeit\n"
-        "Dann `/roleplay hi` oder `t!rp hi`",
+        "Buttons unten oder `t!rp config` für ein **neues** Menü.\n"
+        "Befehle: `t!rp random` · `t!rp reset` · `t!rp config`",
+    },
+    "roleplay.setup.footer": {
+        "en": "Buttons expire after 10 min — run t!rp config again if they stop working.",
+        "pt": "Botões expiram em 10 min — use t!rp config de novo se pararem de funcionar.",
+        "es": "Los botones caducan en 10 min — usa t!rp config otra vez si dejan de funcionar.",
+        "fr": "Les boutons expirent après 10 min — relance t!rp config si ça ne répond plus.",
+        "de": "Buttons laufen nach 10 Min ab — nutze t!rp config erneut, falls sie hängen.",
+    },
+    "roleplay.btn.configure": {
+        "en": "Configure",
+        "pt": "Configurar",
+        "es": "Configurar",
+        "fr": "Configurer",
+        "de": "Einrichten",
+    },
+    "roleplay.btn.random": {
+        "en": "Random",
+        "pt": "Aleatório",
+        "es": "Aleatorio",
+        "fr": "Aléatoire",
+        "de": "Zufall",
+    },
+    "roleplay.btn.reset": {
+        "en": "Reset",
+        "pt": "Resetar",
+        "es": "Reiniciar",
+        "fr": "Réinitialiser",
+        "de": "Zurücksetzen",
+    },
+    "roleplay.modal.title": {
+        "en": "Roleplay personality",
+        "pt": "Personalidade roleplay",
+        "es": "Personalidad roleplay",
+        "fr": "Personnalité roleplay",
+        "de": "Roleplay-Persönlichkeit",
+    },
+    "roleplay.modal.tone": {
+        "en": "Tone (playful, chill, witty…)",
+        "pt": "Tom (divertido, de boa, espirituoso…)",
+        "es": "Tono (juguetón, relajado, ingenioso…)",
+        "fr": "Ton (enjoué, détendu, spirituel…)",
+        "de": "Ton (verspielt, entspannt, witzig…)",
+    },
+    "roleplay.modal.humor": {
+        "en": "Humor (low, medium, high)",
+        "pt": "Humor (baixo, médio, alto)",
+        "es": "Humor (bajo, medio, alto)",
+        "fr": "Humour (faible, moyen, élevé)",
+        "de": "Humor (niedrig, mittel, hoch)",
+    },
+    "roleplay.modal.energy": {
+        "en": "Energy (calm, bubbly, sharp…)",
+        "pt": "Energia (calma, animada, afiada…)",
+        "es": "Energía (calma, animada, afilada…)",
+        "fr": "Énergie (calme, pétillante, vive…)",
+        "de": "Energie (ruhig, lebhaft, scharf…)",
+    },
+    "roleplay.modal.note": {
+        "en": "Extra (optional)",
+        "pt": "Extra (opcional)",
+        "es": "Extra (opcional)",
+        "fr": "Extra (optionnel)",
+        "de": "Extra (optional)",
+    },
+    "roleplay.modal.note_ph": {
+        "en": "e.g. talk like a gamer friend who loves RPGs",
+        "pt": "ex.: fale como uma amiga gamer que ama RPG",
+        "es": "ej.: habla como una amiga gamer que ama RPG",
+        "fr": "ex. : parle comme une amie gamer fan de RPG",
+        "de": "z. B. wie eine Gamer-Freundin, die RPGs liebt",
+    },
+    "roleplay.err.empty": {
+        "en": "Hmm… I lost the thread. Try again?",
+        "pt": "Hmm… perdi o fio. Tenta de novo?",
+        "es": "Hmm… perdí el hilo. ¿Intentas otra vez?",
+        "fr": "Hmm… j'ai perdu le fil. Réessaie ?",
+        "de": "Hmm… Thread verloren. Nochmal?",
+    },
+    "roleplay.usage.hint": {
+        "en": "Change anytime: `t!rp config` · `t!rp random` · `t!rp reset`",
+        "pt": "Mude quando quiser: `t!rp config` · `t!rp random` · `t!rp reset`",
+        "es": "Cambia cuando quieras: `t!rp config` · `t!rp random` · `t!rp reset`",
+        "fr": "Change quand tu veux : `t!rp config` · `t!rp random` · `t!rp reset`",
+        "de": "Ändern jederzeit: `t!rp config` · `t!rp random` · `t!rp reset`",
     },
     "roleplay.profile.saved": {
         "en": "✅ Personality saved! Send a message with `/roleplay` or `t!rp`.",
@@ -884,11 +978,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "de": "🎲 Zufällige Persönlichkeit! Sag hi mit `/roleplay` oder `t!rp`.",
     },
     "roleplay.profile.reset": {
-        "en": "Profile cleared. Use **Configure** or **Skip** again.",
-        "pt": "Perfil limpo. Use **Configure** ou **Skip** de novo.",
-        "es": "Perfil borrado. Usa **Configure** o **Skip** otra vez.",
-        "fr": "Profil effacé. Utilise **Configure** ou **Skip** à nouveau.",
-        "de": "Profil gelöscht. Nutze **Configure** oder **Skip** erneut.",
+        "en": "Profile cleared. Run `t!rp config`, `t!rp random`, or use the buttons on a new menu.",
+        "pt": "Perfil limpo. Use `t!rp config`, `t!rp random` ou os botões de um menu novo.",
+        "es": "Perfil borrado. Usa `t!rp config`, `t!rp random` o los botones de un menú nuevo.",
+        "fr": "Profil effacé. Utilise `t!rp config`, `t!rp random` ou les boutons d'un nouveau menu.",
+        "de": "Profil gelöscht. Nutze `t!rp config`, `t!rp random` oder Buttons in einem neuen Menü.",
     },
     "roleplay.profile.not_you": {
         "en": "This setup is not yours.",
@@ -903,6 +997,48 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Configura el roleplay primero — usa los botones o `t!rp config`.",
         "fr": "Configure le roleplay d'abord — boutons ci-dessous ou `t!rp config`.",
         "de": "Richte Roleplay zuerst ein — Buttons unten oder `t!rp config`.",
+    },
+    "roleplay.visibility.title": {
+        "en": "Roleplay visibility",
+        "pt": "Visibilidade do roleplay",
+        "es": "Visibilidad del roleplay",
+        "fr": "Visibilité du roleplay",
+        "de": "Roleplay-Sichtbarkeit",
+    },
+    "roleplay.visibility.body": {
+        "en": "Should your **/roleplay** and **t!rp** replies be visible to everyone in this channel, or only to you?\n\nYou can change this later with `t!rp config`.",
+        "pt": "As respostas do **/roleplay** e **t!rp** devem ficar **visíveis para todos** neste canal ou **só para você**?\n\nDá para mudar depois com `t!rp config`.",
+        "es": "¿Las respuestas de **/roleplay** y **t!rp** deben ser **visibles para todos** en este canal o **solo para ti**?\n\nPuedes cambiarlo luego con `t!rp config`.",
+        "fr": "Les réponses **/roleplay** et **t!rp** doivent-elles être **visibles par tous** ici ou **uniquement pour toi** ?\n\nTu peux changer plus tard avec `t!rp config`.",
+        "de": "Sollen **/roleplay**- und **t!rp**-Antworten **für alle** in diesem Kanal sichtbar sein oder **nur für dich**?\n\nSpäter änderbar mit `t!rp config`.",
+    },
+    "roleplay.visibility.saved_public": {
+        "en": "✅ Roleplay replies will be **public** in this server.",
+        "pt": "✅ Respostas do roleplay serão **públicas** neste servidor.",
+        "es": "✅ Las respuestas del roleplay serán **públicas** en este servidor.",
+        "fr": "✅ Les réponses roleplay seront **publiques** sur ce serveur.",
+        "de": "✅ Roleplay-Antworten sind auf diesem Server **öffentlich**.",
+    },
+    "roleplay.visibility.saved_private": {
+        "en": "✅ Roleplay replies will be **private** (only you see them in guilds).",
+        "pt": "✅ Respostas do roleplay serão **privadas** (só você vê no servidor).",
+        "es": "✅ Las respuestas del roleplay serán **privadas** (solo tú las ves en el servidor).",
+        "fr": "✅ Les réponses roleplay seront **privées** (seulement toi sur le serveur).",
+        "de": "✅ Roleplay-Antworten sind **privat** (nur du siehst sie auf dem Server).",
+    },
+    "roleplay.visibility.btn_public": {
+        "en": "Everyone",
+        "pt": "Todos",
+        "es": "Todos",
+        "fr": "Tout le monde",
+        "de": "Alle",
+    },
+    "roleplay.visibility.btn_private": {
+        "en": "Only me",
+        "pt": "Só eu",
+        "es": "Solo yo",
+        "fr": "Moi seulement",
+        "de": "Nur ich",
     },
     "chat.nonsense": {
         "de": "Ich verstehe diese Nachricht nicht — schreib bitte in einer normalen Sprache (DE, EN, ES, FR, PT).",
@@ -4178,3 +4314,8 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Cheguei no {guild}",
     },
 }
+
+from roleplay_i18n import ROLEPLAY_I18N
+
+for _rp_key, _rp_langs in ROLEPLAY_I18N.items():
+    _STRINGS.setdefault(_rp_key, {}).update(_rp_langs)
