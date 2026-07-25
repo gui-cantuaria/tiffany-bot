@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Tiffany Lavalink cluster — WARP/proxy on nodes (not on bot).
 # Bot orchestrates via wavelink; nodes pull audio from platforms (LavaSrc + YouTube plugin).
 #
