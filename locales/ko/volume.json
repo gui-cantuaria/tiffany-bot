@@ -1,0 +1,9 @@
+{
+  "volume.title": "볼륨",
+  "volume.global": "🔊 **Tiffany 스트림 볼륨: {pct}%** (0–150)\n\n보이스 채널 **모든 사람**에게 적용됩니다.",
+  "volume.client_title": "🎧 본인만 볼륨 조절할까요?",
+  "volume.client_body": "Discord: 보이스 채널에서 Tiffany **우클릭** → **사용자 볼륨**.\n\n**클라이언트 측** 설정 — 다른 멤버에게는 영향 없음.",
+  "volume.footer": "스트림 = 전체 · 사용자 볼륨 = 개인",
+  "volume.ytdlp_note": "다음 트랙부터 볼륨 적용 (yt-dlp 모드).",
+  "premium.upsell": "⭐ 이 기능은 **Tiffany Premium**이 필요합니다. 봇 프로필 또는 `/premium`에서 구독."
+}

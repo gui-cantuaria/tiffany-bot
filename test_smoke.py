@@ -130,6 +130,43 @@ class TestRoleplayHistory(unittest.TestCase):
             rp.clear_history(uid)
 
 
+class TestRoleplayIntensity(unittest.TestCase):
+    def test_normalize_intensity_defaults(self):
+        import roleplay_config as rp
+
+        self.assertEqual(rp.normalize_intensity(None), "medium")
+        self.assertEqual(rp.normalize_intensity("alta"), "high")
+        self.assertEqual(rp.normalize_intensity("baixo"), "low")
+
+    def test_build_roleplay_prompt_high_intensity(self):
+        import roleplay_config as rp
+
+        prompt = rp.build_roleplay_prompt(
+            "pt",
+            {"tone": "witty", "humor": "high", "energy": "sharp", "intensity": "high"},
+        )
+        self.assertIn("PERSONALITY INTENSITY: HIGH", prompt)
+        self.assertIn("exaggerate the preset", prompt)
+
+    def test_set_intensity_persists(self):
+        import roleplay_config as rp
+
+        uid = 999004
+        rp.reset_profile(uid)
+        try:
+            rp.set_intensity(uid, "high")
+            profile = rp.get_profile(uid)
+            self.assertIsNotNone(profile)
+            assert profile is not None
+            self.assertEqual(profile.get("intensity"), "high")
+            rp.set_intensity(uid, "low")
+            profile = rp.get_profile(uid)
+            assert profile is not None
+            self.assertEqual(profile.get("intensity"), "low")
+        finally:
+            rp.reset_profile(uid)
+
+
 class TestVolumeHelpers(unittest.TestCase):
     def test_volume_mappings(self):
         import tiffany_voice as tv
@@ -185,8 +222,24 @@ class TestI18nLoader(unittest.TestCase):
         self.assertIn("🎧", pt_title or "")
         pt_body = i18n_loader.lookup("pt", "volume.client_body")
         self.assertIn("Discord", pt_body or "")
-        en = i18n_loader.lookup("ja", "volume.title")
-        self.assertTrue(en)  # falls back to en.json or en chain
+        ja_title = i18n_loader.lookup("ja", "volume.title")
+        self.assertTrue(ja_title)
+        self.assertNotEqual(ja_title, "Volume")
+
+    def test_all_thirteen_languages_in_picker(self):
+        self.assertEqual(len(locale_utils.ALL_LANGS), 13)
+        self.assertEqual(len(locale_utils.LANGUAGE_SELECT_OPTIONS), 13)
+        values = {opt[0] for opt in locale_utils.LANGUAGE_SELECT_OPTIONS}
+        self.assertEqual(values, set(locale_utils.ALL_LANGS))
+
+    def test_extended_lang_help_not_english_fallback(self):
+        from infra import i18n_loader
+        i18n_loader.ensure_loaded()
+        ja_help = locale_utils.tr("ja", "help.title")
+        self.assertIn("Tiffany", ja_help)
+        self.assertNotEqual(ja_help, locale_utils.tr("en", "help.title"))
+        about_lang = locale_utils.tr("de", "about.language.body")
+        self.assertIn("13", about_lang)
 
 
 if __name__ == "__main__":

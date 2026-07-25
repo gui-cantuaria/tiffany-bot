@@ -2,7 +2,8 @@
   "volume.title": "Volym",
   "volume.global": "🔊 **Tiffanys streamvolym: {pct}%** (0–150)\n\nDetta påverkar **alla** i röstkanalen.",
   "volume.client_title": "🎧 Vill du justera volymen bara för dig?",
-  "volume.client_body": "I Discord: **högerklicka** på Tiffany i röstkanalen → **Användarvolym**.\n\nDet är **klient-side** — påverkar inte andra.",
+  "volume.client_body": "I Discord: **högerklicka** på Tiffany i röstkanalen → **Användarvolym**.\n\nDet är **klientbaserat** — påverkar inte volymen för andra medlemmar.",
   "volume.footer": "Stream = global · Användarvolym = personlig",
-  "premium.upsell": "⭐ Denna funktion kräver **Tiffany Premium**."
+  "volume.ytdlp_note": "Volymen gäller från nästa låt (yt-dlp-läge).",
+  "premium.upsell": "⭐ Denna funktion kräver **Tiffany Premium**. Prenumerera via botprofilen eller `/premium`."
 }

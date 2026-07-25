@@ -37,27 +37,35 @@ ROLEPLAY_I18N: dict[str, dict[str, str]] = {
     "roleplay.setup.body": {
         "tr": "Tiffany'nin **seninle** nasıl sohbet edeceğini ayarla (kullanıcı başına kaydedilir, DM'de çalışır).\n"
         "Aşağıdaki düğmeleri kullan veya **yeni** menü için `t!rp config` yaz.\n"
+        "Özellik **yoğunluğunu** seç (🌱 düşük · ⚖️ orta · 🔥 yüksek) + kişilik alanları.\n"
         "Komutlar: `t!rp random` · `t!rp reset` · `t!rp config`",
         "sv": "Ställ in hur Tiffany chattar **med dig** (sparas per användare, fungerar i DM).\n"
         "Använd knapparna nedan eller skriv `t!rp config` för en **ny** meny.\n"
+        "Välj **intensitet** (🌱 låg · ⚖️ medium · 🔥 hög) + personlighetsfält.\n"
         "Kommandon: `t!rp random` · `t!rp reset` · `t!rp config`",
         "it": "Configura come Tiffany chatta **con te** (salvato per utente, funziona in DM).\n"
         "Usa i pulsanti sotto o scrivi `t!rp config` per un menu **nuovo**.\n"
+        "Scegli l'**intensità** dei tratti (🌱 bassa · ⚖️ media · 🔥 alta) + personalità.\n"
         "Comandi: `t!rp random` · `t!rp reset` · `t!rp config`",
         "nl": "Stel in hoe Tiffany **met jou** chat (per gebruiker opgeslagen, werkt in DM).\n"
         "Gebruik de knoppen hieronder of typ `t!rp config` voor een **nieuw** menu.\n"
+        "Kies **intensiteit** (🌱 laag · ⚖️ medium · 🔥 hoog) + persoonlijkheidsvelden.\n"
         "Commando's: `t!rp random` · `t!rp reset` · `t!rp config`",
         "ar": "اضبط كيف تتحدث Tiffany **معك** (يُحفظ لكل مستخدم، يعمل في الرسائل الخاصة).\n"
         "استخدم الأزرار أدناه أو اكتب `t!rp config` لقائمة **جديدة**.\n"
+        "اختر **شدة** السمات (🌱 منخفضة · ⚖️ متوسطة · 🔥 عالية) + الشخصية.\n"
         "الأوامر: `t!rp random` · `t!rp reset` · `t!rp config`",
         "ja": "Tiffanyが**あなたと**どう話すか設定（ユーザーごとに保存、DMでも可）。\n"
         "下のボタンか `t!rp config` で**新しい**メニューを開けます。\n"
+        "特性の**強さ**を選択（🌱 低 · ⚖️ 中 · 🔥 高）+ 性格フィールド。\n"
         "コマンド: `t!rp random` · `t!rp reset` · `t!rp config`",
         "ko": "Tiffany가 **당신과** 어떻게 대화할지 설정 (사용자별 저장, DM 가능).\n"
         "아래 버튼 또는 `t!rp config`로 **새** 메뉴를 여세요.\n"
+        "성격 **강도** 선택 (🌱 낮음 · ⚖️ 보통 · 🔥 높음) + 성격 필드.\n"
         "명령: `t!rp random` · `t!rp reset` · `t!rp config`",
         "ru": "Настрой, как Tiffany общается **с тобой** (сохраняется на пользователя, работает в ЛС).\n"
         "Кнопки ниже или `t!rp config` для **нового** меню.\n"
+        "Выбери **интенсивность** черт (🌱 низкая · ⚖️ средняя · 🔥 высокая) + личность.\n"
         "Команды: `t!rp random` · `t!rp reset` · `t!rp config`",
     },
     "roleplay.setup.footer": {
@@ -99,6 +107,116 @@ ROLEPLAY_I18N: dict[str, dict[str, str]] = {
         "ja": "リセット",
         "ko": "초기화",
         "ru": "Сброс",
+    },
+    "roleplay.btn.intensity_low": {
+        "tr": "Düşük yoğunluk",
+        "sv": "Låg intensitet",
+        "it": "Intensità bassa",
+        "nl": "Lage intensiteit",
+        "ar": "شدة منخفضة",
+        "ja": "低強度",
+        "ko": "낮은 강도",
+        "ru": "Низкая интенсивность",
+    },
+    "roleplay.btn.intensity_medium": {
+        "tr": "Orta yoğunluk",
+        "sv": "Medium intensitet",
+        "it": "Intensità media",
+        "nl": "Gemiddelde intensiteit",
+        "ar": "شدة متوسطة",
+        "ja": "中強度",
+        "ko": "보통 강도",
+        "ru": "Средняя интенсивность",
+    },
+    "roleplay.btn.intensity_high": {
+        "tr": "Yüksek yoğunluk",
+        "sv": "Hög intensitet",
+        "it": "Intensità alta",
+        "nl": "Hoge intensiteit",
+        "ar": "شدة عالية",
+        "ja": "高強度",
+        "ko": "높은 강도",
+        "ru": "Высокая интенсивность",
+    },
+    "roleplay.intensity.field_title": {
+        "tr": "🎚️ Özellik yoğunluğu",
+        "sv": "🎚️ Trait-intensitet",
+        "it": "🎚️ Intensità tratti",
+        "nl": "🎚️ Trait-intensiteit",
+        "ar": "🎚️ شدة السمات",
+        "ja": "🎚️ 特性の強さ",
+        "ko": "🎚️ 성격 강도",
+        "ru": "🎚️ Интенсивность черт",
+    },
+    "roleplay.intensity.label_low": {
+        "tr": "düşük",
+        "sv": "låg",
+        "it": "bassa",
+        "nl": "laag",
+        "ar": "منخفضة",
+        "ja": "低",
+        "ko": "낮음",
+        "ru": "низкая",
+    },
+    "roleplay.intensity.label_medium": {
+        "tr": "orta",
+        "sv": "medium",
+        "it": "media",
+        "nl": "medium",
+        "ar": "متوسطة",
+        "ja": "中",
+        "ko": "보통",
+        "ru": "средняя",
+    },
+    "roleplay.intensity.label_high": {
+        "tr": "yüksek",
+        "sv": "hög",
+        "it": "alta",
+        "nl": "hoog",
+        "ar": "عالية",
+        "ja": "高",
+        "ko": "높음",
+        "ru": "высокая",
+    },
+    "roleplay.intensity.current_low": {
+        "tr": "Şu an: **düşük** — hafif kişilik ipuçları.",
+        "sv": "Nu: **låg** — subtila personlighetsdrag.",
+        "it": "Attuale: **bassa** — tratti sottili.",
+        "nl": "Nu: **laag** — subtiele persoonlijkheid.",
+        "ar": "الحالي: **منخفضة** — سمات خفيفة.",
+        "ja": "現在: **低** — 控えめな性格。",
+        "ko": "현재: **낮음** — 은은한 성격.",
+        "ru": "Сейчас: **низкая** — лёгкие черты.",
+    },
+    "roleplay.intensity.current_medium": {
+        "tr": "Şu an: **orta** — dengeli kişilik.",
+        "sv": "Nu: **medium** — balanserad personlighet.",
+        "it": "Attuale: **media** — personalità equilibrata.",
+        "nl": "Nu: **medium** — gebalanceerde persoonlijkheid.",
+        "ar": "الحالي: **متوسطة** — شخصية متوازنة.",
+        "ja": "現在: **中** — バランスの取れた性格。",
+        "ko": "현재: **보통** — 균형 잡힌 성격.",
+        "ru": "Сейчас: **средняя** — сбалансированная личность.",
+    },
+    "roleplay.intensity.current_high": {
+        "tr": "Şu an: **yüksek** — belirgin, güçlü özellikler.",
+        "sv": "Nu: **hög** — tydliga, starka drag.",
+        "it": "Attuale: **alta** — tratti forti e marcati.",
+        "nl": "Nu: **hoog** — sterke, duidelijke traits.",
+        "ar": "الحالي: **عالية** — سمات قوية وواضحة.",
+        "ja": "現在: **高** — はっきりした強い性格。",
+        "ko": "현재: **높음** — 강하고 뚜렷한 성격.",
+        "ru": "Сейчас: **высокая** — яркие, сильные черты.",
+    },
+    "roleplay.intensity.saved": {
+        "tr": "✅ Özellik yoğunluğu **{level}** olarak ayarlandı.",
+        "sv": "✅ Trait-intensitet satt till **{level}**.",
+        "it": "✅ Intensità tratti impostata su **{level}**.",
+        "nl": "✅ Trait-intensiteit ingesteld op **{level}**.",
+        "ar": "✅ تم ضبط شدة السمات على **{level}**.",
+        "ja": "✅ 特性の強さを **{level}** に設定しました。",
+        "ko": "✅ 성격 강도를 **{level}**(으)로 설정했습니다.",
+        "ru": "✅ Интенсивность черт: **{level}**.",
     },
     "roleplay.modal.title": {
         "tr": "Roleplay kişiliği",

@@ -1,0 +1,9 @@
+{
+  "volume.title": "音量",
+  "volume.global": "🔊 **Tiffanyストリーム音量: {pct}%** (0–150)\n\nボイスチャンネルの**全員**に影響します。",
+  "volume.client_title": "🎧 自分だけ音量を調整しますか？",
+  "volume.client_body": "Discord: ボイスチャンネルでTiffanyのアバターを**右クリック** → **ユーザーボリューム**。\n\nそのスライダーは**クライアント側** — 他メンバーの音量は変わりません。",
+  "volume.footer": "ストリーム = 全体 · ユーザーボリューム = 個人",
+  "volume.ytdlp_note": "音量は次の曲から適用（yt-dlpモード）。",
+  "premium.upsell": "⭐ この機能には **Tiffany Premium** が必要です。Botプロフィールまたは `/premium` から登録。"
+}

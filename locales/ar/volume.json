@@ -1,0 +1,9 @@
+{
+  "volume.title": "الصوت",
+  "volume.global": "🔊 **صوت stream Tiffany: {pct}%** (0–150)\n\nيؤثر على **الجميع** في قناة الصوت.",
+  "volume.client_title": "🎧 تريد ضبط الصوت لنفسك فقط؟",
+  "volume.client_body": "في Discord: **انقر يمين** على أيقونة Tiffany في قناة الصوت → **User Volume**.\n\nهذا المنزلق **من جانب العميل** — لا يغيّر الصوت للآخرين.",
+  "volume.footer": "Stream = عام · User Volume = شخصي",
+  "volume.ytdlp_note": "يُطبّق الصوت على المقطع التالي (وضع yt-dlp).",
+  "premium.upsell": "⭐ هذه الميزة تتطلب **Tiffany Premium**. اشترك عبر ملف البوت أو `/premium`."
+}

@@ -27,13 +27,103 @@ RP_MAX_TURNS = 8
 RP_TTL_SEC = 7200
 RP_MAX_USERS = 500
 
+INTENSITY_LEVELS = ("low", "medium", "high")
+DEFAULT_INTENSITY = "medium"
+
+INTENSITY_PROMPTS: dict[str, str] = {
+    "low": (
+        "PERSONALITY INTENSITY: LOW — express the preset traits subtly. "
+        "Stay close to default Tiffany; tone/humor/energy should only lightly tint replies."
+    ),
+    "medium": (
+        "PERSONALITY INTENSITY: MEDIUM — apply tone, humor, and energy at a balanced level. "
+        "Traits should be clearly noticeable without dominating every sentence."
+    ),
+    "high": (
+        "PERSONALITY INTENSITY: HIGH — strongly embody every trait in each reply. "
+        "Let tone, humor, and energy drive word choice, jokes, rhythm, reactions, and emoji use. "
+        "The personality must feel unmistakable while staying natural."
+    ),
+}
+
 PRESETS: tuple[dict[str, str], ...] = (
-    {"tone": "playful", "humor": "high", "energy": "bubbly", "note": "loves memes and games"},
-    {"tone": "chill", "humor": "medium", "energy": "calm", "note": "laid-back friend vibes"},
-    {"tone": "witty", "humor": "high", "energy": "sharp", "note": "dry humor, quick comebacks"},
-    {"tone": "warm", "humor": "low", "energy": "gentle", "note": "supportive and kind"},
-    {"tone": "nerdy", "humor": "medium", "energy": "enthusiastic", "note": "tech and gaming geek"},
+    {
+        "tone": "playful",
+        "humor": "high",
+        "energy": "bubbly",
+        "note": "loves memes and games",
+        "intensity": "high",
+    },
+    {
+        "tone": "chill",
+        "humor": "medium",
+        "energy": "calm",
+        "note": "laid-back friend vibes",
+        "intensity": "low",
+    },
+    {
+        "tone": "witty",
+        "humor": "high",
+        "energy": "sharp",
+        "note": "dry humor, quick comebacks",
+        "intensity": "high",
+    },
+    {
+        "tone": "warm",
+        "humor": "low",
+        "energy": "gentle",
+        "note": "supportive and kind",
+        "intensity": "medium",
+    },
+    {
+        "tone": "nerdy",
+        "humor": "medium",
+        "energy": "enthusiastic",
+        "note": "tech and gaming geek",
+        "intensity": "high",
+    },
 )
+
+
+def normalize_intensity(raw: Any) -> str:
+    """Map user input to low | medium | high (default medium)."""
+    val = str(raw or DEFAULT_INTENSITY).strip().lower()
+    aliases = {
+        "low": "low",
+        "baixo": "low",
+        "bajo": "low",
+        "faible": "low",
+        "niedrig": "low",
+        "subtle": "low",
+        "medium": "medium",
+        "med": "medium",
+        "medio": "medium",
+        "médio": "medium",
+        "moyen": "medium",
+        "mittel": "medium",
+        "high": "high",
+        "alto": "high",
+        "alta": "high",
+        "élevé": "high",
+        "eleve": "high",
+        "hoch": "high",
+        "strong": "high",
+    }
+    return aliases.get(val, DEFAULT_INTENSITY)
+
+
+def set_intensity(user_id: int, intensity: str) -> None:
+    """Set trait intensity while preserving other profile fields."""
+    level = normalize_intensity(intensity)
+    profile = get_profile(user_id) or {
+        "tone": "casual",
+        "humor": "medium",
+        "energy": "balanced",
+        "note": "",
+        "source": "custom",
+    }
+    profile["intensity"] = level
+    _merge_profile(user_id, profile)
 
 
 def _load() -> None:
@@ -188,6 +278,7 @@ def _merge_profile(user_id: int, profile: dict[str, Any]) -> None:
 def random_profile() -> dict[str, Any]:
     p = dict(random.choice(PRESETS))
     p["source"] = "random"
+    p["intensity"] = normalize_intensity(p.get("intensity"))
     return p
 
 
@@ -199,14 +290,25 @@ def build_roleplay_prompt(lang: GuildLang, profile: Optional[dict[str, Any]] = N
     humor = profile.get("humor") or "medium"
     energy = profile.get("energy") or "balanced"
     note = (profile.get("note") or "").strip()[:200]
+    intensity = normalize_intensity(profile.get("intensity"))
     extra = (
         f"\nUSER PERSONALITY PRESET:\n"
         f"- Tone: {tone}\n"
         f"- Humor level: {humor}\n"
         f"- Energy: {energy}\n"
+        f"- {INTENSITY_PROMPTS[intensity]}\n"
     )
     if note:
         extra += f"- User note: {note}\n"
+    if intensity == "high":
+        extra += (
+            "- At HIGH intensity, exaggerate the preset: punchy phrasing, vivid reactions, "
+            "and personality-first replies (still 1-3 sentences).\n"
+        )
+    elif intensity == "low":
+        extra += (
+            "- At LOW intensity, keep replies grounded; personality is a hint, not the main event.\n"
+        )
     return base + extra
 
 
@@ -256,12 +358,14 @@ class RoleplayConfigModal(ui.Modal):
         self.add_item(self.note)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        existing = get_profile(self.user_id) or {}
         profile = {
             "tone": (self.tone.value or "casual").strip()[:40],
             "humor": (self.humor.value or "medium").strip()[:20],
             "energy": (self.energy.value or "balanced").strip()[:40],
             "note": (self.note.value or "").strip()[:200],
             "source": "custom",
+            "intensity": normalize_intensity(existing.get("intensity")),
         }
         _merge_profile(self.user_id, profile)
         await interaction.response.send_message(tr(self.lang, "roleplay.profile.saved"), ephemeral=True)
@@ -378,6 +482,33 @@ class RoleplaySetupView(ui.View):
         priv.callback = self._on_vis_private
         self.add_item(priv)
 
+        low = ui.Button(
+            label=tr(lang, "roleplay.btn.intensity_low")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="🌱",
+            row=2,
+        )
+        low.callback = self._on_intensity_low
+        self.add_item(low)
+
+        med = ui.Button(
+            label=tr(lang, "roleplay.btn.intensity_medium")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="⚖️",
+            row=2,
+        )
+        med.callback = self._on_intensity_medium
+        self.add_item(med)
+
+        high = ui.Button(
+            label=tr(lang, "roleplay.btn.intensity_high")[:80],
+            style=discord.ButtonStyle.secondary,
+            emoji="🔥",
+            row=2,
+        )
+        high.callback = self._on_intensity_high
+        self.add_item(high)
+
     def bind_message(self, message: discord.Message) -> None:
         self._host_message = message
 
@@ -426,6 +557,26 @@ class RoleplaySetupView(ui.View):
         set_visibility(self.user_id, "private")
         await interaction.response.send_message(tr(self.lang, "roleplay.visibility.saved_private"), ephemeral=True)
 
+    async def _on_intensity(self, interaction: discord.Interaction, level: str) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
+            return
+        set_intensity(self.user_id, level)
+        label = tr(self.lang, f"roleplay.intensity.label_{level}")
+        await interaction.response.send_message(
+            tr(self.lang, "roleplay.intensity.saved", level=label),
+            ephemeral=True,
+        )
+
+    async def _on_intensity_low(self, interaction: discord.Interaction) -> None:
+        await self._on_intensity(interaction, "low")
+
+    async def _on_intensity_medium(self, interaction: discord.Interaction) -> None:
+        await self._on_intensity(interaction, "medium")
+
+    async def _on_intensity_high(self, interaction: discord.Interaction) -> None:
+        await self._on_intensity(interaction, "high")
+
 
 def visibility_prompt_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
     return discord.Embed(
@@ -435,11 +586,18 @@ def visibility_prompt_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
     )
 
 
-def setup_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
+def setup_embed(lang: GuildLang, *, pink: int, profile: Optional[dict[str, Any]] = None) -> discord.Embed:
     em = discord.Embed(
         title=tr(lang, "roleplay.setup.title"),
         description=tr(lang, "roleplay.setup.body"),
         color=pink,
     )
+    if profile:
+        intensity = normalize_intensity(profile.get("intensity"))
+        em.add_field(
+            name=tr(lang, "roleplay.intensity.field_title"),
+            value=tr(lang, f"roleplay.intensity.current_{intensity}"),
+            inline=False,
+        )
     em.set_footer(text=tr(lang, "roleplay.setup.footer"))
     return em

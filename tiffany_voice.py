@@ -8388,7 +8388,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def _send_roleplay_setup(ctx: commands.Context, uid: int, lang: GuildLang) -> None:
         import roleplay_config as rp_cfg
 
-        em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+        em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK, profile=rp_cfg.get_profile(uid))
         view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
         msg = await ctx.send(embed=em, view=view)
         view.bind_message(msg)
@@ -8437,7 +8437,7 @@ def register_voice(bot: commands.Bot) -> None:
             if not (message and message.strip()):
                 await _send_roleplay_setup(ctx, uid, lang)
                 return
-            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK)
+            em = rp_cfg.setup_embed(lang, pink=TIFFANY_PINK, profile=rp_cfg.get_profile(uid))
             view = rp_cfg.RoleplaySetupView(uid, lang, pink=TIFFANY_PINK)
             msg_out = await ctx.send(tr(lang, "roleplay.profile.required"), embed=em, view=view)
             view.bind_message(msg_out)

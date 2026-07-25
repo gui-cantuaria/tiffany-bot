@@ -1,0 +1,9 @@
+{
+  "premium.upsell": "⭐ Questa funzione richiede **Tiffany Premium**. Abbonati dal profilo del bot o `/premium`.",
+  "volume.client_body": "Su Discord: **clic destro** sull'avatar di Tiffany nel canale vocale → **Volume utente**.\n\nQuel controllo è **lato client** — non cambia il volume per gli altri membri.",
+  "volume.client_title": "🎧 Regolare il volume solo per te?",
+  "volume.footer": "Stream = globale · Volume utente = personale",
+  "volume.global": "🔊 **Volume stream Tiffany: {pct}%** (0–150)\n\nQuesto influisce su **tutti** nel canale vocale.",
+  "volume.title": "Volume",
+  "volume.ytdlp_note": "Il volume si applica alla traccia successiva (modalità yt-dlp)."
+}

@@ -11,9 +11,30 @@ from discord import app_commands
 
 GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
 
-# Fully translated core UI languages (language picker + primary fallbacks).
+# Fully translated UI languages (all 13 in /language picker; core also in _STRINGS).
 CORE_LANGS: tuple[GuildLang, ...] = ("en", "fr", "es", "pt", "de")
+ALL_LANGS: tuple[GuildLang, ...] = (
+    "en", "pt", "es", "fr", "de",
+    "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
+)
 DEFAULT_LANG: GuildLang = "en"
+
+# Native labels for /language select (value, label, description, emoji).
+LANGUAGE_SELECT_OPTIONS: tuple[tuple[str, str, str, str], ...] = (
+    ("en", "English", "Switch to English", "🇺🇸"),
+    ("pt", "Português (BR)", "Mudar para Português", "🇧🇷"),
+    ("es", "Español", "Cambiar a Español", "🇪🇸"),
+    ("fr", "Français", "Passer en Français", "🇫🇷"),
+    ("de", "Deutsch", "Auf Deutsch wechseln", "🇩🇪"),
+    ("tr", "Türkçe", "Türkçe'ye geç", "🇹🇷"),
+    ("sv", "Svenska", "Byt till Svenska", "🇸🇪"),
+    ("it", "Italiano", "Passa a Italiano", "🇮🇹"),
+    ("nl", "Nederlands", "Wissel naar Nederlands", "🇳🇱"),
+    ("ar", "العربية", "التبديل إلى العربية", "🇸🇦"),
+    ("ja", "日本語", "日本語に切り替え", "🇯🇵"),
+    ("ko", "한국어", "한국어로 변경", "🇰🇷"),
+    ("ru", "Русский", "Переключить на русский", "🇷🇺"),
+)
 
 
 def slash_ephemeral(interaction: discord.Interaction) -> bool:
@@ -466,31 +487,61 @@ def tts_voice(lang: GuildLang) -> str:
         "es": "es-MX-DaliaNeural",
         "fr": "fr-FR-DeniseNeural",
         "de": "de-DE-KatjaNeural",
-    }[lang]
+        "tr": "tr-TR-EmelNeural",
+        "sv": "sv-SE-SofieNeural",
+        "it": "it-IT-ElsaNeural",
+        "nl": "nl-NL-ColetteNeural",
+        "ar": "ar-SA-ZariyahNeural",
+        "ja": "ja-JP-NanamiNeural",
+        "ko": "ko-KR-SunHiNeural",
+        "ru": "ru-RU-SvetlanaNeural",
+    }.get(lang, "en-US-JennyNeural")
 
 
 def gtts_lang(lang: GuildLang) -> str:
-    return {"pt": "pt-br", "en": "en", "es": "es", "fr": "fr", "de": "de"}[lang]
+    return {
+        "pt": "pt-br", "en": "en", "es": "es", "fr": "fr", "de": "de",
+        "tr": "tr", "sv": "sv", "it": "it", "nl": "nl", "ar": "ar",
+        "ja": "ja", "ko": "ko", "ru": "ru",
+    }.get(lang, "en")
 
 
 def google_stt_lang(lang: GuildLang) -> str:
-    return {"pt": "pt-BR", "en": "en-US", "es": "es-MX", "fr": "fr-FR", "de": "de-DE"}[lang]
+    return {
+        "pt": "pt-BR", "en": "en-US", "es": "es-MX", "fr": "fr-FR", "de": "de-DE",
+        "tr": "tr-TR", "sv": "sv-SE", "it": "it-IT", "nl": "nl-NL", "ar": "ar-SA",
+        "ja": "ja-JP", "ko": "ko-KR", "ru": "ru-RU",
+    }.get(lang, "en-US")
 
 
 def stt_openrouter_lang(lang: GuildLang) -> str:
-    return {"pt": "pt", "en": "en", "es": "es", "fr": "fr", "de": "de"}[lang]
+    return {
+        "pt": "pt", "en": "en", "es": "es", "fr": "fr", "de": "de",
+        "tr": "tr", "sv": "sv", "it": "it", "nl": "nl", "ar": "ar",
+        "ja": "ja", "ko": "ko", "ru": "ru",
+    }.get(lang, "en")
 
 
 def stt_chat_instruction(lang: GuildLang) -> str:
-    if lang == "pt":
-        return "Transcribe the audio. Output in Brazilian Portuguese only. Reply ONLY with the spoken words, no commentary."
-    if lang == "es":
-        return "Transcribe the audio. Output in Spanish only. Reply ONLY with the spoken words, no commentary."
-    if lang == "fr":
-        return "Transcribe the audio. Output in French only. Reply ONLY with the spoken words, no commentary."
-    if lang == "de":
-        return "Transcribe the audio. Output in German only. Reply ONLY with the spoken words, no commentary."
-    return "Transcribe the audio. Output in English only. Reply ONLY with the spoken words, no commentary."
+    _by_lang = {
+        "pt": "Brazilian Portuguese",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "tr": "Turkish",
+        "sv": "Swedish",
+        "it": "Italian",
+        "nl": "Dutch",
+        "ar": "Arabic",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "ru": "Russian",
+    }
+    out = _by_lang.get(lang, "English")
+    return (
+        f"Transcribe the audio. Output in {out} only. "
+        "Reply ONLY with the spoken words, no commentary."
+    )
 
 
 def build_public_status_embed(
@@ -645,15 +696,15 @@ def build_volume_embed(lang: GuildLang, *, current: int, pink: int) -> discord.E
 class LanguageSelect(discord.ui.Select):
     def __init__(self, lang: GuildLang):
         options = [
-            discord.SelectOption(label="English", value="en", description="Switch to English", emoji="🇺🇸"),
-            discord.SelectOption(label="Français", value="fr", description="Passer en Français", emoji="🇫🇷"),
-            discord.SelectOption(label="Español", value="es", description="Cambiar a Español", emoji="🇪🇸"),
-            discord.SelectOption(label="Português (BR)", value="pt", description="Mudar para Português", emoji="🇧🇷"),
-            discord.SelectOption(label="Deutsch", value="de", description="Auf Deutsch wechseln", emoji="🇩🇪"),
+            discord.SelectOption(
+                label=label[:100],
+                value=value,
+                description=desc[:100],
+                emoji=emoji,
+                default=(value == lang),
+            )
+            for value, label, desc, emoji in LANGUAGE_SELECT_OPTIONS
         ]
-        for opt in options:
-            if opt.value == lang:
-                opt.default = True
         super().__init__(placeholder=tr(lang, "lang.placeholder"), min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -811,20 +862,20 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "about.language.body": {
         "de": "Deine Sprache gilt **nur für dich** — unabhängig vom Server. "
-        "Nutze **`/language`** (oder `t!lang`), um jederzeit zu wechseln "
-        "(DE, EN, ES, PT, FR).",
+        "Nutze **`/language`** (oder `t!lang`) — **13 Sprachen**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
         "en": "Your language applies **only to you** — regardless of the server. "
-        "Use **`/language`** (or `t!lang`) to switch anytime "
-        "(EN, FR, ES, PT, DE).",
+        "Use **`/language`** (or `t!lang`) — **13 languages**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
         "es": "Tu idioma aplica **solo para ti** — sin importar el servidor. "
-        "Usa **`/language`** (o `t!lang`) para cambiar cuando quieras "
-        "(ES, EN, FR, PT, DE).",
+        "Usa **`/language`** (o `t!lang`) — **13 idiomas**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
         "fr": "Ta langue s'applique **uniquement à toi** — quel que soit le serveur. "
-        "Utilise **`/language`** (ou `t!lang`) pour changer à tout moment "
-        "(FR, EN, ES, PT, DE).",
+        "Utilise **`/language`** (ou `t!lang`) — **13 langues** : "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
         "pt": "Seu idioma vale **só para você** — independente do servidor. "
-        "Use **`/language`** (ou `t!lang`) para trocar quando quiser "
-        "(PT, EN, ES, FR, DE).",
+        "Use **`/language`** (ou `t!lang`) — **13 idiomas**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
     },
     "about.language.title": {"de": "🌐 Sprache", "en": "🌐 Language", "es": "🌐 Idioma", "fr": "🌐 Langue", "pt": "🌐 Idioma"},
     "about.music.body": {
@@ -1017,18 +1068,23 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "roleplay.setup.body": {
         "en": "Configure how Tiffany chats with **you** (saved per user, works in DMs).\n"
         "Use the buttons below or type `t!rp config` anytime for a **new** menu.\n"
+        "Pick trait **intensity** (🌱 low · ⚖️ medium · 🔥 high) + personality fields.\n"
         "Commands: `t!rp random` · `t!rp reset` · `t!rp config`",
         "pt": "Configure como a Tiffany conversa **com você** (salvo por usuário, funciona na DM).\n"
         "Use os botões abaixo ou `t!rp config` a qualquer hora para um menu **novo**.\n"
+        "Escolha a **intensidade** dos traços (🌱 baixa · ⚖️ média · 🔥 alta) + personalidade.\n"
         "Comandos: `t!rp random` · `t!rp reset` · `t!rp config`",
         "es": "Configura cómo Tiffany habla **contigo** (guardado por usuario, funciona en DM).\n"
         "Usa los botones abajo o `t!rp config` cuando quieras un menú **nuevo**.\n"
+        "Elige la **intensidad** de los rasgos (🌱 baja · ⚖️ media · 🔥 alta) + personalidad.\n"
         "Comandos: `t!rp random` · `t!rp reset` · `t!rp config`",
         "fr": "Configure comment Tiffany parle **avec toi** (sauvegardé par utilisateur, DM ok).\n"
         "Boutons ci-dessous ou `t!rp config` pour un menu **neuf**.\n"
+        "Choisis l'**intensité** des traits (🌱 faible · ⚖️ moyenne · 🔥 forte) + personnalité.\n"
         "Commandes : `t!rp random` · `t!rp reset` · `t!rp config`",
         "de": "Stelle ein, wie Tiffany **mit dir** chattet (pro Nutzer gespeichert, DM ok).\n"
         "Buttons unten oder `t!rp config` für ein **neues** Menü.\n"
+        "Wähle die **Intensität** der Traits (🌱 niedrig · ⚖️ mittel · 🔥 hoch) + Persönlichkeit.\n"
         "Befehle: `t!rp random` · `t!rp reset` · `t!rp config`",
     },
     "roleplay.setup.footer": {
@@ -1058,6 +1114,83 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Reiniciar",
         "fr": "Réinitialiser",
         "de": "Zurücksetzen",
+    },
+    "roleplay.btn.intensity_low": {
+        "en": "Low intensity",
+        "pt": "Intensidade baixa",
+        "es": "Intensidad baja",
+        "fr": "Intensité faible",
+        "de": "Niedrige Intensität",
+    },
+    "roleplay.btn.intensity_medium": {
+        "en": "Medium intensity",
+        "pt": "Intensidade média",
+        "es": "Intensidad media",
+        "fr": "Intensité moyenne",
+        "de": "Mittlere Intensität",
+    },
+    "roleplay.btn.intensity_high": {
+        "en": "High intensity",
+        "pt": "Intensidade alta",
+        "es": "Intensidad alta",
+        "fr": "Intensité forte",
+        "de": "Hohe Intensität",
+    },
+    "roleplay.intensity.field_title": {
+        "en": "🎚️ Trait intensity",
+        "pt": "🎚️ Intensidade dos traços",
+        "es": "🎚️ Intensidad de rasgos",
+        "fr": "🎚️ Intensité des traits",
+        "de": "🎚️ Trait-Intensität",
+    },
+    "roleplay.intensity.label_low": {
+        "en": "low",
+        "pt": "baixa",
+        "es": "baja",
+        "fr": "faible",
+        "de": "niedrig",
+    },
+    "roleplay.intensity.label_medium": {
+        "en": "medium",
+        "pt": "média",
+        "es": "media",
+        "fr": "moyenne",
+        "de": "mittel",
+    },
+    "roleplay.intensity.label_high": {
+        "en": "high",
+        "pt": "alta",
+        "es": "alta",
+        "fr": "forte",
+        "de": "hoch",
+    },
+    "roleplay.intensity.current_low": {
+        "en": "Current: **low** — subtle personality hints.",
+        "pt": "Atual: **baixa** — traços sutis, Tiffany mais neutra.",
+        "es": "Actual: **baja** — rasgos sutiles, Tiffany más neutra.",
+        "fr": "Actuelle : **faible** — traits discrets, Tiffany plus neutre.",
+        "de": "Aktuell: **niedrig** — dezente Traits, Tiffany neutraler.",
+    },
+    "roleplay.intensity.current_medium": {
+        "en": "Current: **medium** — balanced personality.",
+        "pt": "Atual: **média** — personalidade equilibrada.",
+        "es": "Actual: **media** — personalidad equilibrada.",
+        "fr": "Actuelle : **moyenne** — personnalité équilibrée.",
+        "de": "Aktuell: **mittel** — ausgewogene Persönlichkeit.",
+    },
+    "roleplay.intensity.current_high": {
+        "en": "Current: **high** — strong, unmistakable traits.",
+        "pt": "Atual: **alta** — traços fortes e bem marcados.",
+        "es": "Actual: **alta** — rasgos fuertes y marcados.",
+        "fr": "Actuelle : **forte** — traits marqués et visibles.",
+        "de": "Aktuell: **hoch** — starke, unverkennbare Traits.",
+    },
+    "roleplay.intensity.saved": {
+        "en": "✅ Trait intensity set to **{level}**.",
+        "pt": "✅ Intensidade dos traços definida como **{level}**.",
+        "es": "✅ Intensidad de rasgos en **{level}**.",
+        "fr": "✅ Intensité des traits : **{level}**.",
+        "de": "✅ Trait-Intensität auf **{level}** gesetzt.",
     },
     "roleplay.modal.title": {
         "en": "Roleplay personality",
@@ -2202,19 +2335,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.footer": {
         "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
-        "🌐 **`/language`** — DE · EN · ES · FR · PT",
+        "🌐 **`/language`** — 13 Sprachen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
         "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
-        "🌐 **`/language`** — EN · FR · ES · PT · DE",
+        "🌐 **`/language`** — 13 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
         "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
-        "🌐 **`/language`** — ES · EN · FR · PT · DE",
+        "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
         "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
-        "🌐 **`/language`** — FR · EN · ES · PT · DE",
+        "🌐 **`/language`** — 13 langues : EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
         "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
-        "🌐 **`/language`** — PT · EN · ES · FR · DE",
+        "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
     },
     "help.music.body": {
         "de": "`/play` · `/skip` · `/pause` · `/resume`\n"
@@ -2353,20 +2486,44 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "✅ ¡Idioma cambiado a Español!",
         "fr": "✅ Langue changée en Français!",
         "pt": "✅ Idioma alterado para Português!",
+        "tr": "✅ Dil Türkçe olarak ayarlandı!",
+        "sv": "✅ Språk ändrat till Svenska!",
+        "it": "✅ Lingua impostata su Italiano!",
+        "nl": "✅ Taal gewijzigd naar Nederlands!",
+        "ar": "✅ تم تغيير اللغة إلى العربية!",
+        "ja": "✅ 言語を日本語に変更しました！",
+        "ko": "✅ 언어가 한국어로 변경되었습니다!",
+        "ru": "✅ Язык изменён на русский!",
     },
     "lang.desc": {
-        "de": "Wähle die Sprache, die Tiffany verwenden wird, um dir auf allen Servern zu antworten.",
-        "en": "Select the language Tiffany will use to reply to you across all servers.",
-        "es": "Selecciona el idioma que usará Tiffany para responderte en todos los servidores.",
-        "fr": "Sélectionnez la langue que Tiffany utilisera pour vous répondre sur tous les serveurs.",
-        "pt": "Selecione o idioma que a Tiffany usará para responder você em qualquer servidor.",
+        "de": "Wähle eine von **13 Sprachen** — Tiffany antwortet dir so auf allen Servern.",
+        "en": "Pick one of **13 languages** — Tiffany will reply to you in it on every server.",
+        "es": "Elige uno de **13 idiomas** — Tiffany te responderá en él en cualquier servidor.",
+        "fr": "Choisis l'une des **13 langues** — Tiffany te répondra ainsi sur tous les serveurs.",
+        "pt": "Escolha um dos **13 idiomas** — a Tiffany responderá assim em qualquer servidor.",
+        "tr": "**13 dil**den birini seç — Tiffany tüm sunucularda sana böyle yanıt verir.",
+        "sv": "Välj ett av **13 språk** — Tiffany svarar dig så på alla servrar.",
+        "it": "Scegli una delle **13 lingue** — Tiffany ti risponderà così su ogni server.",
+        "nl": "Kies een van **13 talen** — Tiffany antwoordt je zo op elke server.",
+        "ar": "اختر واحدة من **13 لغة** — سترد Tiffany إليك بها في كل السيرفرات.",
+        "ja": "**13言語**から選択 — どのサーバーでもその言語で返信します。",
+        "ko": "**13개 언어** 중 선택 — 모든 서버에서 해당 언어로 답합니다.",
+        "ru": "Выбери один из **13 языков** — Tiffany будет отвечать так на всех серверах.",
     },
     "lang.placeholder": {
-        "de": "Wähle eine Sprache...",
-        "en": "Select a language...",
-        "es": "Selecciona un idioma...",
-        "fr": "Sélectionnez une langue...",
-        "pt": "Selecione um idioma...",
+        "de": "Sprache wählen (13 verfügbar)...",
+        "en": "Select a language (13 available)...",
+        "es": "Selecciona un idioma (13 disponibles)...",
+        "fr": "Sélectionnez une langue (13 disponibles)...",
+        "pt": "Selecione um idioma (13 disponíveis)...",
+        "tr": "Dil seç (13 mevcut)...",
+        "sv": "Välj språk (13 tillgängliga)...",
+        "it": "Seleziona lingua (13 disponibili)...",
+        "nl": "Kies taal (13 beschikbaar)...",
+        "ar": "اختر لغة (13 متاحة)...",
+        "ja": "言語を選択（13言語）...",
+        "ko": "언어 선택 (13개)...",
+        "ru": "Выберите язык (13 доступно)...",
     },
     "lang.title": {
         "de": "🌐 Wähle deine Sprache",
@@ -2374,6 +2531,14 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "🌐 Elige tu Idioma",
         "fr": "🌐 Choisissez votre Langue",
         "pt": "🌐 Escolha seu Idioma",
+        "tr": "🌐 Dilini seç",
+        "sv": "🌐 Välj ditt språk",
+        "it": "🌐 Scegli la tua lingua",
+        "nl": "🌐 Kies je taal",
+        "ar": "🌐 اختر لغتك",
+        "ja": "🌐 言語を選択",
+        "ko": "🌐 언어 선택",
+        "ru": "🌐 Выберите язык",
     },
     "manipulation.1": {
         "de": "🛡️ **Dafür falle ich nicht hinein.** Versuche, die Filter zu umgehen, werden erkannt " "und blockiert.",
