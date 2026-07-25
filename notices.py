@@ -42,7 +42,7 @@ except Exception as _ve:
 # =========================
 # CONFIGURATION
 # =========================
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -2338,19 +2338,8 @@ async def on_ready():
         i18n_loader.ensure_loaded()
     except Exception:
         log.exception("Infrastructure init partial failure — JSON/local fallback active.")
-    if _voice_available and tiffany_voice:
-        try:
-            tiffany_voice.register_voice(discord_client)
-            log.info("Voice commands registered (t! + slash).")
-        except Exception:
-            log.exception("register_voice failed — voice/prefix/slash commands disabled.")
-            _voice_available = False
-    else:
-        log.warning("Voice module unavailable — t! commands and /help will not work.")
-    if _voice_available and tiffany_voice:
-        await tiffany_voice.start_presence_rotation(discord_client)
-    else:
-        log.warning("Voice module unavailable — presence rotation skipped.")
+    # Voice/Lavalink handlers register before bot.run() — on_ready listeners must not
+    # be added from inside on_ready or they miss the first ready event.
     # Load offers Cog before syncing slash commands
     if not discord_client.get_cog("OffersCog"):
         try:
@@ -2534,6 +2523,16 @@ def _sync_cleanup():
         log.warning("⚠️ http_session closed via atexit (forced shutdown).")
 
 atexit.register(_sync_cleanup)
+
+if _voice_available and tiffany_voice:
+    try:
+        tiffany_voice.register_voice(discord_client)
+        log.info("Voice commands registered (t! + slash).")
+    except Exception:
+        log.exception("register_voice failed — voice/prefix/slash commands disabled.")
+        _voice_available = False
+elif not _voice_available:
+    log.warning("Voice module unavailable — t! commands and /help will not work.")
 
 if __name__ == "__main__":
     discord_client.run(DISCORD_TOKEN)

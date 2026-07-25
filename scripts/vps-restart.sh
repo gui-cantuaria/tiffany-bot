@@ -8,6 +8,7 @@ cd "$TIFFANY_DIR"
 echo "==> Atualizando arquivos do GitHub..."
 git fetch origin main
 git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py \
+  infra/ lavalink/application.yml requirements.txt \
   scripts/vps-restart.sh scripts/kill-orphans.sh scripts/tiffany-bot.service scripts/run.sh 2>/dev/null || true
 
 echo "==> Matando instâncias duplicadas..."

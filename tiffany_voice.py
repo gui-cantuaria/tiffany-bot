@@ -9309,9 +9309,21 @@ def register_voice(bot: commands.Bot) -> None:
                 from infra.audio.lavalink_nodes import build_wavelink_nodes
                 nodes = build_wavelink_nodes()
                 if nodes:
-                    await wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100)
+                    log.info(
+                        "Connecting Lavalink cluster (%d node(s), LAVALINK_ENABLED=%s)...",
+                        len(nodes),
+                        os.getenv("LAVALINK_ENABLED", "?"),
+                    )
+                    await asyncio.wait_for(
+                        wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100),
+                        timeout=20.0,
+                    )
                     ids = [getattr(n, "identifier", "?") for n in nodes]
                     log.info("Lavalink cluster connected: %s", ", ".join(ids))
+                else:
+                    log.warning("Lavalink enabled but no nodes configured — yt-dlp fallback.")
+            except asyncio.TimeoutError:
+                log.warning("Lavalink connect timed out (20s) — using yt-dlp as fallback.")
             except Exception as e:
                 log.warning("Lavalink unavailable (%s) — using yt-dlp as fallback.", e)
         elif _WAVELINK_AVAILABLE:
