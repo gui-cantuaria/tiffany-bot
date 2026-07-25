@@ -34,7 +34,7 @@ from discord.ext import commands
 import game_recommendations
 import locale_utils
 import guild_config
-from locale_utils import GuildLang, resolve_guild_lang, tr, slash_desc_kwargs, slash_param
+from locale_utils import GuildLang, resolve_guild_lang, resolve_lang, interaction_lang, tr, slash_desc_kwargs, slash_param
 
 try:
     from discord.ext import voice_recv as voice_recv
@@ -1408,6 +1408,7 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "rp": 2.0, "replay": 2.0,
     "ly": 2.0, "lyrics": 2.0,
     "g": 2.0, "game": 2.0, "games": 2.0,
+    "roleplay": 2.0,
     "su": 2.0, "summary": 2.0,
     "player-status": 2.0,
     # 5s — audio recording
@@ -1919,33 +1920,12 @@ def _save_stats() -> None:
 _stats: dict[str, int] = _load_stats()
 
 
-def build_rewind_embed(user: discord.User | discord.Member) -> discord.Embed:
+def build_rewind_embed(user: discord.User | discord.Member, *, lang: Optional[GuildLang] = None) -> discord.Embed:
     """Personal music rewind for /rewind and t!rewind."""
     uid = str(user.id)
     user_stats = _stats.get("user_songs", {}).get(uid)
-    if not user_stats or user_stats.get("total", 0) == 0:
-        return discord.Embed(
-            title="🎧 Tiffany Rewind",
-            description=(
-                "Você ainda não tem um histórico com a Tiffany. "
-                "Peça mais músicas para gerar o seu Rewind!"
-            ),
-            color=TIFFANY_PINK,
-        )
-    total = user_stats["total"]
-    top_artists = sorted(user_stats.get("top", {}).items(), key=lambda x: x[1], reverse=True)[:3]
-    desc = f"**Você já pediu {total} músicas!**\n\n**Seus artistas/canais favoritos:**\n"
-    for i, (artist, count) in enumerate(top_artists, 1):
-        desc += f"{i}️⃣ **{artist}** ({count} plays)\n"
-    em = discord.Embed(
-        title=f"🎧 O Rewind de {user.display_name}",
-        description=desc,
-        color=TIFFANY_PINK,
-    )
-    if user.avatar:
-        em.set_thumbnail(url=user.avatar.url)
-    em.set_footer(text="Continue ouvindo com a Tiffany para atualizar suas estatísticas!")
-    return em
+    resolved = lang or resolve_lang(getattr(user, "guild", None), user.id)
+    return locale_utils.build_rewind_embed(resolved, user, user_stats, pink=TIFFANY_PINK)
 
 # Playlists saved in JSON per server
 _PLAYLISTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlists.json")
@@ -3958,22 +3938,22 @@ def bot_invite_url(client: discord.Client) -> str:
 class _InviteLinkView(discord.ui.View):
     """Persistent invite button for /about and welcome messages."""
 
-    def __init__(self, invite_url: str):
+    def __init__(self, invite_url: str, lang: GuildLang = "en"):
         super().__init__(timeout=None)
         if invite_url:
             self.add_item(
                 discord.ui.Button(
-                    label="➕ Adicionar em outro servidor",
+                    label=tr(lang, "about.invite_btn"),
                     url=invite_url,
                     style=discord.ButtonStyle.link,
                 )
             )
 
 
-def invite_link_view(invite_url: str) -> discord.ui.View | None:
+def invite_link_view(invite_url: str, lang: GuildLang = "en") -> discord.ui.View | None:
     if not invite_url:
         return None
-    return _InviteLinkView(invite_url)
+    return _InviteLinkView(invite_url, lang)
 
 
 _presence_rotation_task: asyncio.Task | None = None
@@ -4504,7 +4484,7 @@ async def _run_game_recommendation(
     *,
     history_line: str = "",
 ) -> discord.Embed:
-    lang = resolve_guild_lang(guild)
+    lang = resolve_lang(guild, author.id)
     if _contains_blocked_content(query):
         return _embed(_pick_blocked_reply())
 
@@ -4842,6 +4822,49 @@ async def _ctx_reply(
         )
     except discord.HTTPException:
         return await ctx.send(embed=embed, **kwargs)
+
+
+async def _delete_message_later(msg: discord.Message, delay: float) -> None:
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except discord.HTTPException:
+        pass
+
+
+async def _ctx_reply_ai(
+    ctx: commands.Context,
+    content: str | discord.Embed,
+    **kwargs,
+) -> Optional[discord.Message]:
+    """Private AI reply — ephemeral slash in guild, DM for prefix in guild."""
+    embed = content if isinstance(content, discord.Embed) else _embed(content)
+    delete_after = kwargs.pop("delete_after", None)
+
+    if ctx.interaction is not None:
+        kwargs.setdefault("ephemeral", True)
+        try:
+            if ctx.interaction.response.is_done():
+                msg = await ctx.followup.send(embed=embed, **kwargs)
+            else:
+                msg = await ctx.send(embed=embed, **kwargs)
+            if delete_after and msg:
+                asyncio.create_task(_delete_message_later(msg, delete_after))
+            return msg
+        except discord.HTTPException:
+            return None
+
+    if ctx.guild is not None:
+        try:
+            return await ctx.author.send(embed=embed, delete_after=delete_after)
+        except (discord.Forbidden, discord.HTTPException):
+            text = embed.description or str(content)
+            await _send_private_notice(
+                ctx.author, ctx.channel, text, interaction=None, delete_after=delete_after,
+            )
+            return None
+
+    return await ctx.send(embed=embed, delete_after=delete_after, **kwargs)
 
 
 async def _ensure_opus() -> None:
@@ -6676,7 +6699,7 @@ class DiceRerollView(discord.ui.View):
                 rolls_info = _rolls_info_from_footer(ft.text)
         if not rolls_info:
             await interaction.response.send_message(
-                embed=_embed(tr(resolve_guild_lang(interaction.guild), "cmd.dice.reroll_no_formula")),
+                embed=_embed(tr(interaction_lang(interaction), "cmd.dice.reroll_no_formula")),
                 ephemeral=True,
             )
             return
@@ -6689,7 +6712,7 @@ class DiceRerollView(discord.ui.View):
 
         if not roll_results:
             await interaction.response.send_message(
-                embed=_embed(tr(resolve_guild_lang(interaction.guild), "cmd.dice.reroll_failed")),
+                embed=_embed(tr(interaction_lang(interaction), "cmd.dice.reroll_failed")),
                 ephemeral=True,
             )
             return
@@ -6822,7 +6845,7 @@ def register_voice(bot: commands.Bot) -> None:
         if not allowed:
             try:
                 await message.channel.send(
-                    embed=_embed(tr(resolve_guild_lang(message.guild), "cmd.dice.cooldown", secs=f"{wait:.0f}")),
+                    embed=_embed(tr(resolve_lang(message.guild, message.author.id), "cmd.dice.cooldown", secs=f"{wait:.0f}")),
                     delete_after=5,
                 )
             except discord.HTTPException:
@@ -7008,11 +7031,11 @@ def register_voice(bot: commands.Bot) -> None:
                 ok, reason = _ai_rate_limit_peek(guild_id, bucket="voice")
                 if not ok:
                     ch = bot.get_channel(session.text_channel_id)
-                    msg = (
-                        "⏳ Muitas perguntas neste servidor! Aguarde um momento."
-                        if reason == "server"
-                        else "🧠 Muitas perguntas agora. Aguarde alguns segundos."
-                    )
+                    vlang = resolve_lang(getattr(vc, "guild", None), user_id)
+                    if reason == "server":
+                        msg = tr(vlang, "chat.rate_limit_server")
+                    else:
+                        msg = tr(vlang, "chat.rate_limit_user")
                     if ch:
                         try:
                             await ch.send(embed=_embed(msg))
@@ -8159,28 +8182,28 @@ def register_voice(bot: commands.Bot) -> None:
         ]
 
         if not (question and question.strip()) and not image_urls:
-            await _ctx_reply(ctx, tr(lang, "chat.usage.image"))
+            await _ctx_reply_ai(ctx, tr(lang, "chat.usage.image"))
             return
         question = question.strip() if question else ""
 
         nested = _nested_command_hint(question)
         if nested:
-            await _ctx_reply(ctx, nested, delete_after=18)
+            await _ctx_reply_ai(ctx, nested, delete_after=18)
             return
 
         question = _normalize_chat_question(question)
         if not question and not image_urls:
-            await _ctx_reply(ctx, tr(lang, "chat.usage.no_name"))
+            await _ctx_reply_ai(ctx, tr(lang, "chat.usage.no_name"))
             return
 
         zoeira = _try_chat_zoeira_reply(question, user_id=ctx.author.id)
         if zoeira:
-            await _ctx_reply(ctx, f"💬 {zoeira}")
+            await _ctx_reply_ai(ctx, f"💬 {zoeira}")
             _add_to_context(ctx.author.id, question, zoeira)
             return
 
         if question and locale_utils.is_chat_nonsense(question):
-            await _ctx_reply(ctx, tr(lang, "chat.nonsense"))
+            await _ctx_reply_ai(ctx, tr(lang, "chat.nonsense"))
             return
 
         if question and await _should_block_content(question):
@@ -8189,39 +8212,31 @@ def register_voice(bot: commands.Bot) -> None:
 
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
-            await _ctx_reply(ctx, f"⏳ Aguarde {remaining}s antes de perguntar novamente.")
+            await _ctx_reply_ai(ctx, tr(lang, "chat.cooldown", remaining=remaining))
             return
         gid, uid = _ai_rl_ids(ctx)
         ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid)
         if not ok:
-            await _ctx_reply(ctx, _rate_limit_message(lang, reason), delete_after=8)
+            await _ctx_reply_ai(ctx, _rate_limit_message(lang, reason), delete_after=8)
             return
 
-        thinking = await _ctx_reply(ctx, "🧠 Pensando...")
+        thinking = await _ctx_reply_ai(ctx, tr(lang, "chat.thinking"))
         answer = await _answer_question(
             question, gid, None, None,
             image_urls=image_urls if image_urls else None,
             user_id=ctx.author.id,
         )
         if not (answer or "").strip():
-            answer = "Não consegui formular uma resposta agora. Tenta de novo?"
+            answer = tr(lang, "chat.err.no_answer")
         try:
             if thinking:
                 await thinking.edit(embed=_embed(f"💬 {answer}"))
             else:
-                await _ctx_reply(ctx, f"💬 {answer}")
+                await _ctx_reply_ai(ctx, f"💬 {answer}")
         except discord.HTTPException:
-            await _ctx_reply(ctx, f"💬 {answer}")
+            await _ctx_reply_ai(ctx, f"💬 {answer}")
 
-    @bot.hybrid_command(
-        name="roleplay",
-        aliases=["rp"],
-        help="Conversa casual com a Tiffany (personalidade roleplay): t!rp / t!roleplay <mensagem>",
-        **slash_desc_kwargs("slash.cmd.roleplay"),
-    )
-    @app_commands.describe(message=slash_param("slash.param.message"))
-    @_dm_slash
-    async def cmd_roleplay(ctx: commands.Context, *, message: str = ""):
+    async def _run_roleplay(ctx: commands.Context, *, message: str = "") -> None:
         import roleplay_config as rp_cfg
 
         if not await _require_dm_access(ctx):
@@ -8268,7 +8283,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         allowed, remaining = _check_cooldown(ctx.author.id)
         if not allowed:
-            await _ctx_reply(ctx, f"⏳ Aguarde {remaining}s antes de usar de novo.")
+            await _ctx_reply(ctx, tr(lang, "roleplay.cooldown", remaining=remaining))
             return
         gid, uid_rl = _ai_rl_ids(ctx)
         ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid_rl)
@@ -8324,6 +8339,25 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(answer)
 
     @bot.hybrid_command(
+        name="roleplay",
+        aliases=["rp"],
+        help="Conversa casual com a Tiffany (personalidade roleplay): t!rp / t!roleplay <mensagem>",
+        **slash_desc_kwargs("slash.cmd.roleplay"),
+    )
+    @app_commands.describe(message=slash_param("slash.param.message"))
+    @_dm_slash
+    async def cmd_roleplay(ctx: commands.Context, *, message: str = ""):
+        await _run_roleplay(ctx, message=message)
+
+    @bot.tree.command(name="rp", **slash_desc_kwargs("slash.cmd.roleplay"))
+    @app_commands.describe(message=slash_param("slash.param.message"))
+    @_dm_slash
+    async def slash_rp(interaction: discord.Interaction, message: str = ""):
+        ctx = await commands.Context.from_interaction(interaction)
+        ctx.command = cmd_roleplay
+        await _run_roleplay(ctx, message=message)
+
+    @bot.hybrid_command(
         name="game",
         aliases=["g", "games"],
         help="Recomenda jogos por filtros: t!g / t!game <loja, gênero, preço, multiplayer...>",
@@ -8341,7 +8375,7 @@ def register_voice(bot: commands.Bot) -> None:
         lang = _ctx_lang(ctx)
 
         if not (query and query.strip()):
-            await ctx.send(embed=_embed(
+            await _ctx_reply_ai(ctx, _embed(
                 f"{tr(lang, 'game.usage.title')}\n\n"
                 f"{tr(lang, 'game.usage.hint')}\n\n"
                 f"{tr(lang, 'game.usage.repeat')}\n\n"
@@ -8351,7 +8385,7 @@ def register_voice(bot: commands.Bot) -> None:
 
         resolved, mode = _resolve_game_query(ctx.author.id, query.strip())
         if mode == "empty":
-            await ctx.send(embed=_embed(tr(lang, "game.repeat.empty")))
+            await _ctx_reply_ai(ctx, tr(lang, "game.repeat.empty"))
             return
         query = resolved or query.strip()
         history_line = ""
@@ -8362,14 +8396,14 @@ def register_voice(bot: commands.Bot) -> None:
             await _enforce_guidelines(ctx, _pick_blocked_reply())
             return
 
-        status = await _ctx_reply(ctx, tr(lang, "game.searching"))
+        status = await _ctx_reply_ai(ctx, tr(lang, "game.searching"))
         result = await _run_game_recommendation(
             ctx.guild, ctx.author, query, history_line=history_line,
         )
         if status:
             await status.edit(embed=result)
         else:
-            await _ctx_reply(ctx, result)
+            await _ctx_reply_ai(ctx, result)
 
     @bot.hybrid_command(name="loop", aliases=["l", "lo"], help="Loop da música atual (liga/desliga): t!l / t!loop", dm_permission=False, **slash_desc_kwargs("slash.cmd.loop"))
     @_guild_slash
@@ -8935,7 +8969,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await message.delete()
             except discord.HTTPException:
                 pass
-        msg = _pick_localized(_ANTISPAM_MSGS, resolve_guild_lang(message.guild)).format(mention=message.author.mention)
+        msg = _pick_localized(_ANTISPAM_MSGS, resolve_lang(message.guild, message.author.id)).format(mention=message.author.mention)
         # Warn privately so the user isn't publicly shamed; the @everyone/@here
         # message itself was already removed above.
         await _send_private_notice(message.author, channel, msg)
@@ -9411,9 +9445,10 @@ def register_voice(bot: commands.Bot) -> None:
             and isinstance(interaction.user, discord.Member)
             and interaction.user.guild_permissions.administrator
         )
-        em = build_about_embed(bot, for_admin=is_admin, guild=interaction.guild)
+        lang = interaction_lang(interaction)
+        em = build_about_embed(bot, for_admin=is_admin, guild=interaction.guild, lang=lang)
         invite = bot_invite_url(bot) if bot.user else ""
-        view = invite_link_view(invite)
+        view = invite_link_view(invite, lang)
         await interaction.response.send_message(embed=em, view=view)
 
     @bot.tree.command(
@@ -9434,7 +9469,7 @@ def register_voice(bot: commands.Bot) -> None:
     @app_commands.guild_only()
     @_guild_slash
     async def slash_player_status(interaction: discord.Interaction):
-        lang = resolve_guild_lang(interaction.guild)
+        lang = interaction_lang(interaction)
         if not interaction.guild:
             await _slash_reply(interaction, tr(lang, "slash.guild_only"))
             return
@@ -9446,37 +9481,8 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.tree.command(name="rewind", **slash_desc_kwargs("slash.cmd.rewind"))
     @_dm_slash
     async def slash_rewind(interaction: discord.Interaction):
-        uid = str(interaction.user.id)
-        user_stats = _stats.get("user_songs", {}).get(uid)
-        
-        if not user_stats or user_stats.get("total", 0) == 0:
-            em = discord.Embed(
-                title="🎧 Tiffany Rewind",
-                description="Você ainda não tem um histórico com a Tiffany. Peça mais músicas para gerar o seu Rewind!",
-                color=TIFFANY_PINK
-            )
-            await interaction.response.send_message(
-                embed=em, ephemeral=locale_utils.slash_ephemeral(interaction),
-            )
-            return
-
-        total = user_stats["total"]
-        top_artists = sorted(user_stats.get("top", {}).items(), key=lambda x: x[1], reverse=True)[:3]
-        
-        desc = f"**Você já pediu {total} músicas!**\n\n**Seus artistas/canais favoritos:**\n"
-        for i, (artist, count) in enumerate(top_artists, 1):
-            desc += f"{i}️⃣ **{artist}** ({count} plays)\n"
-            
-        em = discord.Embed(
-            title=f"🎧 O Rewind de {interaction.user.display_name}",
-            description=desc,
-            color=TIFFANY_PINK
-        )
-        if interaction.user.avatar:
-            em.set_thumbnail(url=interaction.user.avatar.url)
-            
-        em.set_footer(text="Continue ouvindo com a Tiffany para atualizar suas estatísticas!")
-        
+        lang = interaction_lang(interaction)
+        em = build_rewind_embed(interaction.user, lang=lang)
         await interaction.response.send_message(
             embed=em, ephemeral=locale_utils.slash_ephemeral(interaction),
         )

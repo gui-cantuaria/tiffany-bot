@@ -21,7 +21,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from locale_utils import slash_ephemeral, slash_desc_kwargs
+from locale_utils import slash_ephemeral, slash_desc_kwargs, interaction_lang, build_public_status_embed, tr, resolve_lang
 import updates as tiffany_updates
 import owner_dashboard
 import guild_config
@@ -1677,15 +1677,18 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
         _daily_mention_news = 0
     try:
         mention = None
+        mention_role_id = None
         if noticia["nota"] >= NOTA_URGENTE and ID_CARGO_PARA_MARCAR and _daily_mention_news < 3:
             guild = getattr(channel, "guild", None)
             if guild and guild.get_role(ID_CARGO_PARA_MARCAR):
                 mention = f"<@&{ID_CARGO_PARA_MARCAR}>"
-        msg = await channel.send(
-            content=mention,
-            embed=embed,
-            file=attachment,
-        )
+                mention_role_id = ID_CARGO_PARA_MARCAR
+        send_kwargs: dict = {"content": mention, "embed": embed, "file": attachment}
+        if mention_role_id:
+            send_kwargs["allowed_mentions"] = discord.AllowedMentions(
+                roles=[mention_role_id], everyone=False, users=False,
+            )
+        msg = await channel.send(**send_kwargs)
         try:
             thread_name = f"💬 {noticia['categoria']}: {noticia['titulo'][:80]}"
             if len(thread_name) > 100:
@@ -2396,46 +2399,17 @@ async def on_close():
 # =========================
 # PUBLIC / OWNER STATUS & STATS
 # =========================
-def _build_public_status_embed() -> discord.Embed:
-    agora = datetime.now(FUSO_HORARIO_BR)
-    lat = discord_client.latency
-    lat_ms = int(lat * 1000) if (lat == lat and lat not in (float("inf"), float("-inf"))) else None
+def _build_public_status_embed(lang=None) -> discord.Embed:
     voice_ok = bool(_voice_available and tiffany_voice)
     chat_ok = voice_ok and bool(os.getenv("OPENROUTER_API_KEY", "").strip())
-    conexao_ruim = (lat_ms is None) or (lat_ms > 1000)
-    conexao_lenta = (lat_ms is not None) and (400 < lat_ms <= 1000)
-    recursos_ok = voice_ok and chat_ok
-    if conexao_ruim or not recursos_ok:
-        nivel, titulo, cor = "🔴", "Com instabilidades", 0xED4245
-        msg = "Estou com problemas agora. Tenta de novo em alguns minutos. 🙏"
-    elif conexao_lenta:
-        nivel, titulo, cor = "🟡", "Pequenas instabilidades", 0xFEE75C
-        msg = "Funcionando, com leve lentidão."
-    else:
-        nivel, titulo, cor = "🟢", "Funcionando normalmente", 0x57F287
-        msg = "Tá tudo certo por aqui! 💖"
-    em = discord.Embed(title=f"{nivel} Tiffany — {titulo}", description=msg, color=cor, timestamp=agora)
-    if lat_ms is None:
-        conexao_txt = "conectando..."
-    elif lat_ms <= 200:
-        conexao_txt = f"ótima ({lat_ms} ms)"
-    elif lat_ms <= 400:
-        conexao_txt = f"boa ({lat_ms} ms)"
-    elif lat_ms <= 1000:
-        conexao_txt = f"lenta ({lat_ms} ms)"
-    else:
-        conexao_txt = f"instável ({lat_ms} ms)"
-    if voice_ok and chat_ok:
-        recursos_txt = "Disponíveis"
-    elif voice_ok:
-        recursos_txt = "Música OK · chat indisponível"
-    else:
-        recursos_txt = "Indisponíveis no momento"
-    em.add_field(name="📶 Conexão", value=conexao_txt, inline=True)
-    em.add_field(name="🎵 Música & chat", value=recursos_txt, inline=True)
-    em.add_field(name="🛒 Ofertas automáticas", value="Ativas", inline=True)
-    em.set_footer(text="Tiffany 💖 · use /updates para novidades")
-    return em
+    resolved = lang or "pt"
+    return build_public_status_embed(
+        resolved,
+        latency=discord_client.latency,
+        voice_ok=voice_ok,
+        chat_ok=chat_ok,
+        pink=TIFFANY_PINK,
+    )
 
 
 @discord_client.tree.command(
@@ -2444,8 +2418,9 @@ def _build_public_status_embed() -> discord.Embed:
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_status(interaction: discord.Interaction):
+    lang = interaction_lang(interaction)
     await interaction.response.send_message(
-        embed=_build_public_status_embed(),
+        embed=_build_public_status_embed(lang),
         ephemeral=slash_ephemeral(interaction),
     )
 
@@ -2459,10 +2434,11 @@ async def cmd_status(interaction: discord.Interaction):
 )
 @discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def cmd_stats(interaction: discord.Interaction):
+    lang = interaction_lang(interaction)
     if not owner_dashboard.is_bot_owner(interaction.user.id):
         await interaction.response.send_message(
             embed=discord.Embed(
-                description="⚠️ Sem permissão para este comando.",
+                description=tr(lang, "err.missing_perms"),
                 color=0xED4245,
             ),
             ephemeral=True,
@@ -2492,7 +2468,8 @@ async def cmd_stats_prefix(ctx: commands.Context):
 
 @discord_client.command(name="status")
 async def cmd_status_prefix(ctx: commands.Context):
-    await ctx.send(embed=_build_public_status_embed())
+    lang = resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
+    await ctx.send(embed=_build_public_status_embed(lang))
 
 
 # =========================

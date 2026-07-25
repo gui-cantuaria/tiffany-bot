@@ -85,6 +85,12 @@ def resolve_lang(guild: Optional[discord.Guild], user_id: Optional[int] = None) 
     return resolve_guild_lang(guild)
 
 
+def interaction_lang(interaction: discord.Interaction) -> GuildLang:
+    """User preference first, then guild locale — for slash/interaction handlers."""
+    uid = interaction.user.id if interaction.user else None
+    return resolve_lang(interaction.guild, uid)
+
+
 def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
     """Look up a localized string. Falls back to en, then the key itself."""
     bucket = _STRINGS.get(key)
@@ -311,6 +317,92 @@ def stt_chat_instruction(lang: GuildLang) -> str:
     if lang == "de":
         return "Transcribe the audio. Output in German only. Reply ONLY with the spoken words, no commentary."
     return "Transcribe the audio. Output in English only. Reply ONLY with the spoken words, no commentary."
+
+
+def build_public_status_embed(
+    lang: GuildLang,
+    *,
+    latency: float,
+    voice_ok: bool,
+    chat_ok: bool,
+    pink: int = 0xFF69B4,
+) -> discord.Embed:
+    """Public /status embed — localized."""
+    from datetime import datetime, timedelta, timezone
+
+    br = timezone(timedelta(hours=-3))
+    agora = datetime.now(br)
+    lat_ms = (
+        int(latency * 1000)
+        if (latency == latency and latency not in (float("inf"), float("-inf")))
+        else None
+    )
+    conexao_ruim = (lat_ms is None) or (lat_ms > 1000)
+    conexao_lenta = (lat_ms is not None) and (400 < lat_ms <= 1000)
+    recursos_ok = voice_ok and chat_ok
+    if conexao_ruim or not recursos_ok:
+        nivel, titulo_key, msg_key = "🔴", "status.public.title_bad", "status.public.msg_bad"
+    elif conexao_lenta:
+        nivel, titulo_key, msg_key = "🟡", "status.public.title_slow", "status.public.msg_slow"
+    else:
+        nivel, titulo_key, msg_key = "🟢", "status.public.title_ok", "status.public.msg_ok"
+    em = discord.Embed(
+        title=f"{nivel} Tiffany — {tr(lang, titulo_key)}",
+        description=tr(lang, msg_key),
+        color=pink if recursos_ok and not conexao_ruim else (0xFEE75C if conexao_lenta else 0xED4245),
+        timestamp=agora,
+    )
+    if lat_ms is None:
+        conexao_txt = tr(lang, "status.public.conn_connecting")
+    elif lat_ms <= 200:
+        conexao_txt = tr(lang, "status.public.conn_great", ms=lat_ms)
+    elif lat_ms <= 400:
+        conexao_txt = tr(lang, "status.public.conn_good", ms=lat_ms)
+    elif lat_ms <= 1000:
+        conexao_txt = tr(lang, "status.public.conn_slow", ms=lat_ms)
+    else:
+        conexao_txt = tr(lang, "status.public.conn_bad", ms=lat_ms)
+    if voice_ok and chat_ok:
+        recursos_txt = tr(lang, "status.public.resources_ok")
+    elif voice_ok:
+        recursos_txt = tr(lang, "status.public.resources_music_only")
+    else:
+        recursos_txt = tr(lang, "status.public.resources_down")
+    em.add_field(name=tr(lang, "status.public.field_connection"), value=conexao_txt, inline=True)
+    em.add_field(name=tr(lang, "status.public.field_resources"), value=recursos_txt, inline=True)
+    em.add_field(name=tr(lang, "status.public.field_offers"), value=tr(lang, "status.public.offers_active"), inline=True)
+    em.set_footer(text=tr(lang, "status.public.footer"))
+    return em
+
+
+def build_rewind_embed(
+    lang: GuildLang,
+    user: discord.abc.User,
+    user_stats: Optional[dict],
+    *,
+    pink: int,
+) -> discord.Embed:
+    """Personal music rewind — localized."""
+    if not user_stats or user_stats.get("total", 0) == 0:
+        return discord.Embed(
+            title=tr(lang, "rewind.title"),
+            description=tr(lang, "rewind.empty"),
+            color=pink,
+        )
+    total = int(user_stats["total"])
+    top_artists = sorted(user_stats.get("top", {}).items(), key=lambda x: x[1], reverse=True)[:3]
+    desc = tr(lang, "rewind.total", total=total) + "\n\n" + tr(lang, "rewind.top_header") + "\n"
+    for i, (artist, count) in enumerate(top_artists, 1):
+        desc += tr(lang, "rewind.top_line", rank=i, artist=artist, count=count) + "\n"
+    em = discord.Embed(
+        title=tr(lang, "rewind.title_user", name=user.display_name),
+        description=desc,
+        color=pink,
+    )
+    if user.avatar:
+        em.set_thumbnail(url=user.avatar.url)
+    em.set_footer(text=tr(lang, "rewind.footer"))
+    return em
 
 
 def build_about_embed(
@@ -669,6 +761,34 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "fr": "Je ne peux pas formuler de réponse pour le moment. Essaye encore ?",
         "pt": "Não consegui formular uma resposta agora. Tenta de novo?",
     },
+    "chat.cooldown": {
+        "de": "⏳ Warte {remaining}s, bevor du erneut fragst.",
+        "en": "⏳ Wait {remaining}s before asking again.",
+        "es": "⏳ Espera {remaining}s antes de preguntar de nuevo.",
+        "fr": "⏳ Attends {remaining}s avant de redemander.",
+        "pt": "⏳ Aguarde {remaining}s antes de perguntar novamente.",
+    },
+    "chat.rate_limit_server": {
+        "de": "⏳ Zu viele Fragen auf diesem Server! Warte einen Moment.",
+        "en": "⏳ Too many questions on this server! Wait a moment.",
+        "es": "⏳ ¡Demasiadas preguntas en este servidor! Espera un momento.",
+        "fr": "⏳ Trop de questions sur ce serveur ! Attends un instant.",
+        "pt": "⏳ Muitas perguntas neste servidor! Aguarde um momento.",
+    },
+    "chat.rate_limit_user": {
+        "de": "🧠 Zu viele Fragen gerade. Warte ein paar Sekunden.",
+        "en": "🧠 Too many questions right now. Wait a few seconds.",
+        "es": "🧠 Demasiadas preguntas ahora. Espera unos segundos.",
+        "fr": "🧠 Trop de questions en ce moment. Attends quelques secondes.",
+        "pt": "🧠 Muitas perguntas agora. Aguarde alguns segundos.",
+    },
+    "chat.thinking": {
+        "de": "🧠 Denke nach…",
+        "en": "🧠 Thinking…",
+        "es": "🧠 Pensando…",
+        "fr": "🧠 Je réfléchis…",
+        "pt": "🧠 Pensando…",
+    },
     "chat.err.process_failed": {
         "de": "Entschuldigung, ich hatte ein Problem bei der Verarbeitung Ihrer Frage. " "Versuchen Sie es erneut.",
         "en": "Sorry, I had a problem processing your question. Try again.",
@@ -689,6 +809,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "💭 Un momento…",
         "fr": "💭 Un instant…",
         "pt": "💭 Só um instantinho…",
+    },
+    "roleplay.cooldown": {
+        "de": "⏳ Warte {remaining}s, bevor du es erneut nutzt.",
+        "en": "⏳ Wait {remaining}s before using again.",
+        "es": "⏳ Espera {remaining}s antes de usar de nuevo.",
+        "fr": "⏳ Attends {remaining}s avant de réutiliser.",
+        "pt": "⏳ Aguarde {remaining}s antes de usar de novo.",
     },
     "roleplay.setup.title": {
         "en": "🎭 Roleplay — pick Tiffany's vibe",
@@ -2750,6 +2877,876 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Offline — la música puede fallar",
         "fr": "Hors ligne — la musique peut échouer",
         "pt": "Offline — música pode falhar",
+    },
+    "status.public.conn_bad": {
+        "de": "instabil ({ms} ms)",
+        "en": "unstable ({ms} ms)",
+        "es": "inestable ({ms} ms)",
+        "fr": "instable ({ms} ms)",
+        "pt": "instável ({ms} ms)",
+    },
+    "status.public.conn_connecting": {
+        "de": "verbindet…",
+        "en": "connecting…",
+        "es": "conectando…",
+        "fr": "connexion…",
+        "pt": "conectando…",
+    },
+    "status.public.conn_good": {
+        "de": "gut ({ms} ms)",
+        "en": "good ({ms} ms)",
+        "es": "buena ({ms} ms)",
+        "fr": "bonne ({ms} ms)",
+        "pt": "boa ({ms} ms)",
+    },
+    "status.public.conn_great": {
+        "de": "sehr gut ({ms} ms)",
+        "en": "great ({ms} ms)",
+        "es": "excelente ({ms} ms)",
+        "fr": "excellente ({ms} ms)",
+        "pt": "ótima ({ms} ms)",
+    },
+    "status.public.conn_slow": {
+        "de": "langsam ({ms} ms)",
+        "en": "slow ({ms} ms)",
+        "es": "lenta ({ms} ms)",
+        "fr": "lente ({ms} ms)",
+        "pt": "lenta ({ms} ms)",
+    },
+    "status.public.field_connection": {
+        "de": "📶 Verbindung",
+        "en": "📶 Connection",
+        "es": "📶 Conexión",
+        "fr": "📶 Connexion",
+        "pt": "📶 Conexão",
+    },
+    "status.public.field_offers": {
+        "de": "🛒 Angebote",
+        "en": "🛒 Auto deals",
+        "es": "🛒 Ofertas auto",
+        "fr": "🛒 Offres auto",
+        "pt": "🛒 Ofertas automáticas",
+    },
+    "status.public.field_resources": {
+        "de": "🎵 Musik & Chat",
+        "en": "🎵 Music & chat",
+        "es": "🎵 Música y chat",
+        "fr": "🎵 Musique & chat",
+        "pt": "🎵 Música & chat",
+    },
+    "status.public.footer": {
+        "de": "Tiffany 💖 · /updates für Neuigkeiten",
+        "en": "Tiffany 💖 · use /updates for news",
+        "es": "Tiffany 💖 · /updates para novedades",
+        "fr": "Tiffany 💖 · /updates pour les nouveautés",
+        "pt": "Tiffany 💖 · use /updates para novidades",
+    },
+    "status.public.msg_bad": {
+        "de": "Ich habe gerade Probleme. Versuch es in ein paar Minuten nochmal. 🙏",
+        "en": "I'm having issues right now. Try again in a few minutes. 🙏",
+        "es": "Tengo problemas ahora. Intenta de nuevo en unos minutos. 🙏",
+        "fr": "J'ai des problèmes en ce moment. Réessaie dans quelques minutes. 🙏",
+        "pt": "Estou com problemas agora. Tenta de novo em alguns minutos. 🙏",
+    },
+    "status.public.msg_ok": {
+        "de": "Alles läuft! 💖",
+        "en": "Everything looks good! 💖",
+        "es": "¡Todo bien por aquí! 💖",
+        "fr": "Tout va bien ! 💖",
+        "pt": "Tá tudo certo por aqui! 💖",
+    },
+    "status.public.msg_slow": {
+        "de": "Läuft, mit leichter Verzögerung.",
+        "en": "Running, with slight slowness.",
+        "es": "Funcionando, con leve lentitud.",
+        "fr": "En marche, avec un peu de lenteur.",
+        "pt": "Funcionando, com leve lentidão.",
+    },
+    "status.public.offers_active": {
+        "de": "Aktiv",
+        "en": "Active",
+        "es": "Activas",
+        "fr": "Actives",
+        "pt": "Ativas",
+    },
+    "status.public.resources_down": {
+        "de": "Derzeit nicht verfügbar",
+        "en": "Unavailable right now",
+        "es": "No disponibles ahora",
+        "fr": "Indisponibles pour le moment",
+        "pt": "Indisponíveis no momento",
+    },
+    "status.public.resources_music_only": {
+        "de": "Musik OK · Chat nicht verfügbar",
+        "en": "Music OK · chat unavailable",
+        "es": "Música OK · chat no disponible",
+        "fr": "Musique OK · chat indisponible",
+        "pt": "Música OK · chat indisponível",
+    },
+    "status.public.resources_ok": {
+        "de": "Verfügbar",
+        "en": "Available",
+        "es": "Disponibles",
+        "fr": "Disponibles",
+        "pt": "Disponíveis",
+    },
+    "status.public.title_bad": {
+        "de": "Mit Instabilitäten",
+        "en": "Having issues",
+        "es": "Con inestabilidades",
+        "fr": "Avec des instabilités",
+        "pt": "Com instabilidades",
+    },
+    "status.public.title_ok": {
+        "de": "Läuft normal",
+        "en": "Running normally",
+        "es": "Funcionando normalmente",
+        "fr": "Fonctionne normalement",
+        "pt": "Funcionando normalmente",
+    },
+    "status.public.title_slow": {
+        "de": "Leichte Instabilitäten",
+        "en": "Minor issues",
+        "es": "Pequeñas inestabilidades",
+        "fr": "Petites instabilités",
+        "pt": "Pequenas instabilidades",
+    },
+    "rewind.empty": {
+        "de": "Du hast noch keinen Verlauf mit Tiffany. Fordere mehr Musik an, um dein Rewind zu füllen!",
+        "en": "You don't have history with Tiffany yet. Request more songs to build your Rewind!",
+        "es": "Aún no tienes historial con Tiffany. ¡Pide más música para generar tu Rewind!",
+        "fr": "Tu n'as pas encore d'historique avec Tiffany. Demande plus de musique pour ton Rewind !",
+        "pt": "Você ainda não tem histórico com a Tiffany. Peça mais músicas para gerar o seu Rewind!",
+    },
+    "rewind.footer": {
+        "de": "Hör weiter mit Tiffany, um deine Stats zu aktualisieren!",
+        "en": "Keep listening with Tiffany to update your stats!",
+        "es": "¡Sigue escuchando con Tiffany para actualizar tus estadísticas!",
+        "fr": "Continue d'écouter avec Tiffany pour mettre à jour tes stats !",
+        "pt": "Continue ouvindo com a Tiffany para atualizar suas estatísticas!",
+    },
+    "rewind.title": {
+        "de": "🎧 Tiffany Rewind",
+        "en": "🎧 Tiffany Rewind",
+        "es": "🎧 Tiffany Rewind",
+        "fr": "🎧 Tiffany Rewind",
+        "pt": "🎧 Tiffany Rewind",
+    },
+    "rewind.title_user": {
+        "de": "🎧 {name}s Rewind",
+        "en": "🎧 {name}'s Rewind",
+        "es": "🎧 Rewind de {name}",
+        "fr": "🎧 Rewind de {name}",
+        "pt": "🎧 O Rewind de {name}",
+    },
+    "rewind.top_header": {
+        "de": "**Deine Top-Künstler/Kanäle:**",
+        "en": "**Your top artists/channels:**",
+        "es": "**Tus artistas/canales favoritos:**",
+        "fr": "**Tes artistes/chaînes favoris :**",
+        "pt": "**Seus artistas/canais favoritos:**",
+    },
+    "rewind.top_line": {
+        "de": "{rank}️⃣ **{artist}** ({count} plays)",
+        "en": "{rank}️⃣ **{artist}** ({count} plays)",
+        "es": "{rank}️⃣ **{artist}** ({count} plays)",
+        "fr": "{rank}️⃣ **{artist}** ({count} plays)",
+        "pt": "{rank}️⃣ **{artist}** ({count} plays)",
+    },
+    "rewind.total": {
+        "de": "**Du hast {total} Songs angefordert!**",
+        "en": "**You requested {total} songs!**",
+        "es": "**¡Pediste {total} canciones!**",
+        "fr": "**Tu as demandé {total} morceaux !**",
+        "pt": "**Você já pediu {total} músicas!**",
+    },
+    "mod.none": {
+        "de": "Keine",
+        "en": "None",
+        "es": "Ninguno",
+        "fr": "Aucun",
+        "pt": "Nenhum",
+    },
+    "mod.on": {"de": "🟢 AN", "en": "🟢 ON", "es": "🟢 ON", "fr": "🟢 ON", "pt": "🟢 ON"},
+    "mod.off": {"de": "🔴 AUS", "en": "🔴 OFF", "es": "🔴 OFF", "fr": "🔴 OFF", "pt": "🔴 OFF"},
+    "mod.panel.desc": {
+        "de": "Sicherheits- und Moderationseinstellungen des Servers.",
+        "en": "Configure server security and moderation options.",
+        "es": "Configura seguridad y moderación del servidor.",
+        "fr": "Configure la sécurité et la modération du serveur.",
+        "pt": "Configure as opções de segurança e moderação do servidor.",
+    },
+    "mod.panel.title": {
+        "de": "🛡️ Moderationspanel — Tiffany",
+        "en": "🛡️ Moderation Panel — Tiffany",
+        "es": "🛡️ Panel de moderación — Tiffany",
+        "fr": "🛡️ Panneau de modération — Tiffany",
+        "pt": "🛡️ Painel de Moderação — Tiffany",
+    },
+    "mod.deny_admin": {
+        "de": "Du brauchst **Administrator**, um dieses Panel zu nutzen.",
+        "en": "You need **Administrator** to use this panel.",
+        "es": "Necesitas **Administrador** para usar este panel.",
+        "fr": "Tu as besoin de **Administrateur** pour ce panneau.",
+        "pt": "Precisa da permissão **Administrador** para usar o painel de moderação.",
+    },
+    "mod.wrong_guild": {
+        "de": "Dieses Panel gehört nicht zu diesem Server.",
+        "en": "This panel does not belong to this server.",
+        "es": "Este panel no pertenece a este servidor.",
+        "fr": "Ce panneau n'appartient pas à ce serveur.",
+        "pt": "Este painel não pertence a este servidor.",
+    },
+    "mod.affiliate_saved": {
+        "de": "✅ Tags gespeichert!\n⚠️ 50/50-Plan: deine Tags haben 50% Chance in Links auf deinem Server.",
+        "en": "✅ Tags saved!\n⚠️ 50/50 plan: your tags have a 50% chance on links in your server.",
+        "es": "✅ Tags guardadas!\n⚠️ Plan 50/50: tus tags tienen 50% de chance en los links de tu servidor.",
+        "fr": "✅ Tags enregistrées !\n⚠️ Plan 50/50 : tes tags ont 50% de chance sur les liens de ton serveur.",
+        "pt": "✅ Tags salvas com sucesso!\n⚠️ O plano atual é 50/50: suas tags têm 50% de chance de serem usadas nos links enviados no seu servidor.",
+    },
+    "mod.blacklist_added": {
+        "de": "Hinzugefügt: {names}",
+        "en": "Added: {names}",
+        "es": "Añadidos: {names}",
+        "fr": "Ajoutés : {names}",
+        "pt": "Adicionados: {names}",
+    },
+    "mod.blacklist_count": {
+        "de": "{count} Benutzer",
+        "en": "{count} user(s)",
+        "es": "{count} usuario(s)",
+        "fr": "{count} utilisateur(s)",
+        "pt": "{count} usuário(s)",
+    },
+    "mod.blacklist_removed": {
+        "de": "Entfernt: {names}",
+        "en": "Removed: {names}",
+        "es": "Eliminados: {names}",
+        "fr": "Retirés : {names}",
+        "pt": "Removidos: {names}",
+    },
+    "mod.blacklist_updated": {
+        "de": "Blacklist aktualisiert:",
+        "en": "Blacklist updated:",
+        "es": "Blacklist actualizada:",
+        "fr": "Blacklist mise à jour :",
+        "pt": "Blacklist atualizada:",
+    },
+    "mod.btn.affiliates": {
+        "de": "Affiliate-Tags",
+        "en": "Affiliate tags",
+        "es": "Tags afiliado",
+        "fr": "Tags affiliés",
+        "pt": "Tags de Afiliado",
+    },
+    "mod.btn.anti_spam": {
+        "de": "Anti-Spam",
+        "en": "Anti-Spam",
+        "es": "Anti-Spam",
+        "fr": "Anti-Spam",
+        "pt": "Anti-Spam",
+    },
+    "mod.btn.blacklist": {
+        "de": "Blacklist",
+        "en": "Blacklist",
+        "es": "Blacklist",
+        "fr": "Blacklist",
+        "pt": "Gerenciar Blacklist",
+    },
+    "mod.btn.dj": {
+        "de": "DJ-Rolle",
+        "en": "DJ role",
+        "es": "Rol DJ",
+        "fr": "Rôle DJ",
+        "pt": "Configurar Cargo DJ",
+    },
+    "mod.btn.logs": {
+        "de": "Logs",
+        "en": "Logs",
+        "es": "Logs",
+        "fr": "Logs",
+        "pt": "Configurar Logs",
+    },
+    "mod.btn.offers": {
+        "de": "Angebotskanal",
+        "en": "Offers channel",
+        "es": "Canal ofertas",
+        "fr": "Canal offres",
+        "pt": "Canal de Ofertas",
+    },
+    "mod.btn.strict_filter": {
+        "de": "Strenger Filter",
+        "en": "Strict filter",
+        "es": "Filtro estricto",
+        "fr": "Filtre strict",
+        "pt": "Filtro Restrito",
+    },
+    "mod.dj_cleared": {
+        "de": "DJ-Rolle entfernt.",
+        "en": "DJ role removed.",
+        "es": "Rol DJ eliminado.",
+        "fr": "Rôle DJ retiré.",
+        "pt": "Cargo DJ removido.",
+    },
+    "mod.dj_set": {
+        "de": "DJ-Rolle: {role}",
+        "en": "DJ role set to {role}",
+        "es": "Rol DJ: {role}",
+        "fr": "Rôle DJ : {role}",
+        "pt": "Cargo DJ definido para {role}!",
+    },
+    "mod.field.affiliate_tags": {
+        "de": "Affiliate-Tags (Server)",
+        "en": "Affiliate tags (server)",
+        "es": "Tags afiliado (servidor)",
+        "fr": "Tags affiliés (serveur)",
+        "pt": "Tags de Afiliado (Servidor)",
+    },
+    "mod.field.anti_spam": {
+        "de": "Anti-Spam",
+        "en": "Anti-Spam",
+        "es": "Anti-Spam",
+        "fr": "Anti-Spam",
+        "pt": "Anti-Spam",
+    },
+    "mod.field.blacklist": {
+        "de": "Blacklist",
+        "en": "Blacklist",
+        "es": "Blacklist",
+        "fr": "Blacklist",
+        "pt": "Blacklist",
+    },
+    "mod.field.dj": {
+        "de": "DJ-Rolle (nur DJs steuern Musik)",
+        "en": "DJ role (only DJs control music)",
+        "es": "Rol DJ (solo DJs controlan música)",
+        "fr": "Rôle DJ (seuls les DJs contrôlent la musique)",
+        "pt": "Cargo DJ (Apenas DJs controlam música)",
+    },
+    "mod.field.mod_log": {
+        "de": "Mod-Log-Kanal",
+        "en": "Moderation log channel",
+        "es": "Canal de logs de moderación",
+        "fr": "Canal logs modération",
+        "pt": "Canal de Logs de Moderação",
+    },
+    "mod.field.offers": {
+        "de": "Angebotskanal (Affiliate)",
+        "en": "Offers channel (affiliate)",
+        "es": "Canal de ofertas (afiliados)",
+        "fr": "Canal offres (affiliés)",
+        "pt": "Canal de Ofertas (Afiliados)",
+    },
+    "mod.field.strict_filter": {
+        "de": "Strenger Filter (Inhalt)",
+        "en": "Strict filter (content)",
+        "es": "Filtro estricto (contenido)",
+        "fr": "Filtre strict (contenu)",
+        "pt": "Filtro Restrito (Conteúdo)",
+    },
+    "mod.logs_disabled": {
+        "de": "Mod-Logs deaktiviert.",
+        "en": "Moderation logs disabled.",
+        "es": "Logs de moderación desactivados.",
+        "fr": "Logs de modération désactivés.",
+        "pt": "Logs de moderação desativados.",
+    },
+    "mod.logs_set": {
+        "de": "Log-Kanal: {channel}",
+        "en": "Log channel: {channel}",
+        "es": "Canal de logs: {channel}",
+        "fr": "Canal logs : {channel}",
+        "pt": "Canal de logs definido para {channel}!",
+    },
+    "mod.modal.affiliate_title": {
+        "de": "Affiliate-Tags konfigurieren",
+        "en": "Configure affiliate tags",
+        "es": "Configurar tags de afiliado",
+        "fr": "Configurer les tags affiliés",
+        "pt": "Configurar Tags de Afiliado",
+    },
+    "mod.offers_disabled": {
+        "de": "Angebote in diesem Server deaktiviert.",
+        "en": "Offers posting disabled on this server.",
+        "es": "Ofertas desactivadas en este servidor.",
+        "fr": "Offres désactivées sur ce serveur.",
+        "pt": "Postagem de ofertas desativada neste servidor.",
+    },
+    "mod.offers_set": {
+        "de": "Angebotskanal: {channel}",
+        "en": "Offers channel: {channel}",
+        "es": "Canal de ofertas: {channel}",
+        "fr": "Canal offres : {channel}",
+        "pt": "Canal de Ofertas definido para {channel}!",
+    },
+    "mod.prompt.blacklist": {
+        "de": "Benutzer für Blacklist wählen:",
+        "en": "Select users for blacklist:",
+        "es": "Selecciona usuarios para la blacklist:",
+        "fr": "Sélectionne des utilisateurs pour la blacklist :",
+        "pt": "Selecione usuários para adicionar ou remover da blacklist:",
+    },
+    "mod.prompt.dj": {
+        "de": "DJ-Rolle wählen:",
+        "en": "Select DJ role:",
+        "es": "Selecciona el rol DJ:",
+        "fr": "Sélectionne le rôle DJ :",
+        "pt": "Selecione o cargo de DJ (ou cancele/limpe):",
+    },
+    "mod.prompt.logs": {
+        "de": "Log-Kanal wählen:",
+        "en": "Select log channel:",
+        "es": "Selecciona el canal de logs:",
+        "fr": "Sélectionne le canal de logs :",
+        "pt": "Selecione o canal para Logs de Moderação:",
+    },
+    "mod.prompt.offers": {
+        "de": "Angebotskanal wählen:",
+        "en": "Select offers channel:",
+        "es": "Selecciona el canal de ofertas:",
+        "fr": "Sélectionne le canal d'offres :",
+        "pt": "Selecione o canal para postar as ofertas diárias:",
+    },
+    "mod.tags_count": {
+        "de": "{count} konfiguriert",
+        "en": "{count} configured",
+        "es": "{count} configuradas",
+        "fr": "{count} configurées",
+        "pt": "{count} configuradas",
+    },
+    "emb.help.body": {
+        "de": "**Befehle:**\n`t!emb create <name>` — leeres Embed\n`t!emb edit <name>` — Modal\n`t!emb preview <name>`\n`t!emb send <name> [#kanal]`\n`t!emb list`\n`t!emb delete <name>`\n\nErfordert **Nachrichten verwalten**.",
+        "en": "**Commands:**\n`t!emb create <name>` — empty embed\n`t!emb edit <name>` — edit modal\n`t!emb preview <name>`\n`t!emb send <name> [#channel]`\n`t!emb list`\n`t!emb delete <name>`\n\nRequires **Manage Messages**.",
+        "es": "**Comandos:**\n`t!emb create <nombre>` — embed vacío\n`t!emb edit <nombre>` — modal\n`t!emb preview <nombre>`\n`t!emb send <nombre> [#canal]`\n`t!emb list`\n`t!emb delete <nombre>`\n\nRequiere **Gestionar mensajes**.",
+        "fr": "**Commandes :**\n`t!emb create <nom>` — embed vide\n`t!emb edit <nom>` — modal\n`t!emb preview <nom>`\n`t!emb send <nom> [#salon]`\n`t!emb list`\n`t!emb delete <nom>`\n\nNécessite **Gérer les messages**.",
+        "pt": "**Comandos:**\n`t!emb create <nome>` — cria embed vazio (modal de edição)\n`t!emb edit <nome>` — abre modal para editar\n`t!emb preview <nome>` — pré-visualiza\n`t!emb send <nome> [#canal]` — publica no canal\n`t!emb list` — lista embeds salvos\n`t!emb delete <nome>` — remove\n\nRequer **Gerenciar Mensagens**.",
+    },
+    "emb.help.title": {
+        "de": "📝 Embed Builder",
+        "en": "📝 Embed Builder",
+        "es": "📝 Embed Builder",
+        "fr": "📝 Embed Builder",
+        "pt": "📝 Embed Builder",
+    },
+    "gw.help.body": {
+        "de": "**Befehle (t! oder /):**\n`t!gw create <zeit> <gewinner> <preis>` — z.B. `t!gw create 2h 1 Nitro`\n`t!gw end [id]`\n`t!gw reroll [id]`\n`t!gw list`\n\nZeit: `30m`, `2h`, `1d`",
+        "en": "**Commands (t! or /):**\n`t!gw create <time> <winners> <prize>` — e.g. `t!gw create 2h 1 Nitro`\n`t!gw end [id]`\n`t!gw reroll [id]`\n`t!gw list`\n\nTime: `30m`, `2h`, `1d`",
+        "es": "**Comandos (t! o /):**\n`t!gw create <tiempo> <ganadores> <premio>` — ej: `t!gw create 2h 1 Nitro`\n`t!gw end [id]`\n`t!gw reroll [id]`\n`t!gw list`\n\nTiempo: `30m`, `2h`, `1d`",
+        "fr": "**Commandes (t! ou /) :**\n`t!gw create <durée> <gagnants> <prix>` — ex : `t!gw create 2h 1 Nitro`\n`t!gw end [id]`\n`t!gw reroll [id]`\n`t!gw list`\n\nDurée : `30m`, `2h`, `1d`",
+        "pt": "**Comandos (t! ou /):**\n`t!gw create <tempo> <vencedores> <prêmio>` — ex: `t!gw create 2h 1 Nitro Discord`\n`t!gw end [id]` — encerra agora\n`t!gw reroll [id]` — sorteia de novo\n`t!gw list` — sorteios ativos\n\nTempo: `30m`, `2h`, `1d`",
+    },
+    "gw.help.title": {
+        "de": "🎁 Tiffany Giveaways",
+        "en": "🎁 Tiffany Giveaways",
+        "es": "🎁 Sorteos Tiffany",
+        "fr": "🎁 Giveaways Tiffany",
+        "pt": "🎁 Sorteios Tiffany",
+    },
+    "gw.btn.enter": {
+        "de": "Teilnehmen",
+        "en": "Enter",
+        "es": "Participar",
+        "fr": "Participer",
+        "pt": "Participar",
+    },
+    "gw.created": {
+        "de": "Giveaway erstellt! ID: `{gw_id}` · endet in **{remaining}**",
+        "en": "Giveaway created! ID: `{gw_id}` · ends in **{remaining}**",
+        "es": "¡Sorteo creado! ID: `{gw_id}` · termina en **{remaining}**",
+        "fr": "Giveaway créé ! ID : `{gw_id}` · fin dans **{remaining}**",
+        "pt": "Sorteio criado! ID: `{gw_id}` · termina em **{remaining}**",
+    },
+    "gw.embed.ends_in": {
+        "de": "Endet in",
+        "en": "Ends in",
+        "es": "Termina en",
+        "fr": "Fin dans",
+        "pt": "Termina em",
+    },
+    "gw.embed.footer": {
+        "de": "Host: {host_id} · t!gw list · /giveaway",
+        "en": "Host: {host_id} · t!gw list · /giveaway",
+        "es": "Host: {host_id} · t!gw list · /giveaway",
+        "fr": "Host : {host_id} · t!gw list · /giveaway",
+        "pt": "Host: {host_id} · t!gw list · /giveaway",
+    },
+    "gw.embed.participants": {
+        "de": "Teilnehmer",
+        "en": "Participants",
+        "es": "Participantes",
+        "fr": "Participants",
+        "pt": "Participantes",
+    },
+    "gw.embed.prize": {
+        "de": "Preis",
+        "en": "Prize",
+        "es": "Premio",
+        "fr": "Prix",
+        "pt": "Prêmio",
+    },
+    "gw.embed.status": {
+        "de": "Status",
+        "en": "Status",
+        "es": "Estado",
+        "fr": "Statut",
+        "pt": "Status",
+    },
+    "gw.embed.status_ended": {
+        "de": "Beendet",
+        "en": "Ended",
+        "es": "Encerrado",
+        "fr": "Terminé",
+        "pt": "Encerrado",
+    },
+    "gw.embed.title": {
+        "de": "🎁 Tiffany Giveaway",
+        "en": "🎁 Tiffany Giveaway",
+        "es": "🎁 Sorteo Tiffany",
+        "fr": "🎁 Giveaway Tiffany",
+        "pt": "🎁 Sorteio Tiffany",
+    },
+    "gw.embed.winners": {
+        "de": "Gewinner",
+        "en": "Winners",
+        "es": "Ganadores",
+        "fr": "Gagnants",
+        "pt": "Vencedores",
+    },
+    "gw.end.no_entries": {
+        "de": "Giveaway beendet — keine Teilnehmer.",
+        "en": "Giveaway ended — no participants.",
+        "es": "Sorteo cerrado — sin participantes.",
+        "fr": "Giveaway terminé — aucun participant.",
+        "pt": "Sorteio encerrado — nenhum participante.",
+    },
+    "gw.end.not_found": {
+        "de": "Giveaway nicht gefunden oder bereits beendet.",
+        "en": "Giveaway not found or already ended on this server.",
+        "es": "Sorteo no encontrado o ya cerrado en este servidor.",
+        "fr": "Giveaway introuvable ou déjà terminé sur ce serveur.",
+        "pt": "Sorteio não encontrado ou já encerrado neste servidor.",
+    },
+    "gw.end.need_id": {
+        "de": "Gib die ID an: `t!gw end <id>` oder lasse nur ein aktives Giveaway.",
+        "en": "Provide the ID: `t!gw end <id>` or keep only one active giveaway.",
+        "es": "Indica el ID: `t!gw end <id>` o deja solo un sorteo activo.",
+        "fr": "Indique l'ID : `t!gw end <id>` ou garde un seul giveaway actif.",
+        "pt": "Informe o ID: `t!gw end <id>` ou deixe só um sorteio ativo.",
+    },
+    "gw.end.title": {
+        "de": "🎉 Giveaway beendet!",
+        "en": "🎉 Giveaway ended!",
+        "es": "🎉 ¡Sorteo cerrado!",
+        "fr": "🎉 Giveaway terminé !",
+        "pt": "🎉 Sorteio encerrado!",
+    },
+    "gw.end.winners": {
+        "de": "Gewinner: {mentions}",
+        "en": "Winner(s): {mentions}",
+        "es": "Ganador(es): {mentions}",
+        "fr": "Gagnant(s) : {mentions}",
+        "pt": "Vencedor(es): {mentions}",
+    },
+    "gw.enter_ok": {
+        "de": "Du nimmst teil! Viel Glück ✨",
+        "en": "You're in! Good luck ✨",
+        "es": "¡Entraste al sorteo! Buena suerte ✨",
+        "fr": "Tu participes ! Bonne chance ✨",
+        "pt": "Você entrou no sorteio! Boa sorte ✨",
+    },
+    "gw.err.already_in": {
+        "de": "Du nimmst bereits teil! 🎀",
+        "en": "You're already entered! 🎀",
+        "es": "¡Ya estás participando! 🎀",
+        "fr": "Tu participes déjà ! 🎀",
+        "pt": "Você já está participando! 🎀",
+    },
+    "gw.err.bad_duration": {
+        "de": "Ungültige Zeit. Beispiel: `30m`, `2h`, `1d` (min. 1 Min.).",
+        "en": "Invalid duration. Use e.g. `30m`, `2h`, `1d` (min 1 min).",
+        "es": "Tiempo inválido. Usa ej: `30m`, `2h`, `1d` (mín. 1 min).",
+        "fr": "Durée invalide. Ex : `30m`, `2h`, `1d` (min 1 min).",
+        "pt": "Tempo inválido. Use ex: `30m`, `2h`, `1d` (mínimo 1 min).",
+    },
+    "gw.err.bad_prize": {
+        "de": "Beschreibe den Preis.",
+        "en": "Describe the prize.",
+        "es": "Describe el premio.",
+        "fr": "Décris le prix.",
+        "pt": "Descreva o prêmio.",
+    },
+    "gw.err.bad_winners": {
+        "de": "Anzahl Gewinner: zwischen **1** und **20**.",
+        "en": "Number of winners: between **1** and **20**.",
+        "es": "Número de ganadores: entre **1** y **20**.",
+        "fr": "Nombre de gagnants : entre **1** et **20**.",
+        "pt": "Número de vencedores: entre **1** e **20**.",
+    },
+    "gw.err.bots": {
+        "de": "Bots können nicht teilnehmen.",
+        "en": "Bots can't enter.",
+        "es": "Los bots no pueden participar.",
+        "fr": "Les bots ne peuvent pas participer.",
+        "pt": "Bots não podem participar.",
+    },
+    "gw.err.ended": {
+        "de": "Giveaway beendet.",
+        "en": "Giveaway ended.",
+        "es": "Sorteo encerrado.",
+        "fr": "Giveaway terminé.",
+        "pt": "Sorteio encerrado.",
+    },
+    "gw.err.guild_only": {
+        "de": "Nur auf einem Server nutzbar.",
+        "en": "Use this in a server.",
+        "es": "Úsalo en un servidor.",
+        "fr": "Utilise ceci sur un serveur.",
+        "pt": "Use em um servidor.",
+    },
+    "gw.err.max_entries": {
+        "de": "Dieses Giveaway hat das Teilnehmerlimit erreicht.",
+        "en": "This giveaway reached the participant limit.",
+        "es": "Este sorteo alcanzó el límite de participantes.",
+        "fr": "Ce giveaway a atteint la limite de participants.",
+        "pt": "Este sorteio atingiu o limite de participantes.",
+    },
+    "gw.err.missing_perms": {
+        "de": "Du brauchst **Server verwalten**.",
+        "en": "You need **Manage Server** permission.",
+        "es": "Necesitas **Gestionar servidor**.",
+        "fr": "Tu as besoin de **Gérer le serveur**.",
+        "pt": "Precisa da permissão **Gerenciar servidor**.",
+    },
+    "gw.err.not_found": {
+        "de": "Dieses Giveaway ist beendet oder existiert nicht.",
+        "en": "This giveaway ended or doesn't exist.",
+        "es": "Este sorteo ya cerró o no existe.",
+        "fr": "Ce giveaway est terminé ou n'existe pas.",
+        "pt": "Este sorteio já encerrou ou não existe mais.",
+    },
+    "gw.expire.no_entries": {
+        "de": "**Preis:** {prize}\n\nNiemand hat teilgenommen.",
+        "en": "**Prize:** {prize}\n\nNo one entered this time.",
+        "es": "**Premio:** {prize}\n\nNadie participó esta vez.",
+        "fr": "**Prix :** {prize}\n\nPersonne n'a participé.",
+        "pt": "**Prêmio:** {prize}\n\nNinguém participou desta vez.",
+    },
+    "gw.expire.title": {
+        "de": "🎉 Giveaway beendet!",
+        "en": "🎉 Giveaway ended!",
+        "es": "🎉 ¡Sorteo cerrado!",
+        "fr": "🎉 Giveaway terminé !",
+        "pt": "🎉 Sorteio encerrado!",
+    },
+    "gw.expire.title_short": {
+        "de": "🎁 Giveaway beendet",
+        "en": "🎁 Giveaway ended",
+        "es": "🎁 Sorteo cerrado",
+        "fr": "🎁 Giveaway terminé",
+        "pt": "🎁 Sorteio encerrado",
+    },
+    "gw.expire.winners": {
+        "de": "**Preis:** {prize}\n\nGewinner: {mentions}",
+        "en": "**Prize:** {prize}\n\nWinner(s): {mentions}",
+        "es": "**Premio:** {prize}\n\nGanador(es): {mentions}",
+        "fr": "**Prix :** {prize}\n\nGagnant(s) : {mentions}",
+        "pt": "**Prêmio:** {prize}\n\nVencedor(es): {mentions}",
+    },
+    "gw.list.empty": {
+        "de": "Kein aktives Giveaway auf diesem Server.",
+        "en": "No active giveaway on this server.",
+        "es": "Ningún sorteo activo en este servidor.",
+        "fr": "Aucun giveaway actif sur ce serveur.",
+        "pt": "Nenhum sorteio ativo neste servidor.",
+    },
+    "gw.list.line": {
+        "de": "• `{gw_id}` — **{prize}** · {entries} Einträge · {remaining}",
+        "en": "• `{gw_id}` — **{prize}** · {entries} entries · {remaining}",
+        "es": "• `{gw_id}` — **{prize}** · {entries} entradas · {remaining}",
+        "fr": "• `{gw_id}` — **{prize}** · {entries} entrées · {remaining}",
+        "pt": "• `{gw_id}` — **{prize}** · {entries} entradas · {remaining}",
+    },
+    "gw.list.title": {
+        "de": "🎁 Aktive Giveaways",
+        "en": "🎁 Active giveaways",
+        "es": "🎁 Sorteos activos",
+        "fr": "🎁 Giveaways actifs",
+        "pt": "🎁 Sorteios ativos",
+    },
+    "gw.prize_default": {
+        "de": "Preis",
+        "en": "Prize",
+        "es": "Premio",
+        "fr": "Prix",
+        "pt": "Prêmio",
+    },
+    "gw.reroll.no_entries": {
+        "de": "Keine Teilnehmer für Reroll.",
+        "en": "No participants for reroll.",
+        "es": "Sin participantes para reroll.",
+        "fr": "Aucun participant pour le reroll.",
+        "pt": "Sem participantes para reroll.",
+    },
+    "gw.reroll.none_ended": {
+        "de": "Kein beendetes Giveaway auf diesem Server.",
+        "en": "No ended giveaway on this server.",
+        "es": "Ningún sorteo cerrado en este servidor.",
+        "fr": "Aucun giveaway terminé sur ce serveur.",
+        "pt": "Nenhum sorteio encerrado neste servidor.",
+    },
+    "gw.reroll.not_found": {
+        "de": "Beendetes Giveaway nicht gefunden.",
+        "en": "Ended giveaway not found on this server.",
+        "es": "Sorteo cerrado no encontrado en este servidor.",
+        "fr": "Giveaway terminé introuvable sur ce serveur.",
+        "pt": "Sorteio encerrado não encontrado neste servidor.",
+    },
+    "gw.reroll.title": {
+        "de": "🔄 Reroll",
+        "en": "🔄 Reroll",
+        "es": "🔄 Reroll",
+        "fr": "🔄 Reroll",
+        "pt": "🔄 Reroll",
+    },
+    "gw.reroll.winners": {
+        "de": "Neue Gewinner: {mentions}",
+        "en": "New winner(s): {mentions}",
+        "es": "Nuevo(s) ganador(es): {mentions}",
+        "fr": "Nouveau(x) gagnant(s) : {mentions}",
+        "pt": "Novo(s) vencedor(es): {mentions}",
+    },
+    "emb.created": {
+        "de": "Embed **`{name}`** erstellt! Nutze **`/embed edit {name}`** (Slash öffnet das Modal).",
+        "en": "Embed **`{name}`** created! Use **`/embed edit {name}`** (slash opens the edit modal).",
+        "es": "¡Embed **`{name}`** creado! Usa **`/embed edit {name}`** (slash abre el modal).",
+        "fr": "Embed **`{name}`** créé ! Utilise **`/embed edit {name}`** (slash ouvre le modal).",
+        "pt": "Embed **`{name}`** criado! Use **`/embed edit {name}`** (slash abre o modal de edição).",
+    },
+    "emb.default.desc": {
+        "de": "Beschreibung hier — bearbeite mit `t!emb edit {name}`",
+        "en": "Description here — edit with `t!emb edit {name}`",
+        "es": "Descripción aquí — edita con `t!emb edit {name}`",
+        "fr": "Description ici — modifie avec `t!emb edit {name}`",
+        "pt": "Descrição aqui — edite com `t!emb edit {name}`",
+    },
+    "emb.default.title": {
+        "de": "Embed-Titel",
+        "en": "Embed title",
+        "es": "Título del embed",
+        "fr": "Titre de l'embed",
+        "pt": "Título do embed",
+    },
+    "emb.err.bad_channel": {
+        "de": "Ungültiger Kanal.",
+        "en": "Invalid channel.",
+        "es": "Canal inválido.",
+        "fr": "Salon invalide.",
+        "pt": "Canal inválido.",
+    },
+    "emb.err.bad_name": {
+        "de": "Ungültiger Name (Buchstaben, Zahlen, `-`, max. 32).",
+        "en": "Invalid name (letters, numbers, `-`, max 32).",
+        "es": "Nombre inválido (letras, números, `-`, máx 32).",
+        "fr": "Nom invalide (lettres, chiffres, `-`, max 32).",
+        "pt": "Nome inválido (use letras, números, `-`, máx 32).",
+    },
+    "emb.err.exists": {
+        "de": "**`{name}`** existiert bereits. Nutze `t!emb edit {name}`.",
+        "en": "**`{name}`** already exists. Use `t!emb edit {name}`.",
+        "es": "**`{name}`** ya existe. Usa `t!emb edit {name}`.",
+        "fr": "**`{name}`** existe déjà. Utilise `t!emb edit {name}`.",
+        "pt": "Já existe **`{name}`**. Use `t!emb edit {name}`.",
+    },
+    "emb.err.not_found": {
+        "de": "Embed **`{name}`** nicht gefunden.",
+        "en": "Embed **`{name}`** not found.",
+        "es": "Embed **`{name}`** no encontrado.",
+        "fr": "Embed **`{name}`** introuvable.",
+        "pt": "Embed **`{name}`** não encontrado.",
+    },
+    "emb.err.perms": {
+        "de": "Du brauchst **Nachrichten verwalten**.",
+        "en": "You need **Manage Messages**.",
+        "es": "Necesitas **Gestionar mensajes**.",
+        "fr": "Tu as besoin de **Gérer les messages**.",
+        "pt": "Precisa de **Gerenciar Mensagens**.",
+    },
+    "emb.list.empty": {
+        "de": "Keine Embeds gespeichert. Erstelle mit `t!emb create rules`.",
+        "en": "No saved embeds. Create with `t!emb create rules`.",
+        "es": "Ningún embed guardado. Crea con `t!emb create reglas`.",
+        "fr": "Aucun embed enregistré. Crée avec `t!emb create regles`.",
+        "pt": "Nenhum embed salvo. Crie com `t!emb create regras`.",
+    },
+    "emb.list.title": {
+        "de": "📝 Gespeicherte Embeds",
+        "en": "📝 Saved embeds",
+        "es": "📝 Embeds guardados",
+        "fr": "📝 Embeds enregistrés",
+        "pt": "📝 Embeds salvos",
+    },
+    "emb.modal.color_label": {
+        "de": "Farbe (hex)",
+        "en": "Color (hex)",
+        "es": "Color (hex)",
+        "fr": "Couleur (hex)",
+        "pt": "Cor (hex)",
+    },
+    "emb.modal.desc_label": {
+        "de": "Beschreibung",
+        "en": "Description",
+        "es": "Descripción",
+        "fr": "Description",
+        "pt": "Descrição",
+    },
+    "emb.modal.footer_label": {
+        "de": "Footer",
+        "en": "Footer",
+        "es": "Footer",
+        "fr": "Footer",
+        "pt": "Footer",
+    },
+    "emb.modal.title": {
+        "de": "Embed bearbeiten",
+        "en": "Edit embed",
+        "es": "Editar embed",
+        "fr": "Modifier l'embed",
+        "pt": "Editar embed",
+    },
+    "emb.modal.title_label": {
+        "de": "Titel",
+        "en": "Title",
+        "es": "Título",
+        "fr": "Titre",
+        "pt": "Título",
+    },
+    "emb.removed": {
+        "de": "Embed **`{name}`** entfernt.",
+        "en": "Embed **`{name}`** removed.",
+        "es": "Embed **`{name}`** eliminado.",
+        "fr": "Embed **`{name}`** supprimé.",
+        "pt": "Embed **`{name}`** removido.",
+    },
+    "emb.sent": {
+        "de": "Embed **`{name}`** gesendet in {channel}.",
+        "en": "Embed **`{name}`** sent to {channel}.",
+        "es": "Embed **`{name}`** enviado en {channel}.",
+        "fr": "Embed **`{name}`** envoyé dans {channel}.",
+        "pt": "Embed **`{name}`** enviado em {channel}.",
+    },
+    "emb.updated": {
+        "de": "Embed **`{name}`** aktualisiert! Nutze `t!emb send {name}`.",
+        "en": "Embed **`{name}`** updated! Use `t!emb send {name}`.",
+        "es": "¡Embed **`{name}`** actualizado! Usa `t!emb send {name}`.",
+        "fr": "Embed **`{name}`** mis à jour ! Utilise `t!emb send {name}`.",
+        "pt": "Embed **`{name}`** atualizado! Use `t!emb send {name}`.",
+    },
+    "emb.use_slash_edit": {
+        "de": "Nutze **`/embed edit`** (Slash), um das Modal zu öffnen.",
+        "en": "Use **`/embed edit`** (slash) to open the edit modal.",
+        "es": "Usa **`/embed edit`** (slash) para abrir el modal.",
+        "fr": "Utilise **`/embed edit`** (slash) pour ouvrir le modal.",
+        "pt": "Use **`/embed edit`** (slash) para abrir o modal no Discord.",
     },
     "status.warp.ok": {
         "de": "Online (Musik OK)",

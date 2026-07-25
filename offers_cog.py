@@ -2308,6 +2308,7 @@ async def _run_deals_cycle_inner() -> None:
                 embed.set_image(url=deal["image"])
 
             content = None
+            mention_role_id = None
             if target["is_primary"]:
                 global _mention_count_ofertas, _mention_date_ofertas
                 today_br = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
@@ -2320,14 +2321,21 @@ async def _run_deals_cycle_inner() -> None:
                 guild = getattr(target["channel"], "guild", None)
                 if is_ultra and cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
                     content = f"<@&{cargo_id}>"
+                    mention_role_id = cargo_id
                     _mention_count_ofertas += 1
 
+            send_kwargs: dict = {"content": content, "embed": embed, "file": file}
+            if mention_role_id:
+                send_kwargs["allowed_mentions"] = discord.AllowedMentions(
+                    roles=[mention_role_id], everyone=False, users=False,
+                )
             view = _build_view(deal, guild_tags=use_tags)
             try:
                 if view is not None:
-                    await target["channel"].send(content=content, embed=embed, file=file, view=view)
+                    send_kwargs["view"] = view
+                    await target["channel"].send(**send_kwargs)
                 else:
-                    await target["channel"].send(content=content, embed=embed, file=file)
+                    await target["channel"].send(**send_kwargs)
                 posted_any = True
             except Exception as e:
                 log.error(f"Failed to post deal in {target['channel'].id}: {e}")

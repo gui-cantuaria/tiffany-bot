@@ -12,7 +12,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from locale_utils import slash_desc_kwargs
+from locale_utils import slash_desc_kwargs, resolve_lang, tr, GuildLang
+
+
+def _ctx_lang(ctx: commands.Context) -> GuildLang:
+    return resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
 
 log = logging.getLogger("tiffany-bot")
 
@@ -88,32 +92,33 @@ def _build_from_data(data: dict[str, Any]) -> discord.Embed:
     return em
 
 
-class EmbedEditModal(discord.ui.Modal, title="Editar embed"):
-    def __init__(self, guild_id: int, name: str, data: dict[str, Any]):
-        super().__init__()
+class EmbedEditModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, name: str, data: dict[str, Any], lang: GuildLang):
+        super().__init__(title=tr(lang, "emb.modal.title"))
         self.guild_id = guild_id
         self.name = name
+        self.lang = lang
         self.title_input = discord.ui.TextInput(
-            label="Título",
+            label=tr(lang, "emb.modal.title_label"),
             default=(data.get("title") or "")[:256],
             max_length=256,
             required=False,
         )
         self.desc_input = discord.ui.TextInput(
-            label="Descrição",
+            label=tr(lang, "emb.modal.desc_label"),
             style=discord.TextStyle.paragraph,
             default=(data.get("description") or "")[:4000],
             max_length=4000,
             required=False,
         )
         self.color_input = discord.ui.TextInput(
-            label="Cor (hex)",
+            label=tr(lang, "emb.modal.color_label"),
             default=hex(int(data.get("color") or BRAND_PINK)).replace("0x", "#"),
             max_length=16,
             required=False,
         )
         self.footer_input = discord.ui.TextInput(
-            label="Footer",
+            label=tr(lang, "emb.modal.footer_label"),
             default=(data.get("footer") or "")[:256],
             max_length=256,
             required=False,
@@ -136,7 +141,7 @@ class EmbedEditModal(discord.ui.Modal, title="Editar embed"):
         }
         _save()
         await interaction.response.send_message(
-            f"Embed **`{self.name}`** atualizado! Use `t!emb send {self.name}`.",
+            tr(self.lang, "emb.updated", name=self.name),
             ephemeral=True,
         )
 
@@ -158,19 +163,11 @@ async def setup(bot: commands.Bot):
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_embed(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
         await ctx.send(
             embed=discord.Embed(
-                title="📝 Embed Builder",
-                description=(
-                    "**Comandos:**\n"
-                    "`t!emb create <nome>` — cria embed vazio (modal de edição)\n"
-                    "`t!emb edit <nome>` — abre modal para editar\n"
-                    "`t!emb preview <nome>` — pré-visualiza\n"
-                    "`t!emb send <nome> [#canal]` — publica no canal\n"
-                    "`t!emb list` — lista embeds salvos\n"
-                    "`t!emb delete <nome>` — remove\n\n"
-                    "Requer **Gerenciar Mensagens**."
-                ),
+                title=tr(lang, "emb.help.title"),
+                description=tr(lang, "emb.help.body"),
                 color=BRAND_PINK,
             )
         )
@@ -183,20 +180,21 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="create", aliases=["new", "add"])
     async def emb_create(ctx: commands.Context, name: str):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         name = re.sub(r"[^\w\-]", "", (name or "").strip().lower())
         if not name or len(name) > 32:
-            await ctx.send("Nome inválido (use letras, números, `-`, máx 32).")
+            await ctx.send(tr(lang, "emb.err.bad_name"))
             return
         bucket = _guild_bucket(ctx.guild.id)
         if name in bucket:
-            await ctx.send(f"Já existe **`{name}`**. Use `t!emb edit {name}`.")
+            await ctx.send(tr(lang, "emb.err.exists", name=name))
             return
         bucket[name] = {
-            "title": "Título do embed",
-            "description": "Descrição aqui — edite com `t!emb edit " + name + "`",
+            "title": tr(lang, "emb.default.title"),
+            "description": tr(lang, "emb.default.desc", name=name),
             "color": BRAND_PINK,
             "footer": "",
             "thumbnail": "",
@@ -204,77 +202,78 @@ async def setup(bot: commands.Bot):
             "fields": [],
         }
         _save()
-        modal = EmbedEditModal(ctx.guild.id, name, bucket[name])
+        modal = EmbedEditModal(ctx.guild.id, name, bucket[name], lang)
         if ctx.interaction:
             await ctx.interaction.response.send_modal(modal)
         else:
             await ctx.send(
                 embed=discord.Embed(
-                    description=(
-                        f"Embed **`{name}`** criado! "
-                        f"Use **`/embed edit {name}`** (slash abre o modal de edição)."
-                    ),
+                    description=tr(lang, "emb.created", name=name),
                     color=BRAND_PINK,
                 )
             )
 
     @cmd_embed.command(name="edit", aliases=["e"])
     async def emb_edit(ctx: commands.Context, name: str):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         name = (name or "").strip().lower()
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(f"Embed **`{name}`** não encontrado.")
+            await ctx.send(tr(lang, "emb.err.not_found", name=name))
             return
-        modal = EmbedEditModal(ctx.guild.id, name, data)
+        modal = EmbedEditModal(ctx.guild.id, name, data, lang)
         if ctx.interaction:
             await ctx.interaction.response.send_modal(modal)
         else:
-            await ctx.send("Use **`/embed edit`** (slash) para abrir o modal no Discord.")
+            await ctx.send(tr(lang, "emb.use_slash_edit"))
 
     @cmd_embed.command(name="preview", aliases=["pv", "show"])
     async def emb_preview(ctx: commands.Context, name: str):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         name = (name or "").strip().lower()
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(f"Embed **`{name}`** não encontrado.")
+            await ctx.send(tr(lang, "emb.err.not_found", name=name))
             return
         await ctx.send(embed=_build_from_data(data))
 
     @cmd_embed.command(name="send", aliases=["post", "s"])
     async def emb_send(ctx: commands.Context, name: str, channel: Optional[discord.TextChannel] = None):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         name = (name or "").strip().lower()
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(f"Embed **`{name}`** não encontrado.")
+            await ctx.send(tr(lang, "emb.err.not_found", name=name))
             return
         target = channel or ctx.channel
         if not isinstance(target, discord.TextChannel):
-            await ctx.send("Canal inválido.")
+            await ctx.send(tr(lang, "emb.err.bad_channel"))
             return
         await target.send(embed=_build_from_data(data))
-        await ctx.send(f"Embed **`{name}`** enviado em {target.mention}.", delete_after=8)
+        await ctx.send(tr(lang, "emb.sent", name=name, channel=target.mention), delete_after=8)
 
     @cmd_embed.command(name="list", aliases=["ls"])
     async def emb_list(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         names = sorted(_guild_bucket(ctx.guild.id).keys())
         if not names:
-            await ctx.send("Nenhum embed salvo. Crie com `t!emb create regras`.")
+            await ctx.send(tr(lang, "emb.list.empty"))
             return
         await ctx.send(
             embed=discord.Embed(
-                title="📝 Embeds salvos",
+                title=tr(lang, "emb.list.title"),
                 description="\n".join(f"• **`{n}`**" for n in names)[:4000],
                 color=BRAND_PINK,
             )
@@ -282,14 +281,15 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="delete", aliases=["del", "rm"])
     async def emb_delete(ctx: commands.Context, name: str):
+        lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send("Precisa de **Gerenciar Mensagens**.", ephemeral=True)
+            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
             return
         name = (name or "").strip().lower()
         bucket = _guild_bucket(ctx.guild.id)
         if name not in bucket:
-            await ctx.send(f"Embed **`{name}`** não encontrado.")
+            await ctx.send(tr(lang, "emb.err.not_found", name=name))
             return
         del bucket[name]
         _save()
-        await ctx.send(f"Embed **`{name}`** removido.", delete_after=8)
+        await ctx.send(tr(lang, "emb.removed", name=name), delete_after=8)

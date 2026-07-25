@@ -9,14 +9,22 @@ import random
 import re
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from locale_utils import slash_desc_kwargs
+from locale_utils import slash_desc_kwargs, resolve_lang, resolve_guild_lang, interaction_lang, tr, GuildLang
+
+
+def _ctx_lang(ctx: commands.Context) -> GuildLang:
+    return resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
+
+
+def _guild_lang(bot: commands.Bot, guild_id: int) -> GuildLang:
+    guild = bot.get_guild(guild_id)
+    return resolve_guild_lang(guild)
 
 log = logging.getLogger("tiffany-bot")
 
@@ -75,36 +83,37 @@ def _fmt_remaining(seconds: float) -> str:
     return f"{s}s"
 
 
-def _build_giveaway_embed(gw: dict, *, ended: bool = False) -> discord.Embed:
+def _build_giveaway_embed(gw: dict, lang: GuildLang, *, ended: bool = False) -> discord.Embed:
     ends_at = float(gw.get("ends_at") or 0)
     remaining = ends_at - time.time()
     winners = int(gw.get("winners") or 1)
     entries = gw.get("entries") or []
     host_id = int(gw.get("host_id") or 0)
-    prize = (gw.get("prize") or "Prêmio").strip()
+    prize = (gw.get("prize") or tr(lang, "gw.prize_default")).strip()
 
     em = discord.Embed(
-        title="🎁 Sorteio Tiffany",
-        description=f"**Prêmio:** {prize[:500]}",
+        title=tr(lang, "gw.embed.title"),
+        description=f"**{tr(lang, 'gw.embed.prize')}:** {prize[:500]}",
         color=BRAND_PINK if not ended else 0x808080,
     )
-    em.add_field(name="Vencedores", value=str(winners), inline=True)
-    em.add_field(name="Participantes", value=str(len(entries)), inline=True)
+    em.add_field(name=tr(lang, "gw.embed.winners"), value=str(winners), inline=True)
+    em.add_field(name=tr(lang, "gw.embed.participants"), value=str(len(entries)), inline=True)
     if ended:
-        em.add_field(name="Status", value="Encerrado", inline=True)
+        em.add_field(name=tr(lang, "gw.embed.status"), value=tr(lang, "gw.embed.status_ended"), inline=True)
     else:
-        em.add_field(name="Termina em", value=_fmt_remaining(remaining), inline=True)
+        em.add_field(name=tr(lang, "gw.embed.ends_in"), value=_fmt_remaining(remaining), inline=True)
     if host_id:
-        em.set_footer(text=f"Host: {host_id} · t!gw list · /giveaway")
+        em.set_footer(text=tr(lang, "gw.embed.footer", host_id=host_id))
     return em
 
 
 class GiveawayEnterView(discord.ui.View):
-    def __init__(self, giveaway_id: str):
+    def __init__(self, giveaway_id: str, *, lang: GuildLang = "en"):
         super().__init__(timeout=None)
         self.giveaway_id = giveaway_id
+        self.lang = lang
         btn = discord.ui.Button(
-            label="Participar",
+            label=tr(lang, "gw.btn.enter"),
             emoji="🎉",
             style=discord.ButtonStyle.success,
             custom_id=f"tiffany_gw_enter:{giveaway_id}",
@@ -113,40 +122,40 @@ class GiveawayEnterView(discord.ui.View):
         self.add_item(btn)
 
     async def _enter_callback(self, interaction: discord.Interaction):
+        lang = interaction_lang(interaction)
         if interaction.user.bot:
-            await interaction.response.send_message("Bots não podem participar.", ephemeral=True)
+            await interaction.response.send_message(tr(lang, "gw.err.bots"), ephemeral=True)
             return
         _load_state()
         gw = _state["active"].get(self.giveaway_id)
         if not gw:
-            await interaction.response.send_message(
-                "Este sorteio já encerrou ou não existe mais.", ephemeral=True,
-            )
+            await interaction.response.send_message(tr(lang, "gw.err.not_found"), ephemeral=True)
             return
         if time.time() >= float(gw.get("ends_at") or 0):
-            await interaction.response.send_message("Sorteio encerrado.", ephemeral=True)
+            await interaction.response.send_message(tr(lang, "gw.err.ended"), ephemeral=True)
             return
         uid = interaction.user.id
         entries = gw.setdefault("entries", [])
         if uid in entries:
-            await interaction.response.send_message("Você já está participando! 🎀", ephemeral=True)
+            await interaction.response.send_message(tr(lang, "gw.err.already_in"), ephemeral=True)
             return
         if len(entries) >= _MAX_ENTRIES_PER_GW:
-            await interaction.response.send_message(
-                "Este sorteio atingiu o limite de participantes.", ephemeral=True,
-            )
+            await interaction.response.send_message(tr(lang, "gw.err.max_entries"), ephemeral=True)
             return
         entries.append(uid)
         _save_state()
-        await interaction.response.send_message("Você entrou no sorteio! Boa sorte ✨", ephemeral=True)
+        await interaction.response.send_message(tr(lang, "gw.enter_ok"), ephemeral=True)
         try:
             if interaction.message:
-                await interaction.message.edit(embed=_build_giveaway_embed(gw), view=self)
+                glang = _guild_lang(interaction.client, int(gw.get("guild_id") or 0))
+                await interaction.message.edit(embed=_build_giveaway_embed(gw, glang), view=self)
         except Exception:
             pass
 
 
-async def _finish_giveaway(bot: commands.Bot, gw_id: str, *, reroll: bool = False) -> Optional[list[int]]:
+async def _finish_giveaway(
+    bot: commands.Bot, gw_id: str, *, lang: Optional[GuildLang] = None,
+) -> Optional[list[int]]:
     _load_state()
     gw = _state["active"].pop(gw_id, None)
     if not gw:
@@ -163,6 +172,7 @@ async def _finish_giveaway(bot: commands.Bot, gw_id: str, *, reroll: bool = Fals
     _state["ended"][gw_id] = gw
     _save_state()
 
+    glang = lang or _guild_lang(bot, int(gw.get("guild_id") or 0))
     channel_id = int(gw.get("channel_id") or 0)
     msg_id = int(gw.get("message_id") or 0)
     channel = bot.get_channel(channel_id)
@@ -174,7 +184,7 @@ async def _finish_giveaway(bot: commands.Bot, gw_id: str, *, reroll: bool = Fals
     if channel and msg_id:
         try:
             msg = await channel.fetch_message(msg_id)
-            await msg.edit(embed=_build_giveaway_embed(gw, ended=True), view=None)
+            await msg.edit(embed=_build_giveaway_embed(gw, glang, ended=True), view=None)
         except Exception:
             pass
     return picked
@@ -184,8 +194,9 @@ class GiveawaysCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         _load_state()
-        for gw_id in _state.get("active", {}):
-            self.bot.add_view(GiveawayEnterView(gw_id))
+        for gw_id, gw in _state.get("active", {}).items():
+            glang = _guild_lang(bot, int(gw.get("guild_id") or 0))
+            self.bot.add_view(GiveawayEnterView(gw_id, lang=glang))
         self._expire_loop.start()
 
     def cog_unload(self):
@@ -200,7 +211,9 @@ class GiveawaysCog(commands.Cog):
             if now >= float(gw.get("ends_at") or 0)
         ]
         for gw_id in expired:
-            picked = await _finish_giveaway(self.bot, gw_id)
+            gw = _state["active"].get(gw_id, {})
+            glang = _guild_lang(self.bot, int(gw.get("guild_id") or 0))
+            picked = await _finish_giveaway(self.bot, gw_id, lang=glang)
             if picked is None:
                 continue
             gw = _state["ended"].get(gw_id, {})
@@ -211,21 +224,21 @@ class GiveawaysCog(commands.Cog):
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
                     channel = None
-            prize = gw.get("prize") or "Prêmio"
+            prize = (gw.get("prize") or tr(glang, "gw.prize_default"))[:300]
             if channel and picked:
                 mentions = " ".join(f"<@{u}>" for u in picked)
                 await channel.send(
                     embed=discord.Embed(
-                        title="🎉 Sorteio encerrado!",
-                        description=f"**Prêmio:** {prize[:300]}\n\nVencedor(es): {mentions}",
+                        title=tr(glang, "gw.expire.title"),
+                        description=tr(glang, "gw.expire.winners", prize=prize, mentions=mentions),
                         color=BRAND_PINK,
                     )
                 )
             elif channel:
                 await channel.send(
                     embed=discord.Embed(
-                        title="🎁 Sorteio encerrado",
-                        description=f"**Prêmio:** {prize[:300]}\n\nNinguém participou desta vez.",
+                        title=tr(glang, "gw.expire.title_short"),
+                        description=tr(glang, "gw.expire.no_entries", prize=prize),
                         color=0x808080,
                     )
                 )
@@ -247,17 +260,11 @@ async def setup(bot: commands.Bot):
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_giveaway(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
         await ctx.send(
             embed=discord.Embed(
-                title="🎁 Sorteios Tiffany",
-                description=(
-                    "**Comandos (t! ou /):**\n"
-                    "`t!gw create <tempo> <vencedores> <prêmio>` — ex: `t!gw create 2h 1 Nitro Discord`\n"
-                    "`t!gw end [id]` — encerra agora\n"
-                    "`t!gw reroll [id]` — sorteia de novo\n"
-                    "`t!gw list` — sorteios ativos\n\n"
-                    "Tempo: `30m`, `2h`, `1d`"
-                ),
+                title=tr(lang, "gw.help.title"),
+                description=tr(lang, "gw.help.body"),
                 color=BRAND_PINK,
             )
         )
@@ -272,19 +279,20 @@ async def setup(bot: commands.Bot):
         *,
         prize: str,
     ):
+        lang = _ctx_lang(ctx)
         if not ctx.guild:
-            await ctx.send("Use em um servidor.", ephemeral=True)
+            await ctx.send(tr(lang, "gw.err.guild_only"), ephemeral=True)
             return
         secs = _parse_duration(duration)
         if not secs or secs < 60:
-            await ctx.send("Tempo inválido. Use ex: `30m`, `2h`, `1d` (mínimo 1 min).")
+            await ctx.send(tr(lang, "gw.err.bad_duration"))
             return
         if winners < 1 or winners > 20:
-            await ctx.send("Número de vencedores: entre **1** e **20**.")
+            await ctx.send(tr(lang, "gw.err.bad_winners"))
             return
         prize = (prize or "").strip()
         if len(prize) < 2:
-            await ctx.send("Descreva o prêmio.")
+            await ctx.send(tr(lang, "gw.err.bad_prize"))
             return
 
         gw_id = uuid.uuid4().hex[:12]
@@ -300,8 +308,8 @@ async def setup(bot: commands.Bot):
             "entries": [],
             "created_at": time.time(),
         }
-        view = GiveawayEnterView(gw_id)
-        em = _build_giveaway_embed(gw)
+        view = GiveawayEnterView(gw_id, lang=lang)
+        em = _build_giveaway_embed(gw, lang)
         msg = await ctx.send(embed=em, view=view)
         gw["message_id"] = msg.id
         _load_state()
@@ -310,7 +318,7 @@ async def setup(bot: commands.Bot):
         bot.add_view(view)
         await ctx.send(
             embed=discord.Embed(
-                description=f"Sorteio criado! ID: `{gw_id}` · termina em **{_fmt_remaining(secs)}**",
+                description=tr(lang, "gw.created", gw_id=gw_id, remaining=_fmt_remaining(secs)),
                 color=BRAND_PINK,
             ),
             delete_after=15,
@@ -319,11 +327,13 @@ async def setup(bot: commands.Bot):
     @gw_create.error
     async def gw_create_error(ctx: commands.Context, error: Exception):
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send("Precisa da permissão **Gerenciar servidor**.", ephemeral=True)
+            lang = _ctx_lang(ctx)
+            await ctx.send(tr(lang, "gw.err.missing_perms"), ephemeral=True)
 
     @cmd_giveaway.command(name="end", aliases=["stop", "finish"])
     @commands.has_permissions(manage_guild=True)
     async def gw_end(ctx: commands.Context, gw_id: str = ""):
+        lang = _ctx_lang(ctx)
         _load_state()
         if not gw_id:
             active = [
@@ -331,29 +341,30 @@ async def setup(bot: commands.Bot):
                 if int(g.get("guild_id") or 0) == ctx.guild.id
             ]
             if len(active) != 1:
-                await ctx.send("Informe o ID: `t!gw end <id>` ou deixe só um sorteio ativo.")
+                await ctx.send(tr(lang, "gw.end.need_id"))
                 return
             gw_id = active[0]["id"]
         gw = _state["active"].get(gw_id)
         if not gw or int(gw.get("guild_id") or 0) != ctx.guild.id:
-            await ctx.send("Sorteio não encontrado ou já encerrado neste servidor.")
+            await ctx.send(tr(lang, "gw.end.not_found"))
             return
-        picked = await _finish_giveaway(ctx.bot, gw_id)
+        picked = await _finish_giveaway(ctx.bot, gw_id, lang=lang)
         if picked:
             mentions = " ".join(f"<@{u}>" for u in picked)
             await ctx.send(
                 embed=discord.Embed(
-                    title="🎉 Sorteio encerrado!",
-                    description=f"Vencedor(es): {mentions}",
+                    title=tr(lang, "gw.end.title"),
+                    description=tr(lang, "gw.end.winners", mentions=mentions),
                     color=BRAND_PINK,
                 )
             )
         else:
-            await ctx.send("Sorteio encerrado — nenhum participante.")
+            await ctx.send(tr(lang, "gw.end.no_entries"))
 
     @cmd_giveaway.command(name="reroll", aliases=["rr"])
     @commands.has_permissions(manage_guild=True)
     async def gw_reroll(ctx: commands.Context, gw_id: str = ""):
+        lang = _ctx_lang(ctx)
         _load_state()
         if not gw_id:
             ended = [
@@ -361,50 +372,57 @@ async def setup(bot: commands.Bot):
                 if int(g.get("guild_id") or 0) == ctx.guild.id
             ]
             if not ended:
-                await ctx.send("Nenhum sorteio encerrado neste servidor.")
+                await ctx.send(tr(lang, "gw.reroll.none_ended"))
                 return
             gw = ended[-1]
             gw_id = gw["id"]
         else:
             gw = _state["ended"].get(gw_id)
         if not gw or int(gw.get("guild_id") or 0) != ctx.guild.id:
-            await ctx.send("Sorteio encerrado não encontrado neste servidor.")
+            await ctx.send(tr(lang, "gw.reroll.not_found"))
             return
         entries = list(dict.fromkeys(gw.get("entries") or []))
         if not entries:
-            await ctx.send("Sem participantes para reroll.")
+            await ctx.send(tr(lang, "gw.reroll.no_entries"))
             return
         winners_n = max(1, min(int(gw.get("winners") or 1), len(entries)))
         picked = random.sample(entries, winners_n)
         mentions = " ".join(f"<@{u}>" for u in picked)
         await ctx.send(
             embed=discord.Embed(
-                title="🔄 Reroll",
-                description=f"Novo(s) vencedor(es): {mentions}",
+                title=tr(lang, "gw.reroll.title"),
+                description=tr(lang, "gw.reroll.winners", mentions=mentions),
                 color=BRAND_PINK,
             )
         )
 
     @cmd_giveaway.command(name="list", aliases=["ls"])
     async def gw_list(ctx: commands.Context):
+        lang = _ctx_lang(ctx)
         _load_state()
         active = [
             g for g in _state["active"].values()
             if int(g.get("guild_id") or 0) == (ctx.guild.id if ctx.guild else 0)
         ]
         if not active:
-            await ctx.send("Nenhum sorteio ativo neste servidor.")
+            await ctx.send(tr(lang, "gw.list.empty"))
             return
         lines = []
         for g in active:
             rem = _fmt_remaining(float(g.get("ends_at") or 0) - time.time())
             lines.append(
-                f"• `{g['id']}` — **{g.get('prize', '?')[:40]}** · "
-                f"{len(g.get('entries') or [])} entradas · {rem}"
+                tr(
+                    lang,
+                    "gw.list.line",
+                    gw_id=g["id"],
+                    prize=(g.get("prize") or "?")[:40],
+                    entries=len(g.get("entries") or []),
+                    remaining=rem,
+                )
             )
         await ctx.send(
             embed=discord.Embed(
-                title="🎁 Sorteios ativos",
+                title=tr(lang, "gw.list.title"),
                 description="\n".join(lines)[:4000],
                 color=BRAND_PINK,
             )
