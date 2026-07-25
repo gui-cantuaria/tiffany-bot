@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Komutlar ve yardım",
   "help.desc": "Sesli müzik, AI sohbet, zar, tech haberleri ve fırsatlar.\n\n**\t!** veya **/** · sese katıl → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Müzik",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10.000 hit) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — ses kanalında çal · `/skip` — parçayı atla · `/pause` — duraklat · `/resume` — devam\n\n`/queue` — kuyruk + çalan parça · `/shuffle` — karıştır · `/loop` — tekrar · `/replay` — baştan çal\n\n`/random` — rastgele hit (10k) · `/autoplay` — autoplay · `/lyrics` — şarkı sözü · `/seek` — +30 / -15\n\n`/volume` — stream sesi (t!v) · `/clear` — durdur ve çık · `/nonstop` — 24/7 · `/clip` — son 30sn · `/playlist` — listeler",
   "help.chat.title": "💬 Sohbet ve AI",
   "help.chat.body": "`/chat` — AI (görsel OK)\n\n`/roleplay` (t!rp) — gündelik sohbet · `t!rp config` — kişilik\n\n`/game` — oyunlar (Steam/Epic)\n\n`/summary` (t!su) — link özeti",
   "help.dice.title": "🎲 Zar",

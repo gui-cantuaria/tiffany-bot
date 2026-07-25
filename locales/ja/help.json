@@ -2,7 +2,7 @@
   "help.title": "Tiffany · コマンドとヘルプ",
   "help.desc": "音楽、AIチャット、ダイス、テックニュース、お得情報。\n\n接頭 **\t!** または **/** · ボイス参加 → **/play**。\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 音楽",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000曲) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — ボイスで再生 · `/skip` — スキップ · `/pause` — 一時停止 · `/resume` — 再開\n\n`/queue` — キュー + 再生中 · `/shuffle` — シャッフル · `/loop` — ループ · `/replay` — 最初から\n\n`/random` — ランダム曲 (10k) · `/autoplay` — 自動再生 · `/lyrics` — 歌詞 · `/seek` — +30 / -15\n\n`/volume` — 音量 (t!v) · `/clear` — 停止して退出 · `/nonstop` — 24/7 · `/clip` — 直近30秒 · `/playlist` — プレイリスト",
   "help.chat.title": "💬 チャットとAI",
   "help.chat.body": "`/chat` — AI質問（画像OK）\n\n`/roleplay` (t!rp) — カジュアルチャット · `t!rp config` — 性格設定\n\n`/game` — ゲーム（Steam/Epic）\n\n`/summary` (t!su) — リンク要約",
   "help.dice.title": "🎲 ダイス",

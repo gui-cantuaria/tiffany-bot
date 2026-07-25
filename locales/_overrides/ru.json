@@ -1,0 +1,18 @@
+{
+  "emb.modal.footer_label": "Подвал",
+  "game.filter.multiplayer": "Мультиплеер",
+  "game.filter.rating.metacritic": "Метакритик",
+  "game.filter.rating.opencritic": "ОпенКритик",
+  "game.filter.rating.steam": "Стим",
+  "game.filter.singleplayer": "Одиночная игра",
+  "gw.reroll.title": "🔄 Переигровка",
+  "mod.btn.anti_spam": "Анти-спам",
+  "mod.field.anti_spam": "Анти-спам",
+  "rewind.title": "🎧 Музыкальный итог Tiffany",
+  "status.field.ping": "Пинг",
+  "status.field.uptime": "Время работы",
+  "status.field.warp": "🌐 WARP (Ютуб)",
+  "status.mode.autoplay": "▶️ Автовоспроизведение",
+  "status.mode.loop": "🔁 Повтор",
+  "status.mode.stay": "🔒 Круглосуточно"
+}

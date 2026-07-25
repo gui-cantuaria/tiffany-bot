@@ -1,5 +1,4 @@
 {
-  "volume.title": "Volym",
   "volume.global": "🔊 **Tiffanys streamvolym: {pct}%** (0–150)\n\nDetta påverkar **alla** i röstkanalen.",
   "volume.client_title": "🎧 Vill du justera volymen bara för dig?",
   "volume.client_body": "I Discord: **högerklicka** på Tiffany i röstkanalen → **Användarvolym**.\n\nDet är **klientbaserat** — påverkar inte volymen för andra medlemmar.",

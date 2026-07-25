@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Kommandon och hjälp",
   "help.desc": "Musik, AI-chatt, tärningar, tech-nyheter och erbjudanden.\n\nPrefix **\t!** eller **/** · gå med i röst → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Musik",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — spela i röst · `/skip` — hoppa över · `/pause` — pausa · `/resume` — fortsätt\n\n`/queue` — kö + spelas nu · `/shuffle` — blanda · `/loop` — loop · `/replay` — spela om\n\n`/random` — slumpmässig hit (10k) · `/autoplay` — autoplay · `/lyrics` — text · `/seek` — +30 / -15\n\n`/volume` — streamvolym (t!v) · `/clear` — stoppa & lämna · `/nonstop` — 24/7 · `/clip` — sista 30s · `/playlist` — listor",
   "help.chat.title": "💬 Chatt och AI",
   "help.chat.body": "`/chat` — AI-frågor (bilder OK)\n\n`/roleplay` (t!rp) — avslappnad chatt · `t!rp config` — personlighet\n\n`/game` — spel (Steam/Epic)\n\n`/summary` (t!su) — sammanfatta länk",
   "help.dice.title": "🎲 Tärning",

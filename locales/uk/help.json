@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Команди та допомога",
   "help.desc": "Музика, ШІ-чат, кубики, новини технологій та знижки.\n\nПрефікс **`t!`** або **`/`** · приєднатися до голосового каналу → **`/play`**.\n\n**`/language`** · **`/stats`** · **`/updates`**",
   "help.music.title": "🎵 Музика",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000 треків) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — музика у голосовому · `/skip` — пропустити · `/pause` — пауза · `/resume` — продовжити\n\n`/queue` — черга + зараз грає · `/shuffle` — перемішати · `/loop` — повтор · `/replay` — з початку\n\n`/random` — випадковий хіт (10k) · `/autoplay` — autoplay · `/lyrics` — текст · `/seek` — +30 / -15\n\n`/volume` — гучність (t!v) · `/clear` — стоп і вихід · `/nonstop` — 24/7 · `/clip` — останні 30с · `/playlist` — плейлисти",
   "help.chat.title": "💬 Чат та ШІ",
   "help.chat.body": "`/chat` — питання до ШІ (зображення дозволені)\n\n`/roleplay` (t!rp) — вільне спілкування · `t!rp config` — налаштування особистості\n\n`/game` — ігри (Steam/Epic)\n\n`/summary` (t!su) — короткий зміст посилання",
   "help.dice.title": "🎲 Кубики",

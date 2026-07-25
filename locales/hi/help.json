@@ -2,13 +2,13 @@
   "help.title": "Tiffany · कमांड्स और मदद",
   "help.desc": "म्यूजिक, AI चैट, डाइस, टेक न्यूज़ और डील्स।\n\nप्रीफिक्स **`t!`** या **`/`** · वॉइस चैनल में जुड़ें → **`/play`**।\n\n**`/language`** · **`/stats`** · **`/updates`**",
   "help.music.title": "🎵 म्यूजिक",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000 हिट्स) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — वॉइस में बजाएँ · `/skip` — स्किप · `/pause` — रोकें · `/resume` — फिर चलाएँ\n\n`/queue` — कतार + अभी बज रहा · `/shuffle` — शफल · `/loop` — लूप · `/replay` — शुरू से\n\n`/random` — रैंडम हिट (10k) · `/autoplay` — autoplay · `/lyrics` — lyrics · `/seek` — +30 / -15\n\n`/volume` — स्ट्रीम वॉल्यूम (t!v) · `/clear` — रोकें और छोड़ें · `/nonstop` — 24/7 · `/clip` — अंतिम 30s · `/playlist` — प्लेलिस्ट",
   "help.chat.title": "💬 चैट और AI",
   "help.chat.body": "`/chat` — AI प्रश्न (इमेज ठीक है)\n\n`/roleplay` (t!rp) — सामान्य बातचीत · `t!rp config` — व्यक्तित्व\n\n`/game` — गेम्स (Steam/Epic)\n\n`/summary` (t!su) — लिंक का सारांश",
   "help.dice.title": "🎲 डाइस",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <name> <expr>`\n\nचैट में कोई प्रीफिक्स नहीं — रीरोल बटन शामिल है।",
   "help.settings.title": "⚙️ सेटिंग्स और टूल्स",
   "help.settings.body": "`/language` — अपनी भाषा चुनें\n\n`/stats` — **बॉट हेल्थ** (पिंग, म्यूजिक, न्यूज़, WARP)\n\n`/updates` — **चेंजलॉग**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (एडमिन) · `/player-status` (एडमिन)",
-  "help.footer": "🌐 **`/language`** — 16 भाषाएँ: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK · HI · VI · UK",
+  "help.footer": "🎙️ वॉइस में: «Tiffany, play [song]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 भाषाएँ: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
   "slash.cmd.help": "सभी कमांड्स: म्यूज़िक (10k हिट्स), AI, पासा, गिवअवे, सेटिंग्स"
 }

@@ -2,7 +2,7 @@
   "help.title": "Tiffany · الأوامر والمساعدة",
   "help.desc": "موسيقى، دردشة AI، نرد، أخبار تقنية وعروض.\n\nالبادئة **\t!** أو **/** · انضم للصوت → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 موسيقى",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000 أغنية) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — موسيقى في الصوت · `/skip` — تخطّي · `/pause` — إيقاف مؤقت · `/resume` — استئناف\n\n`/queue` — الطابور + يُشغَّل الآن · `/shuffle` — خلط · `/loop` — تكرار · `/replay` — إعادة\n\n`/random` — hit عشوائي (10k) · `/autoplay` — autoplay · `/lyrics` — كلمات · `/seek` — +30 / -15\n\n`/volume` — صوت stream (t!v) · `/clear` — إيقاف ومغادرة · `/nonstop` — 24/7 · `/clip` — آخر 30ث · `/playlist` — قوائم",
   "help.chat.title": "💬 دردشة وAI",
   "help.chat.body": "`/chat` — أسئلة AI (صور OK)\n\n`/roleplay` (t!rp) — دردشة casual · `t!rp config` — شخصية\n\n`/game` — ألعاب (Steam/Epic)\n\n`/summary` (t!su) — تلخيص رابط",
   "help.dice.title": "🎲 نرد",

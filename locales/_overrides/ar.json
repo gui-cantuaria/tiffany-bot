@@ -1,0 +1,20 @@
+{
+  "emb.modal.footer_label": "تذييل",
+  "game.filter.multiplayer": "متعدد اللاعبين",
+  "game.filter.publisher": "الناشر",
+  "game.filter.rating.metacritic": "ميتاكريتيك",
+  "game.filter.rating.opencritic": "أوبن كريتيك",
+  "game.filter.rating.steam": "ستيم",
+  "game.filter.singleplayer": "لاعب واحد",
+  "game.filter.studio": "الاستوديو",
+  "game.filter.tags": "الوسوم",
+  "mod.btn.anti_spam": "مكافحة السبام",
+  "mod.field.anti_spam": "مكافحة السبام",
+  "rewind.title": "🎧 ملخص Tiffany الموسيقي",
+  "status.field.ping": "زمن الاستجابة",
+  "status.field.uptime": "مدة التشغيل",
+  "status.field.warp": "🌐 WARP (يوتيوب)",
+  "status.mode.autoplay": "▶️ تشغيل تلقائي",
+  "status.mode.loop": "🔁 تكرار",
+  "status.mode.stay": "🔒 على مدار الساعة"
+}

@@ -1,5 +1,4 @@
 {
-  "volume.title": "音量",
   "volume.global": "🔊 **Tiffanyストリーム音量: {pct}%** (0–150)\n\nボイスチャンネルの**全員**に影響します。",
   "volume.client_title": "🎧 自分だけ音量を調整しますか？",
   "volume.client_body": "Discord: ボイスチャンネルでTiffanyのアバターを**右クリック** → **ユーザーボリューム**。\n\nそのスライダーは**クライアント側** — 他メンバーの音量は変わりません。",

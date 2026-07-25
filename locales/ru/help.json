@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Команды и помощь",
   "help.desc": "Музыка, AI-чат, кости, tech-новости и скидки.\n\nПрефикс **\t!** или **/** · войди в войс → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Музыка",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10 000 хитов) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — музыка в войсе · `/skip` — пропустить · `/pause` — пауза · `/resume` — продолжить\n\n`/queue` — очередь + сейчас · `/shuffle` — перемешать · `/loop` — повтор · `/replay` — сначала\n\n`/random` — случайный хит (10k) · `/autoplay` — autoplay · `/lyrics` — текст · `/seek` — +30 / -15\n\n`/volume` — громкость (t!v) · `/clear` — стоп и выход · `/nonstop` — 24/7 · `/clip` — последние 30с · `/playlist` — плейлисты",
   "help.chat.title": "💬 Чат и AI",
   "help.chat.body": "`/chat` — вопросы AI (картинки OK)\n\n`/roleplay` (t!rp) — casual-чат · `t!rp config` — личность\n\n`/game` — игры (Steam/Epic)\n\n`/summary` (t!su) — кратко о ссылке",
   "help.dice.title": "🎲 Кости",

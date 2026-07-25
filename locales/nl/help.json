@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Commando's en hulp",
   "help.desc": "Muziek, AI-chat, dobbelstenen, tech-nieuws en deals.\n\nPrefix **\t!** of **/** · join voice → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 Muziek",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — muziek in voice · `/skip` — overslaan · `/pause` — pauze · `/resume` — hervatten\n\n`/queue` — wachtrij + now playing · `/shuffle` — shuffle · `/loop` — loop · `/replay` — opnieuw\n\n`/random` — random hit (10k) · `/autoplay` — autoplay · `/lyrics` — lyrics · `/seek` — +30 / -15\n\n`/volume` — streamvolume (t!v) · `/clear` — stop & leave · `/nonstop` — 24/7 · `/clip` — laatste 30s · `/playlist` — lijsten",
   "help.chat.title": "💬 Chat en AI",
   "help.chat.body": "`/chat` — AI-vragen (afbeeldingen OK)\n\n`/roleplay` (t!rp) — casual chat · `t!rp config` — persoonlijkheid\n\n`/game` — games (Steam/Epic)\n\n`/summary` (t!su) — link samenvatten",
   "help.dice.title": "🎲 Dobbelstenen",

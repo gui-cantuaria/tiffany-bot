@@ -3996,18 +3996,60 @@ def invite_link_view(invite_url: str, lang: GuildLang = "en") -> discord.ui.View
 _presence_rotation_task: asyncio.Task | None = None
 _presence_lines: tuple[str, ...] = ()
 
+# Short English taglines after "/cmd — …" (Discord Playing status, max 128 chars total).
+PRESENCE_CMD_TAGLINES: dict[str, str] = {
+    "about": "what I do",
+    "autoplay": "toggle autoplay",
+    "chat": "ask me anything",
+    "clear": "stop & leave voice",
+    "clip": "last 30s audio clip",
+    "embed": "custom embeds",
+    "game": "Steam & Epic picks",
+    "giveaway": "run giveaways",
+    "help": "all commands",
+    "language": "pick your language",
+    "loop": "loop current track",
+    "lyrics": "song lyrics",
+    "mod-panel": "admin settings",
+    "nonstop": "24/7 in voice",
+    "pause": "pause track",
+    "play": "music in voice",
+    "player-status": "player health check",
+    "playlist": "saved playlists",
+    "queue": "queue & now playing",
+    "random": "random famous hit",
+    "replay": "replay from start",
+    "resume": "resume playback",
+    "rewind": "your year stats",
+    "roleplay": "casual chat",
+    "seek": "jump +30 / -15",
+    "shuffle": "shuffle the queue",
+    "skip": "skip current track",
+    "stats": "am I online?",
+    "updates": "recent changes",
+    "volume": "stream volume 0–150%",
+}
+
 # Fallback if command tree is empty at startup (rare).
 _PRESENCE_FALLBACK: tuple[str, ...] = (
-    "/help",
-    "/play",
-    "/stats",
+    "/help — all commands",
+    "/play — music in voice",
+    "/stats — am I online?",
 )
 
 PRESENCE_ROTATE_SEC = 8
 
 
+def presence_line_for_cmd(name: str) -> str:
+    """Format one Playing status line: `/name — short tagline`."""
+    tag = PRESENCE_CMD_TAGLINES.get(name)
+    if tag:
+        return f"/{name} — {tag}"[:128]
+    return f"/{name}"[:128]
+
+
 def presence_lines_for(client: discord.Client) -> tuple[str, ...]:
-    """Build `/command` labels from the live slash command tree (cheap, no I/O)."""
+    """Build `/command — tagline` labels from the live slash command tree (cheap, no I/O)."""
     skip = frozenset({"rp"})  # duplicate slash alias of /roleplay
     names = sorted(
         cmd.name
@@ -4016,7 +4058,7 @@ def presence_lines_for(client: discord.Client) -> tuple[str, ...]:
     )
     if not names:
         return _PRESENCE_FALLBACK
-    return tuple(f"/{name}" for name in names)
+    return tuple(presence_line_for_cmd(name) for name in names)
 
 
 def refresh_presence_lines(client: discord.Client) -> tuple[str, ...]:
@@ -4041,7 +4083,7 @@ async def _set_playing_presence(client: discord.Client, name: str) -> bool:
 
 
 async def start_presence_rotation(client: discord.Client) -> None:
-    """Rotate playing status through every slash command (/name), 8s each."""
+    """Rotate playing status through every slash command (/name — tagline), 8s each."""
     global _presence_rotation_task
     lines = refresh_presence_lines(client)
     if lines:
@@ -8292,7 +8334,11 @@ def register_voice(bot: commands.Bot) -> None:
         embed = locale_utils.build_language_select_embed(lang, pink=TIFFANY_PINK)
         view = locale_utils.LanguageSelectView(lang)
         ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
-        await ctx.send(embed=embed, view=view, ephemeral=ephem)
+        msg = await ctx.send(embed=embed, view=view, ephemeral=ephem)
+        view.panel_message = msg
+        for item in view.children:
+            if isinstance(item, locale_utils.LanguageSelect):
+                item.panel_message = msg
 
     @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.mod_panel"))
     @commands.has_permissions(administrator=True)

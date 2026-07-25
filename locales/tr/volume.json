@@ -1,9 +1,9 @@
 {
+  "volume.title": "🔊 Ses",
   "premium.upsell": "⭐ Bu özellik **Tiffany Premium** gerektirir. Bot profilinden veya `/premium` ile abone ol.",
   "volume.client_body": "Discord'da: ses kanalında Tiffany'nin avatarına **sağ tık** → **Kullanıcı Ses Seviyesi**.\n\nBu kaydırıcı **istemci tarafı**dır — diğer üyelerin duyduğu sesi değiştirmez.",
   "volume.client_title": "🎧 Sadece kendin için mi ayarlamak istiyorsun?",
   "volume.footer": "Yayın = global · Kullanıcı sesi = kişisel",
   "volume.global": "🔊 **Tiffany yayın sesi: {pct}%** (0–150)\n\nBu, ses kanalındaki **herkesi** etkiler.",
-  "volume.title": "Ses",
   "volume.ytdlp_note": "Ses bir sonraki parçada uygulanır (yt-dlp modu)."
 }

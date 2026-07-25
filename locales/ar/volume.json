@@ -1,5 +1,4 @@
 {
-  "volume.title": "الصوت",
   "volume.global": "🔊 **صوت stream Tiffany: {pct}%** (0–150)\n\nيؤثر على **الجميع** في قناة الصوت.",
   "volume.client_title": "🎧 تريد ضبط الصوت لنفسك فقط؟",
   "volume.client_body": "في Discord: **انقر يمين** على أيقونة Tiffany في قناة الصوت → **User Volume**.\n\nهذا المنزلق **من جانب العميل** — لا يغيّر الصوت للآخرين.",

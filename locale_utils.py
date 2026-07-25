@@ -42,6 +42,28 @@ LANGUAGE_SELECT_OPTIONS: tuple[tuple[str, str, str, str], ...] = (
     ("uk", "Українська", "Перемкнути на українську", "🇺🇦"),
 )
 
+# Extra terms for /language search (English + common aliases).
+LANGUAGE_SEARCH_ALIASES: dict[str, tuple[str, ...]] = {
+    "en": ("english", "inglês", "ingles", "anglais", "englisch"),
+    "pt": ("portuguese", "português", "portugues", "brasil", "brazil", "brazilian"),
+    "es": ("spanish", "español", "espanol", "castellano"),
+    "fr": ("french", "français", "francais"),
+    "de": ("german", "deutsch", "alemão", "alemao"),
+    "tr": ("turkish", "türkçe", "turkce"),
+    "sv": ("swedish", "svenska"),
+    "it": ("italian", "italiano"),
+    "nl": ("dutch", "nederlands", "holland"),
+    "ar": ("arabic", "arab", "عربي", "العربية"),
+    "ja": ("japanese", "日本語", "nihongo"),
+    "ko": ("korean", "한국어", "hangul"),
+    "ru": ("russian", "русский", "russkiy"),
+    "hi": ("hindi", "हिन्दी", "हिंदी", "devanagari"),
+    "vi": ("vietnamese", "tiếng việt", "tieng viet"),
+    "uk": ("ukrainian", "українська", "ukraina"),
+}
+
+_DISCORD_SELECT_MAX = 25
+
 
 def slash_ephemeral(interaction: discord.Interaction) -> bool:
     """Ephemeral in guild channels; normal send in DMs (already private)."""
@@ -238,19 +260,32 @@ def interaction_lang(interaction: discord.Interaction) -> GuildLang:
 
 
 def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
-    """Look up a localized string. JSON catalog → _STRINGS → en → key."""
+    """Look up a localized string. Core _STRINGS → JSON[lang] → _STRINGS[en] → JSON[en] → key."""
+    bucket = _STRINGS.get(key)
+    if bucket and lang in bucket:
+        text = bucket[lang]
+        return text.format(**kwargs) if kwargs else text
     try:
         from infra import i18n_loader
-        json_text = i18n_loader.lookup(lang, key)
+        # Core langs: never pull EN stubs from locales/en/volume.json over _STRINGS.
+        json_text = i18n_loader.lookup(
+            lang, key, fallback_en=(lang not in CORE_LANGS),
+        )
         if json_text:
             return json_text.format(**kwargs) if kwargs else json_text
     except Exception:
         pass
-    bucket = _STRINGS.get(key)
-    if not bucket:
-        return key
-    text = bucket.get(lang) or bucket.get("en") or key
-    return text.format(**kwargs) if kwargs else text
+    if bucket:
+        text = bucket.get("en") or key
+        return text.format(**kwargs) if kwargs else text
+    try:
+        from infra import i18n_loader
+        json_text = i18n_loader.lookup("en", key, fallback_en=False)
+        if json_text:
+            return json_text.format(**kwargs) if kwargs else json_text
+    except Exception:
+        pass
+    return key
 
 
 # Discord native slash localizations (description_localizations / locale_str)
@@ -721,45 +756,176 @@ def build_volume_embed(lang: GuildLang, *, current: int, pink: int) -> discord.E
     return em
 
 
+def match_language_query(query: str) -> list[GuildLang]:
+    """Return language codes matching a free-text search (name, code, alias)."""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    matches: list[GuildLang] = []
+    for value, label, desc, _emoji in LANGUAGE_SELECT_OPTIONS:
+        terms = (
+            value.lower(),
+            label.lower(),
+            desc.lower(),
+            *LANGUAGE_SEARCH_ALIASES.get(value, ()),
+        )
+        if value.lower() == q:
+            matches.append(value)  # type: ignore[arg-type]
+            continue
+        if any(q == term or (len(q) >= 2 and q in term) for term in terms if term):
+            matches.append(value)  # type: ignore[arg-type]
+            continue
+        if any(len(term) >= 3 and term in q for term in terms if term):
+            matches.append(value)  # type: ignore[arg-type]
+    return matches
+
+
+async def apply_user_language(
+    interaction: discord.Interaction,
+    new_lang: GuildLang,
+    *,
+    pink: int = TIFFANY_PINK,
+    panel_message: discord.Message | None = None,
+) -> None:
+    """Persist user language and refresh the /language panel message."""
+    if not interaction.user:
+        return
+    await set_user_lang_async(interaction.user.id, new_lang)
+    try:
+        from infra import i18n_middleware
+        await i18n_middleware.bind_user(interaction.user.id)
+    except Exception:
+        pass
+    embed = build_language_select_embed(new_lang, pink=pink)
+    view = LanguageSelectView(new_lang, pink=pink, panel_message=panel_message)
+    content = tr(new_lang, "lang.changed")
+    target = panel_message
+    if target is None and interaction.message:
+        target = interaction.message
+    if target is not None and interaction.message and interaction.message.id != target.id:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        await target.edit(content=content, embed=embed, view=view)
+        return
+    if not interaction.response.is_done():
+        await interaction.response.edit_message(content=content, embed=embed, view=view)
+        return
+    if target is not None:
+        await target.edit(content=content, embed=embed, view=view)
+
+
 class LanguageSelect(discord.ui.Select):
-    def __init__(self, lang: GuildLang):
-        options = [
+    def __init__(
+        self,
+        lang: GuildLang,
+        *,
+        options: tuple[tuple[str, str, str, str], ...] | None = None,
+        panel_message: discord.Message | None = None,
+    ):
+        src = options or LANGUAGE_SELECT_OPTIONS
+        select_options = [
             discord.SelectOption(
                 label=label[:100],
                 value=value,
-                description=desc[:100],
                 emoji=emoji,
                 default=(value == lang),
             )
-            for value, label, desc, emoji in LANGUAGE_SELECT_OPTIONS
+            for value, label, _desc, emoji in src
         ]
-        super().__init__(placeholder=tr(lang, "lang.placeholder"), min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=tr(lang, "lang.placeholder"),
+            min_values=1,
+            max_values=1,
+            options=select_options,
+        )
+        self.panel_message = panel_message
 
     async def callback(self, interaction: discord.Interaction):
-        if not interaction.user:
-            return
         new_lang = self.values[0]  # type: ignore[assignment]
-        await set_user_lang_async(interaction.user.id, new_lang)
-        try:
-            from infra import i18n_middleware
-            await i18n_middleware.bind_user(interaction.user.id)
-        except Exception:
-            pass
         pink = getattr(self.view, "pink", TIFFANY_PINK)
-        embed = build_language_select_embed(new_lang, pink=pink)
-        view = LanguageSelectView(new_lang, pink=pink)
-        await interaction.response.edit_message(
-            content=tr(new_lang, "lang.changed"),
-            embed=embed,
+        panel = self.panel_message or getattr(self.view, "panel_message", None)
+        await apply_user_language(interaction, new_lang, pink=pink, panel_message=panel)
+
+
+class LanguageSearchModal(discord.ui.Modal, title="Language"):
+    query = discord.ui.TextInput(
+        label="Search",
+        placeholder="English, PT, deutsch, 日本語…",
+        required=True,
+        max_length=40,
+    )
+
+    def __init__(self, lang: GuildLang, *, pink: int = TIFFANY_PINK):
+        super().__init__(title=tr(lang, "lang.search_title")[:45])
+        self.lang = lang
+        self.pink = pink
+        self.panel_message: discord.Message | None = None
+        self.query.label = tr(lang, "lang.search_label")[:45]  # type: ignore[attr-defined]
+        self.query.placeholder = tr(lang, "lang.search_placeholder")[:100]  # type: ignore[attr-defined]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        matches = match_language_query(str(self.query.value))
+        if len(matches) == 1:
+            await apply_user_language(
+                interaction,
+                matches[0],
+                pink=self.pink,
+                panel_message=self.panel_message,
+            )
+            return
+        if not matches:
+            await interaction.response.send_message(
+                tr(self.lang, "lang.search_not_found"),
+                ephemeral=True,
+            )
+            return
+        filtered = tuple(opt for opt in LANGUAGE_SELECT_OPTIONS if opt[0] in matches)
+        view = discord.ui.View(timeout=120)
+        view.add_item(
+            LanguageSelect(
+                self.lang,
+                options=filtered,
+                panel_message=self.panel_message,
+            )
+        )
+        await interaction.response.send_message(
+            tr(self.lang, "lang.search_many", count=len(matches)),
             view=view,
+            ephemeral=True,
         )
 
 
+class LanguageSearchButton(discord.ui.Button):
+    def __init__(self, lang: GuildLang):
+        super().__init__(
+            label=tr(lang, "lang.search_btn"),
+            style=discord.ButtonStyle.secondary,
+            emoji="🔍",
+        )
+        self.lang = lang
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        pink = getattr(self.view, "pink", TIFFANY_PINK)
+        panel = getattr(self.view, "panel_message", None)
+        modal = LanguageSearchModal(self.lang, pink=pink)
+        modal.panel_message = panel
+        await interaction.response.send_modal(modal)
+
+
 class LanguageSelectView(discord.ui.View):
-    def __init__(self, lang: GuildLang, *, pink: int = TIFFANY_PINK):
+    def __init__(
+        self,
+        lang: GuildLang,
+        *,
+        pink: int = TIFFANY_PINK,
+        panel_message: discord.Message | None = None,
+    ):
         super().__init__(timeout=300)
         self.pink = pink
-        self.add_item(LanguageSelect(lang))
+        self.panel_message = panel_message
+        if len(LANGUAGE_SELECT_OPTIONS) <= _DISCORD_SELECT_MAX:
+            self.add_item(LanguageSelect(lang, panel_message=panel_message))
+        self.add_item(LanguageSearchButton(lang))
 
 
 def build_language_select_embed(lang: GuildLang, *, pink: int) -> discord.Embed:
@@ -2393,26 +2559,26 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "🌐 **`/language`** — 16 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
     },
     "help.music.body": {
-        "de": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
-        "`/random` (10.000 Hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
-        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "en": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
-        "`/random` (10,000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
-        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "es": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
-        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
-        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "fr": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
-        "`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
-        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "pt": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
-        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
-        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "de": "`/play` — Musik in Voice · `/skip` — Track überspringen · `/pause` — pausieren · `/resume` — fortsetzen\n\n"
+        "`/queue` — Warteschlange + Now Playing · `/shuffle` — mischen · `/loop` — Loop · `/replay` — von vorn\n\n"
+        "`/random` — Zufallshit (10k) · `/autoplay` — Autoplay · `/lyrics` — Songtext · `/seek` — +30 / -15\n\n"
+        "`/volume` — Stream-Lautstärke (t!v) · `/clear` — stoppen & Voice verlassen · `/nonstop` — 24/7 · `/clip` — letzte 30s · `/playlist` — Listen",
+        "en": "`/play` — play in voice · `/skip` — skip track · `/pause` — pause · `/resume` — resume\n\n"
+        "`/queue` — now playing + queue · `/shuffle` — shuffle queue · `/loop` — loop track · `/replay` — replay from start\n\n"
+        "`/random` — random hit (10k catalog) · `/autoplay` — toggle autoplay · `/lyrics` — song lyrics · `/seek` — jump +30 / -15\n\n"
+        "`/volume` — stream volume (t!v) · `/clear` — stop & leave voice · `/nonstop` — 24/7 in call · `/clip` — last 30s audio · `/playlist` — save/load lists",
+        "es": "`/play` — música en voz · `/skip` — saltar pista · `/pause` — pausar · `/resume` — reanudar\n\n"
+        "`/queue` — cola + reproduciendo · `/shuffle` — mezclar cola · `/loop` — repetir pista · `/replay` — reiniciar pista\n\n"
+        "`/random` — hit aleatorio (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra · `/seek` — +30 / -15\n\n"
+        "`/volume` — volumen del stream (t!v) · `/clear` — parar y salir del voice · `/nonstop` — 24/7 · `/clip` — últimos 30s · `/playlist` — listas guardadas",
+        "fr": "`/play` — musique en vocal · `/skip` — piste suivante · `/pause` — pause · `/resume` — reprendre\n\n"
+        "`/queue` — file + en cours · `/shuffle` — mélanger · `/loop` — boucle · `/replay` — rejouer du début\n\n"
+        "`/random` — hit aléatoire (10k) · `/autoplay` — autoplay · `/lyrics` — paroles · `/seek` — +30 / -15\n\n"
+        "`/volume` — volume stream (t!v) · `/clear` — stop & quitter le vocal · `/nonstop` — 24/7 · `/clip` — 30 dernières s · `/playlist` — listes",
+        "pt": "`/play` — tocar na call · `/skip` — pular faixa · `/pause` — pausar · `/resume` — retomar\n\n"
+        "`/queue` — fila + tocando agora · `/shuffle` — embaralhar fila · `/loop` — repetir faixa · `/replay` — recomeçar do início\n\n"
+        "`/random` — hit aleatório (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra da música · `/seek` — pular +30 / -15\n\n"
+        "`/volume` — volume do stream (t!v) · `/clear` — parar e sair da call · `/nonstop` — modo 24/7 · `/clip` — últimos 30s · `/playlist` — listas salvas",
     },
     "help.music.title": {
         "de": "🎵 Musik",
@@ -2539,34 +2705,124 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "ru": "✅ Язык изменён на русский!",
     },
     "lang.desc": {
-        "de": "Wähle eine von **16 Sprachen** — Tiffany antwortet dir so auf allen Servern.",
-        "en": "Pick one of **16 languages** — Tiffany will reply to you in it on every server.",
-        "es": "Elige uno de **16 idiomas** — Tiffany te responderá en él en cualquier servidor.",
-        "fr": "Choisis l'une des **16 langues** — Tiffany te répondra ainsi sur tous les serveurs.",
-        "pt": "Escolha um dos **16 idiomas** — a Tiffany responderá assim em qualquer servidor.",
-        "tr": "**16 dil**den birini seç — Tiffany tüm sunucularda sana böyle yanıt verir.",
-        "sv": "Välj ett av **16 språk** — Tiffany svarar dig så på alla servrar.",
-        "it": "Scegli una delle **16 lingue** — Tiffany ti risponderà così su ogni server.",
-        "nl": "Kies een van **16 talen** — Tiffany antwoordt je zo op elke server.",
-        "ar": "اختر واحدة من **16 لغة** — سترد Tiffany إليك بها في كل السيرفرات.",
-        "ja": "**16言語**から選択 — どのサーバーでもその言語で返信します。",
-        "ko": "**16개 언어** 중 선택 — 모든 서버에서 해당 언어로 답합니다.",
-        "ru": "Выбери один из **16 языков** — Tiffany будет отвечать так на всех серверах.",
+        "de": "Menü unten (**tippen zum Filtern**) oder **Suchen** — Tiffany antwortet dir so auf allen Servern.",
+        "en": "Use the menu below (**type to filter**) or **Search** — Tiffany replies in your pick on every server.",
+        "es": "Menú abajo (**escribe para filtrar**) o **Buscar** — Tiffany te responderá en ese idioma en cualquier servidor.",
+        "fr": "Menu ci-dessous (**tape pour filtrer**) ou **Rechercher** — Tiffany te répond ainsi sur tous les serveurs.",
+        "pt": "Use o menu abaixo (**digite para filtrar**) ou **Buscar** — a Tiffany responde neste idioma em todos os servidores.",
+        "tr": "Alttaki menü (**yazarak filtrele**) veya **Ara** — Tiffany tüm sunucularda bu dilde yanıt verir.",
+        "sv": "Menyn nedan (**skriv för att filtrera**) eller **Sök** — Tiffany svarar på ditt val på alla servrar.",
+        "it": "Menu sotto (**digita per filtrare**) o **Cerca** — Tiffany risponde nella lingua scelta su ogni server.",
+        "nl": "Menu hieronder (**typ om te filteren**) of **Zoeken** — Tiffany antwoordt in jouw keuze op elke server.",
+        "ar": "القائمة أدناه (**اكتب للتصفية**) أو **بحث** — سترد Tiffany باللغة التي تختارها في كل السيرفرات.",
+        "ja": "下のメニュー（**入力で絞り込み**）または **検索** — 選んだ言語で全サーバーに返信します。",
+        "ko": "아래 메뉴(**입력으로 필터**) 또는 **검색** — 선택한 언어로 모든 서버에서 답합니다.",
+        "ru": "Меню ниже (**введите для фильтра**) или **Поиск** — Tiffany ответит на выбранном языке на всех серверах.",
     },
     "lang.placeholder": {
-        "de": "Sprache wählen (16 verfügbar)...",
-        "en": "Select a language (16 available)...",
-        "es": "Selecciona un idioma (16 disponibles)...",
-        "fr": "Sélectionnez une langue (16 disponibles)...",
-        "pt": "Selecione um idioma (16 disponíveis)...",
-        "tr": "Dil seç (16 mevcut)...",
-        "sv": "Välj språk (16 tillgängliga)...",
-        "it": "Seleziona lingua (16 disponibili)...",
-        "nl": "Kies taal (16 beschikbaar)...",
-        "ar": "اختر لغة (16 متاحة)...",
-        "ja": "言語を選択（16言語）...",
-        "ko": "언어 선택 (16개)...",
-        "ru": "Выберите язык (16 доступно)...",
+        "de": "Sprache wählen (tippen zum Suchen)...",
+        "en": "Pick a language (type to search)...",
+        "es": "Elige idioma (escribe para buscar)...",
+        "fr": "Choisir une langue (tape pour chercher)...",
+        "pt": "Escolha um idioma (digite para buscar)...",
+        "tr": "Dil seç (yazarak ara)...",
+        "sv": "Välj språk (skriv för att söka)...",
+        "it": "Scegli lingua (digita per cercare)...",
+        "nl": "Kies taal (typ om te zoeken)...",
+        "ar": "اختر لغة (اكتب للبحث)...",
+        "ja": "言語を選択（入力で検索）...",
+        "ko": "언어 선택 (입력으로 검색)...",
+        "ru": "Выберите язык (введите для поиска)...",
+    },
+    "lang.search_btn": {
+        "de": "Suchen",
+        "en": "Search",
+        "es": "Buscar",
+        "fr": "Rechercher",
+        "pt": "Buscar",
+        "tr": "Ara",
+        "sv": "Sök",
+        "it": "Cerca",
+        "nl": "Zoeken",
+        "ar": "بحث",
+        "ja": "検索",
+        "ko": "검색",
+        "ru": "Поиск",
+    },
+    "lang.search_label": {
+        "de": "Sprache suchen",
+        "en": "Search language",
+        "es": "Buscar idioma",
+        "fr": "Rechercher une langue",
+        "pt": "Buscar idioma",
+        "tr": "Dil ara",
+        "sv": "Sök språk",
+        "it": "Cerca lingua",
+        "nl": "Taal zoeken",
+        "ar": "بحث عن لغة",
+        "ja": "言語を検索",
+        "ko": "언어 검색",
+        "ru": "Поиск языка",
+    },
+    "lang.search_many": {
+        "de": "**{count}** Treffer — wähle unten:",
+        "en": "**{count}** matches — pick one below:",
+        "es": "**{count}** coincidencias — elige abajo:",
+        "fr": "**{count}** résultats — choisis ci-dessous :",
+        "pt": "**{count}** resultados — escolha abaixo:",
+        "tr": "**{count}** eşleşme — aşağıdan seç:",
+        "sv": "**{count}** träffar — välj nedan:",
+        "it": "**{count}** risultati — scegli sotto:",
+        "nl": "**{count}** resultaten — kies hieronder:",
+        "ar": "**{count}** نتائج — اختر أدناه:",
+        "ja": "**{count}** 件 — 下から選択:",
+        "ko": "**{count}**개 일치 — 아래에서 선택:",
+        "ru": "**{count}** совпадений — выбери ниже:",
+    },
+    "lang.search_not_found": {
+        "de": "Keine Sprache gefunden. Probiere **English**, **PT**, **deutsch** oder **日本語**.",
+        "en": "No language found. Try **English**, **PT**, **deutsch**, or **日本語**.",
+        "es": "Idioma no encontrado. Prueba **English**, **PT**, **deutsch** o **日本語**.",
+        "fr": "Aucune langue trouvée. Essaie **English**, **PT**, **deutsch** ou **日本語**.",
+        "pt": "Idioma não encontrado. Tente **English**, **PT**, **deutsch** ou **日本語**.",
+        "tr": "Dil bulunamadı. **English**, **PT**, **deutsch** veya **日本語** dene.",
+        "sv": "Inget språk hittades. Prova **English**, **PT**, **deutsch** eller **日本語**.",
+        "it": "Lingua non trovata. Prova **English**, **PT**, **deutsch** o **日本語**.",
+        "nl": "Geen taal gevonden. Probeer **English**, **PT**, **deutsch** of **日本語**.",
+        "ar": "لم يتم العثور على لغة. جرّب **English** أو **PT** أو **deutsch** أو **日本語**.",
+        "ja": "見つかりませんでした。**English**、**PT**、**deutsch**、**日本語** を試してください。",
+        "ko": "언어를 찾을 수 없습니다. **English**, **PT**, **deutsch**, **日本語** 를 시도해 보세요.",
+        "ru": "Язык не найден. Попробуй **English**, **PT**, **deutsch** или **日本語**.",
+    },
+    "lang.search_placeholder": {
+        "de": "English, PT, deutsch, 日本語…",
+        "en": "English, PT, deutsch, 日本語…",
+        "es": "English, PT, deutsch, 日本語…",
+        "fr": "English, PT, deutsch, 日本語…",
+        "pt": "English, PT, deutsch, 日本語…",
+        "tr": "English, PT, deutsch, 日本語…",
+        "sv": "English, PT, deutsch, 日本語…",
+        "it": "English, PT, deutsch, 日本語…",
+        "nl": "English, PT, deutsch, 日本語…",
+        "ar": "English, PT, deutsch, 日本語…",
+        "ja": "English, PT, deutsch, 日本語…",
+        "ko": "English, PT, deutsch, 日本語…",
+        "ru": "English, PT, deutsch, 日本語…",
+    },
+    "lang.search_title": {
+        "de": "Sprache suchen",
+        "en": "Search language",
+        "es": "Buscar idioma",
+        "fr": "Rechercher une langue",
+        "pt": "Buscar idioma",
+        "tr": "Dil ara",
+        "sv": "Sök språk",
+        "it": "Cerca lingua",
+        "nl": "Taal zoeken",
+        "ar": "بحث عن لغة",
+        "ja": "言語を検索",
+        "ko": "언어 검색",
+        "ru": "Поиск языка",
     },
     "lang.title": {
         "de": "🌐 Wähle deine Sprache",

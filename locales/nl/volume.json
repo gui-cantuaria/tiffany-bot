@@ -1,5 +1,4 @@
 {
-  "volume.title": "Volume",
   "volume.global": "🔊 **Tiffany streamvolume: {pct}%** (0–150)\n\nDit geldt voor **iedereen** in het spraakkanal.",
   "volume.client_title": "🎧 Volume alleen voor jezelf aanpassen?",
   "volume.client_body": "In Discord: **rechtsklik** op Tiffanys avatar in het spraakkanal → **User Volume**.\n\nDie slider is **client-side** — hij wijzigt het volume voor andere leden niet.",

@@ -29,9 +29,12 @@ def _load_lang(lang: str) -> dict[str, str]:
     merged: dict[str, str] = {}
     if not os.path.isdir(lang_dir):
         return merged
-    for fname in sorted(os.listdir(lang_dir)):
-        if not fname.endswith(".json"):
-            continue
+    # Load help.json last (help wins); volume.json before help (bot.json base catalog wins over volume stubs).
+    names = sorted(f for f in os.listdir(lang_dir) if f.endswith(".json"))
+    for last in ("volume.json", "help.json"):
+        if last in names:
+            names = [n for n in names if n != last] + [last]
+    for fname in names:
         path = os.path.join(lang_dir, fname)
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -56,16 +59,14 @@ def ensure_loaded() -> None:
     log.info("i18n JSON catalog: %d strings across %d langs", total, len(_cache))
 
 
-def lookup(lang: str, key: str) -> Optional[str]:
-    """Return string from JSON catalog or None."""
+def lookup(lang: str, key: str, *, fallback_en: bool = True) -> Optional[str]:
+    """Return string from JSON catalog or None. EN fallback optional (off for core _STRINGS langs)."""
     ensure_loaded()
     bucket = _cache.get(lang) or {}
     if key in bucket:
         return bucket[key]
-    for fb in _FALLBACK_CHAIN:
-        if fb == lang:
-            continue
-        fb_bucket = _cache.get(fb) or {}
+    if fallback_en and lang != "en":
+        fb_bucket = _cache.get("en") or {}
         if key in fb_bucket:
             return fb_bucket[key]
     return None

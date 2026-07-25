@@ -2,7 +2,7 @@
   "help.title": "Tiffany · 명령어 및 도움말",
   "help.desc": "음악, AI 채팅, 주사위, 테크 뉴스, 할인 정보.\n\n접두사 **\t!** 또는 **/** · 보이스 참가 → **/play**.\n\n**/language** · **/stats** · **/updates**",
   "help.music.title": "🎵 음악",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000곡) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — 보이스 재생 · `/skip` — 건너뛰기 · `/pause` — 일시정지 · `/resume` — 재개\n\n`/queue` — 대기열 + 재생 중 · `/shuffle` — 셔플 · `/loop` — 반복 · `/replay` — 처음부터\n\n`/random` — 무작위 히트 (10k) · `/autoplay` — 자동재생 · `/lyrics` — 가사 · `/seek` — +30 / -15\n\n`/volume` — 스트림 볼륨 (t!v) · `/clear` — 중지 후 퇴장 · `/nonstop` — 24/7 · `/clip` — 최근 30초 · `/playlist` — 플레이리스트",
   "help.chat.title": "💬 채팅 및 AI",
   "help.chat.body": "`/chat` — AI 질문 (이미지 OK)\n\n`/roleplay` (t!rp) — 캐주얼 채팅 · `t!rp config` — 성격 설정\n\n`/game` — 게임 (Steam/Epic)\n\n`/summary` (t!su) — 링크 요약",
   "help.dice.title": "🎲 주사위",

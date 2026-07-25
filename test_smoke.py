@@ -16,13 +16,18 @@ class TestHelpEmbed(unittest.TestCase):
     def test_build_help_embed_none_user_id(self):
         em = locale_utils.build_help_embed(None, None, pink=TIFFANY_PINK)
         self.assertIsNotNone(em.description)
+        self.assertEqual(len(em.fields), 4)
+        self.assertIn("—", em.fields[0].value or "")
+        self.assertIn("roleplay", em.fields[1].value or "")
+        self.assertIn("/language", em.fields[3].value or "")
 
     def test_help_embed_turkish_json_catalog(self):
         locale_utils.set_user_lang(999002, "tr")
         try:
             em = locale_utils.build_help_embed(None, 999002, pink=TIFFANY_PINK)
             self.assertEqual(em.title, locale_utils.tr("tr", "help.title"))
-            self.assertIn("10.000", em.fields[0].value)
+            self.assertIn("10k", em.fields[0].value)
+            self.assertIn("—", em.fields[0].value)
         finally:
             locale_utils._user_lang_cache.pop("999002", None)
 
@@ -30,7 +35,8 @@ class TestHelpEmbed(unittest.TestCase):
         locale_utils.set_user_lang(999003, "pt")
         try:
             em = locale_utils.build_help_embed(None, 999003, pink=TIFFANY_PINK)
-            self.assertIn("10.000", em.fields[0].value)
+            self.assertIn("10k", em.fields[0].value)
+            self.assertIn("—", em.fields[0].value)
             self.assertIn("/giveaway", em.fields[3].value)
         finally:
             locale_utils._user_lang_cache.pop("999003", None)
@@ -185,9 +191,15 @@ class TestVolumeHelpers(unittest.TestCase):
         lines = tv.presence_lines_for(notices.discord_client)
         self.assertGreaterEqual(len(lines), 25)
         self.assertTrue(all(line.startswith("/") for line in lines))
+        self.assertTrue(all(" — " in line for line in lines))
         self.assertNotIn("/rp", lines)
-        self.assertIn("/stats", lines)
-        self.assertIn("/help", lines)
+        self.assertIn("/stats — am I online?", lines)
+        self.assertIn("/help — all commands", lines)
+
+    def test_language_search_match(self):
+        self.assertEqual(locale_utils.match_language_query("portugues"), ["pt"])
+        self.assertEqual(locale_utils.match_language_query("deutsch"), ["de"])
+        self.assertEqual(locale_utils.match_language_query("xyz"), [])
 
 
 class TestVolumeEmbed(unittest.TestCase):
@@ -260,6 +272,62 @@ class TestI18nLoader(unittest.TestCase):
         hi_help = locale_utils.tr("hi", "help.title")
         self.assertIn("Tiffany", hi_help)
         self.assertNotEqual(hi_help, locale_utils.tr("en", "help.title"))
+
+    def test_critical_strings_localized_all_langs(self):
+        """User-facing keys must not silently fall back to English (except en)."""
+        critical = (
+            "help.title",
+            "help.desc",
+            "lang.title",
+            "lang.changed",
+            "lang.search_btn",
+            "lang.search_not_found",
+            "about.desc",
+            "cmd.error.generic",
+        )
+        for lang in locale_utils.ALL_LANGS:
+            if lang == "en":
+                continue
+            for key in critical:
+                got = locale_utils.tr(lang, key)
+                en = locale_utils.tr("en", key)
+                self.assertNotEqual(
+                    got,
+                    en,
+                    msg=f"{lang}:{key} still English fallback",
+                )
+                self.assertNotEqual(got, key, msg=f"{lang}:{key} leaked raw key")
+
+    def test_fallback_chain_defaults_to_english(self):
+        self.assertEqual(locale_utils.DEFAULT_LANG, "en")
+        unknown = locale_utils.tr("xx", "help.title")  # type: ignore[arg-type]
+        self.assertEqual(unknown, locale_utils.tr("en", "help.title"))
+
+    def test_no_en_catalog_copy_in_extended_bot_json(self):
+        """bot.json must not contain copy-pasted EN catalog strings (except brand/proper nouns)."""
+        import json
+        from pathlib import Path
+
+        catalog = json.loads(
+            (Path(__file__).resolve().parent / "locales" / "_catalog_en.json").read_text(encoding="utf-8")
+        )
+        skip = frozenset({
+            "about.title",
+            "game.filter.rating.metacritic",
+            "game.filter.rating.opencritic",
+            "game.filter.rating.steam",
+            "lang.search_placeholder",
+            "status.field.ping",
+            "status.field.warp",
+            "status.mode.stay",
+        })
+        for lang in locale_utils.ALL_LANGS:
+            if lang in locale_utils.CORE_LANGS:
+                continue
+            bot_path = Path(__file__).resolve().parent / "locales" / lang / "bot.json"
+            data = json.loads(bot_path.read_text(encoding="utf-8"))
+            leaks = [k for k, v in data.items() if k in catalog and k not in skip and v == catalog[k]]
+            self.assertEqual(leaks, [], msg=f"{lang} still has EN catalog copy: {leaks[:5]}")
 
 
 if __name__ == "__main__":

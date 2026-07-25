@@ -1,5 +1,4 @@
 {
-  "volume.title": "🔊 Âm lượng",
   "volume.global": "**Âm lượng stream** của Tiffany hiện là **{pct}%**.\nĐiều này áp dụng cho **tất cả mọi người** trong kênh thoại này.",
   "volume.client_title": "🔈 Âm lượng cá nhân của bạn",
   "volume.client_body": "**Điều chỉnh âm lượng của Tiffany chỉ dành riêng cho bạn (trên ứng dụng Discord):**\n• **Máy tính:** Chuột phải vào **Tiffany** trong kênh thoại → **Âm lượng người dùng**\n• **Điện thoại:** Chạm vào **Tiffany** trong giao diện thoại → biểu tượng âm lượng\n\nViệc này chỉ thay đổi âm lượng phía bạn — những người khác vẫn nghe theo mức âm lượng của luồng phát chính.",

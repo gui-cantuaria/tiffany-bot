@@ -2,7 +2,7 @@
   "help.title": "Tiffany · Lệnh & trợ giúp",
   "help.desc": "Âm nhạc, trò chuyện AI, xúc xắc, tin tức công nghệ và ưu đãi.\n\nTiền tố **`t!`** hoặc **`/`** · tham gia kênh thoại → **`/play`**.\n\n**`/language`** · **`/stats`** · **`/updates`**",
   "help.music.title": "🎵 Âm nhạc",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10,000 bài) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` — phát trong voice · `/skip` — bỏ qua · `/pause` — tạm dừng · `/resume` — tiếp tục\n\n`/queue` — hàng đợi + đang phát · `/shuffle` — xáo trộn · `/loop` — lặp · `/replay` — phát lại từ đầu\n\n`/random` — hit ngẫu nhiên (10k) · `/autoplay` — autoplay · `/lyrics` — lời bài hát · `/seek` — +30 / -15\n\n`/volume` — âm lượng stream (t!v) · `/clear` — dừng & rời voice · `/nonstop` — 24/7 · `/clip` — 30 giây cuối · `/playlist` — playlist",
   "help.chat.title": "💬 Trò chuyện & AI",
   "help.chat.body": "`/chat` — Hỏi đáp AI (có thể gửi ảnh)\n\n`/roleplay` (t!rp) — trò chuyện nhập vai · `t!rp config` — thiết lập tính cách\n\n`/game` — trò chơi (Steam/Epic)\n\n`/summary` (t!su) — tóm tắt nội dung từ đường link",
   "help.dice.title": "🎲 Xúc xắc",

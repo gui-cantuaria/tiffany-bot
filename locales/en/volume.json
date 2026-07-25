@@ -1,5 +1,4 @@
 {
-  "volume.title": "Volume",
   "volume.global": "🔊 **Tiffany stream volume: {pct}%** (0–150)\n\nThis affects **everyone** in the voice channel.",
   "volume.client_title": "🎧 Adjust volume only for yourself?",
   "volume.client_body": "In Discord: **right-click** Tiffany's avatar in the voice channel → **User Volume**.\n\nThat slider is **client-side** — it does not change volume for other members.",
