@@ -26,6 +26,15 @@ class TestResolveLang(unittest.TestCase):
         finally:
             locale_utils._user_lang_cache.pop("999001", None)
 
+    def test_guild_locale_not_used_without_user_pref(self):
+        """Interactive output ignores server locale — defaults to en."""
+        lang = locale_utils.resolve_lang(None, None)
+        self.assertEqual(lang, "en")
+
+    def test_discord_locale_fallback(self):
+        lang = locale_utils.resolve_lang(None, None, discord_locale="fr")
+        self.assertEqual(lang, "fr")
+
 
 class TestUpdatesEmbed(unittest.TestCase):
     def test_build_updates_embed_has_title(self):
@@ -68,6 +77,21 @@ class TestSlashLocalizations(unittest.TestCase):
         desc = kw["description"]
         self.assertIsInstance(desc, app_commands.locale_str)
         self.assertEqual(str(desc), locale_utils.tr("en", "slash.cmd.play"))
+
+    def test_hybrid_desc_includes_en_help(self):
+        kw = locale_utils.hybrid_desc_kwargs("slash.cmd.play")
+        self.assertEqual(kw["help"], locale_utils.tr("en", "slash.cmd.play"))
+        self.assertIn("description", kw)
+
+    def test_localized_cmd_help_uses_user_lang(self):
+        locale_utils.set_user_lang(999003, "de")
+        try:
+            class _Cmd:
+                name = "play"
+            text = locale_utils.localized_cmd_help("de", _Cmd())
+            self.assertEqual(text, locale_utils.tr("de", "slash.cmd.play"))
+        finally:
+            locale_utils._user_lang_cache.pop("999003", None)
 
 
 class TestRoleplayHistory(unittest.TestCase):

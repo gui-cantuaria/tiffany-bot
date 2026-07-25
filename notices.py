@@ -21,7 +21,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, urljoin
 import aiohttp
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from locale_utils import slash_ephemeral, slash_desc_kwargs, interaction_lang, build_public_status_embed, tr, resolve_lang
+from locale_utils import slash_ephemeral, slash_desc_kwargs, interaction_lang, build_public_status_embed, tr, resolve_lang, all_user_lang_prefs
 import updates as tiffany_updates
 import owner_dashboard
 import guild_config
@@ -2336,6 +2336,13 @@ async def on_ready():
         await postgres.init_db()
         await postgres.run_migrations()
         i18n_loader.ensure_loaded()
+        try:
+            from infra.repositories import user_preferences as up
+            migrated = await up.migrate_json_batch(all_user_lang_prefs())
+            if migrated:
+                log.info("Migrated %d user language prefs JSON → PostgreSQL", migrated)
+        except Exception:
+            log.debug("User language PG migration skipped", exc_info=True)
     except Exception:
         log.exception("Infrastructure init partial failure — JSON/local fallback active.")
     # Voice/Lavalink handlers register before bot.run() — on_ready listeners must not

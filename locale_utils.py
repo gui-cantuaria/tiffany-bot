@@ -11,6 +11,10 @@ from discord import app_commands
 
 GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
 
+# Fully translated core UI languages (language picker + primary fallbacks).
+CORE_LANGS: tuple[GuildLang, ...] = ("en", "fr", "es", "pt", "de")
+DEFAULT_LANG: GuildLang = "en"
+
 
 def slash_ephemeral(interaction: discord.Interaction) -> bool:
     """Ephemeral in guild channels; normal send in DMs (already private)."""
@@ -34,6 +38,9 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
 
 _USER_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_lang_prefs.json")
 _user_lang_cache: dict[str, GuildLang] = {}
+_ALL_LANGS = frozenset({
+    "en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
+})
 
 
 def _load_user_langs():
@@ -61,9 +68,68 @@ def get_user_lang(user_id: int) -> Optional[GuildLang]:
     return _user_lang_cache.get(str(user_id))
 
 
+def all_user_lang_prefs() -> dict[str, GuildLang]:
+    """Snapshot of in-memory user language prefs (for PG migration)."""
+    return dict(_user_lang_cache)
+
+
 def set_user_lang(user_id: int, lang: GuildLang):
     _user_lang_cache[str(user_id)] = lang
     _save_user_langs()
+
+
+async def set_user_lang_async(user_id: int, lang: GuildLang) -> None:
+    """Persist user language to memory, JSON, Redis, and PostgreSQL."""
+    set_user_lang(user_id, lang)
+    try:
+        from infra import redis_client
+        await redis_client.cache_setex(f"user:lang:{user_id}", 86400, lang)
+    except Exception:
+        pass
+    try:
+        from infra.repositories import user_preferences as up
+        await up.set_language(user_id, lang)
+    except Exception:
+        pass
+
+
+async def get_user_lang_async(user_id: int) -> Optional[GuildLang]:
+    """Load user language: memory → Redis → PostgreSQL."""
+    cached = get_user_lang(user_id)
+    if cached:
+        return cached
+    try:
+        from infra import redis_client
+        redis_val = await redis_client.cache_get(f"user:lang:{user_id}")
+        if redis_val and redis_val in _ALL_LANGS:
+            _user_lang_cache[str(user_id)] = redis_val  # type: ignore[assignment]
+            return redis_val  # type: ignore[return-value]
+    except Exception:
+        pass
+    try:
+        from infra.repositories import user_preferences as up
+        db_lang = await up.get_language(user_id)
+        if db_lang:
+            _user_lang_cache[str(user_id)] = db_lang  # type: ignore[assignment]
+            try:
+                from infra import redis_client
+                await redis_client.cache_setex(f"user:lang:{user_id}", 86400, db_lang)
+            except Exception:
+                pass
+            return db_lang  # type: ignore[return-value]
+    except Exception:
+        pass
+    return None
+
+
+def _lang_from_discord_locale(raw: Optional[str]) -> Optional[GuildLang]:
+    if not raw:
+        return None
+    loc = str(raw).lower().replace("_", "-")
+    for prefix, lang in _LANG_BY_PREFIX:
+        if loc.startswith(prefix):
+            return lang
+    return None
 
 
 def resolve_guild_lang(guild: Optional[discord.Guild]) -> GuildLang:
@@ -84,19 +150,60 @@ def resolve_guild_lang(guild: Optional[discord.Guild]) -> GuildLang:
     return "en"
 
 
-def resolve_lang(guild: Optional[discord.Guild], user_id: Optional[int] = None) -> GuildLang:
-    """Resolve language considering user preference first, then guild locale."""
+def resolve_lang(
+    guild: Optional[discord.Guild],
+    user_id: Optional[int] = None,
+    *,
+    discord_locale: Optional[str] = None,
+) -> GuildLang:
+    """User-scoped language for interactive output (never guild/server locale)."""
+    try:
+        from infra import i18n_middleware
+        if i18n_middleware.is_bound():
+            return i18n_middleware.current_lang()
+    except Exception:
+        pass
     if user_id:
         u_lang = get_user_lang(user_id)
         if u_lang:
             return u_lang
-    return resolve_guild_lang(guild)
+    parsed = _lang_from_discord_locale(discord_locale)
+    if parsed:
+        return parsed
+    return DEFAULT_LANG
+
+
+async def resolve_lang_async(
+    user_id: int,
+    *,
+    discord_locale: Optional[str] = None,
+) -> GuildLang:
+    """Async user language resolution with Redis/PostgreSQL cache."""
+    u_lang = await get_user_lang_async(user_id)
+    if u_lang:
+        return u_lang
+    parsed = _lang_from_discord_locale(discord_locale)
+    if parsed:
+        return parsed
+    return DEFAULT_LANG
 
 
 def interaction_lang(interaction: discord.Interaction) -> GuildLang:
-    """User preference first, then guild locale — for slash/interaction handlers."""
+    """User preference for slash/interaction handlers (guild locale ignored)."""
+    try:
+        from infra import i18n_middleware
+        if i18n_middleware.is_bound():
+            return i18n_middleware.current_lang()
+    except Exception:
+        pass
     uid = interaction.user.id if interaction.user else None
-    return resolve_lang(interaction.guild, uid)
+    discord_locale = None
+    loc = getattr(interaction, "locale", None)
+    if loc is not None and hasattr(loc, "value"):
+        discord_locale = str(loc.value)
+    elif loc is not None:
+        discord_locale = str(loc)
+    return resolve_lang(interaction.guild, uid, discord_locale=discord_locale)
 
 
 def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
@@ -169,6 +276,43 @@ def slash_desc_kwargs(key: str) -> dict[str, object]:
         # tree.command only accepts description=locale_str (not description_localizations).
         return {"description": app_commands.locale_str(en, localizations=locs)}
     return {"description": en}
+
+
+def hybrid_desc_kwargs(key: str) -> dict[str, object]:
+    """Kwargs for @hybrid_command: localized slash description + EN prefix help stub."""
+    kw = slash_desc_kwargs(key)
+    kw["help"] = tr("en", key)
+    return kw
+
+
+_CMD_HELP_KEY_BY_NAME: dict[str, str] = {
+    "su": "slash.cmd.summary",
+    "summary": "slash.cmd.summary",
+}
+
+
+def cmd_i18n_key(command: object) -> Optional[str]:
+    """Map a registered command to its slash.cmd.* i18n key, if any."""
+    name = getattr(command, "name", None)
+    if not name:
+        return None
+    alias_key = _CMD_HELP_KEY_BY_NAME.get(str(name))
+    if alias_key and _STRINGS.get(alias_key):
+        return alias_key
+    key = f"slash.cmd.{str(name).replace('-', '_')}"
+    return key if _STRINGS.get(key) else None
+
+
+def localized_cmd_help(lang: GuildLang, command: object) -> str:
+    """User-facing help text for prefix/hybrid commands (localized)."""
+    key = cmd_i18n_key(command)
+    if key:
+        return tr(lang, key)
+    static = getattr(command, "help", None) if command else None
+    if static:
+        return str(static)
+    name = getattr(command, "name", None) if command else None
+    return f"t!{name}" if name else "t!"
 
 
 def slash_param(key: str) -> app_commands.locale_str:
@@ -502,18 +646,10 @@ class LanguageSelect(discord.ui.Select):
     def __init__(self, lang: GuildLang):
         options = [
             discord.SelectOption(label="English", value="en", description="Switch to English", emoji="🇺🇸"),
+            discord.SelectOption(label="Français", value="fr", description="Passer en Français", emoji="🇫🇷"),
             discord.SelectOption(label="Español", value="es", description="Cambiar a Español", emoji="🇪🇸"),
             discord.SelectOption(label="Português (BR)", value="pt", description="Mudar para Português", emoji="🇧🇷"),
-            discord.SelectOption(label="Français", value="fr", description="Passer en Français", emoji="🇫🇷"),
             discord.SelectOption(label="Deutsch", value="de", description="Auf Deutsch wechseln", emoji="🇩🇪"),
-            discord.SelectOption(label="Türkçe", value="tr", description="Türkçe", emoji="🇹🇷"),
-            discord.SelectOption(label="Svenska", value="sv", description="Svenska", emoji="🇸🇪"),
-            discord.SelectOption(label="Italiano", value="it", description="Italiano", emoji="🇮🇹"),
-            discord.SelectOption(label="Nederlands", value="nl", description="Nederlands", emoji="🇳🇱"),
-            discord.SelectOption(label="العربية", value="ar", description="Arabic", emoji="🇸🇦"),
-            discord.SelectOption(label="日本語", value="ja", description="Japanese", emoji="🇯🇵"),
-            discord.SelectOption(label="한국어", value="ko", description="Korean", emoji="🇰🇷"),
-            discord.SelectOption(label="Русский", value="ru", description="Russian", emoji="🇷🇺"),
         ]
         for opt in options:
             if opt.value == lang:
@@ -523,17 +659,27 @@ class LanguageSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user:
             return
-        new_lang = self.values[0]
-        set_user_lang(interaction.user.id, new_lang)  # type: ignore
-        await interaction.response.send_message(
-            tr(new_lang, "lang.changed"),
-            ephemeral=slash_ephemeral(interaction),
+        new_lang = self.values[0]  # type: ignore[assignment]
+        await set_user_lang_async(interaction.user.id, new_lang)
+        try:
+            from infra import i18n_middleware
+            await i18n_middleware.bind_user(interaction.user.id)
+        except Exception:
+            pass
+        pink = getattr(self.view, "pink", 0xFF69B4)
+        embed = build_language_select_embed(new_lang, pink=pink)
+        view = LanguageSelectView(new_lang, pink=pink)
+        await interaction.response.edit_message(
+            content=tr(new_lang, "lang.changed"),
+            embed=embed,
+            view=view,
         )
 
 
 class LanguageSelectView(discord.ui.View):
-    def __init__(self, lang: GuildLang):
+    def __init__(self, lang: GuildLang, *, pink: int = 0xFF69B4):
         super().__init__(timeout=300)
+        self.pink = pink
         self.add_item(LanguageSelect(lang))
 
 
@@ -664,16 +810,21 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Adicionar em outro servidor",
     },
     "about.language.body": {
-        "de": "Die Standardsprache wird vom Server festgelegt, aber verwende **`/language`** "
-        "(oder `t!lang`), um deine bevorzugte Sprache zu wählen (DE, EN, ES, PT, FR).",
-        "en": "Default language is set by the server, but you can use **`/language`** (or "
-        "`t!lang`) to choose your personal preferred language (EN, ES, PT, FR, DE).",
-        "es": "El idioma predeterminado lo define el servidor, pero puedes usar **`/language`** "
-        "(o `t!lang`) para elegir tu idioma preferido (ES, EN, PT, FR, DE).",
-        "fr": "La langue par défaut est définie par le serveur, mais utilisez **`/language`** "
-        "(ou `t!lang`) pour choisir votre langue préférée (FR, EN, ES, PT, DE).",
-        "pt": "Idioma padrão definido pelo servidor, mas você pode usar **`/language`** (ou "
-        "`t!lang`) para escolher seu idioma preferido pessoal (PT, EN, ES, FR, DE).",
+        "de": "Deine Sprache gilt **nur für dich** — unabhängig vom Server. "
+        "Nutze **`/language`** (oder `t!lang`), um jederzeit zu wechseln "
+        "(DE, EN, ES, PT, FR).",
+        "en": "Your language applies **only to you** — regardless of the server. "
+        "Use **`/language`** (or `t!lang`) to switch anytime "
+        "(EN, FR, ES, PT, DE).",
+        "es": "Tu idioma aplica **solo para ti** — sin importar el servidor. "
+        "Usa **`/language`** (o `t!lang`) para cambiar cuando quieras "
+        "(ES, EN, FR, PT, DE).",
+        "fr": "Ta langue s'applique **uniquement à toi** — quel que soit le serveur. "
+        "Utilise **`/language`** (ou `t!lang`) pour changer à tout moment "
+        "(FR, EN, ES, PT, DE).",
+        "pt": "Seu idioma vale **só para você** — independente do servidor. "
+        "Use **`/language`** (ou `t!lang`) para trocar quando quiser "
+        "(PT, EN, ES, FR, DE).",
     },
     "about.language.title": {"de": "🌐 Sprache", "en": "🌐 Language", "es": "🌐 Idioma", "fr": "🌐 Langue", "pt": "🌐 Idioma"},
     "about.music.body": {
@@ -2596,6 +2747,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Solo owner: uso y costos de IA",
         "fr": "Owner uniquement : usage et coûts IA",
         "pt": "Só o dono: uso e custos de IA",
+    },
+    "slash.cmd.summary": {
+        "de": "[DEAKTIVIERT] Link zusammenfassen",
+        "en": "[DISABLED] Summarize a link",
+        "es": "[DESACTIVADO] Resumir un enlace",
+        "fr": "[DÉSACTIVÉ] Résumer un lien",
+        "pt": "[DESATIVADO] Resume um link",
     },
     "slash.cmd.status": {
         "de": "Ist Tiffany online? Verbindung und Funktionen",
