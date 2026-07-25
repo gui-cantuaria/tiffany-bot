@@ -1,4 +1,4 @@
-"""Guild locale → language (pt / en / es / fr / de / tr / sv / it / nl / ar / ja / ko / ru) for user-facing Tiffany output."""
+"""Guild locale → language (pt / en / es / fr / de / tr / sv / it / nl / ar / ja / ko / ru / hi / vi / uk) for user-facing Tiffany output."""
 
 from __future__ import annotations
 
@@ -11,13 +11,14 @@ from discord import app_commands
 
 from brand_colors import TIFFANY_GREEN, TIFFANY_PINK, TIFFANY_RED
 
-GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
+GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru", "hi", "vi", "uk"]
 
-# Fully translated UI languages (all 13 in /language picker; core also in _STRINGS).
+# Fully translated UI languages (all 16 in /language picker; core also in _STRINGS).
 CORE_LANGS: tuple[GuildLang, ...] = ("en", "fr", "es", "pt", "de")
 ALL_LANGS: tuple[GuildLang, ...] = (
     "en", "pt", "es", "fr", "de",
     "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
+    "hi", "vi", "uk",
 )
 DEFAULT_LANG: GuildLang = "en"
 
@@ -36,6 +37,9 @@ LANGUAGE_SELECT_OPTIONS: tuple[tuple[str, str, str, str], ...] = (
     ("ja", "日本語", "日本語に切り替え", "🇯🇵"),
     ("ko", "한국어", "한국어로 변경", "🇰🇷"),
     ("ru", "Русский", "Переключить на русский", "🇷🇺"),
+    ("hi", "हिन्दी", "हिन्दी में बदलें", "🇮🇳"),
+    ("vi", "Tiếng Việt", "Chuyển sang Tiếng Việt", "🇻🇳"),
+    ("uk", "Українська", "Перемкнути на українську", "🇺🇦"),
 )
 
 
@@ -57,12 +61,16 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
     ("ja", "ja"),
     ("ko", "ko"),
     ("ru", "ru"),
+    ("hi", "hi"),
+    ("vi", "vi"),
+    ("uk", "uk"),
 )
 
 _USER_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_lang_prefs.json")
 _user_lang_cache: dict[str, GuildLang] = {}
 _ALL_LANGS = frozenset({
     "en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
+    "hi", "vi", "uk",
 })
 
 
@@ -258,6 +266,9 @@ _SLASH_LOCALE_BY_LANG: dict[GuildLang, tuple[discord.Locale, ...]] = {
     "ja": (discord.Locale.japanese,),
     "ko": (discord.Locale.korean,),
     "ru": (discord.Locale.russian,),
+    "hi": (discord.Locale.hindi,),
+    "vi": (discord.Locale.vietnamese,),
+    "uk": (discord.Locale.ukrainian,),
 }
 
 
@@ -275,6 +286,9 @@ _RP_DEFAULT_LANG: dict[GuildLang, str] = {
     "ja": "Japanese",
     "ko": "Korean",
     "ru": "Russian",
+    "hi": "Hindi",
+    "vi": "Vietnamese",
+    "uk": "Ukrainian",
 }
 
 
@@ -497,6 +511,9 @@ def tts_voice(lang: GuildLang) -> str:
         "ja": "ja-JP-NanamiNeural",
         "ko": "ko-KR-SunHiNeural",
         "ru": "ru-RU-SvetlanaNeural",
+        "hi": "hi-IN-SwaraNeural",
+        "vi": "vi-VN-HoaiMyNeural",
+        "uk": "uk-UA-PolinaNeural",
     }.get(lang, "en-US-JennyNeural")
 
 
@@ -505,6 +522,7 @@ def gtts_lang(lang: GuildLang) -> str:
         "pt": "pt-br", "en": "en", "es": "es", "fr": "fr", "de": "de",
         "tr": "tr", "sv": "sv", "it": "it", "nl": "nl", "ar": "ar",
         "ja": "ja", "ko": "ko", "ru": "ru",
+        "hi": "hi", "vi": "vi", "uk": "uk",
     }.get(lang, "en")
 
 
@@ -513,6 +531,7 @@ def google_stt_lang(lang: GuildLang) -> str:
         "pt": "pt-BR", "en": "en-US", "es": "es-MX", "fr": "fr-FR", "de": "de-DE",
         "tr": "tr-TR", "sv": "sv-SE", "it": "it-IT", "nl": "nl-NL", "ar": "ar-SA",
         "ja": "ja-JP", "ko": "ko-KR", "ru": "ru-RU",
+        "hi": "hi-IN", "vi": "vi-VN", "uk": "uk-UA",
     }.get(lang, "en-US")
 
 
@@ -521,6 +540,7 @@ def stt_openrouter_lang(lang: GuildLang) -> str:
         "pt": "pt", "en": "en", "es": "es", "fr": "fr", "de": "de",
         "tr": "tr", "sv": "sv", "it": "it", "nl": "nl", "ar": "ar",
         "ja": "ja", "ko": "ko", "ru": "ru",
+        "hi": "hi", "vi": "vi", "uk": "uk",
     }.get(lang, "en")
 
 
@@ -538,6 +558,9 @@ def stt_chat_instruction(lang: GuildLang) -> str:
         "ja": "Japanese",
         "ko": "Korean",
         "ru": "Russian",
+        "hi": "Hindi",
+        "vi": "Vietnamese",
+        "uk": "Ukrainian",
     }
     out = _by_lang.get(lang, "English")
     return (
@@ -867,20 +890,20 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "about.language.body": {
         "de": "Deine Sprache gilt **nur für dich** — unabhängig vom Server. "
-        "Nutze **`/language`** (oder `t!lang`) — **13 Sprachen**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
+        "Nutze **`/language`** (oder `t!lang`) — **16 Sprachen**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
         "en": "Your language applies **only to you** — regardless of the server. "
-        "Use **`/language`** (or `t!lang`) — **13 languages**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
+        "Use **`/language`** (or `t!lang`) — **16 languages**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
         "es": "Tu idioma aplica **solo para ti** — sin importar el servidor. "
-        "Usa **`/language`** (o `t!lang`) — **13 idiomas**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
+        "Usa **`/language`** (o `t!lang`) — **16 idiomas**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
         "fr": "Ta langue s'applique **uniquement à toi** — quel que soit le serveur. "
-        "Utilise **`/language`** (ou `t!lang`) — **13 langues** : "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
+        "Utilise **`/language`** (ou `t!lang`) — **16 langues** : "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
         "pt": "Seu idioma vale **só para você** — independente do servidor. "
-        "Use **`/language`** (ou `t!lang`) — **13 idiomas**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU.",
+        "Use **`/language`** (ou `t!lang`) — **16 idiomas**: "
+        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
     },
     "about.language.title": {"de": "🌐 Sprache", "en": "🌐 Language", "es": "🌐 Idioma", "fr": "🌐 Langue", "pt": "🌐 Idioma"},
     "about.music.body": {
@@ -2355,19 +2378,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.footer": {
         "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 13 Sprachen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+        "🌐 **`/language`** — 16 Sprachen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
         "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 13 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+        "🌐 **`/language`** — 16 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
         "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+        "🌐 **`/language`** — 16 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
         "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 13 langues : EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+        "🌐 **`/language`** — 16 langues : EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
         "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+        "🌐 **`/language`** — 16 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
     },
     "help.music.body": {
         "de": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
@@ -2516,34 +2539,34 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "ru": "✅ Язык изменён на русский!",
     },
     "lang.desc": {
-        "de": "Wähle eine von **13 Sprachen** — Tiffany antwortet dir so auf allen Servern.",
-        "en": "Pick one of **13 languages** — Tiffany will reply to you in it on every server.",
-        "es": "Elige uno de **13 idiomas** — Tiffany te responderá en él en cualquier servidor.",
-        "fr": "Choisis l'une des **13 langues** — Tiffany te répondra ainsi sur tous les serveurs.",
-        "pt": "Escolha um dos **13 idiomas** — a Tiffany responderá assim em qualquer servidor.",
-        "tr": "**13 dil**den birini seç — Tiffany tüm sunucularda sana böyle yanıt verir.",
-        "sv": "Välj ett av **13 språk** — Tiffany svarar dig så på alla servrar.",
-        "it": "Scegli una delle **13 lingue** — Tiffany ti risponderà così su ogni server.",
-        "nl": "Kies een van **13 talen** — Tiffany antwoordt je zo op elke server.",
-        "ar": "اختر واحدة من **13 لغة** — سترد Tiffany إليك بها في كل السيرفرات.",
-        "ja": "**13言語**から選択 — どのサーバーでもその言語で返信します。",
-        "ko": "**13개 언어** 중 선택 — 모든 서버에서 해당 언어로 답합니다.",
-        "ru": "Выбери один из **13 языков** — Tiffany будет отвечать так на всех серверах.",
+        "de": "Wähle eine von **16 Sprachen** — Tiffany antwortet dir so auf allen Servern.",
+        "en": "Pick one of **16 languages** — Tiffany will reply to you in it on every server.",
+        "es": "Elige uno de **16 idiomas** — Tiffany te responderá en él en cualquier servidor.",
+        "fr": "Choisis l'une des **16 langues** — Tiffany te répondra ainsi sur tous les serveurs.",
+        "pt": "Escolha um dos **16 idiomas** — a Tiffany responderá assim em qualquer servidor.",
+        "tr": "**16 dil**den birini seç — Tiffany tüm sunucularda sana böyle yanıt verir.",
+        "sv": "Välj ett av **16 språk** — Tiffany svarar dig så på alla servrar.",
+        "it": "Scegli una delle **16 lingue** — Tiffany ti risponderà così su ogni server.",
+        "nl": "Kies een van **16 talen** — Tiffany antwoordt je zo op elke server.",
+        "ar": "اختر واحدة من **16 لغة** — سترد Tiffany إليك بها في كل السيرفرات.",
+        "ja": "**16言語**から選択 — どのサーバーでもその言語で返信します。",
+        "ko": "**16개 언어** 중 선택 — 모든 서버에서 해당 언어로 답합니다.",
+        "ru": "Выбери один из **16 языков** — Tiffany будет отвечать так на всех серверах.",
     },
     "lang.placeholder": {
-        "de": "Sprache wählen (13 verfügbar)...",
-        "en": "Select a language (13 available)...",
-        "es": "Selecciona un idioma (13 disponibles)...",
-        "fr": "Sélectionnez une langue (13 disponibles)...",
-        "pt": "Selecione um idioma (13 disponíveis)...",
-        "tr": "Dil seç (13 mevcut)...",
-        "sv": "Välj språk (13 tillgängliga)...",
-        "it": "Seleziona lingua (13 disponibili)...",
-        "nl": "Kies taal (13 beschikbaar)...",
-        "ar": "اختر لغة (13 متاحة)...",
-        "ja": "言語を選択（13言語）...",
-        "ko": "언어 선택 (13개)...",
-        "ru": "Выберите язык (13 доступно)...",
+        "de": "Sprache wählen (16 verfügbar)...",
+        "en": "Select a language (16 available)...",
+        "es": "Selecciona un idioma (16 disponibles)...",
+        "fr": "Sélectionnez une langue (16 disponibles)...",
+        "pt": "Selecione um idioma (16 disponíveis)...",
+        "tr": "Dil seç (16 mevcut)...",
+        "sv": "Välj språk (16 tillgängliga)...",
+        "it": "Seleziona lingua (16 disponibili)...",
+        "nl": "Kies taal (16 beschikbaar)...",
+        "ar": "اختر لغة (16 متاحة)...",
+        "ja": "言語を選択（16言語）...",
+        "ko": "언어 선택 (16개)...",
+        "ru": "Выберите язык (16 доступно)...",
     },
     "lang.title": {
         "de": "🌐 Wähle deine Sprache",

@@ -227,9 +227,9 @@ class TestI18nLoader(unittest.TestCase):
         self.assertTrue(ja_title)
         self.assertNotEqual(ja_title, "Volume")
 
-    def test_all_thirteen_languages_in_picker(self):
-        self.assertEqual(len(locale_utils.ALL_LANGS), 13)
-        self.assertEqual(len(locale_utils.LANGUAGE_SELECT_OPTIONS), 13)
+    def test_all_sixteen_languages_in_picker(self):
+        self.assertEqual(len(locale_utils.ALL_LANGS), 16)
+        self.assertEqual(len(locale_utils.LANGUAGE_SELECT_OPTIONS), 16)
         values = {opt[0] for opt in locale_utils.LANGUAGE_SELECT_OPTIONS}
         self.assertEqual(values, set(locale_utils.ALL_LANGS))
 
@@ -240,7 +240,14 @@ class TestI18nLoader(unittest.TestCase):
         self.assertIn("Tiffany", ja_help)
         self.assertNotEqual(ja_help, locale_utils.tr("en", "help.title"))
         about_lang = locale_utils.tr("de", "about.language.body")
-        self.assertIn("13", about_lang)
+        self.assertIn("16", about_lang)
+
+    def test_hindi_help_not_english_fallback(self):
+        from infra import i18n_loader
+        i18n_loader.ensure_loaded()
+        hi_help = locale_utils.tr("hi", "help.title")
+        self.assertIn("Tiffany", hi_help)
+        self.assertNotEqual(hi_help, locale_utils.tr("en", "help.title"))
 
 
 if __name__ == "__main__":

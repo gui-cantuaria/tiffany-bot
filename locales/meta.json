@@ -1,5 +1,5 @@
 {
   "version": 1,
   "fallback": "en",
-  "supported": ["en", "pt", "es", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
+  "supported": ["en", "pt", "es", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru", "hi", "vi", "uk"]
 }

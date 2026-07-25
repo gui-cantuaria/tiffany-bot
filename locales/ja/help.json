@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <名前> <式>`\n\nチャットでプレフィックス不要 — リロールボタン付き。",
   "help.settings.title": "⚙️ 設定とツール",
   "help.settings.body": "/language — 言語選択\n\n/stats — **ボット状態**（ping、音楽、ニュース、WARP）\n\n/updates — **更新履歴**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
-  "help.footer": "🎙️ ボイス: «Tiffany、 [曲] 再生» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13言語: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+  "help.footer": "🎙️ ボイス: «Tiffany、 [曲] 再生» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16言語: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
   "slash.cmd.help": "コマンド: 音楽(10k)、AI、ダイス、Giveaway、設定"
 }

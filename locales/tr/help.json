@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <ad> <expr>`\n\nÖnek yok — yeniden atma düğmesi dahil.",
   "help.settings.title": "⚙️ Ayarlar ve araçlar",
   "help.settings.body": "/language — dil seç\n\n/stats — **bot sağlığı** (ping, müzik, haberler, WARP)\n\n/updates — **değişiklikler**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
-  "help.footer": "🎙️ Sesli: «Tiffany, [şarkı] çal» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 dil: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+  "help.footer": "🎙️ Sesli: «Tiffany, [şarkı] çal» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 dil: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
   "slash.cmd.help": "Komutlar: müzik (10k hit), AI, zar, çekilişler, ayarlar"
 }

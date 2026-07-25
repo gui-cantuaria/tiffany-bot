@@ -15,6 +15,7 @@ _LOCALES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 SUPPORTED_LANGS: tuple[str, ...] = (
     "en", "pt", "es", "fr", "de",
     "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
+    "hi", "vi", "uk",
 )
 
 _FALLBACK_CHAIN: tuple[str, ...] = ("en",)
