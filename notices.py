@@ -837,6 +837,16 @@ def title_add(h: dict, titulo: str) -> None:
     idx[fp] = int(time.time())
     h["_title_idx"] = idx
 
+
+def _register_posted_dedup(history: dict, noticia: dict) -> None:
+    """Register title/simhash/topic only after a successful channel post."""
+    titulo = noticia.get("titulo", "")
+    if titulo:
+        title_add(history, titulo)
+        topic_add(history, titulo)
+    sh = _simhash64(f"{titulo} {noticia.get('resumo', '')}")
+    simhash_add(history, sh)
+
 # =========================
 # IMAGE EXTRACTION
 # =========================
@@ -1701,6 +1711,7 @@ async def _postar_noticia(channel, noticia: dict, history: dict, metrics: dict) 
             log.warning(f"Error creating thread: {e}")
 
         historico_set(history, noticia["link_norm"], noticia["dedupe"], "posted")
+        _register_posted_dedup(history, noticia)
         metric_inc(metrics, "posts_hoje")
         if mention:
             _daily_mention_news += 1
@@ -1801,31 +1812,9 @@ async def _verificar_feeds_inner():
                 save_queue(queue_restante)
                 continue
 
-            # Dedup: check if similar article was already posted (may have been posted
-            # in previous cycle or by another queue item in this same cycle)
-            titulo_item = item.get("titulo", "")
-            if title_is_dup(history, titulo_item):
-                log.info(f"  ✗ Queue dedup (title): {titulo_item[:60]}")
-                queue_restante.remove(item)
-                save_queue(queue_restante)
-                continue
-            sh_item = _simhash64(f"{titulo_item} {item.get('resumo', '')}")
-            if simhash_is_dup(history, sh_item):
-                log.info(f"  ✗ Queue dedup (simhash): {titulo_item[:60]}")
-                queue_restante.remove(item)
-                save_queue(queue_restante)
-                continue
-            if topic_is_dup(history, titulo_item):
-                log.info(f"  ✗ Queue dedup (topic): {titulo_item[:60]}")
-                queue_restante.remove(item)
-                save_queue(queue_restante)
-                continue
-
+            # Queue items were deduped at approval; rely on historico_blocks_post in _postar_noticia.
             if await _postar_noticia(channel, item, history, metrics):
                 posts_feitos += 1
-                title_add(history, titulo_item)
-                simhash_add(history, sh_item)
-                topic_add(history, titulo_item)
                 save_history(history)
                 save_metrics(metrics)
                 queue_restante.remove(item)
@@ -2043,6 +2032,8 @@ async def _verificar_feeds_inner():
     # ===== PHASE 2: AI analysis (budget-limited) =====
     log.info(f"═══ PHASE 2: AI analysis (budget: {MAX_IA_CALLS_POR_CICLO}) ═══")
     aprovados = []
+    _phase2_simhashes: set[int] = set()
+    _phase2_title_fps: set[str] = set()
 
     for cand in candidatos:
         if _ai_calls_this_cycle >= MAX_IA_CALLS_POR_CICLO:
@@ -2127,18 +2118,20 @@ async def _verificar_feeds_inner():
 
         # Post-AI SimHash (generated title + summary)
         sh_post = _simhash64(f"{res.get('titulo', '')} {res.get('resumo', '')}")
-        if simhash_is_dup(history, sh_post):
+        if simhash_is_dup(history, sh_post) or sh_post in _phase2_simhashes:
             historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "dup_simhash_pos"})
             continue
 
-        simhash_add(history, sh_post)
-        simhash_add(history, cand["simhash"])
-        # Register original AND translated title in index
-        title_add(history, cand["title"])
-        title_add(history, res.get("titulo", ""))
-        # Register topic/subject (suppress same story from other sources for hours)
-        topic_add(history, cand["title"])
-        topic_add(history, res.get("titulo", ""))
+        titulo_final = res.get("titulo", "").strip()
+        tfp_ia = _title_fingerprint(titulo_final)
+        tfp_orig = _title_fingerprint(cand["title"])
+        if (
+            title_is_dup(history, titulo_final)
+            or tfp_ia in _phase2_title_fps
+            or tfp_orig in _phase2_title_fps
+        ):
+            historico_set(history, cand["link_norm"], cand["dedupe"], "skipped", {"reason": "dup_title_pos"})
+            continue
 
         # LOCK: no image = never approve
         if not cand.get("img"):
@@ -2147,7 +2140,6 @@ async def _verificar_feeds_inner():
             continue
         
         # LOCK: title must have at least 5 real words
-        titulo_final = res.get("titulo", "").strip()
         # Remove emojis and punctuation to count real words
         titulo_limpo = re.sub(r'[^\w\s]', ' ', titulo_final)
         palavras_titulo = [p for p in titulo_limpo.split() if len(p) > 2]  # words with more than 2 letters
@@ -2169,6 +2161,9 @@ async def _verificar_feeds_inner():
             continue
 
         metric_inc(metrics, "ia_aprovadas_hoje")
+        _phase2_simhashes.add(sh_post)
+        _phase2_title_fps.add(tfp_ia)
+        _phase2_title_fps.add(tfp_orig)
         aprovados.append({
             "titulo": res.get("titulo", cand["title"]),  # already normalized in gerar_analise_ia()
             "resumo": res.get("resumo", ""),

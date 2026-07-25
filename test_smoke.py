@@ -123,6 +123,16 @@ class TestNewsHistoryDedup(unittest.TestCase):
         notices.historico_set(h, link, None, "posted")
         self.assertTrue(notices.historico_blocks_post(h, link, None))
 
+    def test_queued_title_not_self_dup_before_post(self):
+        import notices
+
+        h: dict = {}
+        titulo = "Anthropic lança modelo Claude Opus 5 com foco em custo-benefício"
+        notices.historico_set(h, "https://example.com/a", "hash1", "queued")
+        self.assertFalse(notices.title_is_dup(h, titulo))
+        notices._register_posted_dedup(h, {"titulo": titulo, "resumo": "Resumo teste."})
+        self.assertTrue(notices.title_is_dup(h, titulo))
+
 
 if __name__ == "__main__":
     unittest.main()
