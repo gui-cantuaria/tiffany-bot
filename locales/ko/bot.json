@@ -132,14 +132,14 @@
   "emb.help.title": "📝 임베드 빌더",
   "emb.list.empty": "저장된 임베드 없음. `t!emb create rules`로 생성.",
   "emb.list.title": "📝 저장된 임베드",
-  "emb.modal.color_label": "색상 (hex)",
+  "emb.modal.color_label": "embed 색상 (hex)",
   "emb.modal.desc_label": "설명",
   "emb.modal.footer_label": "푸터",
   "emb.modal.title": "임베드 편집",
   "emb.modal.title_label": "제목",
   "emb.removed": "임베드 **`{name}`** 삭제됨.",
   "emb.sent": "임베드 **`{name}`**을(를) {channel}에 전송함.",
-  "emb.updated": "임베드 **`{name}`** 업데이트! `t!emb send {name}` 사용.",
+  "emb.updated": "임베드 **`{name}`** 업데이트! **`/embed send {name}`** 또는 **`t!emb send {name}`** 사용.",
   "emb.use_slash_edit": "편집 모달은 **`/embed edit`**(슬래시) 사용.",
   "err.api_issue": "⚠️ 지금 기술적 문제가 있어요. 곧 돌아올게요, 불편을 드려 죄송합니다!",
   "err.api_key": "⚠️ 죄송해요, 지금은 할 수 없어요 — API 키가 설정되지 않았습니다.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 볼륨",
   "volume.ytdlp_note": "_참고: yt-dlp 모드에서는 다음 트랙부터 새 레벨이 적용됩니다._",
   "welcome.desc": "**{guild}**에 초대해 주셔서 감사해요! 💖\n\n🎵 음악은 보이스 채널 참가 후 **`/play`**.\n🤖 **`/chat`**으로 언제든 대화할 수 있어요!\n\n할 수 있는 모든 것: **`/help`** 또는 **`/about`**.",
-  "welcome.title": "{guild}에 참가함"
+  "welcome.title": "{guild}에 참가함",
+  "emb.modal.color_placeholder": "예: #FF69B4"
 }

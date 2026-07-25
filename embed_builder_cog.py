@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, tr, GuildLang
+from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, hybrid_ctx_reply, tr, GuildLang
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -20,7 +20,7 @@ def _ctx_lang(ctx: commands.Context) -> GuildLang:
 
 log = logging.getLogger("tiffany-bot")
 
-from brand_colors import TIFFANY_PINK as BRAND_PINK, TIFFANY_RED
+from brand_colors import TIFFANY_PINK as BRAND_PINK
 _STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guild_embeds.json")
 _cache: dict[str, dict[str, dict[str, Any]]] = {}
 _loaded = False
@@ -51,6 +51,28 @@ def _save() -> None:
 def _guild_bucket(guild_id: int) -> dict[str, dict[str, Any]]:
     _load()
     return _cache.setdefault(str(guild_id), {})
+
+
+def _normalize_embed_name(name: str) -> str:
+    return re.sub(r"[^\w\-]", "", (name or "").strip().lower())
+
+
+def _embed_is_postable(data: dict[str, Any]) -> bool:
+    em = _build_from_data(data)
+    return bool(
+        em.title
+        or em.description
+        or em.fields
+        or em.image
+        or em.thumbnail
+        or em.footer
+    )
+
+
+def _channel_send_perms(channel: discord.TextChannel) -> discord.Permissions | None:
+    if not channel.guild or not channel.guild.me:
+        return None
+    return channel.permissions_for(channel.guild.me)
 
 
 def _parse_color(raw: str) -> int:
@@ -113,6 +135,7 @@ class EmbedEditModal(discord.ui.Modal):
         )
         self.color_input = discord.ui.TextInput(
             label=tr(lang, "emb.modal.color_label"),
+            placeholder=tr(lang, "emb.modal.color_placeholder"),
             default=hex(int(data.get("color") or BRAND_PINK)).replace("0x", "#"),
             max_length=16,
             required=False,
@@ -140,8 +163,9 @@ class EmbedEditModal(discord.ui.Modal):
             "fields": bucket.get(self.name, {}).get("fields", []),
         }
         _save()
+        msg = tr(self.lang, "emb.updated", name=self.name)
         await interaction.response.send_message(
-            tr(self.lang, "emb.updated", name=self.name),
+            embed=discord.Embed(description=msg, color=BRAND_PINK),
             ephemeral=True,
         )
 
@@ -180,21 +204,22 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="create", aliases=["new", "add"], **slash_desc_kwargs("slash.cmd.embed_create"))
     @app_commands.describe(name=slash_param("slash.param.embed_name"))
+    @commands.guild_only()
     async def emb_create(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
-        name = re.sub(r"[^\w\-]", "", (name or "").strip().lower())
+        name = _normalize_embed_name(name)
         if not name or len(name) > 32:
-            await ctx.send(tr(lang, "emb.err.bad_name"))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_name"), error=True)
             return
         bucket = _guild_bucket(ctx.guild.id)
         if name in bucket:
-            await ctx.send(tr(lang, "emb.err.exists", name=name))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.exists", name=name), error=True)
             return
         bucket[name] = {
-            "title": tr(lang, "emb.default.title"),
+            "title": "",
             "description": tr(lang, "emb.default.desc", name=name),
             "color": BRAND_PINK,
             "footer": "",
@@ -207,42 +232,42 @@ async def setup(bot: commands.Bot):
         if ctx.interaction:
             await ctx.interaction.response.send_modal(modal)
         else:
-            await ctx.send(
-                embed=discord.Embed(
-                    description=tr(lang, "emb.created", name=name),
-                    color=BRAND_PINK,
-                )
-            )
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.created", name=name))
 
     @cmd_embed.command(name="edit", aliases=["e"], **slash_desc_kwargs("slash.cmd.embed_edit"))
     @app_commands.describe(name=slash_param("slash.param.embed_name"))
+    @commands.guild_only()
     async def emb_edit(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
-        name = (name or "").strip().lower()
+        name = _normalize_embed_name(name)
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(tr(lang, "emb.err.not_found", name=name))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.not_found", name=name), error=True)
             return
         modal = EmbedEditModal(ctx.guild.id, name, data, lang)
         if ctx.interaction:
             await ctx.interaction.response.send_modal(modal)
         else:
-            await ctx.send(tr(lang, "emb.use_slash_edit"))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.use_slash_edit"))
 
     @cmd_embed.command(name="preview", aliases=["pv", "show"], **slash_desc_kwargs("slash.cmd.embed_preview"))
     @app_commands.describe(name=slash_param("slash.param.embed_name"))
+    @commands.guild_only()
     async def emb_preview(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
-        name = (name or "").strip().lower()
+        name = _normalize_embed_name(name)
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(tr(lang, "emb.err.not_found", name=name))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.not_found", name=name), error=True)
+            return
+        if not _embed_is_postable(data):
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.empty_embed", name=name), error=True)
             return
         await ctx.send(embed=_build_from_data(data))
 
@@ -251,32 +276,52 @@ async def setup(bot: commands.Bot):
         name=slash_param("slash.param.embed_name"),
         channel=slash_param("slash.param.embed_channel"),
     )
+    @commands.guild_only()
     async def emb_send(ctx: commands.Context, name: str, channel: Optional[discord.TextChannel] = None):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
-        name = (name or "").strip().lower()
+        name = _normalize_embed_name(name)
+        if not name:
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_name"), error=True)
+            return
         data = _guild_bucket(ctx.guild.id).get(name)
         if not data:
-            await ctx.send(tr(lang, "emb.err.not_found", name=name))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.not_found", name=name), error=True)
+            return
+        if not _embed_is_postable(data):
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.empty_embed", name=name), error=True)
             return
         target = channel or ctx.channel
         if not isinstance(target, discord.TextChannel):
-            await ctx.send(tr(lang, "emb.err.bad_channel"))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_channel"), error=True)
             return
-        await target.send(embed=_build_from_data(data))
-        await ctx.send(tr(lang, "emb.sent", name=name, channel=target.mention), delete_after=8)
+        perms = _channel_send_perms(target)
+        if not perms or not perms.send_messages or not perms.embed_links:
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.no_send_perms", channel=target.mention), error=True)
+            return
+        try:
+            await target.send(embed=_build_from_data(data))
+        except discord.HTTPException as exc:
+            log.warning(
+                "emb send failed guild=%s template=%s channel=%s: %s",
+                ctx.guild.id, name, target.id, exc,
+            )
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.send_failed", name=name), error=True)
+            return
+        await hybrid_ctx_reply(ctx, tr(lang, "emb.sent", name=name, channel=target.mention), delete_after=12)
 
     @cmd_embed.command(name="list", aliases=["ls"], **slash_desc_kwargs("slash.cmd.embed_list"))
+    @commands.guild_only()
     async def emb_list(ctx: commands.Context):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
         names = sorted(_guild_bucket(ctx.guild.id).keys())
         if not names:
-            await ctx.send(tr(lang, "emb.list.empty"))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.list.empty"))
             return
         await ctx.send(
             embed=discord.Embed(
@@ -288,16 +333,17 @@ async def setup(bot: commands.Bot):
 
     @cmd_embed.command(name="delete", aliases=["del", "rm"], **slash_desc_kwargs("slash.cmd.embed_delete"))
     @app_commands.describe(name=slash_param("slash.param.embed_name"))
+    @commands.guild_only()
     async def emb_delete(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
-            await ctx.send(tr(lang, "emb.err.perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.perms"), error=True)
             return
-        name = (name or "").strip().lower()
+        name = _normalize_embed_name(name)
         bucket = _guild_bucket(ctx.guild.id)
         if name not in bucket:
-            await ctx.send(tr(lang, "emb.err.not_found", name=name))
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.not_found", name=name), error=True)
             return
         del bucket[name]
         _save()
-        await ctx.send(tr(lang, "emb.removed", name=name), delete_after=8)
+        await hybrid_ctx_reply(ctx, tr(lang, "emb.removed", name=name), delete_after=8)

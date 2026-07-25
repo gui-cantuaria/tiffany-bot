@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Creatore embed",
   "emb.list.empty": "Nessun embed salvato. Crea con `t!emb create rules`.",
   "emb.list.title": "📝 Embed salvati",
-  "emb.modal.color_label": "Colore (hex)",
+  "emb.modal.color_label": "Colore embed (hex)",
   "emb.modal.desc_label": "Descrizione",
   "emb.modal.footer_label": "Piè di pagina",
   "emb.modal.title": "Modifica embed",
   "emb.modal.title_label": "Titolo",
   "emb.removed": "Embed **`{name}`** rimosso.",
   "emb.sent": "Embed **`{name}`** inviato in {channel}.",
-  "emb.updated": "Embed **`{name}`** aggiornato! Usa `t!emb send {name}`.",
+  "emb.updated": "Embed **`{name}`** aggiornato! Usa **`/embed send {name}`** o **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Usa **`/embed edit`** (slash) per aprire la modale di modifica.",
   "err.api_issue": "⚠️ Ho qualche problema tecnico in questo momento. Torno subito, scusa per l'inconveniente!",
   "err.api_key": "⚠️ Mi dispiace, non posso farlo ora — la chiave API non è configurata.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 Volume audio",
   "volume.ytdlp_note": "_Nota: in modalità yt-dlp, il nuovo livello si applica dalla traccia successiva._",
   "welcome.desc": "Grazie per avermi invitata in **{guild}**! 💖\n\n🎵 Per ascoltare musica, entra in un canale vocale e usa **`/play`**.\n🤖 Puoi anche chattare con me in qualsiasi momento con **`/chat`**!\n\nPer vedere tutto ciò che posso fare, digita **`/help`** o **`/about`**.",
-  "welcome.title": "Entrata in {guild}"
+  "welcome.title": "Entrata in {guild}",
+  "emb.modal.color_placeholder": "es. #FF69B4"
 }

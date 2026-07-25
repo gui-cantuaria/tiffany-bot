@@ -132,14 +132,14 @@
   "emb.help.title": "📝 埋め込みビルダー",
   "emb.list.empty": "保存されたembedなし。`t!emb create rules` で作成。",
   "emb.list.title": "📝 保存済みembed",
-  "emb.modal.color_label": "色 (hex)",
+  "emb.modal.color_label": "embedの色 (hex)",
   "emb.modal.desc_label": "説明",
   "emb.modal.footer_label": "フッター",
   "emb.modal.title": "Embedを編集",
   "emb.modal.title_label": "タイトル",
   "emb.removed": "Embed **`{name}`** を削除しました。",
   "emb.sent": "Embed **`{name}`** を {channel} に送信しました。",
-  "emb.updated": "Embed **`{name}`** を更新！`t!emb send {name}` で送信。",
+  "emb.updated": "Embed **`{name}`** を更新！**`/embed send {name}`** または **`t!emb send {name}`** で送信。",
   "emb.use_slash_edit": "**`/embed edit`**（スラッシュ）で編集モーダルを開く。",
   "err.api_issue": "⚠️ 現在技術的な問題が発生しています。すぐ戻ります — ご不便おかけしてすみません！",
   "err.api_key": "⚠️ すみません、今はできません — APIキーが設定されていません。",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 音量",
   "volume.ytdlp_note": "_注: yt-dlpモードでは次の曲から新しい音量が適用されます。_",
   "welcome.desc": "**{guild}** に招待してくれてありがとう！ 💖\n\n🎵 音楽を聴くにはボイスチャンネルに参加して **`/play`**。\n🤖 **`/chat`** でいつでもチャットもできます！\n\nできることをすべて見るには **`/help`** または **`/about`**。",
-  "welcome.title": "{guild} に参加しました"
+  "welcome.title": "{guild} に参加しました",
+  "emb.modal.color_placeholder": "例: #FF69B4"
 }

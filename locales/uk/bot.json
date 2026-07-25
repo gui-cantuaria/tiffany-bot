@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Конструктор ембедів",
   "emb.list.empty": "Немає збережених ембедів. Створіть один через `t!emb create rules`.",
   "emb.list.title": "📝 Збережені ембеди",
-  "emb.modal.color_label": "Колір (hex)",
+  "emb.modal.color_label": "Колір embed (hex)",
   "emb.modal.desc_label": "Опис",
   "emb.modal.footer_label": "Футер",
   "emb.modal.title": "Редагувати ембед",
   "emb.modal.title_label": "Заголовок",
   "emb.removed": "Ембед **`{name}`** видалено.",
   "emb.sent": "Ембед **`{name}`** надіслано до {channel}.",
-  "emb.updated": "Ембед **`{name}`** оновлено! Використовуйте `t!emb send {name}`.",
+  "emb.updated": "Ембед **`{name}`** оновлено! Використовуйте **`/embed send {name}`** або **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Використовуйте **`/embed edit`** (слеш-команду), щоб відкрити модальне вікно редагування.",
   "err.api_issue": "⚠️ Зараз у мене технічні проблеми. Я скоро повернуся, вибачте за незручності!",
   "err.api_key": "⚠️ Вибачте, зараз я не можу цього зробити — API-ключ не налаштовано.",
@@ -540,5 +540,6 @@
   "lang.search_title": "Пошук мови",
   "lang.search_placeholder": "English, PT, deutsch, 日本語…",
   "lang.search_not_found": "Мову не знайдено. Спробуй **English**, **PT**, **deutsch** або **日本語**.",
-  "lang.search_many": "**{count}** збігів — обери нижче:"
+  "lang.search_many": "**{count}** збігів — обери нижче:",
+  "emb.modal.color_placeholder": "напр. #FF69B4"
 }

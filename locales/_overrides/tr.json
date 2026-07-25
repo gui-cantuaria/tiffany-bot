@@ -41,7 +41,7 @@
   "cmd.summary.usage": "⚠️ Kullanım: `t!su <URL>` — https:// ile tam bağlantı",
   "emb.err.exists": "**`{name}`** zaten mevcut. `t!emb edit {name}` kullanın.",
   "emb.removed": "Gömülü **`{name}`** kaldırıldı.",
-  "emb.updated": "Gömülü **`{name}`** güncellendi! `t!emb send {name}` kullanın.",
+  "emb.updated": "Gömülü **`{name}`** güncellendi! **`/embed send {name}`** veya **`t!emb send {name}`** kullanın.",
   "err.bad_arg": "⚠️ Geçersiz argüman. Kullanım: **{usage}**",
   "err.summary_failed": "⚠️ Bu bağlantıyı şu anda özetleyemedim. Biraz sonra tekrar deneyin.",
   "game.filter.from": "itibaren",

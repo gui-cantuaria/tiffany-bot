@@ -9200,6 +9200,8 @@ def register_voice(bot: commands.Bot) -> None:
             await ctx.send(embed=_embed(tr(lang, "err.missing_perms")), delete_after=5)
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send(embed=_embed(tr(lang, "err.guild_only")))
+        elif isinstance(error, commands.CheckFailure):
+            await ctx.send(embed=_embed(tr(lang, "err.guild_only")))
         elif isinstance(error, commands.CommandNotFound):
             wrong = (ctx.invoked_with or "").strip()
             raw = ctx.message.content if ctx.message else ""

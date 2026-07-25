@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Конструктор embed",
   "emb.list.empty": "Нет сохранённых embed. Создай: `t!emb create rules`.",
   "emb.list.title": "📝 Сохранённые embed",
-  "emb.modal.color_label": "Цвет (hex)",
+  "emb.modal.color_label": "Цвет embed (hex)",
   "emb.modal.desc_label": "Описание",
   "emb.modal.footer_label": "Подвал",
   "emb.modal.title": "Редактировать embed",
   "emb.modal.title_label": "Заголовок",
   "emb.removed": "Embed **`{name}`** удалён.",
   "emb.sent": "Embed **`{name}`** отправлен в {channel}.",
-  "emb.updated": "Embed **`{name}`** обновлён! Используй `t!emb send {name}`.",
+  "emb.updated": "Embed **`{name}`** обновлён! Используй **`/embed send {name}`** или **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Используй **`/embed edit`** (slash) для окна редактирования.",
   "err.api_issue": "⚠️ Сейчас технические проблемы. Скоро вернусь, извини за неудобства!",
   "err.api_key": "⚠️ Извини, сейчас не могу — API-ключ не настроен.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 Громкость",
   "volume.ytdlp_note": "_Примечание: в режиме yt-dlp новый уровень с следующего трека._",
   "welcome.desc": "Спасибо, что пригласил меня на **{guild}**! 💖\n\n🎵 Чтобы слушать музыку, зайди в голосовой канал и используй **`/play`**.\n🤖 Можешь писать мне в любое время через **`/chat`**!\n\nВсё, что я умею: **`/help`** или **`/about`**.",
-  "welcome.title": "Присоединилась к {guild}"
+  "welcome.title": "Присоединилась к {guild}",
+  "emb.modal.color_placeholder": "напр. #FF69B4"
 }

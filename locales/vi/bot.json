@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Trình tạo Embed",
   "emb.list.empty": "Không có embed nào được lưu. Hãy tạo bằng `t!emb create rules`.",
   "emb.list.title": "📝 Các Embed đã lưu",
-  "emb.modal.color_label": "Màu sắc (mã hex)",
+  "emb.modal.color_label": "Màu embed (hex)",
   "emb.modal.desc_label": "Mô tả",
   "emb.modal.footer_label": "Chân trang",
   "emb.modal.title": "Chỉnh sửa embed",
   "emb.modal.title_label": "Tiêu đề",
   "emb.removed": "Đã xóa embed **`{name}`**.",
   "emb.sent": "Đã gửi embed **`{name}`** đến {channel}.",
-  "emb.updated": "Đã cập nhật embed **`{name}`**! Sử dụng `t!emb send {name}`.",
+  "emb.updated": "Đã cập nhật embed **`{name}`**! Dùng **`/embed send {name}`** hoặc **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Sử dụng **`/embed edit`** (lệnh slash) để mở bảng chỉnh sửa.",
   "err.api_issue": "⚠️ Mình đang gặp chút vấn đề kỹ thuật. Mình sẽ quay lại sớm thôi, xin lỗi vì sự bất tiện này!",
   "err.api_key": "⚠️ Xin lỗi, mình không thể thực hiện lệnh này ngay bây giờ — khóa API chưa được cấu hình.",
@@ -540,5 +540,6 @@
   "lang.search_title": "Tìm ngôn ngữ",
   "lang.search_placeholder": "English, PT, deutsch, 日本語…",
   "lang.search_not_found": "Không tìm thấy ngôn ngữ. Thử **English**, **PT**, **deutsch** hoặc **日本語**.",
-  "lang.search_many": "**{count}** kết quả — chọn bên dưới:"
+  "lang.search_many": "**{count}** kết quả — chọn bên dưới:",
+  "emb.modal.color_placeholder": "vd: #FF69B4"
 }

@@ -15,7 +15,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, resolve_guild_lang, interaction_lang, tr, GuildLang
+from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, resolve_guild_lang, interaction_lang, hybrid_ctx_reply, tr, GuildLang
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -286,7 +286,7 @@ async def setup(bot: commands.Bot):
     ):
         lang = _ctx_lang(ctx)
         if not ctx.guild:
-            await ctx.send(tr(lang, "gw.err.guild_only"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "gw.err.guild_only"), error=True)
             return
         secs = _parse_duration(duration)
         if not secs or secs < 60:
@@ -333,7 +333,7 @@ async def setup(bot: commands.Bot):
     async def gw_create_error(ctx: commands.Context, error: Exception):
         if isinstance(error, commands.MissingPermissions):
             lang = _ctx_lang(ctx)
-            await ctx.send(tr(lang, "gw.err.missing_perms"), ephemeral=True)
+            await hybrid_ctx_reply(ctx, tr(lang, "gw.err.missing_perms"), error=True)
 
     @cmd_giveaway.command(name="end", aliases=["stop", "finish"], **slash_desc_kwargs("slash.cmd.giveaway_end"))
     @app_commands.describe(gw_id=slash_param("slash.param.gw_id"))

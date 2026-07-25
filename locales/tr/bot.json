@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Oluşturucuyu Yerleştir",
   "emb.list.empty": "Kaydedilmiş yerleştirme yok. 't!emb create rule' ile oluşturun.",
   "emb.list.title": "📝 Kaydedilen yerleştirmeler",
-  "emb.modal.color_label": "Renk (altıgen)",
+  "emb.modal.color_label": "Embed rengi (hex)",
   "emb.modal.desc_label": "Tanım",
   "emb.modal.footer_label": "Altbilgi",
   "emb.modal.title": "Yerleştirmeyi düzenle",
   "emb.modal.title_label": "Başlık",
   "emb.removed": "Gömülü **`{name}`** kaldırıldı.",
   "emb.sent": "{channel} adresine gönderilen **`{name}`** dosyasını gömün.",
-  "emb.updated": "Gömülü **`{name}`** güncellendi! `t!emb send {name}` kullanın.",
+  "emb.updated": "Gömülü **`{name}`** güncellendi! **`/embed send {name}`** veya **`t!emb send {name}`** kullanın.",
   "emb.use_slash_edit": "Düzenleme kipini açmak için **`/embed edit`** (eğik çizgi) kullanın.",
   "err.api_issue": "⚠️Şu anda bazı teknik sorunlar yaşıyorum. Kısa süre sonra geri döneceğim, rahatsızlıktan dolayı özür dilerim!",
   "err.api_key": "⚠️ Üzgünüm, bunu şu anda yapamam; API anahtarı yapılandırılmamış.",
@@ -528,5 +528,6 @@
   "volume.need_voice": "⚠️Tiffany bir ses kanalında olmalı.",
   "volume.out_of_range": "⚠️Ses düzeyi **0** ile **150** arasında olmalıdır.",
   "welcome.desc": "Beni **{guild}**'ya davet ettiğiniz için teşekkürler! 💖\n\n🎵 Müzik dinlemek için bir ses kanalına katılın ve **`/play`** komutunu kullanın.\n🤖 Ayrıca **`/chat`** kullanarak benimle istediğiniz zaman sohbet edebilirsiniz!\n\nYapabildiğim her şeyi görmek için **`/help`** veya **`/about`** yazın.",
-  "welcome.title": "{guild}'a katıldı"
+  "welcome.title": "{guild}'a katıldı",
+  "emb.modal.color_placeholder": "orn. #FF69B4"
 }

@@ -2372,6 +2372,51 @@ async def on_guild_join(guild: discord.Guild):
 
 
 @discord_client.event
+async def setup_hook():
+    """Load cogs and sync slash commands before the bot goes online (reduces 'outdated command')."""
+    await _load_bot_extensions()
+    await _sync_slash_commands()
+    log.info("Bot extensions loaded and slash commands synced (setup_hook).")
+
+
+async def _load_bot_extensions() -> None:
+    if not discord_client.get_cog("OffersCog"):
+        try:
+            await discord_client.load_extension("offers_cog")
+            log.info("🛒 Offers Cog loaded successfully.")
+        except Exception as e:
+            log.error("❌ Failed to load Offers Cog: %s", e)
+    for ext in ("giveaways_cog", "embed_builder_cog"):
+        cog_name = {"giveaways_cog": "GiveawaysCog", "embed_builder_cog": "EmbedBuilderCog"}[ext]
+        if not discord_client.get_cog(cog_name):
+            try:
+                await discord_client.load_extension(ext)
+                log.info("%s loaded successfully.", ext)
+            except Exception as e:
+                log.error("Failed to load %s: %s", ext, e)
+
+
+async def _sync_slash_commands() -> None:
+    try:
+        for g in discord_client.guilds:
+            try:
+                discord_client.tree.clear_commands(guild=g)
+                await discord_client.tree.sync(guild=g)
+            except Exception:
+                pass
+        synced = await discord_client.tree.sync()
+        log.info("Slash commands synced globally (%d commands).", len(synced))
+        guild_id = os.getenv("GUILD_ID")
+        if guild_id:
+            guild_obj = discord.Object(id=int(guild_id))
+            discord_client.tree.copy_global_to(guild=guild_obj)
+            guild_synced = await discord_client.tree.sync(guild=guild_obj)
+            log.info("Slash commands synced to GUILD_ID (%d commands).", len(guild_synced))
+    except Exception as e:
+        log.warning("Error syncing slash commands: %s", e)
+
+
+@discord_client.event
 async def on_ready():
     global _voice_available
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
@@ -2391,43 +2436,6 @@ async def on_ready():
             log.debug("User language PG migration skipped", exc_info=True)
     except Exception:
         log.exception("Infrastructure init partial failure — JSON/local fallback active.")
-    # Voice/Lavalink handlers register before bot.run() — on_ready listeners must not
-    # be added from inside on_ready or they miss the first ready event.
-    # Load offers Cog before syncing slash commands
-    if not discord_client.get_cog("OffersCog"):
-        try:
-            await discord_client.load_extension("offers_cog")
-            log.info("🛒 Offers Cog loaded successfully.")
-        except Exception as e:
-            log.error(f"❌ Failed to load Offers Cog: {e}")
-    for ext in ("giveaways_cog", "embed_builder_cog"):
-        cog_name = {"giveaways_cog": "GiveawaysCog", "embed_builder_cog": "EmbedBuilderCog"}[ext]
-        if not discord_client.get_cog(cog_name):
-            try:
-                await discord_client.load_extension(ext)
-                log.info("%s loaded successfully.", ext)
-            except Exception as e:
-                log.error("Failed to load %s: %s", ext, e)
-    # Sync slash commands (Discord builds the profile "Commands" tab from these)
-    try:
-        # Remove legacy guild-specific duplicates
-        for g in discord_client.guilds:
-            try:
-                discord_client.tree.clear_commands(guild=g)
-                await discord_client.tree.sync(guild=g)
-            except Exception:
-                pass
-        synced = await discord_client.tree.sync()
-        log.info("Slash commands synced globally (%d commands).", len(synced))
-        # Instant sync on home guild (optional — global can take up to ~1h)
-        guild_id = os.getenv("GUILD_ID")
-        if guild_id:
-            guild_obj = discord.Object(id=int(guild_id))
-            discord_client.tree.copy_global_to(guild=guild_obj)
-            guild_synced = await discord_client.tree.sync(guild=guild_obj)
-            log.info("Slash commands synced to GUILD_ID (%d commands).", len(guild_synced))
-    except Exception as e:
-        log.warning(f"Error syncing slash commands: {e}")
     if _voice_available and tiffany_voice:
         lines = tiffany_voice.refresh_presence_lines(discord_client)
         log.info("Presence slash list refreshed (%d commands).", len(lines))

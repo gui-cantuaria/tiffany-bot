@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Embed-bouwer",
   "emb.list.empty": "Geen opgeslagen embeds. Maak er een met `t!emb create rules`.",
   "emb.list.title": "📝 Opgeslagen embeds",
-  "emb.modal.color_label": "Kleur (hex)",
+  "emb.modal.color_label": "Embed-kleur (hex)",
   "emb.modal.desc_label": "Beschrijving",
   "emb.modal.footer_label": "Voettekst",
   "emb.modal.title": "Embed bewerken",
   "emb.modal.title_label": "Titel",
   "emb.removed": "Embed **`{name}`** verwijderd.",
   "emb.sent": "Embed **`{name}`** verzonden naar {channel}.",
-  "emb.updated": "Embed **`{name}`** bijgewerkt! Gebruik `t!emb send {name}`.",
+  "emb.updated": "Embed **`{name}`** bijgewerkt! Gebruik **`/embed send {name}`** of **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Gebruik **`/embed edit`** (slash) om het bewerkingsvenster te openen.",
   "err.api_issue": "⚠️ Ik heb nu wat technische problemen. Ik ben zo terug, sorry voor het ongemak!",
   "err.api_key": "⚠️ Sorry, dat kan ik nu niet — de API-sleutel is niet geconfigureerd.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 Geluid",
   "volume.ytdlp_note": "_Opmerking: in yt-dlp-modus geldt het nieuwe niveau vanaf het volgende nummer._",
   "welcome.desc": "Bedankt dat je me uitnodigde naar **{guild}**! 💖\n\n🎵 Om naar muziek te luisteren, join een spraakkanal en gebruik **`/play`**.\n🤖 Je kunt ook altijd met me chatten via **`/chat`**!\n\nTyp **`/help`** of **`/about`** om alles te zien wat ik kan.",
-  "welcome.title": "Gejoined {guild}"
+  "welcome.title": "Gejoined {guild}",
+  "emb.modal.color_placeholder": "bijv. #FF69B4"
 }

@@ -8,6 +8,7 @@ from typing import Literal, Optional
 
 import discord
 from discord import app_commands
+from discord.ext import commands
 
 from brand_colors import TIFFANY_GREEN, TIFFANY_PINK, TIFFANY_RED
 from infra.lang_constants import ALL_LANGS, ALL_LANGS_SET, CORE_LANGS, DEFAULT_LANG, LANG_CODES_DISPLAY
@@ -66,6 +67,23 @@ _DISCORD_SELECT_MAX = 25
 def slash_ephemeral(interaction: discord.Interaction) -> bool:
     """Ephemeral in guild channels; normal send in DMs (already private)."""
     return interaction.guild is not None
+
+
+async def hybrid_ctx_reply(
+    ctx: commands.Context,
+    text: str,
+    *,
+    error: bool = False,
+    delete_after: float | None = None,
+) -> None:
+    """Reply to hybrid/prefix commands — never pass ephemeral=True on prefix (raises TypeError)."""
+    em = discord.Embed(description=text, color=TIFFANY_RED if error else TIFFANY_PINK)
+    kwargs: dict[str, object] = {"embed": em}
+    if delete_after is not None:
+        kwargs["delete_after"] = delete_after
+    if ctx.interaction:
+        kwargs["ephemeral"] = slash_ephemeral(ctx.interaction)
+    await ctx.send(**kwargs)
 
 # Discord locale prefix → Tiffany language
 _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
@@ -4583,6 +4601,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "fr": "Salon invalide.",
         "pt": "Canal inválido.",
     },
+    "emb.err.empty_embed": {
+        "de": "Embed **`{name}`** ist leer — zuerst **`/embed edit {name}`** ausfüllen.",
+        "en": "Embed **`{name}`** is empty — fill it with **`/embed edit {name}`** first.",
+        "es": "El embed **`{name}`** está vacío — complétalo con **`/embed edit {name}`**.",
+        "fr": "L'embed **`{name}`** est vide — complète-le avec **`/embed edit {name}`**.",
+        "pt": "O embed **`{name}`** está vazio — preencha com **`/embed edit {name}`** ou **`t!emb edit {name}`**.",
+    },
     "emb.err.bad_name": {
         "de": "Ungültiger Name (Buchstaben, Zahlen, `-`, max. 32).",
         "en": "Invalid name (letters, numbers, `-`, max 32).",
@@ -4602,7 +4627,14 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "en": "Embed **`{name}`** not found.",
         "es": "Embed **`{name}`** no encontrado.",
         "fr": "Embed **`{name}`** introuvable.",
-        "pt": "Embed **`{name}`** não encontrado.",
+        "pt": "Embed **`{name}`** não encontrado. Use **`/embed list`** ou **`t!emb list`**.",
+    },
+    "emb.err.no_send_perms": {
+        "de": "Keine Berechtigung zum Senden in {channel} (**Nachrichten senden** + **Links einbetten**).",
+        "en": "No permission to send in {channel} (**Send Messages** + **Embed Links**).",
+        "es": "Sin permiso para enviar en {channel} (**Enviar mensajes** + **Insertar enlaces**).",
+        "fr": "Pas la permission d'envoyer dans {channel} (**Envoyer des messages** + **Intégrer des liens**).",
+        "pt": "Sem permissão para enviar em {channel} (**Enviar mensagens** + **Inserir links**).",
     },
     "emb.err.perms": {
         "de": "Du brauchst **Nachrichten verwalten**.",
@@ -4610,6 +4642,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Necesitas **Gestionar mensajes**.",
         "fr": "Tu as besoin de **Gérer les messages**.",
         "pt": "Precisa de **Gerenciar Mensagens**.",
+    },
+    "emb.err.send_failed": {
+        "de": "Embed **`{name}`** konnte nicht gesendet werden — prüfe Inhalt und Bot-Rechte.",
+        "en": "Could not send embed **`{name}`** — check content and bot permissions.",
+        "es": "No se pudo enviar el embed **`{name}`** — revisa contenido y permisos del bot.",
+        "fr": "Impossible d'envoyer l'embed **`{name}`** — vérifie le contenu et les permissions du bot.",
+        "pt": "Não consegui enviar o embed **`{name}`** — confira o conteúdo e as permissões do bot.",
     },
     "emb.list.empty": {
         "de": "Keine Embeds gespeichert. Erstelle mit `t!emb create rules`.",
@@ -4626,11 +4665,18 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "📝 Embeds salvos",
     },
     "emb.modal.color_label": {
-        "de": "Farbe (hex)",
-        "en": "Color (hex)",
-        "es": "Color (hex)",
-        "fr": "Couleur (hex)",
-        "pt": "Cor (hex)",
+        "de": "Embed-Farbe (hex)",
+        "en": "Embed color (hex)",
+        "es": "Color del embed (hex)",
+        "fr": "Couleur de l'embed (hex)",
+        "pt": "Cor do embed (hex)",
+    },
+    "emb.modal.color_placeholder": {
+        "de": "z. B. #FF69B4",
+        "en": "e.g. #FF69B4",
+        "es": "ej. #FF69B4",
+        "fr": "ex. #FF69B4",
+        "pt": "ex.: #FF69B4",
     },
     "emb.modal.desc_label": {
         "de": "Beschreibung",
@@ -4675,11 +4721,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Embed **`{name}`** enviado em {channel}.",
     },
     "emb.updated": {
-        "de": "Embed **`{name}`** aktualisiert! Nutze `t!emb send {name}`.",
-        "en": "Embed **`{name}`** updated! Use `t!emb send {name}`.",
-        "es": "¡Embed **`{name}`** actualizado! Usa `t!emb send {name}`.",
-        "fr": "Embed **`{name}`** mis à jour ! Utilise `t!emb send {name}`.",
-        "pt": "Embed **`{name}`** atualizado! Use `t!emb send {name}`.",
+        "de": "Embed **`{name}`** aktualisiert! Nutze **`/embed send {name}`** oder **`t!emb send {name}`**.",
+        "en": "Embed **`{name}`** updated! Use **`/embed send {name}`** or **`t!emb send {name}`**.",
+        "es": "¡Embed **`{name}`** actualizado! Usa **`/embed send {name}`** o **`t!emb send {name}`**.",
+        "fr": "Embed **`{name}`** mis à jour ! Utilise **`/embed send {name}`** ou **`t!emb send {name}`**.",
+        "pt": "Embed **`{name}`** atualizado! Use **`/embed send {name}`** ou **`t!emb send {name}`**.",
     },
     "emb.use_slash_edit": {
         "de": "Nutze **`/embed edit`** (Slash), um das Modal zu öffnen.",

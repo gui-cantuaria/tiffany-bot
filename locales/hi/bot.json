@@ -132,14 +132,14 @@
   "emb.help.title": "📝 एम्बेड बिल्डर",
   "emb.list.empty": "कोई सहेजा गया एम्बेड नहीं है। `t!emb create rules` के साथ बनाएं।",
   "emb.list.title": "📝 सहेजे गए एम्बेड",
-  "emb.modal.color_label": "रंग (hex)",
+  "emb.modal.color_label": "एम्बेड रंग (hex)",
   "emb.modal.desc_label": "विवरण",
   "emb.modal.footer_label": "फुटर",
   "emb.modal.title": "एम्बेड संपादित करें",
   "emb.modal.title_label": "शीर्षक",
   "emb.removed": "एम्बेड **`{name}`** हटा दिया गया।",
   "emb.sent": "एम्बेड **`{name}`** को {channel} पर भेज दिया गया।",
-  "emb.updated": "एम्बेड **`{name}`** अपडेट हो गया! `t!emb send {name}` का उपयोग करें।",
+  "emb.updated": "एम्बेड **`{name}`** अपडेट हो गया! **`/embed send {name}`** या **`t!emb send {name}`** का उपयोग करें।",
   "emb.use_slash_edit": "एडिट मोडल खोलने के लिए **`/embed edit`** (स्लैश) का उपयोग करें।",
   "err.api_issue": "⚠️ मुझे अभी कुछ तकनीकी समस्याओं का सामना करना पड़ रहा है। मैं जल्द ही वापस आऊंगा, असुविधा के लिए खेद है!",
   "err.api_key": "⚠️ क्षमा करें, मैं अभी ऐसा नहीं कर सकता — API की कॉन्फ़िगर नहीं है।",
@@ -540,5 +540,6 @@
   "lang.search_title": "भाषा खोजें",
   "lang.search_placeholder": "English, PT, deutsch, 日本語…",
   "lang.search_not_found": "कोई भाषा नहीं मिली। **English**, **PT**, **deutsch** या **日本語** आज़माएँ।",
-  "lang.search_many": "**{count}** परिणाम — नीचे चुनें:"
+  "lang.search_many": "**{count}** परिणाम — नीचे चुनें:",
+  "emb.modal.color_placeholder": "उदा. #FF69B4"
 }

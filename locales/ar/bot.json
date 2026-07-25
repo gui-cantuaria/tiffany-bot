@@ -132,14 +132,14 @@
   "emb.help.title": "📝 منشئ Embed",
   "emb.list.empty": "لا embeds محفوظة. أنشئ بـ `t!emb create rules`.",
   "emb.list.title": "📝 Embeds محفوظة",
-  "emb.modal.color_label": "اللون (hex)",
+  "emb.modal.color_label": "لون الـ embed (hex)",
   "emb.modal.desc_label": "الوصف",
   "emb.modal.footer_label": "تذييل",
   "emb.modal.title": "تعديل embed",
   "emb.modal.title_label": "العنوان",
   "emb.removed": "أُزيل embed **`{name}`**.",
   "emb.sent": "أُرسل embed **`{name}`** إلى {channel}.",
-  "emb.updated": "حُدّث embed **`{name}`**! استخدم `t!emb send {name}`.",
+  "emb.updated": "تم تحديث embed **`{name}`**! استخدم **`/embed send {name}`** أو **`t!emb send {name}`**.",
   "emb.use_slash_edit": "استخدم **`/embed edit`** (slash) لفتح نافذة التعديل.",
   "err.api_issue": "⚠️ أواجه مشاكل تقنية الآن. سأعود قريباً، آسفة على الإزعاج!",
   "err.api_key": "⚠️ عذراً، لا أستطيع ذلك الآن — مفتاح API غير مُعدّ.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 الصوت",
   "volume.ytdlp_note": "_ملاحظة: في وضع yt-dlp، المستوى الجديد يُطبّق من المقطع التالي._",
   "welcome.desc": "شكراً لدعوتي إلى **{guild}**! 💖\n\n🎵 للاستماع للموسيقى، انضم لقناة صوت واستخدم **`/play`**.\n🤖 يمكنك الدردشة معي في أي وقت بـ **`/chat`**!\n\nلرؤية كل ما أستطيع، اكتب **`/help`** أو **`/about`**.",
-  "welcome.title": "انضممت إلى {guild}"
+  "welcome.title": "انضممت إلى {guild}",
+  "emb.modal.color_placeholder": "مثال: #FF69B4"
 }

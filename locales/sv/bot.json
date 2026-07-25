@@ -132,14 +132,14 @@
   "emb.help.title": "📝 Embed-verktyg",
   "emb.list.empty": "Inga sparade embeds. Skapa med `t!emb create rules`.",
   "emb.list.title": "📝 Sparade embeds",
-  "emb.modal.color_label": "Färg (hex)",
+  "emb.modal.color_label": "Embed-farg (hex)",
   "emb.modal.desc_label": "Beskrivning",
   "emb.modal.footer_label": "Sidfot",
   "emb.modal.title": "Redigera embed",
   "emb.modal.title_label": "Titel",
   "emb.removed": "Embed **`{name}`** borttagen.",
   "emb.sent": "Embed **`{name}`** skickad till {channel}.",
-  "emb.updated": "Embed **`{name}`** uppdaterad! Använd `t!emb send {name}`.",
+  "emb.updated": "Embed **`{name}`** uppdaterad! Använd **`/embed send {name}`** eller **`t!emb send {name}`**.",
   "emb.use_slash_edit": "Använd **`/embed edit`** (slash) för att öppna redigeringsmodalen.",
   "err.api_issue": "⚠️ Jag har tekniska problem just nu. Jag är tillbaka snart, förlåt besväret!",
   "err.api_key": "⚠️ Tyvärr kan jag inte göra det just nu — API-nyckeln är inte konfigurerad.",
@@ -534,5 +534,6 @@
   "volume.title": "🔊 Volym",
   "volume.ytdlp_note": "_Obs: I yt-dlp-läge gäller den nya nivån från nästa låt._",
   "welcome.desc": "Tack för att du bjöd in mig till **{guild}**! 💖\n\n🎵 För att lyssna på musik, gå med i en röstkanal och använd **`/play`**.\n🤖 Du kan också chatta med mig när som helst med **`/chat`**!\n\nFör att se allt jag kan göra, skriv **`/help`** eller **`/about`**.",
-  "welcome.title": "Gick med i {guild}"
+  "welcome.title": "Gick med i {guild}",
+  "emb.modal.color_placeholder": "t.ex. #FF69B4"
 }
