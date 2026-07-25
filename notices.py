@@ -1803,6 +1803,26 @@ async def _before_verificar_feeds():
         log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
 
 
+@tasks.loop(minutes=10)
+async def _critical_tasks_watchdog():
+    """Restart news/offers loops if a bug or partial deploy stopped them."""
+    from infra.critical_tasks import ensure_critical_loops
+
+    try:
+        await ensure_critical_loops(
+            discord_client,
+            news_task=verificar_feeds,
+            reload_offers=_reload_offers_extension,
+        )
+    except Exception:
+        log.exception("Critical tasks watchdog error")
+
+
+@_critical_tasks_watchdog.before_loop
+async def _before_critical_tasks_watchdog():
+    await discord_client.wait_until_ready()
+
+
 async def _verificar_feeds_inner():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     global _simhash_pruned_this_cycle, _title_pruned_this_cycle, _entity_pruned_this_cycle
@@ -2396,6 +2416,13 @@ async def _load_bot_extensions() -> None:
                 log.error("Failed to load %s: %s", ext, e)
 
 
+async def _reload_offers_extension() -> None:
+    """Single extension reload used by the critical-tasks watchdog."""
+    if discord_client.get_cog("OffersCog"):
+        return
+    await discord_client.load_extension("offers_cog")
+
+
 async def _sync_slash_commands() -> None:
     try:
         for g in discord_client.guilds:
@@ -2442,6 +2469,8 @@ async def on_ready():
         await tiffany_voice.start_warp_monitor(discord_client)
     if not verificar_feeds.is_running():
         verificar_feeds.start()
+    if not _critical_tasks_watchdog.is_running():
+        _critical_tasks_watchdog.start()
 
 @discord_client.event
 async def on_close():
@@ -2591,7 +2620,7 @@ if _voice_available and tiffany_voice:
         log.exception("register_voice failed — voice/prefix/slash commands disabled.")
         _voice_available = False
 elif not _voice_available:
-    log.warning("Voice module unavailable — t! commands and /help will not work.")
+    log.warning("Voice module unavailable — music/voice commands disabled; news and offers still run.")
 
 if __name__ == "__main__":
     discord_client.run(DISCORD_TOKEN)
