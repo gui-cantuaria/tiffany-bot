@@ -16,6 +16,24 @@ class TestHelpEmbed(unittest.TestCase):
         em = locale_utils.build_help_embed(None, None, pink=0xFF69B4)
         self.assertIsNotNone(em.description)
 
+    def test_help_embed_turkish_json_catalog(self):
+        locale_utils.set_user_lang(999002, "tr")
+        try:
+            em = locale_utils.build_help_embed(None, 999002, pink=0xFF69B4)
+            self.assertEqual(em.title, locale_utils.tr("tr", "help.title"))
+            self.assertIn("10.000", em.fields[0].value)
+        finally:
+            locale_utils._user_lang_cache.pop("999002", None)
+
+    def test_help_embed_portuguese_core_strings(self):
+        locale_utils.set_user_lang(999003, "pt")
+        try:
+            em = locale_utils.build_help_embed(None, 999003, pink=0xFF69B4)
+            self.assertIn("10.000", em.fields[0].value)
+            self.assertIn("/giveaway", em.fields[3].value)
+        finally:
+            locale_utils._user_lang_cache.pop("999003", None)
+
 
 class TestResolveLang(unittest.TestCase):
     def test_user_pref_overrides_default(self):

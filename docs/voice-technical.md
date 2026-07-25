@@ -58,9 +58,9 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - `_after()` callback protected against `loop.is_closed()`
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
-## Random Music (`t!r`)
-- Exactly 5000 international hits in `random_songs.py` (format: `Title - Artist`)
-- Avoids repeating last played random song
+## Random Music (`t!r` / `/random`)
+- Exactly 10,000 international hits in `random_songs.py` (format: `Title - Artist`)
+- Avoids songs already in queue, recent history, or picked this session (resets session picks when catalog exhausted)
 
 ## Lavalink / wavelink
 - Code integrated but **DISABLED** (`LAVALINK_ENABLED=0`) — VoiceRecvClient needed for voice listening

@@ -692,8 +692,8 @@ _AI_HELP_COMMANDS_TEXT = (
     "TIFFANY BOT COMMANDS (users type t! prefix or slash commands):\n"
     "- t!p / t!play <song or URL> — play music (auto-joins voice channel)\n"
     "- t!s / t!skip — skip track · t!pa / t!pause · t!re / t!resume\n"
-    "- t!cl / t!clear — stop and leave voice · t!l / t!loop · t!sh / t!shuffle · t!rp / t!replay\n"
-    "- t!q / t!queue — now playing + queue · t!r / t!random · t!ap / t!autoplay\n"
+    "- t!cl / t!clear — stop and leave voice · t!l / t!loop · t!sh / t!shuffle · t!rpl / t!replay\n"
+    "- t!q / t!queue — now playing + queue · t!r / t!random (10k famous hits) · t!ap / t!autoplay\n"
     "- t!ff / t!seek +30,-15,1:30\n"
     "- t!v / t!volume [0-150] — stream volume (everyone in the call)\n"
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
@@ -828,16 +828,17 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "about.language.title": {"de": "🌐 Sprache", "en": "🌐 Language", "es": "🌐 Idioma", "fr": "🌐 Langue", "pt": "🌐 Idioma"},
     "about.music.body": {
-        "de": "Warteschlange, Shuffle, Loop, Autoplay, Playlists; `/random` wählt aus ~5000 Hits.\n"
+        "de": "Warteschlange, Shuffle, Loop, Autoplay, Playlists; `/random` wählt aus 10.000 "
+        "Hits.\n"
         "In Sprache: *„Tiffany, spiel…“*, *„überspringen“*, *„Pause“*, *„Warteschlange“*.",
-        "en": "Queue, shuffle, loop, autoplay, playlists; `/random` picks from ~5000 hits.\n"
+        "en": "Queue, shuffle, loop, autoplay, playlists; `/random` picks from 10,000 hits.\n"
         'In voice: *"Tiffany, play…"*, *"skip"*, *"pause"*, *"queue"*.',
-        "es": "Cola, shuffle, loop, autoplay, playlists; `/random` elige entre ~5000 hits.\n"
+        "es": "Cola, shuffle, loop, autoplay, playlists; `/random` elige entre 10.000 hits.\n"
         "En voz: *«Tiffany, toca…»*, *«salta»*, *«pausa»*, *«cola»*.",
-        "fr": "File d'attente, shuffle, loop, autoplay, playlists; `/random` choisit parmi ~5000 "
-        "hits.\n"
+        "fr": "File d'attente, shuffle, loop, autoplay, playlists; `/random` choisit parmi "
+        "10 000 hits.\n"
         "En vocal: *«Tiffany, joue…»*, *«passe»*, *«pause»*, *«file»*.",
-        "pt": "Fila, shuffle, loop, autoplay, playlists; `/random` sorteia entre ~5000 hits.\n"
+        "pt": "Fila, shuffle, loop, autoplay, playlists; `/random` sorteia entre 10.000 hits.\n"
         "Na call: *«Tiffany, toca…»*, *«pula»*, *«pausa»*, *«fila»*.",
     },
     "about.music.title": {"de": "🎵 Musik", "en": "🎵 Music", "es": "🎵 Música", "fr": "🎵 Musique", "pt": "🎵 Música"},
@@ -2139,101 +2140,149 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎮 **Uso:** `t!g` ou `t!game` <filtros em linguagem natural>",
     },
     "help.chat.body": {
-        "de": "`/chat` — KI-Fragen (Bilder OK)\n" "`/roleplay` — lockerer Chat\n" "`/game` — Spiele (Steam/Epic)",
-        "en": "`/chat` — AI questions (images OK)\n" "`/roleplay` — casual chat\n" "`/game` — games (Steam/Epic)",
-        "es": "`/chat` — IA (imágenes OK)\n" "`/roleplay` — chat casual\n" "`/game` — juegos (Steam/Epic)",
-        "fr": "`/chat` — IA (images OK)\n" "`/roleplay` — chat décontracté\n" "`/game` — jeux (Steam/Epic)",
-        "pt": "`/chat` — pergunte à IA (imagens OK)\n" "`/roleplay` — conversa casual\n" "`/game` — jogos (Steam/Epic)",
+        "de": "`/chat` — KI-Fragen (Bilder OK)\n"
+        "`/roleplay` — lockerer Chat · `/game` — Spiele (Steam/Epic)\n"
+        "`/summary` — Link-Zusammenfassung",
+        "en": "`/chat` — AI questions (images OK)\n"
+        "`/roleplay` — casual chat · `/game` — games (Steam/Epic)\n"
+        "`/summary` — summarize a link",
+        "es": "`/chat` — IA (imágenes OK)\n"
+        "`/roleplay` — chat casual · `/game` — juegos (Steam/Epic)\n"
+        "`/summary` — resumir un enlace",
+        "fr": "`/chat` — IA (images OK)\n"
+        "`/roleplay` — chat décontracté · `/game` — jeux (Steam/Epic)\n"
+        "`/summary` — résumer un lien",
+        "pt": "`/chat` — pergunte à IA (imagens OK)\n"
+        "`/roleplay` — conversa casual · `/game` — jogos (Steam/Epic)\n"
+        "`/summary` — resumir um link",
     },
-    "help.chat.title": {"de": "💬 Chat & AI", "en": "💬 Chat & AI", "es": "💬 Chat & AI", "fr": "💬 Chat & AI", "pt": "💬 Chat & AI"},
+    "help.chat.title": {
+        "de": "💬 Chat & KI",
+        "en": "💬 Chat & AI",
+        "es": "💬 Chat e IA",
+        "fr": "💬 Chat et IA",
+        "pt": "💬 Chat e IA",
+    },
     "help.desc": {
-        "de": "Musik im Voice, KI-Chat, Würfel und Tech-News.\n"
-        "Präfix **`t!`** oder **`/`** · Voice beitreten → **`/play`**.\n"
-        "**`/status`** = läuft alles? · **`/stats`** = Nutzungszahlen · **`/updates`** = Changelog",
-        "en": "Music in voice, AI chat, dice, and tech news.\n"
+        "de": "Musik, KI-Chat, Würfel, Tech-News und Angebote.\n"
+        "Präfix **`t!`** oder **`/`** · Sprachkanal → **`/play`**.\n"
+        "**`/language`** — deine Sprache · **`/status`** · **`/stats`** · **`/updates`**",
+        "en": "Music, AI chat, dice, tech news, and deals.\n"
         "Prefix **`t!`** or **`/`** · join voice → **`/play`**.\n"
-        "**`/status`** = is she healthy? · **`/stats`** = usage counters · **`/updates`** = changelog",
-        "es": "Música en voz, chat IA, dados y noticias tech.\n"
+        "**`/language`** — your language · **`/status`** · **`/stats`** · **`/updates`**",
+        "es": "Música, chat IA, dados, noticias tech y ofertas.\n"
         "Prefijo **`t!`** o **`/`** · entra en voz → **`/play`**.\n"
-        "**`/status`** = ¿está bien? · **`/stats`** = números de uso · **`/updates`** = novedades",
-        "fr": "Musique en vocal, chat IA, dés et actu tech.\n"
+        "**`/language`** — tu idioma · **`/status`** · **`/stats`** · **`/updates`**",
+        "fr": "Musique, chat IA, dés, actu tech et bons plans.\n"
         "Préfixe **`t!`** ou **`/`** · rejoins le vocal → **`/play`**.\n"
-        "**`/status`** = tout va bien ? · **`/stats`** = chiffres d'usage · **`/updates`** = nouveautés",
-        "pt": "Música na call, IA, dados e notícias/ofertas de tech.\n"
+        "**`/language`** — ta langue · **`/status`** · **`/stats`** · **`/updates`**",
+        "pt": "Música na call, IA, dados, notícias e ofertas tech.\n"
         "Use **`t!`** ou **`/`** · entre na voz → **`/play`**.\n"
-        "**`/status`** = ela está bem? · **`/updates`** = novidades",
+        "**`/language`** — seu idioma · **`/status`** · **`/stats`** · **`/updates`**",
     },
     "help.dice.body": {
-        "de": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
-        "en": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
-        "es": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
-        "fr": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
-        "pt": "`d20` · `4d6` · `2d10+5` · `c50+50`\n`adv` · `dis` · `stats` · `coin`",
+        "de": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "Ohne Präfix im Chat — Reroll-Button inklusive.",
+        "en": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "No prefix in chat — reroll button included.",
+        "es": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "Sin prefijo en el chat — botón de reroll incluido.",
+        "fr": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "Sans préfixe dans le chat — bouton de relance inclus.",
+        "pt": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "Sem prefixo no chat — botão de reroll incluso.",
     },
-    "help.dice.title": {"de": "🎲 Dice", "en": "🎲 Dice", "es": "🎲 Dice", "fr": "🎲 Dice", "pt": "🎲 Dice"},
+    "help.dice.title": {
+        "de": "🎲 Würfel",
+        "en": "🎲 Dice",
+        "es": "🎲 Dados",
+        "fr": "🎲 Dés",
+        "pt": "🎲 Dados",
+    },
     "help.footer": {
-        "de": '🎙️ Voice: "Tiffany, play [song]"\n' "YouTube · Spotify · Deezer · Apple Music\n" "🌐 EN · ES · PT · FR · DE",
-        "en": '🎙️ Voice: "Tiffany, play [song]"\n' "YouTube · Spotify · Deezer · Apple Music\n" "🌐 EN · ES · PT · FR · DE",
-        "es": '🎙️ Voice: "Tiffany, play [song]"\n' "YouTube · Spotify · Deezer · Apple Music\n" "🌐 EN · ES · PT · FR · DE",
-        "fr": '🎙️ Voice: "Tiffany, play [song]"\n' "YouTube · Spotify · Deezer · Apple Music\n" "🌐 EN · ES · PT · FR · DE",
-        "pt": '🎙️ Voice: "Tiffany, play [song]"\n' "YouTube · Spotify · Deezer · Apple Music\n" "🌐 EN · ES · PT · FR · DE",
+        "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "🌐 **`/language`** — DE · EN · ES · FR · PT",
+        "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "🌐 **`/language`** — EN · FR · ES · PT · DE",
+        "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "🌐 **`/language`** — ES · EN · FR · PT · DE",
+        "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "🌐 **`/language`** — FR · EN · ES · PT · DE",
+        "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "🌐 **`/language`** — PT · EN · ES · FR · DE",
     },
     "help.music.body": {
         "de": "`/play` · `/skip` · `/pause` · `/resume`\n"
         "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` · `/autoplay` · `/lyrics` · `/seek`\n"
+        "`/random` (10.000 Hits) · `/autoplay` · `/lyrics` · `/seek`\n"
         "`/clear` · `/nonstop` · `/clip` · `/playlist`",
         "en": "`/play` · `/skip` · `/pause` · `/resume`\n"
         "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` · `/autoplay` · `/lyrics` · `/seek`\n"
+        "`/random` (10,000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
         "`/clear` · `/nonstop` · `/clip` · `/playlist`",
         "es": "`/play` · `/skip` · `/pause` · `/resume`\n"
         "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` · `/autoplay` · `/lyrics` · `/seek`\n"
+        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
         "`/clear` · `/nonstop` · `/clip` · `/playlist`",
         "fr": "`/play` · `/skip` · `/pause` · `/resume`\n"
         "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` · `/autoplay` · `/lyrics` · `/seek`\n"
+        "`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
         "`/clear` · `/nonstop` · `/clip` · `/playlist`",
         "pt": "`/play` · `/skip` · `/pause` · `/resume`\n"
         "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` · `/autoplay` · `/lyrics` · `/seek`\n"
+        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
         "`/clear` · `/nonstop` · `/clip` · `/playlist`",
     },
-    "help.music.title": {"de": "🎵 Music", "en": "🎵 Music", "es": "🎵 Music", "fr": "🎵 Music", "pt": "🎵 Music"},
+    "help.music.title": {
+        "de": "🎵 Musik",
+        "en": "🎵 Music",
+        "es": "🎵 Música",
+        "fr": "🎵 Musique",
+        "pt": "🎵 Música",
+    },
     "help.settings.body": {
         "de": "`/language` — Sprache wählen\n"
         "`/status` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n"
-        "`/stats` — **Nutzung** (Songs, IA, Befehle, Posts heute)\n"
-        "`/updates` — **Changelog** (neue Features & Fixes)\n"
+        "`/stats` — **Nutzung** (Owner, privat)\n"
+        "`/updates` — **Changelog**\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
         "`/about` · `/rewind` · `/mod-panel` (Admin)",
         "en": "`/language` — pick your language\n"
         "`/status` — **bot health** (ping, music, news, WARP)\n"
-        "`/stats` — **usage counters** (songs, AI, commands, posts today)\n"
-        "`/updates` — **changelog** (new features & fixes)\n"
+        "`/stats` — **usage counters** (owner only, private)\n"
+        "`/updates` — **changelog**\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
         "`/about` · `/rewind` · `/mod-panel` (admin)",
         "es": "`/language` — elegir idioma\n"
         "`/status` — **salud del bot** (ping, música, noticias, WARP)\n"
-        "`/stats` — **uso acumulado** (canciones, IA, comandos, posts hoy)\n"
-        "`/updates` — **novedades** (features y correcciones)\n"
+        "`/stats` — **uso acumulado** (solo owner, privado)\n"
+        "`/updates` — **novedades**\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
         "`/about` · `/rewind` · `/mod-panel` (admin)",
         "fr": "`/language` — choisir la langue\n"
         "`/status` — **santé du bot** (ping, musique, actus, WARP)\n"
-        "`/stats` — **compteurs d'usage** (sons, IA, commandes, posts du jour)\n"
-        "`/updates` — **nouveautés** (features et correctifs)\n"
+        "`/stats` — **compteurs d'usage** (owner, privé)\n"
+        "`/updates` — **nouveautés**\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
         "`/about` · `/rewind` · `/mod-panel` (admin)",
         "pt": "`/language` — mudar meu idioma\n"
         "`/status` — **saúde do bot** (conexão, música, notícias, WARP)\n"
-        "`/stats` — **números de uso** (músicas, IA, comandos, posts hoje)\n"
-        "`/updates` — **novidades** (features e correções recentes)\n"
+        "`/stats` — **números de uso** (só dono, privado)\n"
+        "`/updates` — **novidades**\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
         "`/about` · `/rewind` · `/mod-panel` (admin)",
     },
     "help.settings.title": {
-        "de": "⚙️ Settings & Tools",
-        "en": "⚙️ Settings & Tools",
-        "es": "⚙️ Settings & Tools",
-        "fr": "⚙️ Settings & Tools",
-        "pt": "⚙️ Settings & Tools",
+        "de": "⚙️ Einstellungen & Tools",
+        "en": "⚙️ Settings & tools",
+        "es": "⚙️ Ajustes y herramientas",
+        "fr": "⚙️ Réglages et outils",
+        "pt": "⚙️ Ajustes e ferramentas",
     },
     "help.title": {
         "de": "Tiffany · Befehle & Hilfe",
@@ -2609,11 +2658,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Sorteios personalizáveis da Tiffany",
     },
     "slash.cmd.help": {
-        "de": "Alle Befehle: Musik, KI, Stats, Giveaways, Einstellungen",
-        "en": "List all commands: music, AI, stats, giveaways, settings",
-        "es": "Lista de comandos: música, IA, stats, sorteos, ajustes",
-        "fr": "Liste des commandes : musique, IA, stats, giveaways, réglages",
-        "pt": "Lista de comandos: música, IA, stats, sorteios, ajustes",
+        "de": "Alle Befehle: Musik (10k Hits), KI, Würfel, Giveaways, Einstellungen",
+        "en": "All commands: music (10k hits), AI, dice, giveaways, settings",
+        "es": "Comandos: música (10k hits), IA, dados, sorteos, ajustes",
+        "fr": "Commandes : musique (10k hits), IA, dés, giveaways, réglages",
+        "pt": "Comandos: música (10k hits), IA, dados, sorteios, ajustes",
     },
     "slash.cmd.language": {
         "de": "Sprachauswahl öffnen",
@@ -2686,11 +2735,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Mostra a fila e o que está tocando",
     },
     "slash.cmd.random": {
-        "de": "Zufälligen Song zur Warteschlange hinzufügen",
-        "en": "Add a random song to the queue",
-        "es": "Añadir una canción aleatoria a la cola",
-        "fr": "Ajouter un morceau aléatoire à la file",
-        "pt": "Adiciona uma música aleatória à fila",
+        "de": "Zufälligen Hit aus 10.000 berühmten Songs zur Warteschlange hinzufügen",
+        "en": "Queue a random hit from 10,000 famous tracks",
+        "es": "Añade un hit aleatorio de 10.000 canciones famosas a la cola",
+        "fr": "Ajoute un hit aléatoire parmi 10 000 morceaux célèbres à la file",
+        "pt": "Sorteia um hit entre 10.000 músicas famosas e adiciona à fila",
     },
     "slash.cmd.replay": {
         "de": "Aktuellen Track erneut abspielen",

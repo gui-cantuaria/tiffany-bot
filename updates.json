@@ -2,6 +2,43 @@
   "version_label": "Jul 2026",
   "entries": [
     {
+      "date": "2026-07-25",
+      "title": {
+        "pt": "10.000 hits no /random",
+        "en": "10,000 hits on /random",
+        "es": "10.000 hits en /random",
+        "fr": "10 000 hits sur /random",
+        "de": "10.000 Hits bei /random"
+      },
+      "items": {
+        "pt": [
+          "**/random** / **t!r** — catálogo ampliado para **10.000** músicas famosas internacionais",
+          "Textos de **/about**, **/help** e descrições do comando atualizados",
+          "Correção: **t!rpl** / **t!replay** (não confundir com **t!rp** roleplay)"
+        ],
+        "en": [
+          "**/random** / **t!r** — catalog expanded to **10,000** famous international tracks",
+          "**/about**, **/help**, and command descriptions updated",
+          "Fix: **t!rpl** / **t!replay** (not **t!rp** roleplay)"
+        ],
+        "es": [
+          "**/random** / **t!r** — catálogo ampliado a **10.000** canciones famosas",
+          "Textos de **/about**, **/help** y descripciones del comando actualizados",
+          "Corrección: **t!rpl** / **t!replay** (no confundir con **t!rp** roleplay)"
+        ],
+        "fr": [
+          "**/random** / **t!r** — catalogue élargi à **10 000** morceaux célèbres",
+          "Textes **/about**, **/help** et descriptions de commande mis à jour",
+          "Correction : **t!rpl** / **t!replay** (pas **t!rp** roleplay)"
+        ],
+        "de": [
+          "**/random** / **t!r** — Katalog auf **10.000** berühmte internationale Songs erweitert",
+          "**/about**, **/help** und Befehlsbeschreibungen aktualisiert",
+          "Fix: **t!rpl** / **t!replay** (nicht **t!rp** Roleplay)"
+        ]
+      }
+    },
+    {
       "date": "2026-07-23",
       "title": {
         "pt": "Chat, roleplay e estabilidade",
