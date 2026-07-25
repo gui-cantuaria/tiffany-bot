@@ -22,7 +22,7 @@ if sys.platform != "win32":
         _lock_fd.close()
         _lock_fd = None
         print("[LOCK] Another launcher instance is already running. Exiting duplicate.")
-        sys.exit(0)
+        sys.exit(1)
 
 # --- SIGTERM: systemctl stop sends SIGTERM, treat like Ctrl+C ---
 def _sigterm_handler(signum, frame):

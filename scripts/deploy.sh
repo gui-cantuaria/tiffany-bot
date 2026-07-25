@@ -160,18 +160,45 @@ fi
 
 _stop_systemd
 
+rm -f /tmp/tiffany_launcher.lock
+
 echo "[deploy] Iniciando serviço systemd..."
 systemctl start tiffany-bot
 
 echo "[deploy] Aguardando estabilização (10s)..."
 sleep 10
 
+_count_tiffany_launchers() {
+    local n=0 pid cwd
+    for pid in $(pgrep -f "launcher.py" 2>/dev/null || true); do
+        cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || echo "")
+        if [ "$cwd" = "/opt/tiffany-bot" ]; then
+            n=$((n + 1))
+        fi
+    done
+    echo "$n"
+}
+
+if ! systemctl is-active --quiet tiffany-bot; then
+    echo "[deploy] Serviço inativo após 1ª tentativa — limpando órfãos e reiniciando..."
+    rm -f /tmp/tiffany_launcher.lock
+    bash scripts/kill-orphans.sh || true
+    sleep 2
+    systemctl start tiffany-bot
+    sleep 10
+fi
+
 if systemctl is-active --quiet tiffany-bot; then
-    LAUNCHERS=$(pgrep -f "launcher.py" 2>/dev/null | wc -l)
-    echo "[deploy] Bot reiniciado — launchers ativos: $LAUNCHERS"
+    LAUNCHERS=$(_count_tiffany_launchers)
+    echo "[deploy] Bot reiniciado — launchers ativos (tiffany-bot): $LAUNCHERS"
     pgrep -af "launcher.py|notices.py" 2>/dev/null || true
     if [ "$LAUNCHERS" -gt 1 ]; then
         echo "[deploy] AVISO: mais de 1 launcher — rode: bash scripts/kill-orphans.sh && systemctl restart tiffany-bot"
+        exit 1
+    fi
+    if [ "$LAUNCHERS" -eq 0 ]; then
+        echo "[deploy] AVISO: systemd ativo mas nenhum launcher em /opt/tiffany-bot"
+        journalctl -u tiffany-bot -n 40 --no-pager || true
         exit 1
     fi
 else

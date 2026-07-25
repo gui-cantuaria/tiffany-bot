@@ -9636,6 +9636,7 @@ def register_voice(bot: commands.Bot) -> None:
 
     @bot.hybrid_command(
         name="player-status",
+        aliases=["playerstatus"],
         dm_permission=False,
         **hybrid_desc_kwargs("slash.cmd.player_status"),
     )
