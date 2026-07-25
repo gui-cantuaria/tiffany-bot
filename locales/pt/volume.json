@@ -1,0 +1,9 @@
+{
+  "volume.title": "Volume",
+  "volume.global": "🔊 **Volume do stream da Tiffany: {pct}%** (0–150)\n\nIsso afeta **todos** na call.",
+  "volume.client_title": "🎧 Quer ouvir mais baixo/alto só para você?",
+  "volume.client_body": "No Discord: **clique com o botão direito** no ícone da Tiffany na call → **Volume do usuário**.\n\nEsse controle é **só no seu cliente** — não muda o volume dos outros.",
+  "volume.footer": "Stream = global · Volume do usuário = pessoal",
+  "volume.ytdlp_note": "Volume aplicado na próxima faixa (modo yt-dlp).",
+  "premium.upsell": "⭐ Este recurso exige **Tiffany Premium**. Assine pelo perfil do bot ou `/premium`."
+}

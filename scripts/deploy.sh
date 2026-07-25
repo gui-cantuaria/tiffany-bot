@@ -23,11 +23,12 @@ git checkout origin/main -- \
   affiliate_config.py random_songs.py requirements.txt \
   giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
   updates.py updates.json owner_dashboard.py roleplay_config.py \
+  infra/ schema/ locales/ \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh scripts/start-lavalink.sh \
   scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
   scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
-  CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md 2>/dev/null || true
+  CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md docs/ha-architecture.md docs/infrastructure-roadmap.md lavalink/application.yml 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then

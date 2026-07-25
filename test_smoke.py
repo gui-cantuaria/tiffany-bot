@@ -134,5 +134,16 @@ class TestNewsHistoryDedup(unittest.TestCase):
         self.assertTrue(notices.title_is_dup(h, titulo))
 
 
+class TestI18nLoader(unittest.TestCase):
+    def test_json_volume_overlay(self):
+        from infra import i18n_loader
+        i18n_loader.ensure_loaded()
+        pt = i18n_loader.lookup("pt", "volume.client_title")
+        self.assertIsNotNone(pt)
+        self.assertIn("Discord", pt or "")
+        en = i18n_loader.lookup("ja", "volume.title")
+        self.assertTrue(en)  # falls back to en.json or en chain
+
+
 if __name__ == "__main__":
     unittest.main()

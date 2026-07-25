@@ -1,30 +1,53 @@
 version: '3.8'
 
+# Tiffany Lavalink cluster — WARP/proxy on nodes (not on bot).
+# Bot orchestrates via wavelink; nodes pull audio from platforms (LavaSrc + YouTube plugin).
+#
+# VPS: run `bash scripts/warp-setup.sh` first. With network_mode: host, Lavalink uses 127.0.0.1:40000.
+# Scale: duplicate lavalink-secondary service + LAVALINK_NODES JSON on the bot.
+
 services:
+  lavalink-primary:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: lavalink-primary
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-tiffany_lavalink_2026}
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
+      # WARP SOCKS5 on host — YouTube/datacenter bypass (same as yt-dlp)
+      - JAVA_TOOL_OPTIONS=-DsocksProxyHost=127.0.0.1 -DsocksProxyPort=40000
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+      - lavalink-logs:/opt/Lavalink/logs
+
+  # Optional second node (uncomment for HA / load spread)
+  # lavalink-secondary:
+  #   image: ghcr.io/lavalink-devs/lavalink:4
+  #   container_name: lavalink-secondary
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   environment:
+  #     - SERVER_PORT=2334
+  #     - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-tiffany_lavalink_2026}
+  #     - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
+  #     - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
+  #     - JAVA_TOOL_OPTIONS=-DsocksProxyHost=127.0.0.1 -DsocksProxyPort=40000
+  #   volumes:
+  #     - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
+
   tiffany-bot:
     build: .
     container_name: tiffany_bot
     restart: unless-stopped
-    network_mode: "host"
+    network_mode: host
     env_file:
       - .env
     volumes:
-      # Espelha o diretório local para dentro do container
-      # Isso garante que logs e históricos (arquivos .json) sejam persistentes
       - .:/app
-    # Evita que o container fique em loop de reinicialização infinito muito rápido caso haja erro grave
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 10
-        window: 120s
+    profiles:
+      - docker-bot
 
-  lavalink:
-    image: fredboat/lavalink:master
-    container_name: lavalink
-    restart: unless-stopped
-    ports:
-      - "2333:2333"
-    volumes:
-      - ./lavalink/application.yml:/opt/Lavalink/application.yml
+volumes:
+  lavalink-logs:

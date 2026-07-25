@@ -1,0 +1,8 @@
+{
+  "volume.title": "Ses",
+  "volume.global": "🔊 **Tiffany yayın sesi: {pct}%** (0–150)\n\nBu, ses kanalındaki **herkesi** etkiler.",
+  "volume.client_title": "🎧 Sadece kendin için mi ayarlamak istiyorsun?",
+  "volume.client_body": "Discord'da: Tiffany'nin avatarına **sağ tık** → **Kullanıcı Ses Seviyesi**.\n\nBu **istemci tarafı**dır — diğer üyeleri etkilemez.",
+  "volume.footer": "Yayın = global · Kullanıcı sesi = kişisel",
+  "premium.upsell": "⭐ Bu özellik **Tiffany Premium** gerektirir."
+}

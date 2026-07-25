@@ -1,4 +1,4 @@
-"""Guild locale → language (pt / en / es / fr / de) for user-facing Tiffany output."""
+"""Guild locale → language (pt / en / es / fr / de / tr / sv / it / nl / ar / ja / ko / ru) for user-facing Tiffany output."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Literal, Optional
 import discord
 from discord import app_commands
 
-GuildLang = Literal["en", "es", "pt", "fr", "de"]
+GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
 
 
 def slash_ephemeral(interaction: discord.Interaction) -> bool:
@@ -22,6 +22,14 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
     ("es", "es"),
     ("fr", "fr"),
     ("de", "de"),
+    ("tr", "tr"),
+    ("sv", "sv"),
+    ("it", "it"),
+    ("nl", "nl"),
+    ("ar", "ar"),
+    ("ja", "ja"),
+    ("ko", "ko"),
+    ("ru", "ru"),
 )
 
 _USER_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_lang_prefs.json")
@@ -92,7 +100,14 @@ def interaction_lang(interaction: discord.Interaction) -> GuildLang:
 
 
 def tr(lang: GuildLang, key: str, **kwargs: object) -> str:
-    """Look up a localized string. Falls back to en, then the key itself."""
+    """Look up a localized string. JSON catalog → _STRINGS → en → key."""
+    try:
+        from infra import i18n_loader
+        json_text = i18n_loader.lookup(lang, key)
+        if json_text:
+            return json_text.format(**kwargs) if kwargs else json_text
+    except Exception:
+        pass
     bucket = _STRINGS.get(key)
     if not bucket:
         return key
@@ -476,6 +491,14 @@ class LanguageSelect(discord.ui.Select):
             discord.SelectOption(label="Português (BR)", value="pt", description="Mudar para Português", emoji="🇧🇷"),
             discord.SelectOption(label="Français", value="fr", description="Passer en Français", emoji="🇫🇷"),
             discord.SelectOption(label="Deutsch", value="de", description="Auf Deutsch wechseln", emoji="🇩🇪"),
+            discord.SelectOption(label="Türkçe", value="tr", description="Türkçe", emoji="🇹🇷"),
+            discord.SelectOption(label="Svenska", value="sv", description="Svenska", emoji="🇸🇪"),
+            discord.SelectOption(label="Italiano", value="it", description="Italiano", emoji="🇮🇹"),
+            discord.SelectOption(label="Nederlands", value="nl", description="Nederlands", emoji="🇳🇱"),
+            discord.SelectOption(label="العربية", value="ar", description="Arabic", emoji="🇸🇦"),
+            discord.SelectOption(label="日本語", value="ja", description="Japanese", emoji="🇯🇵"),
+            discord.SelectOption(label="한국어", value="ko", description="Korean", emoji="🇰🇷"),
+            discord.SelectOption(label="Русский", value="ru", description="Russian", emoji="🇷🇺"),
         ]
         for opt in options:
             if opt.value == lang:

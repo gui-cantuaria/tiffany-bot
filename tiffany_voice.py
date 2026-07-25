@@ -9303,18 +9303,15 @@ def register_voice(bot: commands.Bot) -> None:
             except Exception:
                 log.debug("Stale voice cleanup failed guild=%s", guild.id, exc_info=True)
 
-        # Connect to Lavalink only if explicitly enabled (LAVALINK_ENABLED=1).
+        # Connect to Lavalink cluster when LAVALINK_ENABLED=1 (bot orchestrates; nodes stream).
         if _lavalink_enabled() and _WAVELINK_AVAILABLE:
-            lava_host = os.getenv("LAVALINK_HOST", "localhost")
-            lava_port = int(os.getenv("LAVALINK_PORT", "2333"))
-            lava_pass = os.getenv("LAVALINK_PASSWORD", "") or "tiffany_lavalink_2026"
             try:
-                node = wavelink.Node(
-                    uri=f"http://{lava_host}:{lava_port}",
-                    password=lava_pass,
-                )
-                await wavelink.Pool.connect(nodes=[node], client=bot, cache_capacity=100)
-                log.info("Lavalink connected: %s:%d", lava_host, lava_port)
+                from infra.audio.lavalink_nodes import build_wavelink_nodes
+                nodes = build_wavelink_nodes()
+                if nodes:
+                    await wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100)
+                    ids = [getattr(n, "identifier", "?") for n in nodes]
+                    log.info("Lavalink cluster connected: %s", ", ".join(ids))
             except Exception as e:
                 log.warning("Lavalink unavailable (%s) — using yt-dlp as fallback.", e)
         elif _WAVELINK_AVAILABLE:

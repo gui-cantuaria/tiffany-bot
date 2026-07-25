@@ -2329,6 +2329,15 @@ async def on_guild_join(guild: discord.Guild):
 async def on_ready():
     global _voice_available
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
+    try:
+        from infra import redis_client, postgres
+        from infra import i18n_loader
+        await redis_client.init_redis()
+        await postgres.init_db()
+        await postgres.run_migrations()
+        i18n_loader.ensure_loaded()
+    except Exception:
+        log.exception("Infrastructure init partial failure — JSON/local fallback active.")
     if _voice_available and tiffany_voice:
         try:
             tiffany_voice.register_voice(discord_client)
@@ -2385,6 +2394,12 @@ async def on_ready():
 @discord_client.event
 async def on_close():
     global http_session
+    try:
+        from infra import redis_client, postgres
+        await redis_client.close_redis()
+        await postgres.close_db()
+    except Exception:
+        pass
     if http_session:
         await http_session.close()
         http_session = None
