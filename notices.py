@@ -2429,6 +2429,8 @@ async def on_ready():
     except Exception as e:
         log.warning(f"Error syncing slash commands: {e}")
     if _voice_available and tiffany_voice:
+        lines = tiffany_voice.refresh_presence_lines(discord_client)
+        log.info("Presence slash list refreshed (%d commands).", len(lines))
         await tiffany_voice.start_warp_monitor(discord_client)
     if not verificar_feeds.is_running():
         verificar_feeds.start()

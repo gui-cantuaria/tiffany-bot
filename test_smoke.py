@@ -177,6 +177,18 @@ class TestVolumeHelpers(unittest.TestCase):
         self.assertEqual(tv.volume_to_lavalink(100), 1000)
         self.assertEqual(tv.volume_to_lavalink(150), 1500)
 
+    def test_presence_lines_from_slash_tree(self):
+        import notices
+        import tiffany_voice as tv
+
+        tv.register_voice(notices.discord_client)
+        lines = tv.presence_lines_for(notices.discord_client)
+        self.assertGreaterEqual(len(lines), 25)
+        self.assertTrue(all(line.startswith("/") for line in lines))
+        self.assertNotIn("/rp", lines)
+        self.assertIn("/stats", lines)
+        self.assertIn("/help", lines)
+
 
 class TestVolumeEmbed(unittest.TestCase):
     def test_build_volume_embed(self):

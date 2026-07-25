@@ -3994,21 +3994,36 @@ def invite_link_view(invite_url: str, lang: GuildLang = "en") -> discord.ui.View
 
 
 _presence_rotation_task: asyncio.Task | None = None
+_presence_lines: tuple[str, ...] = ()
 
-# Global Discord presence — short lines after Discord's "Playing …" (Jogando … in PT clients)
-PRESENCE_ROTATE_SEC = 10
-PRESENCE_LINES: tuple[str, ...] = (
-    "/help — all commands",
-    "/play — music in voice",
-    "/chat — ask me anything",
-    "/language — pick your language",
-    "/game — Steam & Epic deals",
-    "/rewind — your stats",
-    "/roleplay — casual chat",
-    "/about — what I do",
-    "/stats — am I online?",
-    "/updates — recent changes",
+# Fallback if command tree is empty at startup (rare).
+_PRESENCE_FALLBACK: tuple[str, ...] = (
+    "/help",
+    "/play",
+    "/stats",
 )
+
+PRESENCE_ROTATE_SEC = 8
+
+
+def presence_lines_for(client: discord.Client) -> tuple[str, ...]:
+    """Build `/command` labels from the live slash command tree (cheap, no I/O)."""
+    skip = frozenset({"rp"})  # duplicate slash alias of /roleplay
+    names = sorted(
+        cmd.name
+        for cmd in client.tree.get_commands()
+        if cmd.name not in skip
+    )
+    if not names:
+        return _PRESENCE_FALLBACK
+    return tuple(f"/{name}" for name in names)
+
+
+def refresh_presence_lines(client: discord.Client) -> tuple[str, ...]:
+    """Refresh cached rotation list (call after slash sync / cog load)."""
+    global _presence_lines
+    _presence_lines = presence_lines_for(client)
+    return _presence_lines
 
 
 async def _set_playing_presence(client: discord.Client, name: str) -> bool:
@@ -4026,22 +4041,36 @@ async def _set_playing_presence(client: discord.Client, name: str) -> bool:
 
 
 async def start_presence_rotation(client: discord.Client) -> None:
-    """Rotate playing status to showcase features on the bot profile."""
+    """Rotate playing status through every slash command (/name), 8s each."""
     global _presence_rotation_task
-    # Always refresh on reconnect; only skip spawning a second loop task.
-    await _set_playing_presence(client, PRESENCE_LINES[0])
+    lines = refresh_presence_lines(client)
+    if lines:
+        await _set_playing_presence(client, lines[0])
     if _presence_rotation_task and not _presence_rotation_task.done():
         return
 
     async def _loop() -> None:
-        i = 1
         await client.wait_until_ready()
+        idx = 1
         while not client.is_closed():
-            await _set_playing_presence(client, PRESENCE_LINES[i % len(PRESENCE_LINES)])
-            i += 1
+            lines_local = _presence_lines or refresh_presence_lines(client)
+            if not lines_local:
+                await asyncio.sleep(PRESENCE_ROTATE_SEC)
+                continue
+            if idx >= len(lines_local):
+                refresh_presence_lines(client)
+                lines_local = _presence_lines or lines_local
+                idx = 0
+            await _set_playing_presence(client, lines_local[idx % len(lines_local)])
+            idx += 1
             await asyncio.sleep(PRESENCE_ROTATE_SEC)
 
     _presence_rotation_task = asyncio.create_task(_loop(), name="tiffany-presence")
+    log.info(
+        "Presence rotation: %d slash commands, %ds interval",
+        len(_presence_lines),
+        PRESENCE_ROTATE_SEC,
+    )
 
 
 def _fmt_dur(sec: float) -> str:
