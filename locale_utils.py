@@ -2278,21 +2278,26 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎮 **Uso:** `t!g` ou `t!game` <filtros em linguagem natural>",
     },
     "help.chat.body": {
-        "de": "`/chat` — KI-Fragen (Bilder OK)\n"
-        "`/roleplay` — lockerer Chat · `/game` — Spiele (Steam/Epic)\n"
-        "`/summary` — Link-Zusammenfassung",
-        "en": "`/chat` — AI questions (images OK)\n"
-        "`/roleplay` — casual chat · `/game` — games (Steam/Epic)\n"
-        "`/summary` — summarize a link",
-        "es": "`/chat` — IA (imágenes OK)\n"
-        "`/roleplay` — chat casual · `/game` — juegos (Steam/Epic)\n"
-        "`/summary` — resumir un enlace",
-        "fr": "`/chat` — IA (images OK)\n"
-        "`/roleplay` — chat décontracté · `/game` — jeux (Steam/Epic)\n"
-        "`/summary` — résumer un lien",
-        "pt": "`/chat` — pergunte à IA (imagens OK)\n"
-        "`/roleplay` — conversa casual · `/game` — jogos (Steam/Epic)\n"
-        "`/summary` — resumir um link",
+        "de": "`/chat` — KI-Fragen (Bilder OK)\n\n"
+        "`/roleplay` (t!rp) — lockerer Chat · `t!rp config` — Persönlichkeit\n\n"
+        "`/game` — Spiele (Steam/Epic)\n\n"
+        "`/summary` (t!su) — Link-Zusammenfassung",
+        "en": "`/chat` — AI questions (images OK)\n\n"
+        "`/roleplay` (t!rp) — casual chat · `t!rp config` — personality\n\n"
+        "`/game` — games (Steam/Epic)\n\n"
+        "`/summary` (t!su) — summarize a link",
+        "es": "`/chat` — IA (imágenes OK)\n\n"
+        "`/roleplay` (t!rp) — chat casual · `t!rp config` — personalidad\n\n"
+        "`/game` — juegos (Steam/Epic)\n\n"
+        "`/summary` (t!su) — resumir un enlace",
+        "fr": "`/chat` — IA (images OK)\n\n"
+        "`/roleplay` (t!rp) — chat décontracté · `t!rp config` — personnalité\n\n"
+        "`/game` — jeux (Steam/Epic)\n\n"
+        "`/summary` (t!su) — résumer un lien",
+        "pt": "`/chat` — pergunte à IA (imagens OK)\n\n"
+        "`/roleplay` (t!rp) — conversa casual · `t!rp config` — personalidade\n\n"
+        "`/game` — jogos (Steam/Epic)\n\n"
+        "`/summary` (t!su) — resumir um link",
     },
     "help.chat.title": {
         "de": "💬 Chat & KI",
@@ -2302,32 +2307,42 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "💬 Chat e IA",
     },
     "help.desc": {
-        "de": "Musik, KI-Chat, Würfel, Tech-News und Angebote.\n"
-        "Präfix **`t!`** oder **`/`** · Sprachkanal → **`/play`**.\n"
-        "**`/language`** — deine Sprache · **`/status`** · **`/stats`** · **`/updates`**",
-        "en": "Music, AI chat, dice, tech news, and deals.\n"
-        "Prefix **`t!`** or **`/`** · join voice → **`/play`**.\n"
-        "**`/language`** — your language · **`/status`** · **`/stats`** · **`/updates`**",
-        "es": "Música, chat IA, dados, noticias tech y ofertas.\n"
-        "Prefijo **`t!`** o **`/`** · entra en voz → **`/play`**.\n"
-        "**`/language`** — tu idioma · **`/status`** · **`/stats`** · **`/updates`**",
-        "fr": "Musique, chat IA, dés, actu tech et bons plans.\n"
-        "Préfixe **`t!`** ou **`/`** · rejoins le vocal → **`/play`**.\n"
-        "**`/language`** — ta langue · **`/status`** · **`/stats`** · **`/updates`**",
-        "pt": "Música na call, IA, dados, notícias e ofertas tech.\n"
-        "Use **`t!`** ou **`/`** · entre na voz → **`/play`**.\n"
-        "**`/language`** — seu idioma · **`/status`** · **`/stats`** · **`/updates`**",
+        "de": "Musik, KI-Chat, Würfel, Tech-News und Angebote.\n\n"
+        "Präfix **`t!`** oder **`/`** · Sprachkanal → **`/play`**.\n\n"
+        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "en": "Music, AI chat, dice, tech news, and deals.\n\n"
+        "Prefix **`t!`** or **`/`** · join voice → **`/play`**.\n\n"
+        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "es": "Música, chat IA, dados, noticias tech y ofertas.\n\n"
+        "Prefijo **`t!`** o **`/`** · entra en voz → **`/play`**.\n\n"
+        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "fr": "Musique, chat IA, dés, actu tech et bons plans.\n\n"
+        "Préfixe **`t!`** ou **`/`** · rejoins le vocal → **`/play`**.\n\n"
+        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+        "pt": "Música na call, IA, dados, notícias e ofertas tech.\n\n"
+        "Use **`t!`** ou **`/`** · entre na voz → **`/play`**.\n\n"
+        "**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
     },
     "help.dice.body": {
-        "de": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "de": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
+        "`adv` · `dis` · `stats` · `coin`\n\n"
+        "`t!d adv` · `t!d stats` · `t!d macro add <name> <expr>`\n\n"
         "Ohne Präfix im Chat — Reroll-Button inklusive.",
-        "en": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "en": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
+        "`adv` · `dis` · `stats` · `coin`\n\n"
+        "`t!d adv` · `t!d stats` · `t!d macro add <name> <expr>`\n\n"
         "No prefix in chat — reroll button included.",
-        "es": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "es": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
+        "`adv` · `dis` · `stats` · `coin`\n\n"
+        "`t!d adv` · `t!d stats` · `t!d macro add <nombre> <expr>`\n\n"
         "Sin prefijo en el chat — botón de reroll incluido.",
-        "fr": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "fr": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
+        "`adv` · `dis` · `stats` · `coin`\n\n"
+        "`t!d adv` · `t!d stats` · `t!d macro add <nom> <expr>`\n\n"
         "Sans préfixe dans le chat — bouton de relance inclus.",
-        "pt": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\n"
+        "pt": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n"
+        "`adv` · `dis` · `stats` · `coin`\n\n"
+        "`t!d adv` · `t!d stats` · `t!d macro add <nome> <expr>`\n\n"
         "Sem prefixo no chat — botão de reroll incluso.",
     },
     "help.dice.title": {
@@ -2338,43 +2353,43 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎲 Dados",
     },
     "help.footer": {
-        "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n'
-        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
         "🌐 **`/language`** — 13 Sprachen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
-        "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n'
-        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
         "🌐 **`/language`** — 13 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
-        "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n'
-        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
         "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
-        "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n'
-        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
         "🌐 **`/language`** — 13 langues : EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
-        "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n'
-        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n"
+        "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n\n'
+        "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
         "🌐 **`/language`** — 13 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
     },
     "help.music.body": {
-        "de": "`/play` · `/skip` · `/pause` · `/resume`\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` (10.000 Hits) · `/autoplay` · `/lyrics` · `/seek`\n"
-        "`/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "en": "`/play` · `/skip` · `/pause` · `/resume`\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` (10,000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
-        "`/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "es": "`/play` · `/skip` · `/pause` · `/resume`\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
-        "`/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "fr": "`/play` · `/skip` · `/pause` · `/resume`\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
-        "`/clear` · `/nonstop` · `/clip` · `/playlist`",
-        "pt": "`/play` · `/skip` · `/pause` · `/resume`\n"
-        "`/queue` · `/shuffle` · `/loop` · `/replay`\n"
-        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n"
-        "`/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "de": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
+        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
+        "`/random` (10.000 Hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
+        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "en": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
+        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
+        "`/random` (10,000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
+        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "es": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
+        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
+        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
+        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "fr": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
+        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
+        "`/random` (10 000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
+        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
+        "pt": "`/play` · `/skip` · `/pause` · `/resume`\n\n"
+        "`/queue` · `/shuffle` · `/loop` · `/replay`\n\n"
+        "`/random` (10.000 hits) · `/autoplay` · `/lyrics` · `/seek`\n\n"
+        "`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
     },
     "help.music.title": {
         "de": "🎵 Musik",
@@ -2384,36 +2399,41 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "🎵 Música",
     },
     "help.settings.body": {
-        "de": "`/language` — Sprache wählen\n"
-        "`/status` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n"
-        "`/stats` — **Nutzung** (Owner, privat)\n"
-        "`/updates` — **Changelog**\n"
-        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
-        "`/about` · `/rewind` · `/mod-panel` (Admin)",
-        "en": "`/language` — pick your language\n"
-        "`/status` — **bot health** (ping, music, news, WARP)\n"
-        "`/stats` — **usage counters** (owner only, private)\n"
-        "`/updates` — **changelog**\n"
-        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
-        "`/about` · `/rewind` · `/mod-panel` (admin)",
-        "es": "`/language` — elegir idioma\n"
-        "`/status` — **salud del bot** (ping, música, noticias, WARP)\n"
-        "`/stats` — **uso acumulado** (solo owner, privado)\n"
-        "`/updates` — **novedades**\n"
-        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
-        "`/about` · `/rewind` · `/mod-panel` (admin)",
-        "fr": "`/language` — choisir la langue\n"
-        "`/status` — **santé du bot** (ping, musique, actus, WARP)\n"
-        "`/stats` — **compteurs d'usage** (owner, privé)\n"
-        "`/updates` — **nouveautés**\n"
-        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
-        "`/about` · `/rewind` · `/mod-panel` (admin)",
-        "pt": "`/language` — mudar meu idioma\n"
-        "`/status` — **saúde do bot** (conexão, música, notícias, WARP)\n"
-        "`/stats` — **números de uso** (só dono, privado)\n"
-        "`/updates` — **novidades**\n"
-        "`/giveaway` (t!gw) · `/embed` (t!emb)\n"
-        "`/about` · `/rewind` · `/mod-panel` (admin)",
+        "de": "`/language` — Sprache wählen\n\n"
+        "`/status` — **Bot-Gesundheit** (Ping, Musik, News, WARP)\n\n"
+        "`/stats` — **Nutzung** (Owner, privat)\n\n"
+        "`/updates` — **Changelog**\n\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
+        "`/about` · `/help` · `/rewind`\n\n"
+        "`/mod-panel` (Admin) · `/player-status` (Admin)",
+        "en": "`/language` — pick your language\n\n"
+        "`/status` — **bot health** (ping, music, news, WARP)\n\n"
+        "`/stats` — **usage counters** (owner only, private)\n\n"
+        "`/updates` — **changelog**\n\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
+        "`/about` · `/help` · `/rewind`\n\n"
+        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "es": "`/language` — elegir idioma\n\n"
+        "`/status` — **salud del bot** (ping, música, noticias, WARP)\n\n"
+        "`/stats` — **uso acumulado** (solo owner, privado)\n\n"
+        "`/updates` — **novedades**\n\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
+        "`/about` · `/help` · `/rewind`\n\n"
+        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "fr": "`/language` — choisir la langue\n\n"
+        "`/status` — **santé du bot** (ping, musique, actus, WARP)\n\n"
+        "`/stats` — **compteurs d'usage** (owner, privé)\n\n"
+        "`/updates` — **nouveautés**\n\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
+        "`/about` · `/help` · `/rewind`\n\n"
+        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "pt": "`/language` — mudar meu idioma\n\n"
+        "`/status` — **saúde do bot** (conexão, música, notícias, WARP)\n\n"
+        "`/stats` — **números de uso** (só dono, privado)\n\n"
+        "`/updates` — **novidades**\n\n"
+        "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
+        "`/about` · `/help` · `/rewind`\n\n"
+        "`/mod-panel` (admin) · `/player-status` (admin)",
     },
     "help.settings.title": {
         "de": "⚙️ Einstellungen & Tools",

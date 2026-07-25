@@ -1,14 +1,14 @@
 {
   "help.title": "Tiffany · Komutlar ve yardım",
-  "help.desc": "Sesli müzik, AI sohbet, zar, tech haberleri ve fırsatlar.\n**`t!`** veya **`/`** · sese katıl → **`/play`**.\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.desc": "Sesli müzik, AI sohbet, zar, tech haberleri ve fırsatlar.\n\n**`t!`** veya **`/`** · sese katıl → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
   "help.music.title": "🎵 Müzik",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n`/queue` · `/shuffle` · `/loop` · `/replay`\n`/random` (10.000 hit) · `/autoplay` · `/lyrics` · `/seek`\n`/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10.000 hit) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 Sohbet ve AI",
-  "help.chat.body": "`/chat` — AI (görsel OK)\n`/roleplay` — gündelik sohbet · `/game` — oyunlar (Steam/Epic)\n`/summary` — link özeti",
+  "help.chat.body": "`/chat` — AI (görsel OK)\n\n`/roleplay` (t!rp) — gündelik sohbet · `t!rp config` — kişilik\n\n`/game` — oyunlar (Steam/Epic)\n\n`/summary` (t!su) — link özeti",
   "help.dice.title": "🎲 Zar",
-  "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\nÖnek yok — yeniden atma düğmesi dahil.",
+  "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <ad> <expr>`\n\nÖnek yok — yeniden atma düğmesi dahil.",
   "help.settings.title": "⚙️ Ayarlar ve araçlar",
-  "help.settings.body": "`/language` — dil seç\n`/status` — **bot sağlığı** (ping, müzik, haberler, WARP)\n`/stats` — **kullanım** (sadece owner, gizli)\n`/updates` — **değişiklikler**\n`/giveaway` (t!gw) · `/embed` (t!emb)\n`/about` · `/rewind` · `/mod-panel` (admin)",
-  "help.footer": "🎙️ Sesli: «Tiffany, [şarkı] çal» · skip · pause · queue\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n🌐 Discord dilin otomatik kullanılır · **`/language`** — EN · FR · ES · PT · DE",
+  "help.settings.body": "`/language` — dil seç\n\n`/status` — **bot sağlığı** (ping, müzik, haberler, WARP)\n\n`/stats` — **kullanım** (sadece owner, gizli)\n\n`/updates` — **değişiklikler**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.footer": "🎙️ Sesli: «Tiffany, [şarkı] çal» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 dil: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
   "slash.cmd.help": "Komutlar: müzik (10k hit), AI, zar, çekilişler, ayarlar"
 }

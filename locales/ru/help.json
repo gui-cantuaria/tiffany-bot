@@ -1,14 +1,14 @@
 {
-  "help.title": "Tiffany · Команды и справка",
-  "help.desc": "Музыка в голосе, AI-чат, кости, tech-новости и скидки.\n**`t!`** или **`/`** · зайди в голос → **`/play`**.\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
+  "help.title": "Tiffany · Команды и помощь",
+  "help.desc": "Музыка, AI-чат, кости, tech-новости и скидки.\n\nПрефикс **`t!`** или **`/`** · войди в войс → **`/play`**.\n\n**`/language`** · **`/status`** · **`/stats`** · **`/updates`**",
   "help.music.title": "🎵 Музыка",
-  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n`/queue` · `/shuffle` · `/loop` · `/replay`\n`/random` (10 000 хитов) · `/autoplay` · `/lyrics` · `/seek`\n`/clear` · `/nonstop` · `/clip` · `/playlist`",
+  "help.music.body": "`/play` · `/skip` · `/pause` · `/resume`\n\n`/queue` · `/shuffle` · `/loop` · `/replay`\n\n`/random` (10 000 хитов) · `/autoplay` · `/lyrics` · `/seek`\n\n`/volume` (t!v) · `/clear` · `/nonstop` · `/clip` · `/playlist`",
   "help.chat.title": "💬 Чат и AI",
-  "help.chat.body": "`/chat` — AI (картинки OK)\n`/roleplay` — неформальный чат · `/game` — игры (Steam/Epic)\n`/summary` — кратко о ссылке",
+  "help.chat.body": "`/chat` — вопросы AI (картинки OK)\n\n`/roleplay` (t!rp) — casual-чат · `t!rp config` — личность\n\n`/game` — игры (Steam/Epic)\n\n`/summary` (t!su) — кратко о ссылке",
   "help.dice.title": "🎲 Кости",
-  "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50` · `adv` · `dis` · `stats` · `coin`\nБез префикса в чате — кнопка reroll включена.",
+  "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <имя> <expr>`\n\nБез префикса в чате — кнопка reroll.",
   "help.settings.title": "⚙️ Настройки и инструменты",
-  "help.settings.body": "`/language` — выбрать язык\n`/status` — **здоровье бота** (ping, музыка, новости, WARP)\n`/stats` — **статистика** (только owner, приватно)\n`/updates` — **обновления**\n`/giveaway` (t!gw) · `/embed` (t!emb)\n`/about` · `/rewind` · `/mod-panel` (admin)",
-  "help.footer": "🎙️ В голосе: «Tiffany, play [трек]» · skip · pause · queue\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n🌐 Язык Discord автоматически · **`/language`** — EN · FR · ES · PT · DE",
-  "slash.cmd.help": "Команды: музыка (10k хитов), AI, кости, giveaways, настройки"
+  "help.settings.body": "`/language` — выбрать язык\n\n`/status` — **здоровье бота** (ping, музыка, новости, WARP)\n\n`/stats` — **статистика** (только owner, приватно)\n\n`/updates` — **changelog**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (admin) · `/player-status` (admin)",
+  "help.footer": "🎙️ В войсе: «Tiffany, включи [трек]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 13 языков: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU",
+  "slash.cmd.help": "Команды: музыка (10k), AI, кости, розыгрыши, настройки"
 }
