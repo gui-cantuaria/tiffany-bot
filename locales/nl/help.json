@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <naam> <expr>`\n\nGeen prefix in chat — reroll-knop inbegrepen.",
   "help.settings.title": "⚙️ Instellingen en tools",
   "help.settings.body": "/language — kies taal\n\n/stats — **botgezondheid** (ping, muziek, nieuws, WARP)\n\n/updates — **changelog**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
-  "help.footer": "🎙️ In voice: «Tiffany, speel [nummer]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 talen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+  "help.footer": "🎙️ In voice: «Tiffany, speel [nummer]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 talen: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "Commando's: muziek (10k hits), AI, dobbelstenen, giveaways, instellingen"
 }

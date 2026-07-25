@@ -8,7 +8,7 @@
   "about.dice.title": "Xúc xắc",
   "about.footer": "/help = danh sách lệnh đầy đủ",
   "about.invite_btn": "Thêm vào máy chủ khác",
-  "about.language.body": "Ngôn ngữ của bạn chỉ áp dụng **cho riêng bạn** — bất kể máy chủ. Sử dụng **`/language`** (hoặc `t!lang`) — **16 ngôn ngữ**: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+  "about.language.body": "Ngôn ngữ của bạn chỉ áp dụng **cho riêng bạn** — bất kể máy chủ. Sử dụng **`/language`** (hoặc `t!lang`) — **16 ngôn ngữ**: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
   "about.language.title": "🌐 Ngôn ngữ",
   "about.music.body": "Danh sách phát, xáo trộn, lặp lại, tự động phát; `/random` chọn từ 10.000 bài hát nổi bật.\nTrong kênh thoại: *\"Tiffany, play…\"*, *\"skip\"*, *\"pause\"*, *\"queue\"*.",
   "about.music.title": "🎵 Âm nhạc",

@@ -7,16 +7,13 @@ import logging
 import os
 from typing import Optional
 
+from infra.lang_constants import ALL_LANGS
+
 log = logging.getLogger("tiffany-bot")
 
 _LOCALES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "locales")
 
-# All supported Tiffany languages (priority order for partial translations)
-SUPPORTED_LANGS: tuple[str, ...] = (
-    "en", "pt", "es", "fr", "de",
-    "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
-    "hi", "vi", "uk",
-)
+SUPPORTED_LANGS: tuple[str, ...] = ALL_LANGS
 
 _FALLBACK_CHAIN: tuple[str, ...] = ("en",)
 

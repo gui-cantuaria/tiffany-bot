@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <назва> <вираз>`\n\nБез префікса в чаті — кнопка перекидання включена.",
   "help.settings.title": "⚙️ Налаштування та інструменти",
   "help.settings.body": "`/language` — обрати мову\n\n`/stats` — **стан бота** (пінг, музика, новини, WARP)\n\n`/updates` — **список змін**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (адмін) · `/player-status` (адмін)",
-  "help.footer": "🌐 **`/language`** — 16 мов: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK · HI · VI · UK",
+  "help.footer": "🌐 **`/language`** — 16 мов: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "Усі команди: музика (10 тис. треків), AI, гральні кістки, розіграші, налаштування"
 }

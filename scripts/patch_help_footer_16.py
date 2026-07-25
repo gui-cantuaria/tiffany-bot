@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FOOTER = (
     "🌐 **`/language`** — 16 languages: "
-    "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK"
+    "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV"
 )
 REPLACEMENTS = [
     ("13 languages", "16 languages"),

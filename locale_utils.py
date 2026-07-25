@@ -10,36 +10,34 @@ import discord
 from discord import app_commands
 
 from brand_colors import TIFFANY_GREEN, TIFFANY_PINK, TIFFANY_RED
+from infra.lang_constants import ALL_LANGS, ALL_LANGS_SET, CORE_LANGS, DEFAULT_LANG, LANG_CODES_DISPLAY
 
-GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru", "hi", "vi", "uk"]
-
-# Fully translated UI languages (all 16 in /language picker; core also in _STRINGS).
-CORE_LANGS: tuple[GuildLang, ...] = ("en", "fr", "es", "pt", "de")
-ALL_LANGS: tuple[GuildLang, ...] = (
-    "en", "pt", "es", "fr", "de",
-    "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
-    "hi", "vi", "uk",
-)
-DEFAULT_LANG: GuildLang = "en"
+GuildLang = Literal[
+    "en", "hi", "es", "ar", "fr", "pt", "ru", "de",
+    "ja", "ko", "vi", "tr", "it", "uk", "nl", "sv",
+]
 
 # Native labels for /language select (value, label, description, emoji).
-LANGUAGE_SELECT_OPTIONS: tuple[tuple[str, str, str, str], ...] = (
-    ("en", "English", "Switch to English", "🇺🇸"),
-    ("pt", "Português (BR)", "Mudar para Português", "🇧🇷"),
-    ("es", "Español", "Cambiar a Español", "🇪🇸"),
-    ("fr", "Français", "Passer en Français", "🇫🇷"),
-    ("de", "Deutsch", "Auf Deutsch wechseln", "🇩🇪"),
-    ("tr", "Türkçe", "Türkçe'ye geç", "🇹🇷"),
-    ("sv", "Svenska", "Byt till Svenska", "🇸🇪"),
-    ("it", "Italiano", "Passa a Italiano", "🇮🇹"),
-    ("nl", "Nederlands", "Wissel naar Nederlands", "🇳🇱"),
-    ("ar", "العربية", "التبديل إلى العربية", "🇸🇦"),
-    ("ja", "日本語", "日本語に切り替え", "🇯🇵"),
-    ("ko", "한국어", "한국어로 변경", "🇰🇷"),
-    ("ru", "Русский", "Переключить на русский", "🇷🇺"),
-    ("hi", "हिन्दी", "हिन्दी में बदलें", "🇮🇳"),
-    ("vi", "Tiếng Việt", "Chuyển sang Tiếng Việt", "🇻🇳"),
-    ("uk", "Українська", "Перемкнути на українську", "🇺🇦"),
+_LANGUAGE_SELECT_BY_CODE: dict[str, tuple[str, str, str, str]] = {
+    "en": ("en", "English", "Switch to English", "🇺🇸"),
+    "hi": ("hi", "हिन्दी", "हिन्दी में बदलें", "🇮🇳"),
+    "es": ("es", "Español", "Cambiar a Español", "🇪🇸"),
+    "ar": ("ar", "العربية", "التبديل إلى العربية", "🇸🇦"),
+    "fr": ("fr", "Français", "Passer en Français", "🇫🇷"),
+    "pt": ("pt", "Português (BR)", "Mudar para Português", "🇧🇷"),
+    "ru": ("ru", "Русский", "Переключить на русский", "🇷🇺"),
+    "de": ("de", "Deutsch", "Auf Deutsch wechseln", "🇩🇪"),
+    "ja": ("ja", "日本語", "日本語に切り替え", "🇯🇵"),
+    "ko": ("ko", "한국어", "한국어로 변경", "🇰🇷"),
+    "vi": ("vi", "Tiếng Việt", "Chuyển sang Tiếng Việt", "🇻🇳"),
+    "tr": ("tr", "Türkçe", "Türkçe'ye geç", "🇹🇷"),
+    "it": ("it", "Italiano", "Passa a Italiano", "🇮🇹"),
+    "uk": ("uk", "Українська", "Перемкнути на українську", "🇺🇦"),
+    "nl": ("nl", "Nederlands", "Wissel naar Nederlands", "🇳🇱"),
+    "sv": ("sv", "Svenska", "Byt till Svenska", "🇸🇪"),
+}
+LANGUAGE_SELECT_OPTIONS: tuple[tuple[str, str, str, str], ...] = tuple(
+    _LANGUAGE_SELECT_BY_CODE[code] for code in ALL_LANGS
 )
 
 # Extra terms for /language search (English + common aliases).
@@ -90,10 +88,7 @@ _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
 
 _USER_LANG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_lang_prefs.json")
 _user_lang_cache: dict[str, GuildLang] = {}
-_ALL_LANGS = frozenset({
-    "en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru",
-    "hi", "vi", "uk",
-})
+_ALL_LANGS = ALL_LANGS_SET
 
 
 def _load_user_langs():
@@ -1057,19 +1052,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "about.language.body": {
         "de": "Deine Sprache gilt **nur für dich** — unabhängig vom Server. "
         "Nutze **`/language`** (oder `t!lang`) — **16 Sprachen**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+        "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
         "en": "Your language applies **only to you** — regardless of the server. "
         "Use **`/language`** (or `t!lang`) — **16 languages**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+        "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
         "es": "Tu idioma aplica **solo para ti** — sin importar el servidor. "
         "Usa **`/language`** (o `t!lang`) — **16 idiomas**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+        "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
         "fr": "Ta langue s'applique **uniquement à toi** — quel que soit le serveur. "
         "Utilise **`/language`** (ou `t!lang`) — **16 langues** : "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+        "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
         "pt": "Seu idioma vale **só para você** — independente do servidor. "
         "Use **`/language`** (ou `t!lang`) — **16 idiomas**: "
-        "EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+        "EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
     },
     "about.language.title": {"de": "🌐 Sprache", "en": "🌐 Language", "es": "🌐 Idioma", "fr": "🌐 Langue", "pt": "🌐 Idioma"},
     "about.music.body": {
@@ -2544,19 +2539,19 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.footer": {
         "de": '🎙️ Im Voice: „Tiffany, spiel [Song]“ · skip · pause · queue\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 16 Sprachen: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+        "🌐 **`/language`** — 16 Sprachen: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
         "en": '🎙️ In voice: "Tiffany, play [song]" · skip · pause · queue\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 16 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+        "🌐 **`/language`** — 16 languages: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
         "es": '🎙️ En voz: «Tiffany, toca [canción]» · skip · pausa · cola\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 16 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+        "🌐 **`/language`** — 16 idiomas: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
         "fr": '🎙️ En vocal : « Tiffany, joue [musique] » · skip · pause · file\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 16 langues : EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+        "🌐 **`/language`** — 16 langues : EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
         "pt": '🎙️ Na call: «Tiffany, toca [música]» · pula · pausa · fila\n\n'
         "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-        "🌐 **`/language`** — 16 idiomas: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+        "🌐 **`/language`** — 16 idiomas: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
     },
     "help.music.body": {
         "de": "`/play` — Musik in Voice · `/skip` — Track überspringen · `/pause` — pausieren · `/resume` — fortsetzen\n\n"

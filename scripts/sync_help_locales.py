@@ -107,7 +107,7 @@ def main() -> int:
             data["help.footer"] = (
                 "🎙️ वॉइस में: «Tiffany, play [song]» · skip · pause · queue\n\n"
                 "YouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n"
-                "🌐 **`/language`** — 16 भाषाएँ: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK"
+                "🌐 **`/language`** — 16 भाषाएँ: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV"
             )
         help_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"updated {help_path.relative_to(ROOT)}")

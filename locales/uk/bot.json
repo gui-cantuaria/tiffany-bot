@@ -8,7 +8,7 @@
   "about.dice.title": "Гральні кубики",
   "about.footer": "/help = повний список команд",
   "about.invite_btn": "Додати на інший сервер",
-  "about.language.body": "Ваша мова застосовується **тільки до вас** — незалежно від сервера. Використовуйте **`/language`** (або `t!lang`) — **16 мов**: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+  "about.language.body": "Ваша мова застосовується **тільки до вас** — незалежно від сервера. Використовуйте **`/language`** (або `t!lang`) — **16 мов**: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
   "about.language.title": "🌐 Мова",
   "about.music.body": "Черга, перемішування, повтор, автоплей, плейлисти; `/random` обирає з 10 000 хітів.\nУ голосі: *\"Tiffany, play…\"*, *\"skip\"*, *\"pause\"*, *\"queue\"*.",
   "about.music.title": "🎵 Музика",

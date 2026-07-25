@@ -8,7 +8,7 @@
   "about.dice.title": "पासा (Dice)",
   "about.footer": "/help = कमांड की पूरी सूची",
   "about.invite_btn": "दूसरे सर्वर में जोड़ें",
-  "about.language.body": "आपकी भाषा **केवल आप पर** लागू होती है — सर्वर से स्वतंत्र। **`/language`** (या `t!lang`) का उपयोग करें — **16 भाषाएँ**: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK.",
+  "about.language.body": "आपकी भाषा **केवल आप पर** लागू होती है — सर्वर से स्वतंत्र। **`/language`** (या `t!lang`) का उपयोग करें — **16 भाषाएँ**: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV.",
   "about.language.title": "🌐 भाषा",
   "about.music.body": "कतार, शफल, लूप, ऑटोप्ले, प्लेलिस्ट; `/random` 10,000 हिट्स में से चुनता है।\nवॉयस में: *\"Tiffany, play…\"*, *\"skip\"*, *\"pause\"*, *\"queue\"*.",
   "about.music.title": "🎵 म्यूजिक",

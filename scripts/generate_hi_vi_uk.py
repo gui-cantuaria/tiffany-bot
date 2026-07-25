@@ -38,10 +38,10 @@ VOLUME_KEYS = (
 )
 
 FOOTER_16 = {
-    "en": "🌐 **`/language`** — 16 languages: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
-    "hi": "🌐 **`/language`** — 16 भाषाएँ: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
-    "vi": "🌐 **`/language`** — 16 ngôn ngữ: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
-    "uk": "🌐 **`/language`** — 16 мов: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+    "en": "🌐 **`/language`** — 16 languages: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
+    "hi": "🌐 **`/language`** — 16 भाषाएँ: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
+    "vi": "🌐 **`/language`** — 16 ngôn ngữ: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
+    "uk": "🌐 **`/language`** — 16 мов: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
 }
 
 

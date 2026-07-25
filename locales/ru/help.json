@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <имя> <expr>`\n\nБез префикса в чате — кнопка reroll.",
   "help.settings.title": "⚙️ Настройки и инструменты",
   "help.settings.body": "/language — выбрать язык\n\n/stats — **здоровье бота** (ping, музыка, новости, WARP)\n\n/updates — **changelog**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
-  "help.footer": "🎙️ В войсе: «Tiffany, включи [трек]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 языков: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+  "help.footer": "🎙️ В войсе: «Tiffany, включи [трек]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 языков: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "Команды: музыка (10k), AI, кости, розыгрыши, настройки"
 }

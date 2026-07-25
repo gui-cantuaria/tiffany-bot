@@ -9,6 +9,6 @@
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <اسم> <expr>`\n\nبدون بادئة في الشات — زر reroll مضمّن.",
   "help.settings.title": "⚙️ إعدادات وأدوات",
   "help.settings.body": "/language — اختر اللغة\n\n/stats — **صحة البوت** (ping، موسيقى، أخبار، WARP)\n\n/updates — **سجل التغييرات**\n\n/giveaway (t!gw) · /embed (t!emb)\n\n/about · /help · /rewind\n\n/mod-panel (admin) · /player-status (admin)",
-  "help.footer": "🎙️ بالصوت: «Tiffany، شغّل [أغنية]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 لغة: EN · PT · ES · FR · DE · TR · SV · IT · NL · AR · JA · KO · RU · HI · VI · UK",
+  "help.footer": "🎙️ بالصوت: «Tiffany، شغّل [أغنية]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 لغة: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "الأوامر: موسيقى (10k)، AI، نرد، giveaways، إعدادات"
 }
