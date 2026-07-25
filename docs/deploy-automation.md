@@ -1,107 +1,53 @@
-# Fluxo automático: pedir no Cursor → deploy na VPS
+# Automated deploy (GitHub Actions)
 
-Você **não precisa** entrar na VPS para cada mudança de código. O fluxo ideal:
+Production deploys can run automatically on push to `main`.
+
+## Flow
 
 ```
-Você pede no Cursor  →  Agent edita o código  →  commit + push  →  GitHub Actions  →  VPS atualizada
+git push main  →  GitHub Actions  →  SSH to server  →  scripts/deploy.sh  →  systemd restart
 ```
 
-## O que você faz
+## One-time setup
 
-1. Descreva o que quer em português (ex.: *"corrige o t!p com playlist do Spotify"*, *"sobe o limite da fila pra 80"*).
-2. Quando estiver pronto, diga: **"commita e faz deploy"** (ou só *"pode commitar"*).
-3. O agent aplica as mudanças, faz push pro `main` e o GitHub Actions roda o deploy sozinho.
-
-## O que acontece na VPS (automático)
-
-O workflow `.github/workflows/deploy.yml` faz SSH na VPS e executa `scripts/deploy.sh`, que:
-
-- dá `git fetch` + checkout dos arquivos atualizados
-- instala deps no `.venv` (Python 3.11)
-- reinicia o `tiffany-bot.service`
-- mantém o timer do WARP healthcheck
-
-**Modo:** systemd (não Docker). Não precisa rodar comandos manuais na VPS.
-
-## Setup único (só falta fazer 1 vez)
-
-Se o deploy automático ainda não estiver configurado:
-
-### Na VPS
+### On the server
 
 ```bash
 bash /opt/tiffany-bot/scripts/setup-github-actions.sh
 ```
 
-O script mostra o **IP** e a **chave privada** para colar no GitHub.
+Save the SSH key output for GitHub secrets.
 
-### No GitHub
+### On GitHub
 
-Repositório → **Settings → Secrets and variables → Actions**:
+Repository → **Settings → Secrets and variables → Actions**:
 
-| Secret | Valor |
+| Secret | Value |
 |--------|--------|
-| `VPS_HOST` | IP da VPS (ex.: `187.77.48.146`) |
-| `VPS_SSH_KEY` | chave privada inteira (`-----BEGIN...`) |
+| `VPS_HOST` | Your server IP or hostname |
+| `VPS_SSH_KEY` | Private key (`-----BEGIN...`) |
 
-### Testar
+## Verify
 
-- **Actions** → **Deploy to VPS** → **Run workflow**, ou
-- qualquer push no `main` que altere `.py`, `scripts/**`, `requirements.txt`
+- GitHub → **Actions** → **Deploy to VPS**
+- On the server: `systemctl status tiffany-bot`
 
-## Quando ainda precisa entrar na VPS
-
-Só para coisas **fora do código**:
-
-- editar `.env` (tokens, IDs de canal)
-- instalar WARP pela primeira vez (`bash scripts/warp-setup.sh`)
-- ver logs: `journalctl -u tiffany-bot -n 50 --no-pager`
-
-## Ver se o deploy passou
-
-GitHub → **Actions** → último run de **Deploy to VPS** (verde = ok).
-
-Na VPS (opcional):
+## Manual deploy (fallback)
 
 ```bash
-systemctl status tiffany-bot
-pgrep -af "launcher.py|notices.py"   # deve ser 1 launcher + 1 notices
-```
-
-## Processos duplicados (notícias/ofertas 2x)
-
-**Nunca** rode `nohup python launcher.py` nem `python notices.py` manualmente — use só systemd.
-
-Se suspeitar de instância fantasma:
-
-```bash
-bash /opt/tiffany-bot/scripts/kill-orphans.sh
+cd /opt/tiffany-bot && git fetch origin main
+git checkout origin/main -- launcher.py notices.py tiffany_voice.py offers_cog.py
 systemctl restart tiffany-bot
 ```
 
-O `tiffany-bot.service` executa `kill-orphans.sh --pre-start` antes de cada start (mata `[l]auncher.py` / `[n]otices.py` **sem exigir path no argv**). O deploy chama o mesmo script ao reiniciar.
+Do **not** run `git pull` on a server with a local `.env`. Use `git checkout origin/main -- <files>` instead.
 
 ## Runtime JSON state
 
-O bot **não usa banco de dados** — histórico, filas e memória ficam em arquivos JSON na raiz do projeto (`/opt/tiffany-bot/`). O deploy automático **não sobrescreve** esses arquivos (só faz checkout de `.py`, scripts e deps).
+Deploy updates code and dependencies only. State files (`notices_history.json`, `chat_memory.json`, etc.) stay on the server. Back them up before migrating hosts.
 
-| Arquivo | Conteúdo |
-|---------|----------|
-| `notices_history.json` | Dedup de notícias (SimHash, títulos) |
-| `notices_queue.json` | Fila de posts pendentes |
-| `chat_memory.json` | Memória de conversa `t!c` (TTL 24h) |
-| `voice_state.json` | Fila/música atual por servidor |
-| `voice_stats.json` | Contadores de uso |
-| `game_history.json` | Última recomendação `t!g` por usuário |
+## When SSH is still needed
 
-**Backup / migração de VPS:** copie `.env` + `*.json` antes de trocar de máquina:
-
-```powershell
-# Do PC (PowerShell) — ajuste o IP
-scp root@187.77.48.146:/opt/tiffany-bot/.env .
-scp root@187.77.48.146:/opt/tiffany-bot/*.json .
-```
-
-Na VPS nova, envie de volta para `/opt/tiffany-bot/`. Sem isso, dedup de notícias, memória de chat e histórico de jogos recomeçam do zero.
-
-O backup semanal da Hostinger cobre o disco inteiro, mas **restaurar snapshot** é mais pesado que um `scp` dos JSONs — vale guardar cópia local ocasional se o histórico for importante.
+- Editing `.env` (tokens, channel IDs)
+- First-time WARP/proxy setup (see `docs/voice-technical.md`)
+- Reading logs: `journalctl -u tiffany-bot -n 50 --no-pager`

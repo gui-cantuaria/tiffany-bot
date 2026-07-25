@@ -13,4 +13,4 @@ scripts/extra_songs_bulk.txt
 _build_songs.py
 test_*.py
 *.md
-!CLAUDE.md
+!CONTRIBUTING.md

@@ -83,4 +83,4 @@ Many modules are optional (offers channel, Lavalink, voice STT, affiliates, data
 
 ## Contributing
 
-Issues and pull requests are welcome. Keep changes focused, match existing code style, and avoid committing credentials or personal deployment config.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Issues and pull requests are welcome — no secrets or personal deployment config in the repo.

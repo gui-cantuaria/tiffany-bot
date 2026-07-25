@@ -31,7 +31,7 @@ git checkout origin/main -- \
   infra/ schema/ locales/ \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- \
-  CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md docs/ha-architecture.md docs/infrastructure-roadmap.md lavalink/application.yml 2>/dev/null || true
+  docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md docs/ha-architecture.md docs/infrastructure-roadmap.md lavalink/application.yml CONTRIBUTING.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then

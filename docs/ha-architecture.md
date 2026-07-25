@@ -6,7 +6,7 @@
 
 | Phase | Guilds | Uptime target | Stack |
 |-------|--------|---------------|-------|
-| **0 (today)** | <2k | 99.9% | Hostinger VPS, systemd, `launcher.py`, optional Lavalink Docker |
+| **0 (today)** | <2k | 99.9% | Single VPS, systemd, `launcher.py`, optional Lavalink Docker |
 | **1** | 2k–10k | 99.95% | PostgreSQL + Redis, Lavalink 2 nodes, health webhooks |
 | **2** | 10k–100k | 99.99% | K8s multi-AZ, AutoShardedClient, worker split (news/offers) |
 | **3** | 100k+ | 99.999% | Multi-region Lavalink, DB replicas, active-active shards |

@@ -38,5 +38,9 @@ guild_config.json
 roleplay_profiles.json
 roleplay_history.json
 
-# Editor / local tooling
+# Editor / local tooling (never publish)
 .claude/
+.cursor/
+CLAUDE.md
+audit_gaps*.txt
+tr_gaps_en.txt
