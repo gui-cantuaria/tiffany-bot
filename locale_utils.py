@@ -69,6 +69,14 @@ def slash_ephemeral(interaction: discord.Interaction) -> bool:
     return interaction.guild is not None
 
 
+async def hybrid_defer(ctx: commands.Context) -> bool:
+    """Defer a pending slash interaction (no-op for prefix). Returns True if deferred."""
+    if ctx.interaction and not ctx.interaction.response.is_done():
+        await ctx.interaction.response.defer(ephemeral=slash_ephemeral(ctx.interaction))
+        return True
+    return False
+
+
 async def hybrid_ctx_reply(
     ctx: commands.Context,
     text: str,
@@ -83,6 +91,8 @@ async def hybrid_ctx_reply(
         kwargs["delete_after"] = delete_after
     if ctx.interaction:
         kwargs["ephemeral"] = slash_ephemeral(ctx.interaction)
+        if kwargs["ephemeral"]:
+            kwargs.pop("delete_after", None)
     await ctx.send(**kwargs)
 
 # Discord locale prefix → Tiffany language
@@ -4580,6 +4590,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "fr": "Embed **`{name}`** créé ! Utilise **`/embed edit {name}`** (slash ouvre le modal).",
         "pt": "Embed **`{name}`** criado! Use **`/embed edit {name}`** (slash abre o modal de edição).",
     },
+    "emb.saved_new": {
+        "de": "Embed **`{name}`** gespeichert! Sende mit **`/embed send {name}`** oder **`t!emb send {name}`**.",
+        "en": "Embed **`{name}`** saved! Send it with **`/embed send {name}`** or **`t!emb send {name}`**.",
+        "es": "¡Embed **`{name}`** guardado! Envíalo con **`/embed send {name}`** o **`t!emb send {name}`**.",
+        "fr": "Embed **`{name}`** enregistré ! Envoie-le avec **`/embed send {name}`** ou **`t!emb send {name}`**.",
+        "pt": "Embed **`{name}`** salvo! Publique com **`/embed send {name}`** ou **`t!emb send {name}`**.",
+    },
     "emb.default.desc": {
         "de": "Beschreibung hier — bearbeite mit `t!emb edit {name}`",
         "en": "Description here — edit with `t!emb edit {name}`",
@@ -4616,11 +4633,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Nome inválido (use letras, números, `-`, máx 32).",
     },
     "emb.err.exists": {
-        "de": "**`{name}`** existiert bereits. Nutze `t!emb edit {name}`.",
-        "en": "**`{name}`** already exists. Use `t!emb edit {name}`.",
-        "es": "**`{name}`** ya existe. Usa `t!emb edit {name}`.",
-        "fr": "**`{name}`** existe déjà. Utilise `t!emb edit {name}`.",
-        "pt": "Já existe **`{name}`**. Use `t!emb edit {name}`.",
+        "de": "**`{name}`** existiert bereits. Nutze **`/embed edit {name}`** oder **`t!emb edit {name}`**.",
+        "en": "**`{name}`** already exists. Use **`/embed edit {name}`** or **`t!emb edit {name}`**.",
+        "es": "**`{name}`** ya existe. Usa **`/embed edit {name}`** o **`t!emb edit {name}`**.",
+        "fr": "**`{name}`** existe déjà. Utilise **`/embed edit {name}`** ou **`t!emb edit {name}`**.",
+        "pt": "Já existe **`{name}`**. Use **`/embed edit {name}`** ou **`t!emb edit {name}`**.",
     },
     "emb.err.not_found": {
         "de": "Embed **`{name}`** nicht gefunden.",
@@ -4698,6 +4715,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Editar embed",
         "fr": "Modifier l'embed",
         "pt": "Editar embed",
+    },
+    "emb.modal.title_create": {
+        "de": "Embed erstellen",
+        "en": "Create embed",
+        "es": "Crear embed",
+        "fr": "Créer un embed",
+        "pt": "Criar embed",
     },
     "emb.modal.title_label": {
         "de": "Titel",

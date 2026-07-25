@@ -12,7 +12,16 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, hybrid_ctx_reply, tr, GuildLang
+from locale_utils import (
+    hybrid_desc_kwargs,
+    slash_desc_kwargs,
+    slash_param,
+    resolve_lang,
+    hybrid_ctx_reply,
+    hybrid_defer,
+    tr,
+    GuildLang,
+)
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -114,12 +123,34 @@ def _build_from_data(data: dict[str, Any]) -> discord.Embed:
     return em
 
 
+def _empty_embed_data() -> dict[str, Any]:
+    return {
+        "title": "",
+        "description": "",
+        "color": BRAND_PINK,
+        "footer": "",
+        "thumbnail": "",
+        "image": "",
+        "fields": [],
+    }
+
+
 class EmbedEditModal(discord.ui.Modal):
-    def __init__(self, guild_id: int, name: str, data: dict[str, Any], lang: GuildLang):
-        super().__init__(title=tr(lang, "emb.modal.title"))
+    def __init__(
+        self,
+        guild_id: int,
+        name: str,
+        data: dict[str, Any],
+        lang: GuildLang,
+        *,
+        is_new: bool = False,
+    ):
+        title_key = "emb.modal.title_create" if is_new else "emb.modal.title"
+        super().__init__(title=tr(lang, title_key))
         self.guild_id = guild_id
         self.name = name
         self.lang = lang
+        self.is_new = is_new
         self.title_input = discord.ui.TextInput(
             label=tr(lang, "emb.modal.title_label"),
             default=(data.get("title") or "")[:256],
@@ -163,7 +194,8 @@ class EmbedEditModal(discord.ui.Modal):
             "fields": bucket.get(self.name, {}).get("fields", []),
         }
         _save()
-        msg = tr(self.lang, "emb.updated", name=self.name)
+        msg_key = "emb.saved_new" if self.is_new else "emb.updated"
+        msg = tr(self.lang, msg_key, name=self.name)
         await interaction.response.send_message(
             embed=discord.Embed(description=msg, color=BRAND_PINK),
             ephemeral=True,
@@ -218,21 +250,18 @@ async def setup(bot: commands.Bot):
         if name in bucket:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.exists", name=name), error=True)
             return
+        if ctx.interaction:
+            modal = EmbedEditModal(
+                ctx.guild.id, name, _empty_embed_data(), lang, is_new=True,
+            )
+            await ctx.interaction.response.send_modal(modal)
+            return
         bucket[name] = {
-            "title": "",
+            **_empty_embed_data(),
             "description": tr(lang, "emb.default.desc", name=name),
-            "color": BRAND_PINK,
-            "footer": "",
-            "thumbnail": "",
-            "image": "",
-            "fields": [],
         }
         _save()
-        modal = EmbedEditModal(ctx.guild.id, name, bucket[name], lang)
-        if ctx.interaction:
-            await ctx.interaction.response.send_modal(modal)
-        else:
-            await hybrid_ctx_reply(ctx, tr(lang, "emb.created", name=name))
+        await hybrid_ctx_reply(ctx, tr(lang, "emb.created", name=name))
 
     @cmd_embed.command(name="edit", aliases=["e"], **slash_desc_kwargs("slash.cmd.embed_edit"))
     @app_commands.describe(name=slash_param("slash.param.embed_name"))
@@ -247,7 +276,7 @@ async def setup(bot: commands.Bot):
         if not data:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.not_found", name=name), error=True)
             return
-        modal = EmbedEditModal(ctx.guild.id, name, data, lang)
+        modal = EmbedEditModal(ctx.guild.id, name, data, lang, is_new=False)
         if ctx.interaction:
             await ctx.interaction.response.send_modal(modal)
         else:
@@ -269,6 +298,7 @@ async def setup(bot: commands.Bot):
         if not _embed_is_postable(data):
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.empty_embed", name=name), error=True)
             return
+        await hybrid_defer(ctx)
         await ctx.send(embed=_build_from_data(data))
 
     @cmd_embed.command(name="send", aliases=["post", "s"], **slash_desc_kwargs("slash.cmd.embed_send"))
@@ -301,6 +331,7 @@ async def setup(bot: commands.Bot):
         if not perms or not perms.send_messages or not perms.embed_links:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.no_send_perms", channel=target.mention), error=True)
             return
+        await hybrid_defer(ctx)
         try:
             await target.send(embed=_build_from_data(data))
         except discord.HTTPException as exc:
