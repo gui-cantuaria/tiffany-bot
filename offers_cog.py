@@ -1113,13 +1113,15 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
         elif photo.startswith("http"):
             deal["image"] = photo
 
-    # Buy link: canonical Promobit deal page (always 200).
-    # The old /redirect/oferta/{slug}/ was discontinued (404) and the real
-    # "Go to store" button is JS-generated — unreachable server-side. Sending
-    # users to the deal page guarantees a valid link (coupon + store button).
+    # Internal Promobit deal page (dedup/history only — never shown to users).
     offer_slug = server_offer.get("offerSlug", "")
     if offer_slug:
         deal["store_url"] = f"{PROMOBIT_BASE}/oferta/{offer_slug}/"
+
+    # Real store URL lives in /Redirect/to/{offerId}/ (JS redirect page).
+    offer_id = _extract_offer_id(deal, server_offer)
+    if offer_id:
+        await _resolve_store_via_promobit_redirect(session, deal, offer_id)
 
     # Promobit community product rating
     review_rate = server_offer.get("reviewRate")
@@ -1159,12 +1161,11 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # DIRECT store link: Promobit sometimes exposes the product URL (aliasUrl).
-    # When present, resolve to the final store (to send the user straight to
-    # the store with affiliate tracking). Coupon-only deals lack this — fall back to search.
-    alias = server_offer.get("aliasUrl")
-    if isinstance(alias, str) and alias.startswith("http"):
-        await _resolve_product_url(session, deal, alias)
+    # Fallback: aliasUrl when Redirect/to did not yield a product link.
+    if not deal.get("product_url"):
+        alias = server_offer.get("aliasUrl")
+        if isinstance(alias, str) and alias.startswith("http"):
+            await _resolve_product_url(session, deal, alias)
 
     # Buyer-oriented clean title — strips technical spec dumps
     deal["title"] = await _ai_clean_title(session, _sanitize_title(deal["title"]), deal.get("category", ""))
@@ -1273,6 +1274,19 @@ _STORE_DOMAINS = (
     "magazinevoce.com", "aliexpress.com", "shopee.com",
 )
 
+_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    ),
+}
+
+# Promobit redirect page embeds the store URL in inline JS: l = 'https://...'
+_PROMOBIT_REDIRECT_STORE_RE = re.compile(
+    r"""l\s*=\s*['"](https?://[^'"]+)['"]""",
+    re.IGNORECASE,
+)
+
 
 def _is_store_domain(url: str) -> bool:
     try:
@@ -1282,24 +1296,104 @@ def _is_store_domain(url: str) -> bool:
     return any(sd in dom for sd in _STORE_DOMAINS)
 
 
+def _is_promobit_domain(url: str) -> bool:
+    try:
+        dom = urlparse(url).netloc.lower()
+    except Exception:
+        return False
+    return "promobit.com" in dom or "promoby.me" in dom
+
+
+def _extract_offer_id(deal: dict, server_offer: dict = None) -> Optional[int]:
+    """Numeric Promobit offer id (from JSON or trailing slug in deal URL)."""
+    if server_offer:
+        raw = server_offer.get("offerId")
+        if raw is not None:
+            try:
+                return int(raw)
+            except (ValueError, TypeError):
+                pass
+    url = (deal.get("url") or "").split("?")[0].split("#")[0]
+    m = re.search(r"-(\d+)/?$", url)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_promobit_redirect_store_url(html: str) -> Optional[str]:
+    """Extract the store destination from Promobit's /Redirect/to/{id}/ page."""
+    m = _PROMOBIT_REDIRECT_STORE_RE.search(html or "")
+    if not m:
+        return None
+    url = m.group(1).strip()
+    if not url.startswith("http") or _is_promobit_domain(url):
+        return None
+    return url
+
+
+async def _follow_store_redirect(session: aiohttp.ClientSession, url: str) -> str:
+    """Follow short-link redirects (e.g. s.shopee.com.br) to the store page."""
+    if not url or _is_promobit_domain(url):
+        return url
+    try:
+        async with session.get(
+            url,
+            headers=_HTTP_HEADERS,
+            allow_redirects=True,
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            final = str(resp.url)
+            if _is_store_domain(final) and not _is_promobit_domain(final):
+                return final
+    except Exception as e:
+        log.debug(f"Failed to follow store redirect {url[:60]}: {e}")
+    return url
+
+
+async def _resolve_store_via_promobit_redirect(
+    session: aiohttp.ClientSession, deal: dict, offer_id: int,
+) -> None:
+    """Resolve the real store URL via Promobit's server-side redirect page."""
+    if deal.get("product_url") or not offer_id:
+        return
+    redirect_url = f"{PROMOBIT_BASE}/Redirect/to/{offer_id}/"
+    try:
+        async with session.get(
+            redirect_url,
+            headers=_HTTP_HEADERS,
+            allow_redirects=True,
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            if resp.status != 200:
+                return
+            html = await resp.text()
+        store_url = _parse_promobit_redirect_store_url(html)
+        if not store_url:
+            return
+        deal["product_url"] = await _follow_store_redirect(session, store_url)
+    except Exception as e:
+        log.debug(f"Failed Promobit redirect for offer {offer_id}: {e}")
+
+
 async def _resolve_product_url(session: aiohttp.ClientSession, deal: dict, alias: str) -> None:
     """Resolve a Promobit product URL (aliasUrl) to the final store page.
     If already a store link, use directly; if a redirect (promoby.me/promobit),
     follow to the store. Result stored in deal['product_url']."""
-    if _is_store_domain(alias):
+    if _is_store_domain(alias) and not _is_promobit_domain(alias):
         deal["product_url"] = alias
         return
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }
         async with session.get(
-            alias, headers=headers, allow_redirects=True,
+            alias,
+            headers=_HTTP_HEADERS,
+            allow_redirects=True,
             timeout=aiohttp.ClientTimeout(total=15),
         ) as resp:
             final = str(resp.url)
-            if _is_store_domain(final):
+            if _is_store_domain(final) and not _is_promobit_domain(final):
                 deal["product_url"] = final
     except Exception as e:
         log.debug(f"Failed to resolve product_url from {alias[:60]}: {e}")
@@ -1331,25 +1425,22 @@ def _store_search_url(store: str, title: str) -> Optional[str]:
 
 async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) -> dict:
     """Attempt (B): fetch stars/sales directly from the store page. Best effort."""
-    store_url = deal.get("store_url")
-    if not store_url:
+    fetch_url = deal.get("product_url") or deal.get("real_store_url")
+    if not fetch_url or _is_promobit_domain(fetch_url):
         return deal
 
     try:
-        # Follow Promobit redirect to the real store
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }
         async with session.get(
-            store_url, headers=headers,
+            fetch_url,
+            headers=_HTTP_HEADERS,
             timeout=aiohttp.ClientTimeout(total=15),
             allow_redirects=True,
         ) as resp:
             if resp.status != 200:
                 return deal
-            # Capture real store URL (post-Promobit redirect)
-            deal["real_store_url"] = str(resp.url)
+            final = str(resp.url)
+            if _is_store_domain(final) and not _is_promobit_domain(final):
+                deal["real_store_url"] = final
             html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
@@ -1921,13 +2012,17 @@ def _store_destination(deal: dict) -> Optional[str]:
     page (product_url / real_store_url) over a manufactured search listing —
     a search page can't carry affiliate attribution."""
     candidates = [deal.get("product_url"), deal.get("real_store_url")]
-    # 1) A direct product page (not a search listing).
+    # 1) A direct product page (not a search listing, never Promobit).
     for c in candidates:
-        if c and c.startswith("http") and not _is_search_page(c):
+        if (
+            c and c.startswith("http")
+            and not _is_search_page(c)
+            and not _is_promobit_domain(c)
+        ):
             return c
     # 2) Any resolved store URL beats a manufactured search.
     for c in candidates:
-        if c and c.startswith("http"):
+        if c and c.startswith("http") and not _is_promobit_domain(c):
             return c
     # 3) Last resort: store search by product name.
     return _store_search_url(deal.get("store", ""), deal.get("title", ""))
@@ -2051,7 +2146,14 @@ async def _enrich_deal_full(http_session: aiohttp.ClientSession, deal: dict) -> 
         work["_orig_tkey"] = _title_key(work["title"])
         _normalize_deal_category(work)
         work = await asyncio.wait_for(_enrich_deal(http_session, work), timeout=30.0)
-        if work.get("store_url") and not work.get("real_store_url"):
+        if not work.get("product_url"):
+            oid = _extract_offer_id(work)
+            if oid:
+                await asyncio.wait_for(
+                    _resolve_store_via_promobit_redirect(http_session, work, oid),
+                    timeout=15.0,
+                )
+        if work.get("product_url") and not _is_promobit_domain(work["product_url"]):
             work = await asyncio.wait_for(_try_fetch_store_rating(http_session, work), timeout=20.0)
         return work
     except asyncio.TimeoutError:
