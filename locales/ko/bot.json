@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "권한: **연결**, **말하기**, **메시지 보내기**, **링크 임베드**.\n보이스 채널 참가 → **`/play [노래]`**.\n진단: **`/player-status`** (관리자) · **`/status`** (일반).",
+  "about.admin.body": "권한: **연결**, **말하기**, **메시지 보내기**, **링크 임베드**.\n보이스 채널 참가 → **`/play [노래]`**.\n진단: **`/stats`**.",
   "about.admin.title": "설정 (관리자)",
   "about.chat.body": "`/chat` — AI 채팅 (기억 + 이미지)\n`/game` — 게임 추천 (Steam/Epic)\n`/summary` — 기사·링크 요약\n`/clip` — 통화 마지막 30초 클립",
   "about.chat.title": "💬 채팅 및 부가 기능",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "보이스 24/7 모드 토글",
   "slash.cmd.pause": "현재 트랙 일시정지",
   "slash.cmd.play": "이름 또는 URL로 곡 재생",
-  "slash.cmd.player_status": "Tiffany 상태 점검 (관리자)",
   "slash.cmd.playlist": "저장 플레이리스트 관리 (save, load, list, del)",
   "slash.cmd.queue": "대기열 및 재생 중 표시",
   "slash.cmd.random": "유명 10,000곡 중 무작위 추가",
@@ -409,7 +408,6 @@
   "slash.param.question": "Tiffany에게 할 질문",
   "slash.param.time_expr": "탐색 시간 (+30, -15, 1:30)",
   "slash.param.volume_level": "볼륨 0–150 (비우면 현재 표시)",
-  "slash.player_status.admin_only": "⚠️ **`/player-status`**는 **관리자**만 사용 가능.",
   "slash.queue.desync": "⚠️ 재시작 후 보이스 연결 동기화 안 됨.\n**`t!cl`** 후 **`t!p`**로 재연결.",
   "slash.queue.empty": "📭 대기열 비어 있음.\n**`t!p`**로 곡 추가.",
   "slash.queue.no_session": "⚠️ 음악 세션 미시작.\n**`t!p`**로 시작.",

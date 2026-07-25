@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from locale_utils import slash_desc_kwargs, resolve_lang, tr, GuildLang
+from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, tr, GuildLang
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -159,7 +159,7 @@ async def setup(bot: commands.Bot):
         aliases=["emb"],
         invoke_without_command=True,
         dm_permission=False,
-        **slash_desc_kwargs("slash.cmd.embed"),
+        **hybrid_desc_kwargs("slash.cmd.embed"),
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_embed(ctx: commands.Context):
@@ -178,7 +178,8 @@ async def setup(bot: commands.Bot):
             and ctx.author.guild_permissions.manage_messages
         )
 
-    @cmd_embed.command(name="create", aliases=["new", "add"])
+    @cmd_embed.command(name="create", aliases=["new", "add"], **slash_desc_kwargs("slash.cmd.embed_create"))
+    @app_commands.describe(name=slash_param("slash.param.embed_name"))
     async def emb_create(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
@@ -213,7 +214,8 @@ async def setup(bot: commands.Bot):
                 )
             )
 
-    @cmd_embed.command(name="edit", aliases=["e"])
+    @cmd_embed.command(name="edit", aliases=["e"], **slash_desc_kwargs("slash.cmd.embed_edit"))
+    @app_commands.describe(name=slash_param("slash.param.embed_name"))
     async def emb_edit(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
@@ -230,7 +232,8 @@ async def setup(bot: commands.Bot):
         else:
             await ctx.send(tr(lang, "emb.use_slash_edit"))
 
-    @cmd_embed.command(name="preview", aliases=["pv", "show"])
+    @cmd_embed.command(name="preview", aliases=["pv", "show"], **slash_desc_kwargs("slash.cmd.embed_preview"))
+    @app_commands.describe(name=slash_param("slash.param.embed_name"))
     async def emb_preview(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
@@ -243,7 +246,11 @@ async def setup(bot: commands.Bot):
             return
         await ctx.send(embed=_build_from_data(data))
 
-    @cmd_embed.command(name="send", aliases=["post", "s"])
+    @cmd_embed.command(name="send", aliases=["post", "s"], **slash_desc_kwargs("slash.cmd.embed_send"))
+    @app_commands.describe(
+        name=slash_param("slash.param.embed_name"),
+        channel=slash_param("slash.param.embed_channel"),
+    )
     async def emb_send(ctx: commands.Context, name: str, channel: Optional[discord.TextChannel] = None):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
@@ -261,7 +268,7 @@ async def setup(bot: commands.Bot):
         await target.send(embed=_build_from_data(data))
         await ctx.send(tr(lang, "emb.sent", name=name, channel=target.mention), delete_after=8)
 
-    @cmd_embed.command(name="list", aliases=["ls"])
+    @cmd_embed.command(name="list", aliases=["ls"], **slash_desc_kwargs("slash.cmd.embed_list"))
     async def emb_list(ctx: commands.Context):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):
@@ -279,7 +286,8 @@ async def setup(bot: commands.Bot):
             )
         )
 
-    @cmd_embed.command(name="delete", aliases=["del", "rm"])
+    @cmd_embed.command(name="delete", aliases=["del", "rm"], **slash_desc_kwargs("slash.cmd.embed_delete"))
+    @app_commands.describe(name=slash_param("slash.param.embed_name"))
     async def emb_delete(ctx: commands.Context, name: str):
         lang = _ctx_lang(ctx)
         if not _perm_check(ctx):

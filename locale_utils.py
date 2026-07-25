@@ -332,9 +332,26 @@ def _slash_localizations(bucket: dict[str, str]) -> dict[discord.Locale, str]:
     return locs
 
 
+def _slash_desc_bucket(key: str) -> dict[str, str]:
+    """Core langs from _STRINGS; extended langs from JSON catalog."""
+    bucket: dict[str, str] = dict(_STRINGS.get(key) or {})
+    try:
+        from infra import i18n_loader
+        i18n_loader.ensure_loaded()
+        for lang in i18n_loader.SUPPORTED_LANGS:
+            if lang in bucket:
+                continue
+            val = i18n_loader.lookup(lang, key, fallback_en=False)
+            if val:
+                bucket[lang] = val
+    except Exception:
+        pass
+    return bucket
+
+
 def slash_desc_kwargs(key: str) -> dict[str, object]:
     """Kwargs for @tree.command / @hybrid_command with localized slash descriptions."""
-    bucket = _STRINGS.get(key)
+    bucket = _slash_desc_bucket(key)
     if not bucket:
         return {"description": key}
     en = bucket.get("en") or key
@@ -941,7 +958,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!su / t!summary <URL> — summarize link · t!cp / t!clip [mp3|wav] — last 30s audio clip\n"
     "- Dice in chat (no prefix): d20, D20+7, 4d6, c50+50, adv, stats\n"
     "- t!247 / t!nonstop — stay 24/7 in voice\n"
-    "- Slash: /help, /about, /queue, /stats, /updates, /player-status, /language, /mod-panel\n"
+    "- Slash: /help, /about, /queue, /stats, /updates, /language, /mod-panel\n"
     "- /giveaway (t!gw) — sorteios · /embed (t!emb) — embeds customizados · /roleplay (t!rp) — chat casual\n"
     "- Voice in call: say 'Tiffany, play [song]', 'Tiffany, skip/pause/resume/stop', "
     "'Tiffany, shuffle/loop/replay', 'Tiffany, random/autoplay/24-7', 'Tiffany, what's playing', "
@@ -954,20 +971,20 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "de": "Berechtigungen: **Verbinden**, **Sprechen**, **Nachrichten senden**, **Links "
         "einbetten**.\n"
         "Tritt einem Sprachkanal bei → **`/play [Lied]`**.\n"
-        "Diagnose: **`/player-status`** (Admin) · **`/stats`** (Allgemein).",
+        "Diagnose: **`/stats`**.",
         "en": "Permissions: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\n"
         "Join a voice channel → **`/play [song]`**.\n"
-        "Diagnostics: **`/player-status`** (admin) · **`/stats`** (general).",
+        "Diagnostics: **`/stats`**.",
         "es": "Permisos: **Conectar**, **Hablar**, **Enviar mensajes**, **Incrustar enlaces**.\n"
         "Entra a un canal de voz → **`/play [música]`**.\n"
-        "Diagnóstico: **`/player-status`** (admin) · **`/stats`** (general).",
+        "Diagnóstico: **`/stats`**.",
         "fr": "Permissions : **Connecter**, **Parler**, **Envoyer des messages**, **Intégrer des "
         "liens**.\n"
         "Rejoins un salon vocal → **`/play [musique]`**.\n"
-        "Diagnostics : **`/player-status`** (admin) · **`/stats`** (général).",
+        "Diagnostics : **`/stats`**.",
         "pt": "Permissões: **Conectar**, **Falar**, **Enviar mensagens**, **Embeds**.\n"
         "Entra num canal de voz → **`/play [música]`**.\n"
-        "Diagnóstico: **`/player-status`** (admin) · **`/stats`** (geral).",
+        "Diagnóstico: **`/stats`**.",
     },
     "about.admin.title": {
         "de": "Setup (Admin)",
@@ -2588,31 +2605,31 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "`/updates` — **Changelog**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
-        "`/mod-panel` (Admin) · `/player-status` (Admin)",
+        "`/mod-panel` (Admin)",
         "en": "`/language` — pick your language\n\n"
         "`/stats` — **bot health** (ping, music, news, WARP)\n\n"
         "`/updates` — **changelog**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
-        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "`/mod-panel` (admin)",
         "es": "`/language` — elegir idioma\n\n"
         "`/stats` — **salud del bot** (ping, música, noticias, WARP)\n\n"
         "`/updates` — **novedades**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
-        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "`/mod-panel` (admin)",
         "fr": "`/language` — choisir la langue\n\n"
         "`/stats` — **santé du bot** (ping, musique, actus, WARP)\n\n"
         "`/updates` — **nouveautés**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
-        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "`/mod-panel` (admin)",
         "pt": "`/language` — mudar meu idioma\n\n"
         "`/stats` — **saúde do bot** (conexão, música, notícias, WARP)\n\n"
         "`/updates` — **novidades**\n\n"
         "`/giveaway` (t!gw) · `/embed` (t!emb)\n\n"
         "`/about` · `/help` · `/rewind`\n\n"
-        "`/mod-panel` (admin) · `/player-status` (admin)",
+        "`/mod-panel` (admin)",
     },
     "help.settings.title": {
         "de": "⚙️ Einstellungen & Tools",
@@ -3096,11 +3113,53 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Salva os últimos 30 s de áudio da call",
     },
     "slash.cmd.embed": {
-        "de": "Eigene Embeds erstellen und senden",
-        "en": "Create and send custom embeds",
-        "es": "Crear y enviar embeds personalizados",
-        "fr": "Créer et envoyer des embeds personnalisés",
-        "pt": "Cria e envia embeds personalizados",
+        "de": "Eigene Embeds erstellen, bearbeiten und senden",
+        "en": "Create, edit, and send custom embeds",
+        "es": "Crear, editar y enviar embeds personalizados",
+        "fr": "Créer, modifier et envoyer des embeds personnalisés",
+        "pt": "Cria, edita e envia embeds personalizados",
+    },
+    "slash.cmd.embed_create": {
+        "de": "Neue Embed-Vorlage erstellen",
+        "en": "Create a new embed template",
+        "es": "Crear una plantilla de embed",
+        "fr": "Créer un modèle d'embed",
+        "pt": "Cria um novo template de embed",
+    },
+    "slash.cmd.embed_delete": {
+        "de": "Gespeicherte Embed-Vorlage löschen",
+        "en": "Delete a saved embed template",
+        "es": "Eliminar una plantilla guardada",
+        "fr": "Supprimer un modèle enregistré",
+        "pt": "Exclui um template salvo",
+    },
+    "slash.cmd.embed_edit": {
+        "de": "Embed-Vorlage bearbeiten",
+        "en": "Edit an embed template",
+        "es": "Editar una plantilla de embed",
+        "fr": "Modifier un modèle d'embed",
+        "pt": "Edita um template de embed",
+    },
+    "slash.cmd.embed_list": {
+        "de": "Alle Embed-Vorlagen des Servers auflisten",
+        "en": "List saved embed templates",
+        "es": "Listar plantillas guardadas",
+        "fr": "Lister les modèles enregistrés",
+        "pt": "Lista templates de embed salvos",
+    },
+    "slash.cmd.embed_preview": {
+        "de": "Embed-Vorlage vor dem Senden anzeigen",
+        "en": "Preview an embed template",
+        "es": "Vista previa de una plantilla",
+        "fr": "Aperçu d'un modèle d'embed",
+        "pt": "Pré-visualiza um template de embed",
+    },
+    "slash.cmd.embed_send": {
+        "de": "Embed-Vorlage in einen Kanal senden",
+        "en": "Send an embed template to a channel",
+        "es": "Enviar una plantilla a un canal",
+        "fr": "Envoyer un modèle dans un salon",
+        "pt": "Envia um template para um canal",
     },
     "slash.cmd.game": {
         "de": "Steam/Epic-Spiele aus deiner Anfrage empfehlen",
@@ -3110,11 +3169,39 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Recomenda jogos Steam/Epic a partir da sua busca",
     },
     "slash.cmd.giveaway": {
-        "de": "Anpassbare Tiffany-Giveaways",
-        "en": "Customizable Tiffany giveaways",
-        "es": "Sorteos personalizables de Tiffany",
-        "fr": "Giveaways Tiffany personnalisables",
-        "pt": "Sorteios personalizáveis da Tiffany",
+        "de": "Giveaways erstellen und verwalten",
+        "en": "Create and manage server giveaways",
+        "es": "Crear y gestionar sorteos del servidor",
+        "fr": "Créer et gérer des giveaways serveur",
+        "pt": "Cria e gerencia sorteios do servidor",
+    },
+    "slash.cmd.giveaway_create": {
+        "de": "Neues Giveaway mit Dauer und Preis starten",
+        "en": "Start a new giveaway with duration and prize",
+        "es": "Iniciar sorteo con duración y premio",
+        "fr": "Lancer un giveaway avec durée et lot",
+        "pt": "Inicia um sorteio com duração e prêmio",
+    },
+    "slash.cmd.giveaway_end": {
+        "de": "Giveaway vorzeitig beenden und Gewinner ziehen",
+        "en": "End a giveaway early and pick winners",
+        "es": "Terminar sorteo antes y elegir ganadores",
+        "fr": "Terminer un giveaway et tirer les gagnants",
+        "pt": "Encerra um sorteio e sorteia vencedores",
+    },
+    "slash.cmd.giveaway_list": {
+        "de": "Aktive Giveaways des Servers auflisten",
+        "en": "List active giveaways on this server",
+        "es": "Listar sorteos activos del servidor",
+        "fr": "Lister les giveaways actifs du serveur",
+        "pt": "Lista sorteios ativos do servidor",
+    },
+    "slash.cmd.giveaway_reroll": {
+        "de": "Gewinner eines beendeten Giveaways neu ziehen",
+        "en": "Reroll winners from an ended giveaway",
+        "es": "Volver a sortear ganadores",
+        "fr": "Retirer les gagnants d'un giveaway terminé",
+        "pt": "Sorteia vencedores novamente",
     },
     "slash.cmd.help": {
         "de": "Alle Befehle: Musik (10k Hits), KI, Würfel, Giveaways, Einstellungen",
@@ -3171,13 +3258,6 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Reproducir una canción por nombre o URL",
         "fr": "Lire un morceau par nom ou URL",
         "pt": "Toca uma música por nome ou URL",
-    },
-    "slash.cmd.player_status": {
-        "de": "Tiffany-Gesundheitscheck (Admin)",
-        "en": "Tiffany health check (admin)",
-        "es": "Diagnóstico de Tiffany (admin)",
-        "fr": "Diagnostic Tiffany (admin)",
-        "pt": "Diagnóstico da Tiffany (admin)",
     },
     "slash.cmd.playlist": {
         "de": "Gespeicherte Playlists verwalten (save, load, list, del)",
@@ -3367,12 +3447,54 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "fr": "_Note : en mode yt-dlp, le nouveau niveau s'applique à la piste suivante._",
         "pt": "_No modo yt-dlp, o novo nível vale a partir da próxima faixa._",
     },
+    "slash.param.embed_channel": {
+        "de": "Zielkanal (Standard: hier)",
+        "en": "Target channel (defaults to here)",
+        "es": "Canal destino (por defecto aquí)",
+        "fr": "Salon cible (ici par défaut)",
+        "pt": "Canal de destino (padrão: aqui)",
+    },
+    "slash.param.embed_name": {
+        "de": "Name der Embed-Vorlage",
+        "en": "Embed template name",
+        "es": "Nombre de la plantilla",
+        "fr": "Nom du modèle d'embed",
+        "pt": "Nome do template",
+    },
     "slash.param.fmt": {
         "de": "Dateiformat (mp3 oder wav)",
         "en": "File format (mp3 or wav)",
         "es": "Formato de archivo (mp3 o wav)",
         "fr": "Format de fichier (mp3 ou wav)",
         "pt": "Formato do arquivo (mp3 ou wav)",
+    },
+    "slash.param.gw_duration": {
+        "de": "Dauer (z. B. 30m, 2h, 1d)",
+        "en": "Duration (e.g. 30m, 2h, 1d)",
+        "es": "Duración (ej. 30m, 2h, 1d)",
+        "fr": "Durée (ex. 30m, 2h, 1d)",
+        "pt": "Duração (ex.: 30m, 2h, 1d)",
+    },
+    "slash.param.gw_id": {
+        "de": "Giveaway-ID (optional bei nur einem Aktiven)",
+        "en": "Giveaway ID (optional if only one active)",
+        "es": "ID del sorteo (opcional si solo hay uno)",
+        "fr": "ID du giveaway (optionnel s'il n'y en a qu'un)",
+        "pt": "ID do sorteio (opcional se houver só um)",
+    },
+    "slash.param.gw_prize": {
+        "de": "Preisbeschreibung",
+        "en": "Prize description",
+        "es": "Descripción del premio",
+        "fr": "Description du lot",
+        "pt": "Descrição do prêmio",
+    },
+    "slash.param.gw_winners": {
+        "de": "Anzahl der Gewinner (1–20)",
+        "en": "Number of winners (1–20)",
+        "es": "Número de ganadores (1–20)",
+        "fr": "Nombre de gagnants (1–20)",
+        "pt": "Número de vencedores (1–20)",
     },
     "slash.param.game_query": {
         "de": "Genre, Stil oder Name (z. B. RPG, Multiplayer)",
@@ -3436,13 +3558,6 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "⚠️ Úsalo en un servidor.",
         "fr": "⚠️ Utilisez ceci dans un serveur.",
         "pt": "⚠️ Use em um servidor.",
-    },
-    "slash.player_status.admin_only": {
-        "de": "⚠️ Nur **Administratoren** können `/player-status` verwenden.",
-        "en": "⚠️ Only **administrators** can use `/player-status`.",
-        "es": "⚠️ Solo **administradores** pueden usar `/player-status`.",
-        "fr": "⚠️ Seuls les **administrateurs** peuvent utiliser `/player-status`.",
-        "pt": "⚠️ Apenas **administradores** podem usar `/player-status`.",
     },
     "slash.queue.desync": {
         "de": "⚠️ Sprachverbindung nach dem Neustart außer Synchronisation.\n"

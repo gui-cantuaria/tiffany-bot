@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 Xúc xắc",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <tên> <biểu thức>`\n\nKhông cần tiền tố trong chat — bao gồm nút đổ lại xúc xắc.",
   "help.settings.title": "⚙️ Cài đặt & công cụ",
-  "help.settings.body": "`/language` — chọn ngôn ngữ của bạn\n\n`/stats` — **tình trạng bot** (ping, nhạc, tin tức, WARP)\n\n`/updates` — **nhật ký cập nhật**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (quản trị viên) · `/player-status` (quản trị viên)",
+  "help.settings.body": "`/language` — chọn ngôn ngữ của bạn\n\n`/stats` — **tình trạng bot** (ping, nhạc, tin tức, WARP)\n\n`/updates` — **nhật ký cập nhật**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (quản trị viên)",
   "help.footer": "🌐 **`/language`** — 16 ngôn ngữ: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "Tất cả các lệnh: âm nhạc (10k bài hit), AI, xúc xắc, giveaway, cài đặt"
 }

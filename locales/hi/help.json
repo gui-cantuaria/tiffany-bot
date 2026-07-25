@@ -8,7 +8,7 @@
   "help.dice.title": "🎲 डाइस",
   "help.dice.body": "`d20` · `4d6` · `2d10+5` · `c50+50`\n\n`adv` · `dis` · `stats` · `coin`\n\n`t!d adv` · `t!d stats` · `t!d macro add <name> <expr>`\n\nचैट में कोई प्रीफिक्स नहीं — रीरोल बटन शामिल है।",
   "help.settings.title": "⚙️ सेटिंग्स और टूल्स",
-  "help.settings.body": "`/language` — अपनी भाषा चुनें\n\n`/stats` — **बॉट हेल्थ** (पिंग, म्यूजिक, न्यूज़, WARP)\n\n`/updates` — **चेंजलॉग**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (एडमिन) · `/player-status` (एडमिन)",
+  "help.settings.body": "`/language` — अपनी भाषा चुनें\n\n`/stats` — **बॉट हेल्थ** (पिंग, म्यूजिक, न्यूज़, WARP)\n\n`/updates` — **चेंजलॉग**\n\n`/giveaway` (t!gw) · `/embed` (t!emb)\n\n`/about` · `/help` · `/rewind`\n\n`/mod-panel` (एडमिन)",
   "help.footer": "🎙️ वॉइस में: «Tiffany, play [song]» · skip · pause · queue\n\nYouTube · Spotify · Deezer · Apple Music · Amazon Music\n\n🌐 **`/language`** — 16 भाषाएँ: EN · HI · ES · AR · FR · PT · RU · DE · JA · KO · VI · TR · IT · UK · NL · SV",
   "slash.cmd.help": "सभी कमांड्स: म्यूज़िक (10k हिट्स), AI, पासा, गिवअवे, सेटिंग्स"
 }

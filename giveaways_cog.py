@@ -15,7 +15,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from locale_utils import slash_desc_kwargs, resolve_lang, resolve_guild_lang, interaction_lang, tr, GuildLang
+from locale_utils import hybrid_desc_kwargs, slash_desc_kwargs, slash_param, resolve_lang, resolve_guild_lang, interaction_lang, tr, GuildLang
 
 
 def _ctx_lang(ctx: commands.Context) -> GuildLang:
@@ -256,7 +256,7 @@ async def setup(bot: commands.Bot):
         aliases=["gw"],
         invoke_without_command=True,
         dm_permission=False,
-        **slash_desc_kwargs("slash.cmd.giveaway"),
+        **hybrid_desc_kwargs("slash.cmd.giveaway"),
     )
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_giveaway(ctx: commands.Context):
@@ -269,7 +269,12 @@ async def setup(bot: commands.Bot):
             )
         )
 
-    @cmd_giveaway.command(name="create", aliases=["c", "new"])
+    @cmd_giveaway.command(name="create", aliases=["c", "new"], **slash_desc_kwargs("slash.cmd.giveaway_create"))
+    @app_commands.describe(
+        duration=slash_param("slash.param.gw_duration"),
+        winners=slash_param("slash.param.gw_winners"),
+        prize=slash_param("slash.param.gw_prize"),
+    )
     @commands.has_permissions(manage_guild=True)
     @commands.bot_has_permissions(send_messages=True, embed_links=True)
     async def gw_create(
@@ -330,7 +335,8 @@ async def setup(bot: commands.Bot):
             lang = _ctx_lang(ctx)
             await ctx.send(tr(lang, "gw.err.missing_perms"), ephemeral=True)
 
-    @cmd_giveaway.command(name="end", aliases=["stop", "finish"])
+    @cmd_giveaway.command(name="end", aliases=["stop", "finish"], **slash_desc_kwargs("slash.cmd.giveaway_end"))
+    @app_commands.describe(gw_id=slash_param("slash.param.gw_id"))
     @commands.has_permissions(manage_guild=True)
     async def gw_end(ctx: commands.Context, gw_id: str = ""):
         lang = _ctx_lang(ctx)
@@ -361,7 +367,8 @@ async def setup(bot: commands.Bot):
         else:
             await ctx.send(tr(lang, "gw.end.no_entries"))
 
-    @cmd_giveaway.command(name="reroll", aliases=["rr"])
+    @cmd_giveaway.command(name="reroll", aliases=["rr"], **slash_desc_kwargs("slash.cmd.giveaway_reroll"))
+    @app_commands.describe(gw_id=slash_param("slash.param.gw_id"))
     @commands.has_permissions(manage_guild=True)
     async def gw_reroll(ctx: commands.Context, gw_id: str = ""):
         lang = _ctx_lang(ctx)
@@ -396,7 +403,7 @@ async def setup(bot: commands.Bot):
             )
         )
 
-    @cmd_giveaway.command(name="list", aliases=["ls"])
+    @cmd_giveaway.command(name="list", aliases=["ls"], **slash_desc_kwargs("slash.cmd.giveaway_list"))
     async def gw_list(ctx: commands.Context):
         lang = _ctx_lang(ctx)
         _load_state()

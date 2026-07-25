@@ -1426,7 +1426,6 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "g": 2.0, "game": 2.0, "games": 2.0,
     "roleplay": 2.0,
     "su": 2.0, "summary": 2.0,
-    "player-status": 2.0,
     # 5s — audio recording
     "cp": 5.0, "clip": 5.0,
 }
@@ -3890,8 +3889,6 @@ def _drain_ready_user_pcm(session: _GuildVoiceSession) -> tuple[bytes, int]:
 
 from brand_colors import TIFFANY_GREEN, TIFFANY_PINK, TIFFANY_RED
 
-_BOT_START_TS = time.monotonic()  # module load — used for the /status uptime
-
 # Leading emojis that mark an error, refusal, rate-limit or timeout message.
 # _embed() auto-colors these red so users spot problems at a glance.
 _EMBED_ERROR_PREFIXES = ("⚠️", "🚫", "❌", "🛡️", "⏳", "⏰")
@@ -3929,7 +3926,6 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("stats", ["estatisticas", "metricas"], "t!stats / /stats — saúde do bot"),
     ("lang", ["language", "idioma"], "t!lang / /language — idioma"),
     ("mod", ["modpanel", "mod-panel"], "t!mod / /mod-panel — painel admin"),
-    ("playerstatus", ["player-status"], "t!playerstatus — diagnóstico de player (admin)"),
 ]
 
 def build_about_embed(
@@ -4014,7 +4010,6 @@ PRESENCE_CMD_TAGLINES: dict[str, str] = {
     "nonstop": "24/7 in voice",
     "pause": "pause track",
     "play": "music in voice",
-    "player-status": "player health check",
     "playlist": "saved playlists",
     "queue": "queue & now playing",
     "random": "random famous hit",
@@ -4722,37 +4717,6 @@ def _format_queue_embed(session: "_GuildVoiceSession", lang: GuildLang) -> Optio
         extras.append("🔒 24/7")
     if extras:
         em.set_footer(text=" · ".join(extras))
-    return em
-
-
-def _fmt_uptime(seconds: float) -> str:
-    """Human uptime: '3d 04h', '5h 12min' or '8min'."""
-    s = int(max(0, seconds))
-    d, rem = divmod(s, 86400)
-    h, rem = divmod(rem, 3600)
-    m, _ = divmod(rem, 60)
-    if d:
-        return f"{d}d {h:02d}h"
-    if h:
-        return f"{h}h {m:02d}min"
-    return f"{m}min"
-
-
-def _format_status_embed(client: discord.Client, *, lang: GuildLang = "pt") -> discord.Embed:
-    """Admin health status — discreet proof that Tiffany is up and well.
-    Reports only what works or not; never names internal services/models/APIs."""
-    em = discord.Embed(title=tr(lang, "status.title"), color=TIFFANY_PINK)
-    ok = tr(lang, "status.health.ok")
-    bad = tr(lang, "status.health.degraded")
-    ping_ms = max(0, round((getattr(client, "latency", 0) or 0) * 1000))
-    music_ok = _YTDLP_AVAILABLE and check_warp_proxy_ok()
-    chat_ok = bool(os.getenv("OPENROUTER_API_KEY", "").strip())
-    voice_ok = _VOICE_RECV_AVAILABLE
-    em.add_field(name=tr(lang, "status.field.ping"), value=f"{ping_ms} ms", inline=True)
-    em.add_field(name=tr(lang, "status.field.music"), value=ok if music_ok else bad, inline=True)
-    em.add_field(name=tr(lang, "status.field.chat"), value=ok if chat_ok else bad, inline=True)
-    em.add_field(name=tr(lang, "status.field.voice_call"), value=ok if voice_ok else bad, inline=True)
-    em.add_field(name=tr(lang, "status.field.uptime"), value=_fmt_uptime(time.monotonic() - _BOT_START_TS), inline=True)
     return em
 
 
@@ -9708,25 +9672,6 @@ def register_voice(bot: commands.Bot) -> None:
         )
         ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
         await ctx.send(embed=em, ephemeral=ephem)
-
-    @bot.hybrid_command(
-        name="player-status",
-        aliases=["playerstatus"],
-        dm_permission=False,
-        **hybrid_desc_kwargs("slash.cmd.player_status"),
-    )
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.guild_only()
-    @_guild_slash
-    async def cmd_player_status(ctx: commands.Context):
-        lang = _ctx_lang(ctx)
-        if not ctx.guild:
-            await ctx.send(embed=_embed(tr(lang, "slash.guild_only")))
-            return
-        if isinstance(ctx.author, discord.Member) and not ctx.author.guild_permissions.administrator:
-            await ctx.send(embed=_embed(tr(lang, "slash.player_status.admin_only")))
-            return
-        await ctx.send(embed=_format_status_embed(ctx.bot, lang=lang))
 
     @bot.hybrid_command(name="rewind", **hybrid_desc_kwargs("slash.cmd.rewind"))
     @_dm_slash

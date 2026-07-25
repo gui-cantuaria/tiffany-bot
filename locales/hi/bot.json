@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "अनुमतियाँ: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nवॉयस चैनल में शामिल हों → **`/play [song]`**.\nडायग्नोस्टिक्स: **`/player-status`** (एडमिन) · **`/stats`** (सामान्य).",
+  "about.admin.body": "अनुमतियाँ: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nवॉयस चैनल में शामिल हों → **`/play [song]`**.\nडायग्नोस्टिक्स: **`/stats`**.",
   "about.admin.title": "सेटअप (एडमिन)",
   "about.chat.body": "`/chat` — AI चैट (मेमोरी + इमेज)\n`/game` — गेम सुझाव (Steam/Epic)\n`/summary` — लेख या लिंक का सारांश\n`/clip` — कॉल के अंतिम 30 सेकंड की क्लिप",
   "about.chat.title": "💬 चैट और अन्य",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "वॉइस चैनल में 24/7 मोड टॉगल करें",
   "slash.cmd.pause": "वर्तमान ट्रैक को रोकें (pause)",
   "slash.cmd.play": "नाम या URL द्वारा गाना चलाएं",
-  "slash.cmd.player_status": "Tiffany हेल्थ चेक (एडमिन)",
   "slash.cmd.playlist": "सेव की गई प्लेलिस्ट मैनेज करें (सेव, लोड, लिस्ट, डिलीट)",
   "slash.cmd.queue": "कतार और वर्तमान में चल रहा गाना देखें",
   "slash.cmd.random": "10,000 प्रसिद्ध ट्रैक में से एक रैंडम गाना कतार में लगाएं",
@@ -409,7 +408,6 @@
   "slash.param.question": "Tiffany के लिए आपका सवाल",
   "slash.param.time_expr": "सीक (seek) करने का समय (+30, -15, 1:30)",
   "slash.param.volume_level": "वॉल्यूम 0–150 (खाली छोड़ने पर वर्तमान वॉल्यूम दिखेगा)",
-  "slash.player_status.admin_only": "⚠️ केवल **एडमिनिस्ट्रेटर** ही `/player-status` का उपयोग कर सकते हैं।",
   "slash.queue.desync": "⚠️ रीस्टार्ट के बाद वॉयस कनेक्शन सिंक से बाहर है।\nफिर से कनेक्ट करने के लिए **`t!cl`** और फिर **`t!p`** का उपयोग करें।",
   "slash.queue.empty": "📭 कतार (queue) खाली है।\nगाने जोड़ने के लिए **`t!p`** का उपयोग करें।",
   "slash.queue.no_session": "⚠️ म्यूजिक सेशन शुरू नहीं हुआ है।\nशुरू करने के लिए **`t!p`** का उपयोग करें।",

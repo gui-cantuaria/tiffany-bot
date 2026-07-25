@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "Behörigheter: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nGå med i en röstkanal → **`/play [låt]`**.\nDiagnostik: **`/player-status`** (admin) · **`/status`** (allmänt).",
+  "about.admin.body": "Behörigheter: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nGå med i en röstkanal → **`/play [låt]`**.\nDiagnostik: **`/stats`**.",
   "about.admin.title": "Installation (admin)",
   "about.chat.body": "`/chat` — AI-chatt (minne + bilder)\n`/game` — rekommenderar spel (Steam/Epic)\n`/summary` — sammanfatta artikel eller länk\n`/clip` — klipp av de senaste 30 s i samtalet",
   "about.chat.title": "💬 Chatt och extra",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "Växla 24/7-läge i röstkanal",
   "slash.cmd.pause": "Pausa aktuell låt",
   "slash.cmd.play": "Spela en låt efter namn eller URL",
-  "slash.cmd.player_status": "Tiffany-hälsokontroll (admin)",
   "slash.cmd.playlist": "Hantera sparade spellistor (save, load, list, del)",
   "slash.cmd.queue": "Visa kö och spelas nu",
   "slash.cmd.random": "Köa en slumpmässig hit bland 10 000 kända låtar",
@@ -409,7 +408,6 @@
   "slash.param.question": "Din fråga till Tiffany",
   "slash.param.time_expr": "Tid att hoppa till (+30, -15, 1:30)",
   "slash.param.volume_level": "Volym 0–150 (tomt = visa aktuell)",
-  "slash.player_status.admin_only": "⚠️ Bara **administratörer** kan använda `/player-status`.",
   "slash.queue.desync": "⚠️ Röstanslutning ur synk efter omstart.\nAnvänd **`t!cl`** sedan **`t!p`** för att återansluta.",
   "slash.queue.empty": "📭 Kön är tom.\nAnvänd **`t!p`** för att lägga till låtar.",
   "slash.queue.no_session": "⚠️ Musicsession inte startad.\nAnvänd **`t!p`** för att börja.",

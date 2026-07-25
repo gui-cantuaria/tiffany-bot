@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "الصلاحيات: **Connect**، **Speak**، **Send Messages**، **Embed Links**.\nانضم لقناة صوت → **`/play [song]`**.\nالتشخيص: **`/player-status`** (admin) · **`/status`** (عام).",
+  "about.admin.body": "الصلاحيات: **Connect**، **Speak**، **Send Messages**، **Embed Links**.\nانضم لقناة صوت → **`/play [song]`**.\nالتشخيص: **`/stats`**.",
   "about.admin.title": "الإعداد (admin)",
   "about.chat.body": "`/chat` — دردشة AI (ذاكرة + صور)\n`/game` — يوصي بألعاب (Steam/Epic)\n`/summary` — يلخص مقالاً أو رابطاً\n`/clip` — مقطع من آخر 30 ثانية من المكالمة",
   "about.chat.title": "💬 دردشة وإضافات",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "تبديل وضع 24/7 في قناة الصوت",
   "slash.cmd.pause": "إيقاف المقطع الحالي مؤقتاً",
   "slash.cmd.play": "تشغيل أغنية بالاسم أو الرابط",
-  "slash.cmd.player_status": "فحص صحة Tiffany (admin)",
   "slash.cmd.playlist": "إدارة قوائم التشغيل (save، load، list، del)",
   "slash.cmd.queue": "عرض الطابور والمقطع الحالي",
   "slash.cmd.random": "إضافة hit عشوائي من 10,000 مقطع مشهور",
@@ -409,7 +408,6 @@
   "slash.param.question": "سؤالك لـ Tiffany",
   "slash.param.time_expr": "وقت seek (+30، -15، 1:30)",
   "slash.param.volume_level": "الصوت 0–150 (فارغ = عرض الحالي)",
-  "slash.player_status.admin_only": "⚠️ **Administrators** فقط يستخدمون `/player-status`.",
   "slash.queue.desync": "⚠️ اتصال الصوت غير متزامن بعد إعادة التشغيل.\nاستخدم **`t!cl`** ثم **`t!p`** لإعادة الاتصال.",
   "slash.queue.empty": "📭 الطابور فارغ.\nاستخدم **`t!p`** لإضافة أغاني.",
   "slash.queue.no_session": "⚠️ جلسة الموسيقى لم تبدأ.\nاستخدم **`t!p`** للبدء.",

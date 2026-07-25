@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "Quyền hạn: **Kết nối**, **Nói**, **Gửi tin nhắn**, **Nhúng liên kết**.\nTham gia kênh thoại → **`/play [bài hát]`**.\nChẩn đoán: **`/player-status`** (quản trị viên) · **`/stats`** (chung).",
+  "about.admin.body": "Quyền hạn: **Kết nối**, **Nói**, **Gửi tin nhắn**, **Nhúng liên kết**.\nTham gia kênh thoại → **`/play [bài hát]`**.\nChẩn đoán: **`/stats`**.",
   "about.admin.title": "Thiết lập (quản trị viên)",
   "about.chat.body": "`/chat` — Trò chuyện AI (có bộ nhớ + hình ảnh)\n`/game` — Gợi ý trò chơi (Steam/Epic)\n`/summary` — Tóm tắt bài viết hoặc liên kết\n`/clip` — Lưu 30 giây cuối của cuộc gọi",
   "about.chat.title": "💬 Trò chuyện & tiện ích",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "Bật/tắt chế độ 24/7 trong kênh thoại",
   "slash.cmd.pause": "Tạm dừng bài hát hiện tại",
   "slash.cmd.play": "Phát bài hát theo tên hoặc URL",
-  "slash.cmd.player_status": "Kiểm tra tình trạng sức khỏe của Tiffany (quản trị viên)",
   "slash.cmd.playlist": "Quản lý danh sách phát đã lưu (lưu, tải, liệt kê, xóa)",
   "slash.cmd.queue": "Hiển thị hàng đợi và bài hát đang phát",
   "slash.cmd.random": "Thêm vào hàng đợi một bài hit ngẫu nhiên từ 10.000 bài hát nổi tiếng",
@@ -409,7 +408,6 @@
   "slash.param.question": "Câu hỏi của bạn dành cho Tiffany",
   "slash.param.time_expr": "Thời gian muốn tua đến (+30, -15, 1:30)",
   "slash.param.volume_level": "Âm lượng 0–150 (để trống để xem mức hiện tại)",
-  "slash.player_status.admin_only": "⚠️ Chỉ **quản trị viên** mới có thể sử dụng `/player-status`.",
   "slash.queue.desync": "⚠️ Kết nối âm thanh bị mất đồng bộ sau khi khởi động lại.\nHãy dùng **`t!cl`** sau đó **`t!p`** để kết nối lại.",
   "slash.queue.empty": "📭 Hàng đợi trống.\nHãy dùng **`t!p`** để thêm bài hát.",
   "slash.queue.no_session": "⚠️ Phiên phát nhạc chưa bắt đầu.\nHãy dùng **`t!p`** để bắt đầu.",

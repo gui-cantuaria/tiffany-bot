@@ -2309,7 +2309,7 @@ _CMD_NAMES = (
     "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
     "volume", "vol",
     "embed", "status", "stats", "updates", "novidades", "about", "help", "rewind",
-    "estatisticas", "metricas", "player-status", "playerstatus",
+    "estatisticas", "metricas",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
     "lang", "mod", "gw", "emb", "rp", "roleplay", "v",
     "247",

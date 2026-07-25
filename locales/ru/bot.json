@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "Права: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nЗайди в голосовой канал → **`/play [трек]`**.\nДиагностика: **`/player-status`** (admin) · **`/status`** (общий).",
+  "about.admin.body": "Права: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nЗайди в голосовой канал → **`/play [трек]`**.\nДиагностика: **`/stats`**.",
   "about.admin.title": "Настройка (admin)",
   "about.chat.body": "`/chat` — AI-чат (память + картинки)\n`/game` — рекомендации игр (Steam/Epic)\n`/summary` — кратко о статье или ссылке\n`/clip` — клип последних 30 с звонка",
   "about.chat.title": "💬 Чат и дополнения",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "Режим 24/7 в голосовом канале",
   "slash.cmd.pause": "Пауза текущего трека",
   "slash.cmd.play": "Воспроизвести по названию или URL",
-  "slash.cmd.player_status": "Проверка Tiffany (admin)",
   "slash.cmd.playlist": "Плейлисты (save, load, list, del)",
   "slash.cmd.queue": "Очередь и сейчас играет",
   "slash.cmd.random": "Случайный хит из 10 000 треков",
@@ -409,7 +408,6 @@
   "slash.param.question": "Твой вопрос для Tiffany",
   "slash.param.time_expr": "Время перемотки (+30, -15, 1:30)",
   "slash.param.volume_level": "Громкость 0–150 (пусто = текущая)",
-  "slash.player_status.admin_only": "⚠️ Только **администраторы** могут использовать `/player-status`.",
   "slash.queue.desync": "⚠️ Голосовое соединение рассинхронизировано после перезапуска.\nИспользуй **`t!cl`**, затем **`t!p`** для переподключения.",
   "slash.queue.empty": "📭 Очередь пуста.\nИспользуй **`t!p`** для добавления песен.",
   "slash.queue.no_session": "⚠️ Музыкальная сессия не начата.\nИспользуй **`t!p`** для старта.",

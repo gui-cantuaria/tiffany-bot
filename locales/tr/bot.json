@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "İzinler: **Bağlan**, **Konuş**, **Mesaj Gönder**, **Bağlantı Ekle**.\nBir ses kanalına katılın → **`/play [şarkı]`**.\nTanılama: **`/player-status`** (yönetici) · **`/status`** (genel).",
+  "about.admin.body": "İzinler: **Bağlan**, **Konuş**, **Mesaj Gönder**, **Bağlantı Ekle**.\nBir ses kanalına katılın → **`/play [şarkı]`**.\nTanılama: **`/stats`**.",
   "about.admin.title": "Kurulum (yönetici)",
   "about.chat.body": "`/chat` — AI sohbet (hafıza + görseller)\n`/game` — oyun önerir (Steam/Epic)\n`/summary` — makale veya bağlantıyı özetler\n`/clip` — görüşmenin son 30 sn'lik klibi",
   "about.chat.title": "💬 Sohbet ve ekstralar",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "Ses kanalında 7/24 moduna geçiş yapın",
   "slash.cmd.pause": "Geçerli parçayı duraklat",
   "slash.cmd.play": "Bir şarkıyı ada veya URL'ye göre çal",
-  "slash.cmd.player_status": "Tiffany sağlık kontrolü (yönetici)",
   "slash.cmd.playlist": "Kayıtlı çalma listelerini yönetin (kaydet, yükle, listele, del)",
   "slash.cmd.queue": "Sırayı göster ve şimdi oynatılıyor",
   "slash.cmd.random": "10.000 ünlü parçadan rastgele bir parçayı sıralayın",
@@ -409,7 +408,6 @@
   "slash.param.question": "Tiffany'ye sorunuz",
   "slash.param.time_expr": "Arama zamanı (+30, -15, 1:30)",
   "slash.param.volume_level": "Ses seviyesi 0–150 (boş = akımı göster)",
-  "slash.player_status.admin_only": "⚠️ Yalnızca **yöneticiler** `/player-status`u kullanabilir.",
   "slash.queue.desync": "⚠️ Yeniden başlatmanın ardından ses bağlantısı senkronize değil.\nYeniden bağlanmak için **`t!cl`** ve ardından **`t!p`** tuşlarını kullanın.",
   "slash.queue.empty": "📭 Sıra boş.\nŞarkı eklemek için **`t!p`** kullanın.",
   "slash.queue.no_session": "⚠️ Müzik oturumu başlatılmadı.\nBaşlamak için **`t!p`** kullanın.",

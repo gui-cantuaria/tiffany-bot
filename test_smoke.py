@@ -108,6 +108,21 @@ class TestSlashLocalizations(unittest.TestCase):
         self.assertEqual(kw["help"], locale_utils.tr("en", "slash.cmd.play"))
         self.assertIn("description", kw)
 
+    def test_embed_subcommand_slash_desc(self):
+        from discord import app_commands
+
+        kw = locale_utils.slash_desc_kwargs("slash.cmd.embed_create")
+        desc = kw["description"]
+        self.assertIsInstance(desc, app_commands.locale_str)
+        self.assertEqual(str(desc), locale_utils.tr("en", "slash.cmd.embed_create"))
+
+    def test_slash_desc_bucket_merges_json_catalog(self):
+        bucket = locale_utils._slash_desc_bucket("slash.cmd.embed")
+        self.assertIn("en", bucket)
+        self.assertIn("pt", bucket)
+        self.assertIn("tr", bucket)
+        self.assertEqual(bucket["en"], locale_utils.tr("en", "slash.cmd.embed"))
+
     def test_localized_cmd_help_uses_user_lang(self):
         locale_utils.set_user_lang(999003, "de")
         try:

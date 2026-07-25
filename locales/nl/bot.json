@@ -1,5 +1,5 @@
 {
-  "about.admin.body": "Rechten: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nJoin een spraakkanal → **`/play [nummer]`**.\nDiagnostiek: **`/player-status`** (admin) · **`/status`** (algemeen).",
+  "about.admin.body": "Rechten: **Connect**, **Speak**, **Send Messages**, **Embed Links**.\nJoin een spraakkanal → **`/play [nummer]`**.\nDiagnostiek: **`/stats`**.",
   "about.admin.title": "Instellingen (beheerder)",
   "about.chat.body": "`/chat` — AI-chat (geheugen + afbeeldingen)\n`/game` — game-aanbevelingen (Steam/Epic)\n`/summary` — artikel of link samenvatten\n`/clip` — clip van de laatste 30s van de call",
   "about.chat.title": "💬 Chat en extra's",
@@ -382,7 +382,6 @@
   "slash.cmd.nonstop": "24/7-modus in spraakkanal aan/uit",
   "slash.cmd.pause": "Pauzeer huidig nummer",
   "slash.cmd.play": "Speel een nummer op naam of URL",
-  "slash.cmd.player_status": "Tiffany-gezondheidscheck (beheerder)",
   "slash.cmd.playlist": "Beheer opgeslagen afspeellijsten (save, load, list, del)",
   "slash.cmd.queue": "Toon wachtrij en now playing",
   "slash.cmd.random": "Zet willekeurige hit uit 10.000 beroemde nummers in wachtrij",
@@ -409,7 +408,6 @@
   "slash.param.question": "Je vraag voor Tiffany",
   "slash.param.time_expr": "Tijd om te seeken (+30, -15, 1:30)",
   "slash.param.volume_level": "Volume 0–150 (leeg = huidige tonen)",
-  "slash.player_status.admin_only": "⚠️ Alleen **administrators** kunnen `/player-status` gebruiken.",
   "slash.queue.desync": "⚠️ Voice-verbinding out of sync na herstart.\nGebruik **`t!cl`** en dan **`t!p`** om opnieuw te verbinden.",
   "slash.queue.empty": "📭 Wachtrij is leeg.\nGebruik **`t!p`** om nummers toe te voegen.",
   "slash.queue.no_session": "⚠️ Muzieksessie niet gestart.\nGebruik **`t!p`** om te beginnen.",
