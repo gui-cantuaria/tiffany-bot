@@ -11,7 +11,7 @@ from typing import Any, Optional
 import discord
 
 FUSO_BR = timezone(timedelta(hours=-3))
-TIFFANY_PINK = 0xFF69B4
+from brand_colors import TIFFANY_PINK
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 

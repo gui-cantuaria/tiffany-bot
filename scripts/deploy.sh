@@ -25,7 +25,7 @@ git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot
 echo "[deploy] Aplicando arquivos atualizados..."
 git checkout origin/main -- \
   launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py game_recommendations.py \
-  affiliate_config.py random_songs.py requirements.txt \
+  affiliate_config.py random_songs.py requirements.txt brand_colors.py \
   giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
   updates.py updates.json owner_dashboard.py roleplay_config.py roleplay_i18n.py \
   infra/ schema/ locales/ \

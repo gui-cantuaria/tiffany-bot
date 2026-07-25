@@ -28,7 +28,7 @@ def _guild_lang(bot: commands.Bot, guild_id: int) -> GuildLang:
 
 log = logging.getLogger("tiffany-bot")
 
-BRAND_PINK = 0xFF69B4
+from brand_colors import TIFFANY_PINK as BRAND_PINK
 _STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giveaways.json")
 _MAX_ENTRIES_PER_GW = 10_000
 _state: dict[str, Any] = {"active": {}, "ended": {}}

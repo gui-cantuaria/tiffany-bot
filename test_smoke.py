@@ -5,21 +5,22 @@ from __future__ import annotations
 import unittest
 
 import locale_utils
+from brand_colors import TIFFANY_PINK
 
 
 class TestHelpEmbed(unittest.TestCase):
     def test_build_help_embed_accepts_user_id(self):
-        em = locale_utils.build_help_embed(None, 12345, pink=0xFF69B4)
+        em = locale_utils.build_help_embed(None, 12345, pink=TIFFANY_PINK)
         self.assertTrue(em.title)
 
     def test_build_help_embed_none_user_id(self):
-        em = locale_utils.build_help_embed(None, None, pink=0xFF69B4)
+        em = locale_utils.build_help_embed(None, None, pink=TIFFANY_PINK)
         self.assertIsNotNone(em.description)
 
     def test_help_embed_turkish_json_catalog(self):
         locale_utils.set_user_lang(999002, "tr")
         try:
-            em = locale_utils.build_help_embed(None, 999002, pink=0xFF69B4)
+            em = locale_utils.build_help_embed(None, 999002, pink=TIFFANY_PINK)
             self.assertEqual(em.title, locale_utils.tr("tr", "help.title"))
             self.assertIn("10.000", em.fields[0].value)
         finally:
@@ -28,7 +29,7 @@ class TestHelpEmbed(unittest.TestCase):
     def test_help_embed_portuguese_core_strings(self):
         locale_utils.set_user_lang(999003, "pt")
         try:
-            em = locale_utils.build_help_embed(None, 999003, pink=0xFF69B4)
+            em = locale_utils.build_help_embed(None, 999003, pink=TIFFANY_PINK)
             self.assertIn("10.000", em.fields[0].value)
             self.assertIn("/giveaway", em.fields[3].value)
         finally:
@@ -59,7 +60,7 @@ class TestUpdatesEmbed(unittest.TestCase):
         import updates as upd
 
         upd.reload_updates_cache()
-        em = upd.build_updates_embed(None, 12345, pink=0xFF69B4)
+        em = upd.build_updates_embed(None, 12345, pink=TIFFANY_PINK)
         self.assertTrue(em.title)
 
 
@@ -179,7 +180,7 @@ class TestVolumeHelpers(unittest.TestCase):
 
 class TestVolumeEmbed(unittest.TestCase):
     def test_build_volume_embed(self):
-        em = locale_utils.build_volume_embed("pt", current=80, pink=0xFF69B4)
+        em = locale_utils.build_volume_embed("pt", current=80, pink=TIFFANY_PINK)
         self.assertIn("80", em.description or "")
 
 

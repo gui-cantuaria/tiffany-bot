@@ -20,7 +20,7 @@ def _ctx_lang(ctx: commands.Context) -> GuildLang:
 
 log = logging.getLogger("tiffany-bot")
 
-BRAND_PINK = 0xFF69B4
+from brand_colors import TIFFANY_PINK as BRAND_PINK, TIFFANY_RED
 _STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guild_embeds.json")
 _cache: dict[str, dict[str, dict[str, Any]]] = {}
 _loaded = False

@@ -6,6 +6,7 @@ import logging
 
 import discord
 from discord.ext import commands
+from brand_colors import TIFFANY_RED
 
 import guild_config
 from infra.moderation.pipeline import ModerationAction, get_pipeline
@@ -85,7 +86,7 @@ async def _apply_result(message: discord.Message, result, *, default_title: str)
         discord.Embed(
             title=default_title,
             description=f"{message.author.mention} [{result.layer}]\n{result.reason}\n`{(message.content or '')[:300]}`",
-            color=0xED2939,
+            color=TIFFANY_RED,
         ),
     )
 

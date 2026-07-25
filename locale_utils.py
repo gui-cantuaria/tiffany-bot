@@ -9,6 +9,8 @@ from typing import Literal, Optional
 import discord
 from discord import app_commands
 
+from brand_colors import TIFFANY_GREEN, TIFFANY_PINK, TIFFANY_RED
+
 GuildLang = Literal["en", "es", "pt", "fr", "de", "tr", "sv", "it", "nl", "ar", "ja", "ko", "ru"]
 
 # Fully translated UI languages (all 13 in /language picker; core also in _STRINGS).
@@ -550,7 +552,7 @@ def build_public_status_embed(
     latency: float,
     voice_ok: bool,
     chat_ok: bool,
-    pink: int = 0xFF69B4,
+    pink: int = TIFFANY_PINK,
 ) -> discord.Embed:
     """Public /status embed — localized."""
     from datetime import datetime, timedelta, timezone
@@ -567,14 +569,17 @@ def build_public_status_embed(
     recursos_ok = voice_ok and chat_ok
     if conexao_ruim or not recursos_ok:
         nivel, titulo_key, msg_key = "🔴", "status.public.title_bad", "status.public.msg_bad"
+        embed_color = TIFFANY_RED
     elif conexao_lenta:
         nivel, titulo_key, msg_key = "🟡", "status.public.title_slow", "status.public.msg_slow"
+        embed_color = pink
     else:
         nivel, titulo_key, msg_key = "🟢", "status.public.title_ok", "status.public.msg_ok"
+        embed_color = TIFFANY_GREEN
     em = discord.Embed(
         title=f"{nivel} Tiffany — {tr(lang, titulo_key)}",
         description=tr(lang, msg_key),
-        color=pink if recursos_ok and not conexao_ruim else (0xFEE75C if conexao_lenta else 0xED4245),
+        color=embed_color,
         timestamp=agora,
     )
     if lat_ms is None:
@@ -717,7 +722,7 @@ class LanguageSelect(discord.ui.Select):
             await i18n_middleware.bind_user(interaction.user.id)
         except Exception:
             pass
-        pink = getattr(self.view, "pink", 0xFF69B4)
+        pink = getattr(self.view, "pink", TIFFANY_PINK)
         embed = build_language_select_embed(new_lang, pink=pink)
         view = LanguageSelectView(new_lang, pink=pink)
         await interaction.response.edit_message(
@@ -728,7 +733,7 @@ class LanguageSelect(discord.ui.Select):
 
 
 class LanguageSelectView(discord.ui.View):
-    def __init__(self, lang: GuildLang, *, pink: int = 0xFF69B4):
+    def __init__(self, lang: GuildLang, *, pink: int = TIFFANY_PINK):
         super().__init__(timeout=300)
         self.pink = pink
         self.add_item(LanguageSelect(lang))

@@ -249,7 +249,7 @@ FONTES_INGLES = {
 # =========================
 # CATEGORIES
 # =========================
-TIFFANY_PINK = 0xFF69B4
+from brand_colors import TIFFANY_PINK, TIFFANY_RED
 CORES_CATEGORIA = {
     "Hardware": TIFFANY_PINK,
     "Inteligência Artificial": TIFFANY_PINK,
@@ -2445,7 +2445,7 @@ async def cmd_stats(interaction: discord.Interaction):
         await interaction.response.send_message(
             embed=discord.Embed(
                 description=tr(lang, "err.missing_perms"),
-                color=0xED4245,
+                color=TIFFANY_RED,
             ),
             ephemeral=True,
         )
@@ -2467,7 +2467,7 @@ async def cmd_stats_prefix(ctx: commands.Context):
         await ctx.send(
             embed=discord.Embed(
                 description="Não consigo te enviar DM. Ative mensagens privadas ou use `/stats`.",
-                color=0xED4245,
+                color=TIFFANY_RED,
             ),
         )
 
@@ -2481,8 +2481,6 @@ async def cmd_status_prefix(ctx: commands.Context):
 # =========================
 # SLASH COMMAND: /updates
 # =========================
-TIFFANY_PINK = 0xFF69B4
-
 
 @discord_client.tree.command(
     name="updates",

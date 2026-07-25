@@ -157,7 +157,7 @@ _posted_cat_counts_date: str = ""
 # =========================
 # COLORS AND EMOJIS
 # =========================
-TIFFANY_PINK = 0xFF69B4
+from brand_colors import TIFFANY_PINK, TIFFANY_RED
 COR_OFERTA = TIFFANY_PINK          # default color (store without brand color)
 COR_OFERTA_ALTA = TIFFANY_PINK     # kept for compatibility
 # Embed bar color by discount tier — signals how good the deal is.

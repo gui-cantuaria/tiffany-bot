@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 
 import discord
 from discord.ext import commands
+from brand_colors import TIFFANY_PINK, TIFFANY_RED
 
 from infra import postgres, redis_client
 
@@ -149,7 +150,7 @@ def requires_premium(tier: str = "premium"):
         async def wrapper(ctx: commands.Context, *args, **kwargs):
             guild_id = ctx.guild.id if ctx.guild else None
             if guild_id is None:
-                await ctx.send(embed=discord.Embed(description="Premium feature — guild only.", color=0xED4245))
+                await ctx.send(embed=discord.Embed(description="Premium feature — guild only.", color=TIFFANY_RED))
                 return
             ent = await get_entitlement(guild_id=guild_id)
             if not ent.covers(tier):
@@ -158,7 +159,7 @@ def requires_premium(tier: str = "premium"):
                 await ctx.send(
                     embed=discord.Embed(
                         description=locale_utils.tr(lang, "premium.upsell"),
-                        color=0xFF69B4,
+                        color=TIFFANY_PINK,
                     ),
                     ephemeral=bool(ctx.interaction),
                 )
