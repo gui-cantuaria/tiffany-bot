@@ -17,6 +17,11 @@ export DEPLOY_MODE="${DEPLOY_MODE:-systemd}"
 echo "[deploy] Baixando atualizações..."
 git fetch origin main
 
+echo "[deploy] Atualizando scripts de deploy primeiro (evita checkout parcial)..."
+git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh scripts/start-lavalink.sh \
+  scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
+  scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer 2>/dev/null || true
+
 echo "[deploy] Aplicando arquivos atualizados..."
 git checkout origin/main -- \
   launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py game_recommendations.py \
@@ -25,9 +30,7 @@ git checkout origin/main -- \
   updates.py updates.json owner_dashboard.py roleplay_config.py roleplay_i18n.py \
   infra/ schema/ locales/ \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
-git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh scripts/start-lavalink.sh \
-  scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
-  scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer \
+git checkout origin/main -- \
   CLAUDE.md docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md docs/ha-architecture.md docs/infrastructure-roadmap.md lavalink/application.yml 2>/dev/null || true
 
 USE_DOCKER=0
@@ -142,6 +145,12 @@ PIP="$VENV/bin/pip"
 echo "[deploy] Instalando dependências novas..."
 "$PIP" install -q --upgrade pip
 "$PIP" install -q -r requirements.txt
+
+# Guard: locale_utils imports roleplay_i18n — ensure file exists before restart.
+if grep -q "roleplay_i18n" locale_utils.py 2>/dev/null && [ ! -f roleplay_i18n.py ]; then
+    echo "[deploy] roleplay_i18n.py ausente — baixando do origin/main..."
+    git checkout origin/main -- roleplay_i18n.py 2>/dev/null || true
+fi
 
 if [ -f .env ] && grep -qE '^LAVALINK_ENABLED=1' .env; then
     echo "[deploy] LAVALINK_ENABLED=1 — starting Lavalink container..."
