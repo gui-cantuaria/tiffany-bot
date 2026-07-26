@@ -1847,6 +1847,29 @@ async def _before_critical_tasks_watchdog():
     await discord_client.wait_until_ready()
 
 
+@tasks.loop(minutes=30)
+async def _heartbeat_logger():
+    """Periodic health log — proves the bot is alive and connected."""
+    try:
+        latency_ms = round(discord_client.latency * 1000)
+        guild_count = len(discord_client.guilds)
+        news_ok = verificar_feeds.is_running()
+        watchdog_ok = _critical_tasks_watchdog.is_running()
+        log.info(
+            "💓 Heartbeat: latency=%dms, guilds=%d, news_loop=%s, watchdog=%s",
+            latency_ms, guild_count,
+            "running" if news_ok else "STOPPED",
+            "running" if watchdog_ok else "STOPPED",
+        )
+    except Exception:
+        log.exception("Heartbeat logger error")
+
+
+@_heartbeat_logger.before_loop
+async def _before_heartbeat_logger():
+    await discord_client.wait_until_ready()
+
+
 async def _verificar_feeds_inner():
     global _ai_calls_this_cycle, _vision_calls_this_cycle, http_session, _last_cycle_time, _last_cycle_stats
     global _simhash_pruned_this_cycle, _title_pruned_this_cycle, _entity_pruned_this_cycle
@@ -2467,9 +2490,25 @@ async def _sync_slash_commands() -> None:
         log.warning("Error syncing slash commands: %s", e)
 
 
+_first_ready_done = False
+
+
 @discord_client.event
 async def on_ready():
-    global _voice_available
+    global _voice_available, _first_ready_done
+    if _first_ready_done:
+        log.info("🔄 on_ready fired again (gateway reconnect) — restarting stopped loops only.")
+        # Only restart loops that may have stopped during the disconnect
+        if not verificar_feeds.is_running():
+            verificar_feeds.start()
+            log.info("Restarted verificar_feeds after reconnect.")
+        if not _critical_tasks_watchdog.is_running():
+            _critical_tasks_watchdog.start()
+            log.info("Restarted _critical_tasks_watchdog after reconnect.")
+        if not _heartbeat_logger.is_running():
+            _heartbeat_logger.start()
+        return
+    _first_ready_done = True
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
     try:
         from infra import redis_client, postgres
@@ -2495,6 +2534,19 @@ async def on_ready():
         verificar_feeds.start()
     if not _critical_tasks_watchdog.is_running():
         _critical_tasks_watchdog.start()
+    if not _heartbeat_logger.is_running():
+        _heartbeat_logger.start()
+
+
+@discord_client.event
+async def on_disconnect():
+    log.warning("⚠️ Bot disconnected from Discord gateway.")
+
+
+@discord_client.event
+async def on_resumed():
+    log.info("✅ Bot resumed Discord gateway connection (session resumed).")
+
 
 @discord_client.event
 async def on_close():
@@ -2647,4 +2699,12 @@ elif not _voice_available:
     log.warning("Voice module unavailable — music/voice commands disabled; news and offers still run.")
 
 if __name__ == "__main__":
-    discord_client.run(DISCORD_TOKEN)
+    try:
+        discord_client.run(DISCORD_TOKEN, reconnect=True)
+    except SystemExit:
+        log.info("Bot exited via SystemExit.")
+    except KeyboardInterrupt:
+        log.info("Bot stopped via KeyboardInterrupt.")
+    except Exception as e:
+        log.critical("💀 bot.run() crashed with unhandled exception: %s", e, exc_info=True)
+        raise

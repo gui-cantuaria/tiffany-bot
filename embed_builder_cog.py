@@ -213,7 +213,7 @@ async def setup(bot: commands.Bot):
 
     @bot.hybrid_group(
         name="embed",
-        aliases=["emb"],
+        aliases=["emb", "em"],
         invoke_without_command=True,
         dm_permission=False,
         **hybrid_desc_kwargs("slash.cmd.embed"),

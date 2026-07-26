@@ -93,6 +93,11 @@ _stop_systemd() {
         bash scripts/kill-orphans.sh || true
     else
         systemctl stop tiffany-bot 2>/dev/null || true
+        # Graceful: SIGTERM first, wait, then SIGKILL as last resort
+        pkill -TERM -f '[l]auncher.py' 2>/dev/null || true
+        pkill -TERM -f '[n]otices.py' 2>/dev/null || true
+        pkill -TERM -f '[o]ffers.py' 2>/dev/null || true
+        sleep 10
         pkill -9 -f '[l]auncher.py' 2>/dev/null || true
         pkill -9 -f '[n]otices.py' 2>/dev/null || true
         pkill -9 -f '[o]ffers.py' 2>/dev/null || true

@@ -49,6 +49,9 @@ MAX_RAPID_RESTARTS = 3  # max restarts within the window
 RESTART_WINDOW = 60  # window in seconds
 RESTART_COOLDOWN = 300  # cooldown after restart storm (5 min)
 MAX_TOTAL_RESTARTS = 15  # circuit breaker: give up after N total restarts
+_backoff_level = {}  # name -> current backoff multiplier
+BACKOFF_BASE = 30  # initial backoff in seconds
+BACKOFF_MAX = 300  # max backoff in seconds
 
 
 def log(message: str) -> None:
@@ -86,6 +89,21 @@ def _truncate_log_if_large(log_path: str) -> None:
                 f.write(content)
     except Exception:
         pass
+
+
+def _read_crash_tail(bot_config: dict, lines: int = 15) -> str:
+    """Read the last N lines of a bot's log to include crash context."""
+    try:
+        base_name = os.path.splitext(bot_config["file"])[0]
+        log_path = os.path.join(LOG_DIR, f"{base_name}.log")
+        if not os.path.exists(log_path):
+            return "(no log file)"
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+            tail = all_lines[-lines:] if len(all_lines) >= lines else all_lines
+            return "".join(tail).strip()[-500:]  # cap at 500 chars for webhook
+    except Exception:
+        return "(failed to read log)"
 
 
 def start_bot(bot_config: dict):
@@ -130,25 +148,36 @@ try:
 
             # poll() != None means the process exited
             if p.poll() is not None:
+                crash_tail = _read_crash_tail(bot_config)
                 log(f"⚠️ ALERT: {name} crashed (exit code: {p.returncode})!")
-                webhook_notify(f"⚠️ {name} caiu (exit code: {p.returncode})!")
+                log(f"📋 Last log lines:\n{crash_tail}")
+                webhook_notify(
+                    f"⚠️ {name} caiu (exit code: {p.returncode})!\n"
+                    f"```\n{crash_tail[:400]}\n```"
+                )
                 # Circuit breaker: give up if too many total crashes
                 _total_restarts[name] = _total_restarts.get(name, 0) + 1
                 if _total_restarts[name] >= MAX_TOTAL_RESTARTS:
                     log(f"💀 {name} crashed {MAX_TOTAL_RESTARTS}x total! Giving up permanently.")
                     webhook_notify(f"💀 {name} desativado — crashou {MAX_TOTAL_RESTARTS}x. Requer restart manual.")
                     continue
-                # Anti restart-storm
+                # Anti restart-storm with exponential backoff
                 now = time.time()
                 if name not in _restart_times:
                     _restart_times[name] = []
                 _restart_times[name].append(now)
                 _restart_times[name] = [t for t in _restart_times[name] if now - t < RESTART_WINDOW]
                 if len(_restart_times[name]) >= MAX_RAPID_RESTARTS:
-                    log(f"🚨 {name} crashed {MAX_RAPID_RESTARTS}x in {RESTART_WINDOW}s! Waiting {RESTART_COOLDOWN}s...")
-                    webhook_notify(f"🚨 {name} em restart storm! Cooldown de {RESTART_COOLDOWN // 60} min.")
-                    time.sleep(RESTART_COOLDOWN)
+                    level = _backoff_level.get(name, 0)
+                    wait = min(BACKOFF_BASE * (2 ** level), BACKOFF_MAX)
+                    _backoff_level[name] = level + 1
+                    log(f"🚨 {name} crashed {MAX_RAPID_RESTARTS}x in {RESTART_WINDOW}s! Backoff: {wait}s (level {level + 1})...")
+                    webhook_notify(f"🚨 {name} em restart storm! Backoff de {wait}s.")
+                    time.sleep(wait)
                     _restart_times[name].clear()
+                else:
+                    # Reset backoff on stable restart
+                    _backoff_level[name] = 0
                 if data.get("log_file"):
                     data["log_file"].close()
                 log(f"🔄 Restarting {name}...")
@@ -164,13 +193,25 @@ except KeyboardInterrupt:
     log("🛑 Stop command received. Shutting down bots...")
     webhook_notify("🛑 Sistema encerrado manualmente.")
     for name, data in processes.items():
-        data["process"].terminate()
+        # Graceful: SIGINT first (allows discord.py to clean up), then SIGTERM, then SIGKILL
         try:
-            data["process"].wait(timeout=15)
+            if sys.platform != "win32":
+                data["process"].send_signal(signal.SIGINT)
+            else:
+                data["process"].terminate()
+        except OSError:
+            pass
+        try:
+            data["process"].wait(timeout=10)
         except subprocess.TimeoutExpired:
-            log(f"⚠️ {name} did not exit within 15s, forcing kill...")
-            data["process"].kill()
-            data["process"].wait(timeout=5)
+            log(f"⚠️ {name} did not exit after SIGINT (10s), sending SIGTERM...")
+            data["process"].terminate()
+            try:
+                data["process"].wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                log(f"⚠️ {name} did not exit after SIGTERM (10s), forcing SIGKILL...")
+                data["process"].kill()
+                data["process"].wait(timeout=5)
         if data.get("log_file"):
             data["log_file"].close()
         log(f"💤 {name} shut down successfully.")
