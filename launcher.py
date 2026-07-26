@@ -4,6 +4,11 @@ import sys
 import os
 import signal
 import urllib.request
+
+# Force UTF-8 output to prevent crashes on Windows console when printing emojis
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import json
 from datetime import datetime
 from dotenv import load_dotenv
@@ -120,6 +125,7 @@ def start_bot(bot_config: dict):
             [sys.executable, "-u", bot_config["file"]],
             stdout=log_file,
             stderr=subprocess.STDOUT,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
     except Exception as e:
         log_file.close()
