@@ -19,6 +19,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import affiliate_config
+import guild_config
 
 # =========================
 # CONFIGURATION
@@ -398,7 +399,15 @@ REDE_KEYWORDS = (
 # =========================
 
 _POSTING_STALE_SEC = 300
+_CYCLE_TIMEOUT_SEC = 25 * 60  # prevent hung enrichment from blocking all future cycles
 _offers_post_lock = asyncio.Lock()
+
+
+def _safe_int(val: object, default: int | None = None) -> int | None:
+    try:
+        return int(val)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
 
 
 def _load_history() -> dict:
@@ -568,6 +577,23 @@ def _clean_history(history: dict) -> None:
         del deals[k]
     if to_remove:
         log.info(f"Cleanup: {len(to_remove)} old offers removed from history.")
+        _save_history(history)
+
+
+def _purge_stale_posting_locks(history: dict) -> None:
+    """Drop in-flight posting locks left by a crashed cycle."""
+    now = time.time()
+    deals = history.get("deals", {})
+    stale = [
+        k for k, v in deals.items()
+        if isinstance(v, dict)
+        and v.get("status") == "posting"
+        and (now - v.get("ts", 0)) >= _POSTING_STALE_SEC
+    ]
+    for k in stale:
+        del deals[k]
+    if stale:
+        log.warning("Purged %d stale posting locks from offers history", len(stale))
         _save_history(history)
 
 
@@ -2121,6 +2147,54 @@ def _build_embed(deal: dict, guild_tags: dict = None) -> discord.Embed:
     return embed
 
 
+async def _build_post_targets() -> list[dict]:
+    """Resolve primary + per-guild offer channels; never crash on bad guild_config keys."""
+    targets: list[dict] = []
+    seen_channel_ids: set[int] = set()
+
+    primary_channel = await _resolve_offers_channel(CANAL_OFERTAS_ID)
+    if primary_channel:
+        primary_guild = getattr(primary_channel, "guild", None)
+        if primary_guild is None or guild_config.is_feature_enabled(primary_guild.id, "offers"):
+            seen_channel_ids.add(primary_channel.id)
+            targets.append({
+                "channel": primary_channel,
+                "is_primary": True,
+                "tags": {},
+                "categories": [],
+            })
+        else:
+            log.info(
+                "Primary offers channel skipped — module disabled for guild %s",
+                primary_guild.id,
+            )
+
+    for gid_str, conf in guild_config.get_all_guilds_config().items():
+        gid = _safe_int(gid_str)
+        if gid is None:
+            log.warning("Invalid guild_config key skipped: %r", gid_str)
+            continue
+        try:
+            if not guild_config.is_feature_enabled(gid, "offers"):
+                continue
+            ch_id = _safe_int((conf or {}).get("offers_channel"))
+            if not ch_id or ch_id == CANAL_OFERTAS_ID:
+                continue
+            ch = await _resolve_offers_channel(ch_id)
+            if ch and ch.id not in seen_channel_ids:
+                seen_channel_ids.add(ch.id)
+                targets.append({
+                    "channel": ch,
+                    "is_primary": False,
+                    "tags": (conf or {}).get("affiliate_tags", {}),
+                    "categories": [c.lower() for c in (conf or {}).get("allowed_categories", [])],
+                })
+        except Exception as e:
+            log.warning("Skipping guild %s offers target: %s", gid_str, e)
+
+    return targets
+
+
 # =========================
 # MAIN CYCLE
 # =========================
@@ -2135,7 +2209,14 @@ async def _run_deals_cycle() -> None:
         return
     _cycle_running = True
     try:
-        await _run_deals_cycle_inner()
+        await asyncio.wait_for(_run_deals_cycle_inner(), timeout=_CYCLE_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        log.error(
+            "Offers cycle timed out after %ds — releasing lock so next slot can run",
+            _CYCLE_TIMEOUT_SEC,
+        )
+    except Exception:
+        log.exception("Offers cycle failed")
     finally:
         _cycle_running = False
 
@@ -2198,6 +2279,7 @@ async def _run_deals_cycle_inner() -> None:
 
     history = _load_history()
     _clean_history(history)
+    _purge_stale_posting_locks(history)
 
     log.info("=== Starting offers cycle ===")
 
@@ -2341,38 +2423,9 @@ async def _run_deals_cycle_inner() -> None:
     )
 
     # Post
-    import guild_config
     import random
 
-    guilds = guild_config.get_all_guilds_config()
-    targets = []
-    seen_channel_ids: set[int] = set()
-
-    primary_channel = await _resolve_offers_channel(CANAL_OFERTAS_ID)
-    if primary_channel:
-        seen_channel_ids.add(primary_channel.id)
-        targets.append({
-            "channel": primary_channel,
-            "is_primary": True,
-            "tags": {},
-            "categories": [],
-        })
-
-    for gid, conf in guilds.items():
-        if not guild_config.is_feature_enabled(int(gid), "offers"):
-            continue
-        ch_id = conf.get("offers_channel")
-        if not ch_id or ch_id == CANAL_OFERTAS_ID:
-            continue
-        ch = await _resolve_offers_channel(int(ch_id))
-        if ch and ch.id not in seen_channel_ids:
-            seen_channel_ids.add(ch.id)
-            targets.append({
-                "channel": ch,
-                "is_primary": False,
-                "tags": conf.get("affiliate_tags", {}),
-                "categories": [c.lower() for c in conf.get("allowed_categories", [])],
-            })
+    targets = await _build_post_targets()
 
     if not targets:
         log.error("No valid channels found to post offers!")

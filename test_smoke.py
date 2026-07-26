@@ -435,6 +435,14 @@ class TestImagineSafety(unittest.TestCase):
         self.assertTrue("image" in desc or "imagem" in desc or "bild" in desc)
 
 
+class TestOffersRobustness(unittest.TestCase):
+    def test_safe_int_invalid(self):
+        import offers_cog as oc
+
+        self.assertIsNone(oc._safe_int("abc"))
+        self.assertEqual(oc._safe_int("123"), 123)
+
+
 class TestFeatureFlags(unittest.TestCase):
     def test_command_feature_mapping(self):
         import feature_flags as ff
