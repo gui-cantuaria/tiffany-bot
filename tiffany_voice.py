@@ -34,7 +34,7 @@ from discord.ext import commands
 import game_recommendations
 import locale_utils
 import guild_config
-from locale_utils import GuildLang, resolve_guild_lang, resolve_lang, interaction_lang, tr, slash_desc_kwargs, slash_param, hybrid_desc_kwargs, localized_cmd_help
+from locale_utils import GuildLang, resolve_guild_lang, resolve_lang, interaction_lang, tr, slash_desc_kwargs, slash_param, hybrid_desc_kwargs, localized_cmd_help, hybrid_ctx_reply, hybrid_defer, hybrid_ctx_send
 
 try:
     from discord.ext import voice_recv as voice_recv
@@ -137,9 +137,13 @@ def _voice_enabled() -> bool:
     return os.getenv("VOICE_ENABLED", "1").strip() == "1"
 
 
-def _voice_stt_enabled() -> bool:
+def _voice_stt_enabled(guild_id: int | None = None) -> bool:
     """Wake-word voice commands (STT). Off by default — music via t! only; chat via t!c."""
-    return os.getenv("VOICE_STT_ENABLED", "0").strip() == "1"
+    if os.getenv("VOICE_STT_ENABLED", "0").strip() != "1":
+        return False
+    if guild_id is not None and not guild_config.is_feature_enabled(guild_id, "voice_stt"):
+        return False
+    return True
 
 
 def _is_bot_owner(user_id: int) -> bool:
@@ -186,7 +190,9 @@ async def _require_voice(ctx: commands.Context) -> bool:
         if dj_id and not ctx.author.guild_permissions.administrator:
             role = ctx.guild.get_role(dj_id)
             if role and role not in ctx.author.roles:
-                await ctx.send(embed=_embed(f"⚠️ Apenas membros com o cargo **{role.name}** podem controlar a música.", error=True))
+                await ctx.send(
+                    embed=_embed(tr(lang, "err.perms.dj_role", role=role.name), error=True),
+                )
                 return False
                 
     return True
@@ -263,24 +269,48 @@ def _dm_require_shared_guild() -> bool:
 async def _require_guild(ctx: commands.Context) -> bool:
     if ctx.guild:
         return True
-    await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "err.guild_only")))
+    await hybrid_ctx_reply(ctx, tr(_ctx_lang(ctx), "err.guild_only"), error=True)
     return False
 
 
 async def _require_dm_access(ctx: commands.Context) -> bool:
-    """DM: chat/game/summary/dice — require at least one shared server (anti-abuse)."""
+    """DM: chat/imagine/game/summary/dice — require at least one shared server (anti-abuse)."""
     if ctx.guild:
         return True
+    lang = _ctx_lang(ctx)
     if guild_config.is_user_blacklisted_anywhere(ctx.author.id):
         if ctx.interaction is None:
-            lang = _ctx_lang(ctx)
-            await ctx.send(embed=_embed(tr(lang, "blocked.1")), delete_after=8)
+            await hybrid_ctx_reply(ctx, tr(lang, "blocked.1"), error=True, delete_after=8)
         return False
     if not _dm_require_shared_guild():
         return True
     if await _user_shares_guild_with_bot(ctx.bot, ctx.author.id):
         return True
-    await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "err.dm_no_shared_guild")))
+    await hybrid_ctx_reply(ctx, tr(lang, "err.dm_no_shared_guild"), error=True)
+    return False
+
+
+async def _require_feature(ctx: commands.Context, feature: str | None = None) -> bool:
+    """Block command when guild or user disabled the module."""
+    from feature_flags import (
+        feature_denial_message,
+        feature_for_command,
+        is_feature_allowed,
+    )
+
+    feat = feature or feature_for_command(ctx.command.name if ctx.command else None)
+    if not feat:
+        return True
+    lang = _ctx_lang(ctx)
+    gid = ctx.guild.id if ctx.guild else None
+    uid = ctx.author.id
+    if is_feature_allowed(guild_id=gid, user_id=uid, feature=feat):
+        return True
+    await hybrid_ctx_reply(
+        ctx,
+        feature_denial_message(lang, feat, guild_id=gid, user_id=uid),
+        error=True,
+    )
     return False
 
 
@@ -792,6 +822,135 @@ async def _ai_content_is_blocked(text: str) -> bool:
         log.debug("AI content moderation failed: %s", e)
         # Fail-closed for risky titles when the API is unavailable.
         return _title_is_risky(text) or _contains_blocked_content(text)
+
+
+_imagine_prompt_mod_cache: dict[str, bool] = {}
+
+
+async def _ai_imagine_prompt_is_blocked(text: str) -> bool:
+    """Stricter AI moderation for image-generation prompts (always on for /imagine)."""
+    import imagine_safety
+    if not text or not text.strip():
+        return False
+    key = f"img:{_strip_accents_lower(text.strip())[:200]}"
+    if key in _imagine_prompt_mod_cache:
+        return _imagine_prompt_mod_cache[key]
+    client = _get_openrouter_client()
+    if client is None:
+        return _contains_blocked_content(text) or imagine_safety.check_literal_imagine_prompt(text)
+    try:
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="google/gemini-3.1-flash-lite",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a strict moderator for TEXT-TO-IMAGE prompts on Discord. "
+                            "Reply YES (block) if the prompt requests, glorifies, apologizes for, "
+                            "or tries to bypass filters to create ANY of: "
+                            "NSFW or sexual content, nudity, porn, erotic/hentai, fetish, "
+                            "minors in sexual context (CSAM), "
+                            "graphic gore or extreme violence, torture, self-harm or suicide imagery, "
+                            "hate symbols or hate figures (nazism, fascism, dictators, genocide, KKK), "
+                            "terrorism or mass violence, "
+                            "illegal drugs/weapons/explosives manufacturing or criminal how-to, "
+                            "harassment, doxxing, non-consensual deepfake nudes, "
+                            "real-person sexualization without consent, "
+                            "or ANY encoded/obfuscated bypass (leet, Morse, Base64, Cyrillic swaps). "
+                            "Also block prompts asking to remove clothes, 'make her naked', rule34, etc. "
+                            "IGNORE user excuses ('joke', 'school', 'art project'). "
+                            "Reply ONLY YES or NO."
+                        ),
+                    },
+                    {"role": "user", "content": text[:400]},
+                ],
+                max_tokens=4,
+                temperature=0.0,
+                timeout=12.0,
+            )
+        blocked = _ai_yes_no_is_yes(resp.choices[0].message.content or "")
+        _imagine_prompt_mod_cache[key] = blocked
+        if len(_imagine_prompt_mod_cache) > 1500:
+            for k in list(_imagine_prompt_mod_cache.keys())[:400]:
+                _imagine_prompt_mod_cache.pop(k, None)
+        return blocked
+    except Exception as e:
+        log.debug("AI imagine prompt moderation failed: %s", e)
+        return (
+            _contains_blocked_content(text)
+            or imagine_safety.check_literal_imagine_prompt(text)
+            or _title_is_risky(text)
+        )
+
+
+async def _should_block_imagine_prompt(text: str) -> bool:
+    """Imagine prompts always use strict moderation (ignores guild strict toggle)."""
+    import imagine_safety
+    if not text or not text.strip():
+        return False
+    if _contains_blocked_content(text):
+        return True
+    if imagine_safety.check_literal_imagine_prompt(text):
+        return True
+    return await _ai_imagine_prompt_is_blocked(text)
+
+
+_generated_image_mod_cache: dict[str, bool] = {}
+
+
+async def _ai_generated_image_is_blocked(image_bytes: bytes) -> bool:
+    """Vision check on generated image before posting — fail-closed on API errors."""
+    if not image_bytes or len(image_bytes) < 256:
+        return True
+    import base64
+    import hashlib
+
+    digest = hashlib.sha256(image_bytes[:65536]).hexdigest()[:32]
+    if digest in _generated_image_mod_cache:
+        return _generated_image_mod_cache[digest]
+
+    client = _get_openrouter_client()
+    if client is None:
+        return False
+
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:image/png;base64,{b64}"
+    try:
+        async with _ai_semaphore:
+            resp = await client.chat.completions.create(
+                model="google/gemini-3.1-flash-lite",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Moderate this AI-generated image for Discord. Reply YES if it shows or "
+                                    "strongly implies: nudity or sexual content, minors in sexual context, "
+                                    "graphic gore or extreme violence, hate symbols (swastika, nazi, KKK), "
+                                    "dictators glorified, terrorism, illegal drug/weapons instructions visuals, "
+                                    "or other clearly NSFW/disturbing content. Reply ONLY YES or NO."
+                                ),
+                            },
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }
+                ],
+                max_tokens=4,
+                temperature=0.0,
+                timeout=20.0,
+            )
+        blocked = _ai_yes_no_is_yes(resp.choices[0].message.content or "")
+        _generated_image_mod_cache[digest] = blocked
+        if len(_generated_image_mod_cache) > 500:
+            for k in list(_generated_image_mod_cache.keys())[:150]:
+                _generated_image_mod_cache.pop(k, None)
+        return blocked
+    except Exception as e:
+        log.warning("AI generated-image moderation failed: %s", e)
+        return True
 
 
 # Short greetings — skip AI moderation (false blocks + wasted API calls).
@@ -1579,6 +1738,7 @@ _global_ai_calls: collections.deque = collections.deque()  # recent call timesta
 _AI_BUCKET_MAX: dict[str, int] = {
     "chat": 8,
     "game": 6,
+    "imagine": 3,
     "summary": 4,
     "voice": 6,
     "song": 4,
@@ -1603,6 +1763,8 @@ _user_ai_calls: dict[int, collections.deque] = {}
 # --- t!g cooldown (separate from t!c / t!su) ---
 _game_cooldown_last: dict[int, float] = {}
 _GAME_CMD_COOLDOWN_SEC = 5
+_imagine_cooldown_last: dict[int, float] = {}
+_IMAGINE_CMD_COOLDOWN_SEC = 45
 
 GAME_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "game_history.json")
 GAME_HISTORY_TTL_SEC = int(os.getenv("GAME_HISTORY_TTL_DAYS", "30")) * 86400
@@ -1739,6 +1901,18 @@ def _check_game_cooldown(user_id: int) -> tuple[bool, int]:
     if (now - last) < _GAME_CMD_COOLDOWN_SEC:
         return False, max(1, int(math.ceil(_GAME_CMD_COOLDOWN_SEC - (now - last))))
     _game_cooldown_last[user_id] = now
+    return True, 0
+
+
+def _check_imagine_cooldown(user_id: int) -> tuple[bool, int]:
+    """Separate cooldown for /imagine (image generation is costly)."""
+    if _is_bot_owner(user_id):
+        return True, 0
+    now = time.monotonic()
+    last = _imagine_cooldown_last.get(user_id, 0.0)
+    if (now - last) < _IMAGINE_CMD_COOLDOWN_SEC:
+        return False, max(1, int(math.ceil(_IMAGINE_CMD_COOLDOWN_SEC - (now - last))))
+    _imagine_cooldown_last[user_id] = now
     return True, 0
 
 
@@ -3912,6 +4086,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("ap", ["autoplay"], "t!ap / t!autoplay"),
     ("ly", ["lyrics"], "t!ly / t!lyrics — letra"),
     ("c", ["chat"], "t!c / t!chat <pergunta>"),
+    ("imagine", ["img"], "t!imagine / t!img <descrição> — gera imagem (IA)"),
     ("g", ["game", "games"], "t!g / t!game <filtros> — jogos (loja, preço, estúdio, nota…)"),
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
@@ -3925,6 +4100,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("updates", ["novidades"], "t!updates / /updates — novidades do bot"),
     ("stats", ["estatisticas", "metricas"], "t!stats / /stats — saúde do bot"),
     ("lang", ["language", "idioma"], "t!lang / /language — idioma"),
+    ("settings", ["config", "prefs"], "t!settings / /settings — preferências pessoais"),
     ("mod", ["modpanel", "mod-panel"], "t!mod / /mod-panel — painel admin"),
 ]
 
@@ -4003,11 +4179,12 @@ PRESENCE_CMD_TAGLINES: dict[str, str] = {
     "game": "Steam & Epic picks",
     "giveaway": "run giveaways",
     "help": "all commands",
+    "imagine": "AI image from text",
     "language": "pick your language",
     "loop": "loop current track",
     "lyrics": "song lyrics",
     "mod-panel": "admin settings",
-    "nonstop": "24/7 in voice",
+    "247": "24/7 in voice",
     "pause": "pause track",
     "play": "music in voice",
     "playlist": "saved playlists",
@@ -4018,6 +4195,7 @@ PRESENCE_CMD_TAGLINES: dict[str, str] = {
     "rewind": "your year stats",
     "roleplay": "casual chat",
     "seek": "jump +30 / -15",
+    "settings": "your preferences",
     "shuffle": "shuffle the queue",
     "skip": "skip current track",
     "stats": "am I online?",
@@ -6929,6 +7107,8 @@ def register_voice(bot: commands.Bot) -> None:
         # Hybrid slash: blacklist + rate limit run in CommandTree.interaction_check.
         if ctx.interaction is not None:
             return True
+        if not await _require_feature(ctx):
+            return False
         uid = ctx.author.id
         if ctx.guild and guild_config.is_blacklisted(ctx.guild.id, uid):
             lang = _ctx_lang(ctx)
@@ -6956,6 +7136,8 @@ def register_voice(bot: commands.Bot) -> None:
     @bot.listen("on_message")
     async def _on_message_dice(message: discord.Message):
         if message.author.bot or not message.guild:
+            return
+        if not guild_config.is_feature_enabled(message.guild.id, "dice"):
             return
         if not _dice_channel_ok(message.channel.id):
             return
@@ -7583,9 +7765,9 @@ def register_voice(bot: commands.Bot) -> None:
             return
         await ctx.send(embed=q_em)
 
-    @bot.hybrid_command(name="nonstop", aliases=["247"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.nonstop"))
+    @bot.hybrid_command(name="247", aliases=["nonstop"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.nonstop"))
     @_guild_slash
-    async def cmd_nonstop(ctx: commands.Context):
+    async def cmd_247(ctx: commands.Context):
         if not await _require_guild(ctx):
             return
         session = _sessions.get(ctx.guild.id)
@@ -8304,6 +8486,20 @@ def register_voice(bot: commands.Bot) -> None:
             if isinstance(item, locale_utils.LanguageSelect):
                 item.panel_message = msg
 
+    @bot.hybrid_command(name="settings", aliases=["config", "prefs"], dm_permission=True, **hybrid_desc_kwargs("slash.cmd.settings"))
+    @_dm_slash
+    async def cmd_settings(ctx: commands.Context):
+        _stats["commands_used"] += 1
+        import settings_panel
+
+        lang = _ctx_lang(ctx)
+        uid = ctx.author.id
+        embed = settings_panel.build_settings_embed(uid, lang, pink=TIFFANY_PINK)
+        view = settings_panel.SettingsMainView(uid, lang, pink=TIFFANY_PINK)
+        ephem = locale_utils.slash_ephemeral(ctx.interaction) if ctx.interaction else False
+        msg = await ctx.send(embed=embed, view=view, ephemeral=ephem)
+        view.message = msg
+
     @bot.hybrid_command(name="mod-panel", aliases=["mod", "modpanel"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.mod_panel"))
     @commands.has_permissions(administrator=True)
     @_guild_slash
@@ -8390,6 +8586,121 @@ def register_voice(bot: commands.Bot) -> None:
                 await _ctx_reply_ai(ctx, f"💬 {answer}")
         except discord.HTTPException:
             await _ctx_reply_ai(ctx, f"💬 {answer}")
+
+    @bot.hybrid_command(name="imagine", aliases=["img"], dm_permission=True, **hybrid_desc_kwargs("slash.cmd.imagine"))
+    @app_commands.describe(prompt=slash_param("slash.param.imagine_prompt"))
+    @_dm_slash
+    async def cmd_imagine(ctx: commands.Context, *, prompt: str = ""):
+        if not await _require_dm_access(ctx):
+            return
+
+        _stats["commands_used"] += 1
+        if ctx.guild:
+            _touch_activity(ctx.guild.id)
+        lang = _ctx_lang(ctx)
+
+        import imagine as imagine_mod
+        from infra.permission_messages import bot_channel_missing, bot_missing_perms_message
+
+        prompt = imagine_mod.sanitize_prompt(prompt)
+        if len(prompt) < 3:
+            await _ctx_reply_ai(ctx, tr(lang, "imagine.usage"))
+            return
+
+        nested = _nested_command_hint(prompt)
+        if nested:
+            await _ctx_reply_ai(ctx, nested, delete_after=18)
+            return
+
+        if await _should_block_imagine_prompt(prompt):
+            await _enforce_guidelines(ctx, _pick_blocked_reply(lang))
+            return
+
+        missing_bot = bot_channel_missing(ctx.channel, attach_files=True)
+        if missing_bot:
+            await hybrid_ctx_reply(
+                ctx,
+                bot_missing_perms_message(lang, missing_bot, channel=ctx.channel),
+                error=True,
+            )
+            return
+
+        allowed, remaining = _check_imagine_cooldown(ctx.author.id)
+        if not allowed:
+            await _ctx_reply_ai(ctx, tr(lang, "imagine.cooldown", remaining=remaining))
+            return
+
+        gid, uid = _ai_rl_ids(ctx)
+        ok, reason = _ai_rate_limit_peek(gid, bucket="imagine", user_id=uid)
+        if not ok:
+            await _ctx_reply_ai(ctx, _rate_limit_message(lang, reason), delete_after=8)
+            return
+
+        if not _get_openrouter_client():
+            await _ctx_reply_ai(ctx, tr(lang, "err.api_key"))
+            return
+
+        await hybrid_defer(ctx)
+
+        status = await hybrid_ctx_send(ctx, embed=_embed(tr(lang, "imagine.generating")))
+
+        api_prompt = (
+            "Safe for work, family friendly, fully clothed subjects, no nudity, no sexual content, "
+            "no gore or graphic violence, no hate symbols, no watermarks, no text overlay. "
+            f"User request: {prompt}"
+        )
+        if not _ai_rate_limit_consume(gid, bucket="imagine", user_id=uid):
+            await _ctx_reply_ai(ctx, tr(lang, "err.rate_limit"))
+            return
+
+        image_bytes, err_key = await imagine_mod.generate_image_bytes(api_prompt)
+        if not image_bytes:
+            msg = tr(lang, err_key or "imagine.err.failed")
+            if status:
+                try:
+                    await status.edit(embed=_embed(msg))
+                except discord.HTTPException:
+                    await _ctx_reply_ai(ctx, msg)
+            else:
+                await _ctx_reply_ai(ctx, msg)
+            return
+
+        if await _ai_generated_image_is_blocked(image_bytes):
+            log.info(
+                "Imagine output blocked by vision guild=%s user=%s prompt=%s",
+                ctx.guild.id if ctx.guild else 0,
+                ctx.author.id,
+                prompt[:80],
+            )
+            msg = tr(lang, "imagine.err.blocked")
+            if status:
+                try:
+                    await status.edit(embed=_embed(msg))
+                except discord.HTTPException:
+                    await _ctx_reply_ai(ctx, msg)
+            else:
+                await _ctx_reply_ai(ctx, msg)
+            return
+
+        import io
+
+        filename = "tiffany-imagine.png"
+        file = discord.File(io.BytesIO(image_bytes), filename=filename)
+        em = discord.Embed(
+            title=tr(lang, "imagine.result_title"),
+            description=tr(lang, "imagine.result_prompt", prompt=prompt[:400]),
+            color=TIFFANY_PINK,
+        )
+        em.set_image(url=f"attachment://{filename}")
+        em.set_footer(text=tr(lang, "imagine.footer", user=ctx.author.display_name))
+
+        try:
+            if status:
+                await status.delete()
+        except discord.HTTPException:
+            pass
+
+        await hybrid_ctx_send(ctx, file=file, embed=em)
 
     async def _run_roleplay_core(ctx: commands.Context, *, message: str) -> None:
         import roleplay_config as rp_cfg
@@ -9100,7 +9411,7 @@ def register_voice(bot: commands.Bot) -> None:
     async def cmd_clip(ctx: commands.Context, fmt: str = "mp3"):
         if not await _require_guild(ctx):
             return
-        if not _voice_stt_enabled():
+        if not _voice_stt_enabled(ctx.guild.id if ctx.guild else None):
             await ctx.send(embed=_embed(
                 "🎙️ Voice clip needs microphone capture (`VOICE_STT_ENABLED=1`). "
                 "Music works with `t!p`, `t!skip`, etc.",
@@ -9187,6 +9498,8 @@ def register_voice(bot: commands.Bot) -> None:
     # Central command error handler (cooldown, permission, unknown command, etc.)
     @bot.listen("on_command_error")
     async def _voice_command_error(ctx: commands.Context, error: Exception) -> None:
+        from infra.permission_messages import reply_command_permission_error
+
         lang = _ctx_lang(ctx)
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(embed=_embed(tr(lang, "err.cooldown", secs=f"{error.retry_after:.0f}")), delete_after=4)
@@ -9196,12 +9509,8 @@ def register_voice(bot: commands.Bot) -> None:
                 embed=_embed(tr(lang, "err.rate_limited", secs=f"{error.retry_after:.0f}", cmd=f"{prefix}{error.cmd}")),
                 delete_after=4,
             )
-        elif isinstance(error, commands.MissingPermissions):
-            await ctx.send(embed=_embed(tr(lang, "err.missing_perms")), delete_after=5)
-        elif isinstance(error, commands.NoPrivateMessage):
-            await ctx.send(embed=_embed(tr(lang, "err.guild_only")))
-        elif isinstance(error, commands.CheckFailure):
-            await ctx.send(embed=_embed(tr(lang, "err.guild_only")))
+        elif await reply_command_permission_error(ctx, error):
+            return
         elif isinstance(error, commands.CommandNotFound):
             wrong = (ctx.invoked_with or "").strip()
             raw = ctx.message.content if ctx.message else ""

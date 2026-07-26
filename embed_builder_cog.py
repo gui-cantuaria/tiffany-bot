@@ -12,6 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import guild_config
 from locale_utils import (
     hybrid_desc_kwargs,
     slash_desc_kwargs,
@@ -220,6 +221,9 @@ async def setup(bot: commands.Bot):
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def cmd_embed(ctx: commands.Context):
         lang = _ctx_lang(ctx)
+        if ctx.guild and not guild_config.is_feature_enabled(ctx.guild.id, "embeds"):
+            await hybrid_ctx_reply(ctx, tr(lang, "err.feature_disabled_guild", feature=tr(lang, "feat.embeds")), error=True)
+            return
         await ctx.send(
             embed=discord.Embed(
                 title=tr(lang, "emb.help.title"),

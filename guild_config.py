@@ -42,14 +42,52 @@ def get_guild_config(guild_id: int) -> Dict[str, Any]:
             "blacklist": [],
             "offers_channel": None,
             "allowed_categories": ["hardware", "jogos", "periféricos", "acessórios", "monitores", "outros"],
-            "affiliate_tags": {}
+            "affiliate_tags": {},
+            "features": _default_features(),
         }
-    return _cache[gid]
+    cfg = _cache[gid]
+    cfg["features"] = _ensure_features(cfg.get("features"))
+    return cfg
 
 def save_guild_config(guild_id: int, config: Dict[str, Any]) -> None:
     _load()
+    config["features"] = _ensure_features(config.get("features"))
     _cache[str(guild_id)] = config
     _save()
+
+def _default_features() -> Dict[str, bool]:
+    return {key: True for key in _GUILD_FEATURE_KEYS}
+
+_GUILD_FEATURE_KEYS = (
+    "music", "chat", "imagine", "roleplay", "games", "summary",
+    "giveaways", "embeds", "offers", "dice", "voice_stt",
+)
+
+def _ensure_features(raw: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+    merged = _default_features()
+    if raw:
+        for key in merged:
+            if key in raw:
+                merged[key] = bool(raw[key])
+    return merged
+
+def get_guild_features(guild_id: int) -> Dict[str, bool]:
+    return get_guild_config(guild_id)["features"]
+
+def is_feature_enabled(guild_id: int, feature: str) -> bool:
+    return bool(get_guild_features(guild_id).get(feature, True))
+
+def set_feature_enabled(guild_id: int, feature: str, enabled: bool) -> None:
+    cfg = get_guild_config(guild_id)
+    if feature not in cfg["features"]:
+        return
+    cfg["features"][feature] = bool(enabled)
+    save_guild_config(guild_id, cfg)
+
+def toggle_feature(guild_id: int, feature: str) -> bool:
+    current = is_feature_enabled(guild_id, feature)
+    set_feature_enabled(guild_id, feature, not current)
+    return not current
 
 def get_all_guilds_config() -> Dict[str, Dict[str, Any]]:
     _load()

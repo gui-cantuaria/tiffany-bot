@@ -1,6 +1,7 @@
 import discord
 from discord.ui import View, Button, Select, ChannelSelect, RoleSelect, UserSelect
 import guild_config
+from feature_flags import GUILD_FEATURE_KEYS, feature_label
 from locale_utils import tr, GuildLang, interaction_lang
 
 def build_mod_panel_embed(guild: discord.Guild, lang: GuildLang, *, pink: int) -> discord.Embed:
@@ -33,6 +34,16 @@ def build_mod_panel_embed(guild: discord.Guild, lang: GuildLang, *, pink: int) -
         name=tr(lang, "mod.field.affiliate_tags"),
         value=tr(lang, "mod.tags_count", count=tags_count),
         inline=True,
+    )
+    features = config.get("features") or {}
+    feat_lines = []
+    for key in GUILD_FEATURE_KEYS:
+        state = tr(lang, "mod.on") if features.get(key, True) else tr(lang, "mod.off")
+        feat_lines.append(f"{feature_label(lang, key)}: {state}")
+    embed.add_field(
+        name=tr(lang, "mod.field.features"),
+        value="\n".join(feat_lines[:12]) or tr(lang, "mod.none"),
+        inline=False,
     )
     return embed
 
@@ -112,6 +123,10 @@ class ModPanelMainView(View):
         btn_affiliates.callback = self.config_affiliates
         self.add_item(btn_affiliates)
 
+        btn_features = Button(label=tr(lang, "mod.btn.features"), style=discord.ButtonStyle.primary, row=4)
+        btn_features.callback = self.config_features
+        self.add_item(btn_features)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await _assert_panel_access(interaction, self.guild.id)
 
@@ -152,6 +167,65 @@ class ModPanelMainView(View):
     async def config_affiliates(self, interaction: discord.Interaction):
         modal = AffiliateModal(self)
         await interaction.response.send_modal(modal)
+
+    async def config_features(self, interaction: discord.Interaction):
+        view = GuildFeatureSelectView(self)
+        await interaction.response.send_message(
+            tr(self.lang, "mod.prompt.features"),
+            view=view,
+            ephemeral=True,
+        )
+
+
+class GuildFeatureSelectView(View):
+    def __init__(self, parent_view: ModPanelMainView):
+        super().__init__(timeout=180)
+        self.parent = parent_view
+        self._build_select()
+
+    def _build_select(self) -> None:
+        lang = self.parent.lang
+        features = self.parent.config.get("features") or guild_config.get_guild_features(self.parent.guild.id)
+        options = []
+        for key in GUILD_FEATURE_KEYS:
+            enabled = features.get(key, True)
+            options.append(
+                discord.SelectOption(
+                    label=feature_label(lang, key)[:100],
+                    value=key,
+                    emoji="✅" if enabled else "❌",
+                    description=tr(lang, "mod.on") if enabled else tr(lang, "mod.off"),
+                )
+            )
+        select = Select(
+            placeholder=tr(lang, "mod.select.features"),
+            options=options[:25],
+            min_values=1,
+            max_values=1,
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await _assert_panel_access(interaction, self.parent.guild.id)
+
+    async def on_select(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", [])
+        if not values:
+            await interaction.response.defer()
+            return
+        key = values[0]
+        if "features" not in self.parent.config:
+            self.parent.config["features"] = guild_config.get_guild_features(self.parent.guild.id)
+        current = bool(self.parent.config["features"].get(key, True))
+        self.parent.config["features"][key] = not current
+        label = feature_label(self.parent.lang, key)
+        state = tr(self.parent.lang, "mod.on") if not current else tr(self.parent.lang, "mod.off")
+        await interaction.response.send_message(
+            tr(self.parent.lang, "mod.feature_toggled", feature=label, state=state),
+            ephemeral=True,
+        )
+        await self.parent._update(interaction)
 
 
 class RoleSelectView(View):

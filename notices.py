@@ -160,6 +160,25 @@ class _TiffanyCommandTree(discord.app_commands.CommandTree):
                     ephemeral=True,
                 )
             return False
+        if interaction.command:
+            from feature_flags import feature_denial_message, feature_for_command, is_feature_allowed
+
+            feat = feature_for_command(interaction.command.name)
+            if feat:
+                lang = resolve_lang(interaction.guild, uid)
+                gid = interaction.guild.id if interaction.guild else None
+                if not is_feature_allowed(guild_id=gid, user_id=uid, feature=feat):
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message(
+                            embed=discord.Embed(
+                                description=feature_denial_message(
+                                    lang, feat, guild_id=gid, user_id=uid,
+                                ),
+                                color=TIFFANY_RED,
+                            ),
+                            ephemeral=slash_ephemeral(interaction),
+                        )
+                    return False
         if _voice_available and tiffany_voice:
             return await tiffany_voice.slash_rate_limit_check(interaction)
         return True
@@ -183,7 +202,12 @@ async def _slash_command_error(
     error: discord.app_commands.AppCommandError,
 ) -> None:
     """Always respond on slash failures — avoids Discord 'application did not respond'."""
+    from infra.permission_messages import reply_slash_permission_error
+
     cmd_name = getattr(interaction.command, "name", "?")
+    if await reply_slash_permission_error(interaction, error):
+        log.info("Slash permission denied /%s user=%s", cmd_name, interaction.user.id if interaction.user else 0)
+        return
     log.exception("Slash command error /%s: %s", cmd_name, error)
     lang = resolve_lang(interaction.guild, interaction.user.id if interaction.user else None)
     msg = tr(lang, "cmd.error.generic")
@@ -2325,14 +2349,14 @@ async def _verificar_feeds_inner():
 
 _CMD_NAMES = (
     "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "loop", "play", "chat", "seek", "nonstop", "queue", "language", "mod-panel", "modpanel",
+    "loop", "play", "chat", "seek", "247", "nonstop", "queue", "language", "mod-panel", "modpanel",
     "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
+    "imagine", "img", "settings", "config", "prefs",
     "volume", "vol",
     "embed", "status", "stats", "updates", "novidades", "about", "help", "rewind",
     "estatisticas", "metricas",
     "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
     "lang", "mod", "gw", "emb", "rp", "roleplay", "v",
-    "247",
     "s", "c", "p", "r", "q", "g",
 )
 

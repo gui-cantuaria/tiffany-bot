@@ -95,6 +95,13 @@ async def hybrid_ctx_reply(
             kwargs.pop("delete_after", None)
     await ctx.send(**kwargs)
 
+
+async def hybrid_ctx_send(ctx: commands.Context, **kwargs) -> discord.Message:
+    """Send attachments/embeds for hybrid commands (guild slash, DM slash, prefix)."""
+    if ctx.interaction and ctx.interaction.response.is_done():
+        return await ctx.followup.send(**kwargs)
+    return await ctx.send(**kwargs)
+
 # Discord locale prefix → Tiffany language
 _LANG_BY_PREFIX: tuple[tuple[str, GuildLang], ...] = (
     ("pt", "pt"),
@@ -2271,14 +2278,15 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "err.guild_only": {
         "de": "⚠️ Dieser Befehl funktioniert nur **auf einem Server** (Musik, Sprache und "
-        "Sprachkanal). In DMs verwenden Sie **`t!c`**, **`t!g`** oder **`t!su`**.",
+        "Sprachkanal). In DMs: **`t!c`**, **`t!img`**, **`t!g`** oder **`t!su`**.",
         "en": "⚠️ This command only works **in a server** (music, voice, and voice channel). In DMs "
-        "use **`t!c`**, **`t!g`**, or **`t!su`**.",
+        "use **`t!c`**, **`t!img`**, **`t!g`**, or **`t!su`**.",
         "es": "⚠️ Este comando solo funciona **en un servidor** (música, voz y canal de voz). En "
-        "privado usa **`t!c`**, **`t!g`** o **`t!su`**.",
+        "privado usa **`t!c`**, **`t!img`**, **`t!g`** o **`t!su`**.",
         "fr": "⚠️ Cette commande ne fonctionne que **dans un serveur** (musique, voix et canal "
-        "vocal). Dans les DM, utilisez **`t!c`**, **`t!g`**, ou **`t!su`**.",
-        "pt": "⚠️ Esse comando só funciona **num servidor** (música, voz e call). No privado use " "**`t!c`**, **`t!g`** ou **`t!su`**.",
+        "vocal). Dans les DM : **`t!c`**, **`t!img`**, **`t!g`**, ou **`t!su`**.",
+        "pt": "⚠️ Esse comando só funciona **num servidor** (música, voz e call). No privado use "
+        "**`t!c`**, **`t!img`**, **`t!g`** ou **`t!su`**.",
     },
     "err.missing_arg": {
         "de": "⚠️ Fehlendes Argument. Verwendung: **{usage}**",
@@ -2293,6 +2301,179 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "⚠️ Sin permiso para este comando.",
         "fr": "⚠️ Vous n'avez pas la permission d'exécuter cette commande.",
         "pt": "⚠️ Sem permissão para este comando.",
+    },
+    "err.perms.bot": {
+        "de": "⚠️ Mir fehlen diese Berechtigungen: **{perms}**",
+        "en": "⚠️ I'm missing these permissions: **{perms}**",
+        "es": "⚠️ Me faltan estos permisos: **{perms}**",
+        "fr": "⚠️ Il me manque ces permissions : **{perms}**",
+        "pt": "⚠️ Eu não tenho estas permissões: **{perms}**",
+    },
+    "err.perms.bot_channel": {
+        "de": "⚠️ Mir fehlen in {channel} diese Berechtigungen: **{perms}**",
+        "en": "⚠️ I'm missing these permissions in {channel}: **{perms}**",
+        "es": "⚠️ Me faltan estos permisos en {channel}: **{perms}**",
+        "fr": "⚠️ Il me manque ces permissions dans {channel} : **{perms}**",
+        "pt": "⚠️ Eu não tenho estas permissões em {channel}: **{perms}**",
+    },
+    "err.perms.dj_role": {
+        "de": "⚠️ Nur Mitglieder mit der Rolle **{role}** können die Musik steuern.",
+        "en": "⚠️ Only members with the **{role}** role can control music.",
+        "es": "⚠️ Solo miembros con el rol **{role}** pueden controlar la música.",
+        "fr": "⚠️ Seuls les membres avec le rôle **{role}** peuvent contrôler la musique.",
+        "pt": "⚠️ Apenas membros com o cargo **{role}** podem controlar a música.",
+    },
+    "err.perms.mod_panel": {
+        "de": "⚠️ Du brauchst **Administrator**, um das Mod-Panel zu öffnen.",
+        "en": "⚠️ You need **Administrator** to open the mod panel.",
+        "es": "⚠️ Necesitas **Administrador** para abrir el panel de mod.",
+        "fr": "⚠️ Tu as besoin de **Administrateur** pour ouvrir le panneau mod.",
+        "pt": "⚠️ Precisa ser **Administrador** para abrir o painel de moderação.",
+    },
+    "err.perms.user": {
+        "de": "⚠️ Dir fehlen diese Berechtigungen: **{perms}**",
+        "en": "⚠️ You're missing these permissions: **{perms}**",
+        "es": "⚠️ Te faltan estos permisos: **{perms}**",
+        "fr": "⚠️ Il te manque ces permissions : **{perms}**",
+        "pt": "⚠️ Você precisa destas permissões: **{perms}**",
+    },
+    "err.feature_disabled_guild": {
+        "de": "⚠️ **{feature}** ist auf diesem Server deaktiviert. Ein Admin kann es im **Mod-Panel** aktivieren.",
+        "en": "⚠️ **{feature}** is disabled on this server. An admin can enable it in the **mod panel**.",
+        "es": "⚠️ **{feature}** está desactivado en este servidor. Un admin puede activarlo en el **panel de mod**.",
+        "fr": "⚠️ **{feature}** est désactivé sur ce serveur. Un admin peut l'activer dans le **panneau mod**.",
+        "pt": "⚠️ **{feature}** está desativado neste servidor. Um admin pode ativar no **painel de moderação** (`/mod-panel`).",
+    },
+    "err.feature_disabled_user": {
+        "de": "⚠️ Du hast **{feature}** in deinen Einstellungen deaktiviert. `/settings` zum Aktivieren.",
+        "en": "⚠️ You disabled **{feature}** in your settings. Use `/settings` to turn it back on.",
+        "es": "⚠️ Desactivaste **{feature}** en tus ajustes. Usa `/settings` para activarlo.",
+        "fr": "⚠️ Tu as désactivé **{feature}** dans tes paramètres. Utilise `/settings` pour le réactiver.",
+        "pt": "⚠️ Você desativou **{feature}** nas suas preferências. Use `/settings` para reativar.",
+    },
+    "feat.chat": {
+        "de": "Chat (KI)", "en": "Chat (AI)", "es": "Chat (IA)", "fr": "Chat (IA)", "pt": "Chat (IA)",
+    },
+    "feat.dice": {
+        "de": "Würfel", "en": "Dice", "es": "Dados", "fr": "Dés", "pt": "Dados",
+    },
+    "feat.embeds": {
+        "de": "Embeds", "en": "Embeds", "es": "Embeds", "fr": "Embeds", "pt": "Embeds",
+    },
+    "feat.games": {
+        "de": "Spiele", "en": "Games", "es": "Juegos", "fr": "Jeux", "pt": "Jogos",
+    },
+    "feat.giveaways": {
+        "de": "Giveaways", "en": "Giveaways", "es": "Sorteos", "fr": "Giveaways", "pt": "Sorteios",
+    },
+    "feat.imagine": {
+        "de": "Imagine (Bilder)", "en": "Imagine (images)", "es": "Imagine (imágenes)", "fr": "Imagine (images)", "pt": "Imagine (imagens)",
+    },
+    "feat.music": {
+        "de": "Musik", "en": "Music", "es": "Música", "fr": "Musique", "pt": "Música",
+    },
+    "feat.offers": {
+        "de": "Angebote", "en": "Deals", "es": "Ofertas", "fr": "Offres", "pt": "Ofertas",
+    },
+    "feat.roleplay": {
+        "de": "Roleplay", "en": "Roleplay", "es": "Roleplay", "fr": "Roleplay", "pt": "Roleplay",
+    },
+    "feat.summary": {
+        "de": "Link-Zusammenfassung", "en": "Link summary", "es": "Resumen de links", "fr": "Résumé de liens", "pt": "Resumo de links",
+    },
+    "feat.voice_stt": {
+        "de": "Sprachassistent (STT)", "en": "Voice assistant (STT)", "es": "Asistente de voz (STT)", "fr": "Assistant vocal (STT)", "pt": "Assistente de voz (STT)",
+    },
+    "settings.btn.toggle": {
+        "de": "Module umschalten", "en": "Toggle modules", "es": "Alternar módulos", "fr": "Basculer modules", "pt": "Alternar módulos",
+    },
+    "settings.deny_other": {
+        "de": "Das sind nicht deine Einstellungen.", "en": "These aren't your settings.", "es": "Estos no son tus ajustes.", "fr": "Ce ne sont pas tes paramètres.", "pt": "Essas não são suas configurações.",
+    },
+    "settings.feature_toggled": {
+        "de": "✅ **{feature}** ist jetzt **{state}**.", "en": "✅ **{feature}** is now **{state}**.", "es": "✅ **{feature}** ahora está **{state}**.", "fr": "✅ **{feature}** est maintenant **{state}**.", "pt": "✅ **{feature}** agora está **{state}**.",
+    },
+    "settings.field.features": {
+        "de": "Deine Module", "en": "Your modules", "es": "Tus módulos", "fr": "Tes modules", "pt": "Seus módulos",
+    },
+    "settings.panel.desc": {
+        "de": "Persönliche Tiffany-Einstellungen — nur für dich.",
+        "en": "Your personal Tiffany preferences — only you see this.",
+        "es": "Tus preferencias personales de Tiffany — solo tú las ves.",
+        "fr": "Tes préférences Tiffany personnelles — visible seulement par toi.",
+        "pt": "Suas preferências pessoais da Tiffany — só você vê isso.",
+    },
+    "settings.panel.footer": {
+        "de": "Server-Module steuert der Admin im Mod-Panel.",
+        "en": "Server modules are controlled by admins in the mod panel.",
+        "es": "Los módulos del servidor los controla un admin en el panel de mod.",
+        "fr": "Les modules serveur sont gérés par les admins dans le panneau mod.",
+        "pt": "Módulos do servidor são controlados por admins no painel de moderação.",
+    },
+    "settings.panel.title": {
+        "de": "⚙️ Einstellungen — Tiffany", "en": "⚙️ Settings — Tiffany", "es": "⚙️ Ajustes — Tiffany", "fr": "⚙️ Paramètres — Tiffany", "pt": "⚙️ Configurações — Tiffany",
+    },
+    "settings.prompt.toggle": {
+        "de": "Modul für dich ein-/ausschalten:", "en": "Toggle a module for yourself:", "es": "Activa o desactiva un módulo para ti:", "fr": "Active ou désactive un module pour toi :", "pt": "Ative ou desative um módulo para você:",
+    },
+    "settings.select.placeholder": {
+        "de": "Modul wählen…", "en": "Choose a module…", "es": "Elige un módulo…", "fr": "Choisir un module…", "pt": "Escolha um módulo…",
+    },
+    "perm.administrator": {
+        "de": "Administrator",
+        "en": "Administrator",
+        "es": "Administrador",
+        "fr": "Administrateur",
+        "pt": "Administrador",
+    },
+    "perm.attach_files": {
+        "de": "Dateien anhängen",
+        "en": "Attach Files",
+        "es": "Adjuntar archivos",
+        "fr": "Joindre des fichiers",
+        "pt": "Anexar arquivos",
+    },
+    "perm.connect": {
+        "de": "Verbinden",
+        "en": "Connect",
+        "es": "Conectar",
+        "fr": "Se connecter",
+        "pt": "Conectar",
+    },
+    "perm.embed_links": {
+        "de": "Links einbetten",
+        "en": "Embed Links",
+        "es": "Insertar enlaces",
+        "fr": "Intégrer des liens",
+        "pt": "Inserir links",
+    },
+    "perm.manage_guild": {
+        "de": "Server verwalten",
+        "en": "Manage Server",
+        "es": "Gestionar servidor",
+        "fr": "Gérer le serveur",
+        "pt": "Gerenciar servidor",
+    },
+    "perm.manage_messages": {
+        "de": "Nachrichten verwalten",
+        "en": "Manage Messages",
+        "es": "Gestionar mensajes",
+        "fr": "Gérer les messages",
+        "pt": "Gerenciar mensagens",
+    },
+    "perm.send_messages": {
+        "de": "Nachrichten senden",
+        "en": "Send Messages",
+        "es": "Enviar mensajes",
+        "fr": "Envoyer des messages",
+        "pt": "Enviar mensagens",
+    },
+    "perm.speak": {
+        "de": "Sprechen",
+        "en": "Speak",
+        "es": "Hablar",
+        "fr": "Parler",
+        "pt": "Falar",
     },
     "err.rate_limit": {
         "de": "⏳ Entschuldigung, zu viele Anfragen gerade. Warten Sie ein paar Sekunden und " "versuchen Sie es erneut.",
@@ -2508,22 +2689,27 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     },
     "help.chat.body": {
         "de": "`/chat` — KI-Fragen (Bilder OK)\n\n"
+        "`/imagine` (t!img) — SFW-Bild aus Text\n\n"
         "`/roleplay` (t!rp) — lockerer Chat · `t!rp config` — Persönlichkeit\n\n"
         "`/game` — Spiele (Steam/Epic)\n\n"
         "`/summary` (t!su) — Link-Zusammenfassung",
         "en": "`/chat` — AI questions (images OK)\n\n"
+        "`/imagine` (t!img) — SFW image from text\n\n"
         "`/roleplay` (t!rp) — casual chat · `t!rp config` — personality\n\n"
         "`/game` — games (Steam/Epic)\n\n"
         "`/summary` (t!su) — summarize a link",
         "es": "`/chat` — IA (imágenes OK)\n\n"
+        "`/imagine` (t!img) — imagen SFW desde texto\n\n"
         "`/roleplay` (t!rp) — chat casual · `t!rp config` — personalidad\n\n"
         "`/game` — juegos (Steam/Epic)\n\n"
         "`/summary` (t!su) — resumir un enlace",
         "fr": "`/chat` — IA (images OK)\n\n"
+        "`/imagine` (t!img) — image SFW depuis du texte\n\n"
         "`/roleplay` (t!rp) — chat décontracté · `t!rp config` — personnalité\n\n"
         "`/game` — jeux (Steam/Epic)\n\n"
         "`/summary` (t!su) — résumer un lien",
         "pt": "`/chat` — pergunte à IA (imagens OK)\n\n"
+        "`/imagine` (t!img) — gera imagem SFW por texto\n\n"
         "`/roleplay` (t!rp) — conversa casual · `t!rp config` — personalidade\n\n"
         "`/game` — jogos (Steam/Epic)\n\n"
         "`/summary` (t!su) — resumir um link",
@@ -2602,23 +2788,23 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "de": "`/play` — Musik in Voice · `/skip` — Track überspringen · `/pause` — pausieren · `/resume` — fortsetzen\n\n"
         "`/queue` — Warteschlange + Now Playing · `/shuffle` — mischen · `/loop` — Loop · `/replay` — von vorn\n\n"
         "`/random` — Zufallshit (10k) · `/autoplay` — Autoplay · `/lyrics` — Songtext · `/seek` — +30 / -15\n\n"
-        "`/volume` — Stream-Lautstärke (t!v) · `/clear` — stoppen & Voice verlassen · `/nonstop` — 24/7 · `/clip` — letzte 30s · `/playlist` — Listen",
+        "`/volume` — Stream-Lautstärke (t!v) · `/clear` — stoppen & Voice verlassen · `/247` — 24/7 · `/clip` — letzte 30s · `/playlist` — Listen",
         "en": "`/play` — play in voice · `/skip` — skip track · `/pause` — pause · `/resume` — resume\n\n"
         "`/queue` — now playing + queue · `/shuffle` — shuffle queue · `/loop` — loop track · `/replay` — replay from start\n\n"
         "`/random` — random hit (10k catalog) · `/autoplay` — toggle autoplay · `/lyrics` — song lyrics · `/seek` — jump +30 / -15\n\n"
-        "`/volume` — stream volume (t!v) · `/clear` — stop & leave voice · `/nonstop` — 24/7 in call · `/clip` — last 30s audio · `/playlist` — save/load lists",
+        "`/volume` — stream volume (t!v) · `/clear` — stop & leave voice · `/247` — 24/7 in call · `/clip` — last 30s audio · `/playlist` — save/load lists",
         "es": "`/play` — música en voz · `/skip` — saltar pista · `/pause` — pausar · `/resume` — reanudar\n\n"
         "`/queue` — cola + reproduciendo · `/shuffle` — mezclar cola · `/loop` — repetir pista · `/replay` — reiniciar pista\n\n"
         "`/random` — hit aleatorio (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra · `/seek` — +30 / -15\n\n"
-        "`/volume` — volumen del stream (t!v) · `/clear` — parar y salir del voice · `/nonstop` — 24/7 · `/clip` — últimos 30s · `/playlist` — listas guardadas",
+        "`/volume` — volumen del stream (t!v) · `/clear` — parar y salir del voice · `/247` — 24/7 · `/clip` — últimos 30s · `/playlist` — listas guardadas",
         "fr": "`/play` — musique en vocal · `/skip` — piste suivante · `/pause` — pause · `/resume` — reprendre\n\n"
         "`/queue` — file + en cours · `/shuffle` — mélanger · `/loop` — boucle · `/replay` — rejouer du début\n\n"
         "`/random` — hit aléatoire (10k) · `/autoplay` — autoplay · `/lyrics` — paroles · `/seek` — +30 / -15\n\n"
-        "`/volume` — volume stream (t!v) · `/clear` — stop & quitter le vocal · `/nonstop` — 24/7 · `/clip` — 30 dernières s · `/playlist` — listes",
+        "`/volume` — volume stream (t!v) · `/clear` — stop & quitter le vocal · `/247` — 24/7 · `/clip` — 30 dernières s · `/playlist` — listes",
         "pt": "`/play` — tocar na call · `/skip` — pular faixa · `/pause` — pausar · `/resume` — retomar\n\n"
         "`/queue` — fila + tocando agora · `/shuffle` — embaralhar fila · `/loop` — repetir faixa · `/replay` — recomeçar do início\n\n"
         "`/random` — hit aleatório (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra da música · `/seek` — pular +30 / -15\n\n"
-        "`/volume` — volume do stream (t!v) · `/clear` — parar e sair da call · `/nonstop` — modo 24/7 · `/clip` — últimos 30s · `/playlist` — listas salvas",
+        "`/volume` — volume do stream (t!v) · `/clear` — parar e sair da call · `/247` — modo 24/7 · `/clip` — últimos 30s · `/playlist` — listas salvas",
     },
     "help.music.title": {
         "de": "🎵 Musik",
@@ -3189,6 +3375,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "fr": "Envoyer un modèle dans un salon",
         "pt": "Envia um template para um canal",
     },
+    "slash.cmd.imagine": {
+        "de": "Spaßige KI-Bilder aus Text generieren",
+        "en": "Generate fun AI images from a text prompt",
+        "es": "Genera imágenes divertidas con IA desde texto",
+        "fr": "Génère des images fun avec l'IA à partir de texte",
+        "pt": "Gera imagens divertidas com IA a partir de texto",
+    },
     "slash.cmd.game": {
         "de": "Steam/Epic-Spiele aus deiner Anfrage empfehlen",
         "en": "Recommend Steam/Epic games from your query",
@@ -3244,6 +3437,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Abrir panel de idioma",
         "fr": "Ouvrir le panneau de langue",
         "pt": "Abre o painel de idioma",
+    },
+    "slash.cmd.settings": {
+        "de": "Persönliche Tiffany-Einstellungen",
+        "en": "Your personal Tiffany preferences",
+        "es": "Tus preferencias personales de Tiffany",
+        "fr": "Tes préférences Tiffany personnelles",
+        "pt": "Suas preferências pessoais da Tiffany",
     },
     "slash.cmd.loop": {
         "de": "Loop für den aktuellen Track umschalten",
@@ -3523,6 +3723,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Número de ganadores (1–20)",
         "fr": "Nombre de gagnants (1–20)",
         "pt": "Número de vencedores (1–20)",
+    },
+    "slash.param.imagine_prompt": {
+        "de": "Was soll auf dem Bild erscheinen?",
+        "en": "What should appear in the image?",
+        "es": "Qué debe aparecer en la imagen",
+        "fr": "Ce qui doit apparaître sur l'image",
+        "pt": "O que deve aparecer na imagem",
     },
     "slash.param.game_query": {
         "de": "Genre, Stil oder Name (z. B. RPG, Multiplayer)",
@@ -4038,11 +4245,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "mod.on": {"de": "🟢 AN", "en": "🟢 ON", "es": "🟢 ON", "fr": "🟢 ON", "pt": "🟢 ON"},
     "mod.off": {"de": "🔴 AUS", "en": "🔴 OFF", "es": "🔴 OFF", "fr": "🔴 OFF", "pt": "🔴 OFF"},
     "mod.panel.desc": {
-        "de": "Sicherheits- und Moderationseinstellungen des Servers.",
-        "en": "Configure server security and moderation options.",
-        "es": "Configura seguridad y moderación del servidor.",
-        "fr": "Configure la sécurité et la modération du serveur.",
-        "pt": "Configure as opções de segurança e moderação do servidor.",
+        "de": "Sicherheit, Moderation und **Module** des Servers konfigurieren.",
+        "en": "Configure server security, moderation, and **modules**.",
+        "es": "Configura seguridad, moderación y **módulos** del servidor.",
+        "fr": "Configure la sécurité, la modération et les **modules** du serveur.",
+        "pt": "Configure segurança, moderação e **módulos** do servidor.",
     },
     "mod.panel.title": {
         "de": "🛡️ Moderationspanel — Tiffany",
@@ -4211,6 +4418,41 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Filtro estricto (contenido)",
         "fr": "Filtre strict (contenu)",
         "pt": "Filtro Restrito (Conteúdo)",
+    },
+    "mod.field.features": {
+        "de": "Module (Server)",
+        "en": "Modules (server)",
+        "es": "Módulos (servidor)",
+        "fr": "Modules (serveur)",
+        "pt": "Módulos (servidor)",
+    },
+    "mod.btn.features": {
+        "de": "Module",
+        "en": "Modules",
+        "es": "Módulos",
+        "fr": "Modules",
+        "pt": "Módulos",
+    },
+    "mod.prompt.features": {
+        "de": "Modul ein-/ausschalten (betrifft alle Mitglieder):",
+        "en": "Toggle a module on/off (affects all members):",
+        "es": "Activa o desactiva un módulo (afecta a todos):",
+        "fr": "Active ou désactive un module (pour tout le serveur) :",
+        "pt": "Ative ou desative um módulo (vale para todo o servidor):",
+    },
+    "mod.select.features": {
+        "de": "Modul umschalten…",
+        "en": "Toggle a module…",
+        "es": "Alternar módulo…",
+        "fr": "Basculer un module…",
+        "pt": "Alternar módulo…",
+    },
+    "mod.feature_toggled": {
+        "de": "✅ **{feature}** ist jetzt **{state}**.",
+        "en": "✅ **{feature}** is now **{state}**.",
+        "es": "✅ **{feature}** ahora está **{state}**.",
+        "fr": "✅ **{feature}** est maintenant **{state}**.",
+        "pt": "✅ **{feature}** agora está **{state}**.",
     },
     "mod.logs_disabled": {
         "de": "Mod-Logs deaktiviert.",
@@ -4757,6 +4999,83 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Usa **`/embed edit`** (slash) para abrir el modal.",
         "fr": "Utilise **`/embed edit`** (slash) pour ouvrir le modal.",
         "pt": "Use **`/embed edit`** (slash) para abrir o modal no Discord.",
+    },
+    "imagine.cooldown": {
+        "de": "⏳ Warte **{remaining}s** vor dem nächsten `/imagine`.",
+        "en": "⏳ Wait **{remaining}s** before using `/imagine` again.",
+        "es": "⏳ Espera **{remaining}s** antes de usar `/imagine` otra vez.",
+        "fr": "⏳ Attends **{remaining}s** avant de réutiliser `/imagine`.",
+        "pt": "⏳ Aguarde **{remaining}s** antes de usar `/imagine` de novo.",
+    },
+    "imagine.err.blocked": {
+        "de": "🚫 Dieses Bild entspricht nicht den Discord-Richtlinien — nicht veröffentlicht.",
+        "en": "🚫 This image doesn't meet Discord guidelines — not posted.",
+        "es": "🚫 Esta imagen no cumple las normas de Discord — no se publicó.",
+        "fr": "🚫 Cette image ne respecte pas les règles Discord — non publiée.",
+        "pt": "🚫 Essa imagem não atende às diretrizes do Discord — não foi publicada.",
+    },
+    "imagine.err.failed": {
+        "de": "❌ Bild konnte nicht erstellt werden. Versuche einen anderen Prompt.",
+        "en": "❌ Couldn't generate the image. Try a different prompt.",
+        "es": "❌ No se pudo generar la imagen. Prueba otro prompt.",
+        "fr": "❌ Impossible de générer l'image. Essaie un autre prompt.",
+        "pt": "❌ Não consegui gerar a imagem. Tente outro prompt.",
+    },
+    "imagine.err.no_attach": {
+        "de": "❌ Keine Berechtigung, Dateien in diesem Kanal zu senden.",
+        "en": "❌ No permission to attach files in this channel.",
+        "es": "❌ Sin permiso para adjuntar archivos en este canal.",
+        "fr": "❌ Pas la permission d'envoyer des fichiers dans ce salon.",
+        "pt": "❌ Sem permissão para anexar arquivos neste canal.",
+    },
+    "imagine.err.no_credits": {
+        "de": "❌ Keine OpenRouter-Guthaben für Bildgenerierung.",
+        "en": "❌ No OpenRouter credits for image generation.",
+        "es": "❌ Sin créditos OpenRouter para generar imágenes.",
+        "fr": "❌ Pas de crédits OpenRouter pour la génération d'images.",
+        "pt": "❌ Sem créditos OpenRouter para gerar imagens.",
+    },
+    "imagine.err.rate_limit": {
+        "de": "⏳ Zu viele Bildanfragen — versuche es gleich nochmal.",
+        "en": "⏳ Too many image requests — try again shortly.",
+        "es": "⏳ Demasiadas solicitudes de imagen — inténtalo en un momento.",
+        "fr": "⏳ Trop de demandes d'images — réessaie bientôt.",
+        "pt": "⏳ Muitos pedidos de imagem — tente de novo em instantes.",
+    },
+    "imagine.footer": {
+        "de": "Angefordert von {user}",
+        "en": "Requested by {user}",
+        "es": "Solicitado por {user}",
+        "fr": "Demandé par {user}",
+        "pt": "Pedido por {user}",
+    },
+    "imagine.generating": {
+        "de": "🎨 Bild wird erstellt…",
+        "en": "🎨 Generating image…",
+        "es": "🎨 Generando imagen…",
+        "fr": "🎨 Génération de l'image…",
+        "pt": "🎨 Gerando imagem…",
+    },
+    "imagine.result_prompt": {
+        "de": "**Prompt:** {prompt}",
+        "en": "**Prompt:** {prompt}",
+        "es": "**Prompt:** {prompt}",
+        "fr": "**Prompt :** {prompt}",
+        "pt": "**Prompt:** {prompt}",
+    },
+    "imagine.result_title": {
+        "de": "🎨 Imagine",
+        "en": "🎨 Imagine",
+        "es": "🎨 Imagine",
+        "fr": "🎨 Imagine",
+        "pt": "🎨 Imagine",
+    },
+    "imagine.usage": {
+        "de": "🎨 **Verwendung:** `/imagine` oder `t!imagine` <Beschreibung> (mind. 3 Zeichen, SFW)",
+        "en": "🎨 **Usage:** `/imagine` or `t!imagine` <description> (min 3 chars, SFW only)",
+        "es": "🎨 **Uso:** `/imagine` o `t!imagine` <descripción> (mín. 3 caracteres, solo SFW)",
+        "fr": "🎨 **Usage :** `/imagine` ou `t!imagine` <description> (min 3 caractères, SFW)",
+        "pt": "🎨 **Uso:** `/imagine` ou `t!imagine` <descrição> (mín. 3 caracteres, conteúdo SFW)",
     },
     "status.warp.ok": {
         "de": "Online (Musik OK)",

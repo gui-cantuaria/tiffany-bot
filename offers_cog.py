@@ -2359,6 +2359,8 @@ async def _run_deals_cycle_inner() -> None:
         })
 
     for gid, conf in guilds.items():
+        if not guild_config.is_feature_enabled(int(gid), "offers"):
+            continue
         ch_id = conf.get("offers_channel")
         if not ch_id or ch_id == CANAL_OFERTAS_ID:
             continue

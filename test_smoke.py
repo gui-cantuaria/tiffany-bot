@@ -414,5 +414,52 @@ class TestCriticalStartup(unittest.IsolatedAsyncioTestCase):
         news.start.assert_called_once()
 
 
+class TestImagineSafety(unittest.TestCase):
+    def test_blocks_nsfw_and_crime_prompts(self):
+        import imagine_safety as imsafe
+
+        self.assertTrue(imsafe.check_literal_imagine_prompt("girl nude on beach"))
+        self.assertTrue(imsafe.check_literal_imagine_prompt("hentai catgirl"))
+        self.assertTrue(imsafe.check_literal_imagine_prompt("how to make a bomb"))
+        self.assertTrue(imsafe.check_literal_imagine_prompt("apologia ao crime"))
+
+    def test_allows_safe_prompts(self):
+        import imagine_safety as imsafe
+
+        self.assertFalse(imsafe.check_literal_imagine_prompt("cute pink cat astronaut"))
+        self.assertFalse(imsafe.check_literal_imagine_prompt("sunset over mountains"))
+
+    def test_imagine_slash_desc_registered(self):
+        kw = locale_utils.slash_desc_kwargs("slash.cmd.imagine")
+        desc = str(kw["description"]).lower()
+        self.assertTrue("image" in desc or "imagem" in desc or "bild" in desc)
+
+
+class TestFeatureFlags(unittest.TestCase):
+    def test_command_feature_mapping(self):
+        import feature_flags as ff
+
+        self.assertEqual(ff.feature_for_command("play"), "music")
+        self.assertEqual(ff.feature_for_command("imagine"), "imagine")
+        self.assertEqual(ff.feature_for_command("gw"), "giveaways")
+        self.assertIsNone(ff.feature_for_command("help"))
+
+    def test_guild_feature_defaults_on(self):
+        import guild_config
+
+        cfg = guild_config.get_guild_config(999999991)
+        self.assertTrue(cfg["features"].get("music"))
+        self.assertTrue(cfg["features"].get("chat"))
+
+    def test_user_feature_toggle(self):
+        import user_settings as us
+
+        uid = 999999992
+        self.assertTrue(us.is_feature_enabled(uid, "chat"))
+        us.set_feature_enabled(uid, "chat", False)
+        self.assertFalse(us.is_feature_enabled(uid, "chat"))
+        us.set_feature_enabled(uid, "chat", True)
+
+
 if __name__ == "__main__":
     unittest.main()
