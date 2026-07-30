@@ -38,8 +38,8 @@ def _load() -> None:
 
 def _save() -> None:
     try:
-        with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(_cache, f, indent=2)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_cache, _SETTINGS_FILE, indent=2)
     except Exception as e:
         log.error("Failed to save user_settings.json: %s", e)
 

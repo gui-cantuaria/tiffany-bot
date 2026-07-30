@@ -80,12 +80,13 @@ async def _assert_panel_access(interaction: discord.Interaction, guild_id: int) 
 
 
 class ModPanelMainView(View):
-    def __init__(self, guild: discord.Guild, lang: GuildLang, *, pink: int):
+    def __init__(self, guild: discord.Guild, lang: GuildLang, *, pink: int, author_id: int | None = None):
         super().__init__(timeout=300)
         self.guild = guild
         self.lang = lang
         self.pink = pink
         self.config = guild_config.get_guild_config(guild.id)
+        self.author_id = author_id
 
         btn_filter = Button(
             label=tr(lang, "mod.btn.strict_filter"),
@@ -128,12 +129,15 @@ class ModPanelMainView(View):
         self.add_item(btn_features)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.author_id is not None and interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Este painel não foi aberto por você.", ephemeral=True)
+            return False
         return await _assert_panel_access(interaction, self.guild.id)
 
     async def _update(self, interaction: discord.Interaction) -> None:
         guild_config.save_guild_config(self.guild.id, self.config)
         embed = build_mod_panel_embed(self.guild, self.lang, pink=self.pink)
-        new_view = ModPanelMainView(self.guild, self.lang, pink=self.pink)
+        new_view = ModPanelMainView(self.guild, self.lang, pink=self.pink, author_id=self.author_id)
         panel_msg = getattr(self, "message", None) or interaction.message
         if panel_msg:
             await panel_msg.edit(embed=embed, view=new_view)

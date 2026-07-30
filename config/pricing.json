@@ -1,0 +1,41 @@
+{
+  "plans": {
+    "free": {
+      "price_usd": 0.00,
+      "daily_ai_quotas": 30,
+      "type": "user"
+    },
+    "plus": {
+      "price_usd": 4.99,
+      "daily_ai_quotas": 400,
+      "type": "user"
+    },
+    "pro": {
+      "price_usd": 9.99,
+      "daily_ai_quotas": 1500,
+      "type": "user"
+    },
+    "offers_engine": {
+      "price_usd": 4.99,
+      "daily_ai_quotas": 0,
+      "type": "guild"
+    },
+    "news_feeds": {
+      "price_usd": 3.99,
+      "daily_ai_quotas": 0,
+      "type": "guild"
+    },
+    "ultimate_guild": {
+      "price_usd": 7.99,
+      "daily_ai_quotas": 2000,
+      "type": "guild"
+    },
+    "enterprise_guild": {
+      "price_usd": 29.99,
+      "daily_ai_quotas": 10000,
+      "type": "guild",
+      "dedicated_instance": true,
+      "sla": true
+    }
+  }
+}

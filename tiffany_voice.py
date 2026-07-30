@@ -1522,8 +1522,8 @@ def _save_memory_now() -> None:
             "last_used_real": now_real - elapsed,
         }
     try:
-        with open(_MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(data, _MEMORY_FILE, ensure_ascii=False)
     except Exception:
         pass
 
@@ -1783,7 +1783,7 @@ async def _ai_interpret_song(query: str) -> Optional[str]:
     client = _get_openrouter_client()
     if client is None:
         return None
-    if not _ai_rate_limit_consume(0, bucket="song"):
+    if not await _ai_rate_limit_consume(0, bucket="song"):
         return None
     try:
         async with _ai_semaphore:
@@ -1838,60 +1838,29 @@ def _ai_rate_limit_peek(
     """Check global/server/bucket/DM-user AI limits without recording a call."""
     if user_id and _is_bot_owner(user_id):
         return True, ""
-    now = time.monotonic()
-    while _global_ai_calls and (now - _global_ai_calls[0]) > _GLOBAL_RL_WINDOW:
-        _global_ai_calls.popleft()
-    if len(_global_ai_calls) >= _GLOBAL_RL_MAX:
-        return False, "global"
-    bcalls = _bucket_ai_calls.setdefault(bucket, collections.deque())
-    while bcalls and (now - bcalls[0]) > _GLOBAL_RL_WINDOW:
-        bcalls.popleft()
-    if len(bcalls) >= _AI_BUCKET_MAX.get(bucket, 8):
-        return False, "bucket"
-    if guild_id:
-        calls = _server_ai_calls.setdefault(guild_id, collections.deque())
-        while calls and (now - calls[0]) > _GLOBAL_RL_WINDOW:
-            calls.popleft()
-        if len(calls) >= _SERVER_RL_MAX:
-            return False, "server"
-    elif user_id:
-        calls = _dm_user_ai_calls.setdefault(user_id, collections.deque())
-        while calls and (now - calls[0]) > _GLOBAL_RL_WINDOW:
-            calls.popleft()
-        if len(calls) >= _DM_RL_MAX:
-            return False, "dm_user"
-    # Per-user cap (applies in both guild and DM contexts)
-    _uid = user_id or 0
-    if _uid:
-        ucalls = _user_ai_calls.setdefault(_uid, collections.deque())
-        while ucalls and (now - ucalls[0]) > _GLOBAL_RL_WINDOW:
-            ucalls.popleft()
-        if len(ucalls) >= _USER_AI_RL_MAX:
-            return False, "user"
     return True, ""
 
 
-def _ai_rate_limit_consume(
+async def _ai_rate_limit_consume(
     guild_id: int = 0,
     *,
     bucket: str = "chat",
     user_id: int = 0,
 ) -> bool:
     """Record one AI call. Returns False if limits exceeded (race-safe)."""
-    ok, _ = _ai_rate_limit_peek(guild_id, bucket=bucket, user_id=user_id)
-    if not ok:
-        return False
-    now = time.monotonic()
-    _global_ai_calls.append(now)
-    _bucket_ai_calls.setdefault(bucket, collections.deque()).append(now)
-    if guild_id:
-        _server_ai_calls.setdefault(guild_id, collections.deque()).append(now)
-    elif user_id:
-        _dm_user_ai_calls.setdefault(user_id, collections.deque()).append(now)
-    _uid = user_id or 0
-    if _uid:
-        _user_ai_calls.setdefault(_uid, collections.deque()).append(now)
-    return True
+    if user_id and _is_bot_owner(user_id):
+        return True
+        
+    from infra.services.ai_quota import AIQuotaService
+    
+    # Determine the actual model used based on bucket
+    model_name = "google/gemini-3.1-flash-lite"
+    if bucket == "imagine":
+        model_name = "black-forest-labs/flux-schnell"
+        
+    # Consume quota
+    ok = await AIQuotaService.consume(user_id or 0, guild_id or None, model_name)
+    return ok
 
 
 def _check_game_cooldown(user_id: int) -> tuple[bool, int]:
@@ -2006,10 +1975,8 @@ def _load_game_history() -> dict:
             return {}
         pruned = _prune_game_history(data)
         if len(pruned) != len(data):
-            tmp = GAME_HISTORY_FILE + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(pruned, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, GAME_HISTORY_FILE)
+            from infra.utils.json_utils import atomic_json_dump
+            atomic_json_dump(pruned, GAME_HISTORY_FILE, ensure_ascii=False, indent=2)
         return pruned
     except Exception:
         return {}
@@ -2040,10 +2007,8 @@ def _save_game_history(user_id: int, query: str, matches: list[game_recommendati
             "games": [{"name": m.name, "store": m.store, "price": m.price_label, "url": m.url} for m in matches],
             "ts": int(time.time()),
         }
-        tmp = GAME_HISTORY_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, GAME_HISTORY_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(data, GAME_HISTORY_FILE, ensure_ascii=False, indent=2)
     except Exception:
         log.debug("Failed to save game history", exc_info=True)
 
@@ -2086,8 +2051,8 @@ def _load_stats() -> dict[str, int]:
 def _save_stats_now() -> None:
     """Save _stats to JSON immediately."""
     try:
-        with open(STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump(_stats, f)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_stats, STATS_FILE)
     except Exception:
         pass
 
@@ -2274,8 +2239,9 @@ async def _summarize_url(
         client = _get_openrouter_client()
         if client is None:
             return tr(lang, "err.api_key")
-        if not _ai_rate_limit_consume(guild_id, bucket="summary", user_id=user_id):
-            return tr(lang, "err.rate_limit")
+        if not await _ai_rate_limit_consume(guild_id, bucket="summary", user_id=user_id):
+            from infra.services.ai_quota import AIQuotaService
+            return AIQuotaService.upgrade_message(user_id)
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
                 model="google/gemini-3.1-flash-lite",
@@ -2349,10 +2315,8 @@ def _write_voice_state(guild_id: int, entry: dict) -> None:
         except Exception:
             data = {}
         data[str(guild_id)] = entry
-        tmp = f"{_VOICE_STATE_FILE}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, _VOICE_STATE_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(data, _VOICE_STATE_FILE, ensure_ascii=False)
     except Exception as e:
         log.warning("Failed to save voice state: %s", e)
 
@@ -2373,10 +2337,8 @@ def _clear_voice_state(guild_id: int) -> None:
         except Exception:
             data = {}
         data.pop(str(guild_id), None)
-        tmp = f"{_VOICE_STATE_FILE}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, _VOICE_STATE_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(data, _VOICE_STATE_FILE, ensure_ascii=False)
     except Exception as e:
         log.warning("Failed to clear voice state: %s", e)
 
@@ -2399,8 +2361,8 @@ def _load_playlists() -> dict:
 
 def _save_playlists(data: dict) -> None:
     try:
-        with open(_PLAYLISTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(data, _PLAYLISTS_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error("Failed to save playlists: %s", e)
 
@@ -4782,8 +4744,9 @@ async def _run_game_recommendation(
     if not _get_openrouter_client():
         return _embed(tr(lang, "err.api_key"))
 
-    if not _ai_rate_limit_consume(gid, bucket="game", user_id=uid):
-        return _embed(tr(lang, "err.rate_limit"))
+    if not await _ai_rate_limit_consume(gid, bucket="game", user_id=uid):
+        from infra.services.ai_quota import AIQuotaService
+        return _embed(AIQuotaService.upgrade_message(uid))
 
     matches, filters, err = await game_recommendations.recommend_games(
         query, _get_openrouter_client(),
@@ -6873,10 +6836,11 @@ def _load_dice_macros():
 
 
 def _save_dice_macros():
-    tmp = _MACROS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_dice_macros, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _MACROS_FILE)
+    try:
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_dice_macros, _MACROS_FILE, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log.error("Failed to save dice macros: %s", e)
 
 
 def _get_dice_macro(user_id: int, name: str) -> str:
@@ -7256,12 +7220,13 @@ def register_voice(bot: commands.Bot) -> None:
             if client is None:
                 return tr(lang, "err.api_key")
 
-            if not _ai_rate_limit_consume(
+            if not await _ai_rate_limit_consume(
                 guild_id or 0,
                 bucket="chat",
                 user_id=user_id if not guild_id else 0,
             ):
-                return tr(lang, "err.rate_limit")
+                from infra.services.ai_quota import AIQuotaService
+                return AIQuotaService.upgrade_message(user_id)
 
             system_msg = {
                 "role": "system",
@@ -8649,8 +8614,9 @@ def register_voice(bot: commands.Bot) -> None:
             "no gore or graphic violence, no hate symbols, no watermarks, no text overlay. "
             f"User request: {prompt}"
         )
-        if not _ai_rate_limit_consume(gid, bucket="imagine", user_id=uid):
-            await _ctx_reply_ai(ctx, tr(lang, "err.rate_limit"))
+        if not await _ai_rate_limit_consume(gid, bucket="imagine", user_id=uid):
+            from infra.services.ai_quota import AIQuotaService
+            await _ctx_reply_ai(ctx, AIQuotaService.upgrade_message(uid))
             return
 
         image_bytes, err_key = await imagine_mod.generate_image_bytes(api_prompt)
@@ -8739,8 +8705,9 @@ def register_voice(bot: commands.Bot) -> None:
         if client is None:
             await _ctx_reply_roleplay(ctx, tr(lang, "err.api_key"), private=private)
             return
-        if not _ai_rate_limit_consume(gid, bucket="chat", user_id=uid_rl):
-            await _ctx_reply_roleplay(ctx, tr(lang, "err.rate_limit"), private=private)
+        if not await _ai_rate_limit_consume(gid, bucket="chat", user_id=uid_rl):
+            from infra.services.ai_quota import AIQuotaService
+            await _ctx_reply_roleplay(ctx, AIQuotaService.upgrade_message(uid_rl), private=private)
             return
 
         profile = rp_cfg.get_profile(uid)

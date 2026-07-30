@@ -141,8 +141,8 @@ _load_user_langs()
 
 def _save_user_langs():
     try:
-        with open(_USER_LANG_FILE, "w", encoding="utf-8") as f:
-            json.dump(_user_lang_cache, f, ensure_ascii=False)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_user_lang_cache, _USER_LANG_FILE, ensure_ascii=False)
     except Exception:
         pass
 
@@ -459,10 +459,10 @@ def chat_system_prompt(lang: GuildLang, *, user_message: str = "") -> str:
 
     lang_rule = (
         "LANGUAGE (critical):\n"
-        "- Reply ONLY in the same language the user wrote their current message.\n"
-        "- User writes English → reply English. Portuguese → PT-BR. Spanish → Spanish. Etc.\n"
-        "- NEVER switch language unless the user switches first.\n"
-        "- UI/menu language does NOT override the message language.\n"
+        "- YOU MUST REPLY ONLY in the exact same language the user wrote their current message.\n"
+        "- If the user writes in Portuguese, your reply MUST be in Portuguese.\n"
+        "- If the user writes in Spanish, your reply MUST be in Spanish.\n"
+        "- UI/menu language is completely irrelevant. The user's input language dictates your output language.\n"
     )
     if user_message.strip():
         lang_rule += f"- Current user message language must match your reply.\n"
@@ -546,8 +546,8 @@ def roleplay_system_prompt(lang: GuildLang) -> str:
         "You are Tiffany — a friendly, witty young woman chatting casually on Discord.\n"
         "ROLEPLAY MODE: talk like a real person hanging out, not like a formal assistant.\n"
         "- Short messages (1-3 sentences). Light humor ok. Emojis sparingly (0-1).\n"
-        f"- Reply in {default_lang} by default (user's Tiffany language setting).\n"
-        "- Switch language only when the user clearly writes in another language.\n"
+        f"- The user's UI language is {default_lang}, but YOU MUST REPLY in the exact language the user writes to you.\n"
+        "- If they write in Portuguese, reply in Portuguese. If Spanish, reply in Spanish, regardless of UI settings.\n"
         "- Stay in character as Tiffany; you love games, tech, music and memes.\n"
         "- Never claim to be human or deny being a bot if asked directly — be playful but honest.\n"
         "- Refuse sexual content, hate, scams, illegal stuff, slurs, dictators/glorification.\n"

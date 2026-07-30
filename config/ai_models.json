@@ -1,0 +1,24 @@
+{
+  "models": {
+    "flash_lite": {
+      "weight": 1,
+      "description": "Standard fast model, ideal for basic tasks."
+    },
+    "flash": {
+      "weight": 2,
+      "description": "Balanced model for everyday queries."
+    },
+    "gpt_4o_mini": {
+      "weight": 4,
+      "description": "Advanced fast model."
+    },
+    "claude_sonnet": {
+      "weight": 8,
+      "description": "High reasoning model for complex tasks."
+    },
+    "gpt_5_opus": {
+      "weight": 15,
+      "description": "State-of-the-art model for deep analysis."
+    }
+  }
+}

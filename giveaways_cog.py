@@ -54,8 +54,8 @@ def _load_state() -> None:
 
 def _save_state() -> None:
     try:
-        with open(_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(_state, f, ensure_ascii=False, indent=2)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_state, _STATE_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error("Failed to save giveaways.json: %s", e)
 

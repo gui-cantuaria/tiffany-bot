@@ -545,17 +545,11 @@ def save_history(h: dict) -> None:
                 novo[k] = v
         else:
             novo[k] = v
-    tmp = f"{HISTORY_FILE}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(novo, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, HISTORY_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(novo, HISTORY_FILE, ensure_ascii=False, indent=2)
     except Exception:
         log.exception("Failed to save history")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 # =========================
 # PERSISTENT METRICS
@@ -570,17 +564,11 @@ def load_metrics() -> dict:
         return {}
 
 def save_metrics(m: dict) -> None:
-    tmp = f"{METRICS_FILE}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(m, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, METRICS_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(m, METRICS_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error(f"Failed to save metrics: {e}")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 def metric_inc(m: dict, key: str, amount: int = 1) -> None:
     hoje = datetime.now(FUSO_HORARIO_BR).strftime("%Y-%m-%d")
@@ -608,17 +596,11 @@ def load_queue() -> list:
         return []
 
 def save_queue(q: list) -> None:
-    tmp = f"{QUEUE_FILE}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(q, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, QUEUE_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(q, QUEUE_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error(f"Failed to save queue: {e}")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 def _hist_payload(status: str, extra: Optional[dict] = None) -> dict:
     payload = {"status": status, "ts": int(time.time())}
@@ -2472,20 +2454,21 @@ async def _reload_offers_extension() -> None:
 
 async def _sync_slash_commands() -> None:
     try:
-        for g in discord_client.guilds:
-            try:
-                discord_client.tree.clear_commands(guild=g)
-                await discord_client.tree.sync(guild=g)
-            except Exception:
-                pass
-        synced = await discord_client.tree.sync()
-        log.info("Slash commands synced globally (%d commands).", len(synced))
+        # 1. Clear any stuck guild-specific commands in the main testing guild
+        # This removes the duplicates caused by the old copy_global_to logic.
         guild_id = os.getenv("GUILD_ID")
         if guild_id:
-            guild_obj = discord.Object(id=int(guild_id))
-            discord_client.tree.copy_global_to(guild=guild_obj)
-            guild_synced = await discord_client.tree.sync(guild=guild_obj)
-            log.info("Slash commands synced to GUILD_ID (%d commands).", len(guild_synced))
+            try:
+                guild_obj = discord.Object(id=int(guild_id))
+                discord_client.tree.clear_commands(guild=guild_obj)
+                await discord_client.tree.sync(guild=guild_obj)
+                log.info("Cleared duplicate guild-specific commands for GUILD_ID.")
+            except Exception as e:
+                log.warning("Could not clear guild commands: %s", e)
+                
+        # 2. Sync all commands globally
+        synced = await discord_client.tree.sync()
+        log.info("Slash commands synced globally (%d commands).", len(synced))
     except Exception as e:
         log.warning("Error syncing slash commands: %s", e)
 
@@ -2511,11 +2494,12 @@ async def on_ready():
     _first_ready_done = True
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
     try:
-        from infra import redis_client, postgres
+        from infra import redis_client, postgres, stripe_server
         from infra import i18n_loader
         await redis_client.init_redis()
         await postgres.init_db()
         await postgres.run_migrations()
+        await stripe_server.start_stripe_server(discord_client)
         i18n_loader.ensure_loaded()
         try:
             from infra.repositories import user_preferences as up
@@ -2552,7 +2536,8 @@ async def on_resumed():
 async def on_close():
     global http_session
     try:
-        from infra import redis_client, postgres
+        from infra import redis_client, postgres, stripe_server
+        await stripe_server.stop_stripe_server()
         await redis_client.close_redis()
         await postgres.close_db()
     except Exception:
@@ -2579,52 +2564,7 @@ def _build_public_status_embed(lang=None) -> discord.Embed:
     )
 
 
-@discord_client.tree.command(
-    name="stats",
-    **slash_desc_kwargs("slash.cmd.stats"),
-)
-@discord.app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def cmd_stats(interaction: discord.Interaction):
-    """Public bot health — connection, music, news, WARP."""
-    try:
-        lang = interaction_lang(interaction)
-        await interaction.response.send_message(
-            embed=_build_public_status_embed(lang),
-            ephemeral=slash_ephemeral(interaction),
-        )
-    except Exception:
-        log.exception("cmd_stats failed")
-        if not interaction.response.is_done():
-            lang = resolve_lang(interaction.guild, interaction.user.id if interaction.user else None)
-            await interaction.response.send_message(
-                embed=discord.Embed(description=tr(lang, "cmd.error.generic"), color=TIFFANY_RED),
-                ephemeral=slash_ephemeral(interaction),
-            )
 
-
-@discord_client.command(name="stats", aliases=["estatisticas", "metricas"])
-async def cmd_stats_prefix(ctx: commands.Context):
-    lang = resolve_lang(ctx.guild, ctx.author.id if ctx.author else None)
-    await ctx.send(embed=_build_public_status_embed(lang))
-
-
-@discord_client.command(name="status")
-async def cmd_status_prefix(ctx: commands.Context):
-    """Owner-only usage panel — prefix only (hidden from slash command list)."""
-    if not owner_dashboard.is_bot_owner(ctx.author.id):
-        return
-    em = owner_dashboard.build_owner_stats_embed(discord_client)
-    try:
-        await ctx.author.send(embed=em)
-        if ctx.guild:
-            await ctx.send("📊 Painel enviado na sua DM.", delete_after=8)
-    except discord.Forbidden:
-        await ctx.send(
-            embed=discord.Embed(
-                description="Não consigo te enviar DM. Ative mensagens privadas ou use `t!status` na DM.",
-                color=TIFFANY_RED,
-            ),
-        )
 
 
 # =========================

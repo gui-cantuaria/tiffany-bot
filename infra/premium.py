@@ -19,7 +19,17 @@ from infra import postgres, redis_client
 log = logging.getLogger("tiffany-bot")
 
 CACHE_TTL = int(os.getenv("PREMIUM_CACHE_TTL_SEC", "300"))
-TIER_RANK = {"free": 0, "premium": 1, "premium_plus": 2}
+# Tier hierarchy: higher rank = more access.
+# 'offers' and 'news' are package-specific tiers (rank 1);
+# 'premium' is legacy (rank 1); 'ultimate'/'premium_plus' are top-tier (rank 2).
+TIER_RANK = {
+    "free": 0,
+    "offers": 1,
+    "news": 1,
+    "premium": 1,
+    "ultimate": 2,
+    "premium_plus": 2,
+}
 
 
 @dataclass

@@ -25,8 +25,8 @@ def _load() -> None:
 
 def _save() -> None:
     try:
-        with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(_cache, f, indent=4)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_cache, _CONFIG_FILE, indent=4)
     except Exception as e:
         log.error("Failed to save guild_config.json: %s", e)
 

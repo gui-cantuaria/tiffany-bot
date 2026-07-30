@@ -143,8 +143,8 @@ def _load() -> None:
 
 def _save() -> None:
     try:
-        with open(_PROFILES_FILE, "w", encoding="utf-8") as f:
-            json.dump(_cache, f, ensure_ascii=False, indent=2)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_cache, _PROFILES_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error("Failed to save roleplay_profiles.json: %s", e)
 
@@ -166,10 +166,8 @@ def _load_history() -> None:
 
 def _save_history() -> None:
     try:
-        tmp = f"{_HISTORY_FILE}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_history_cache, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, _HISTORY_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_history_cache, _HISTORY_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
         log.error("Failed to save roleplay_history.json: %s", e)
 
@@ -430,15 +428,24 @@ class RoleplayVisibilityView(ui.View):
 
 
 class RoleplaySetupView(ui.View):
-    def __init__(self, user_id: int, lang: GuildLang, *, pink: int):
+    def __init__(self, user_id: int, lang: GuildLang, *, pink: int, state: str = "main"):
         super().__init__(timeout=600)
         self.user_id = user_id
         self.lang = lang
         self.pink = pink
         self._host_message: Optional[discord.Message] = None
+        self.state = state
 
+        if state == "main":
+            self._build_main()
+        elif state == "visibility":
+            self._build_visibility()
+        elif state == "intensity":
+            self._build_intensity()
+
+    def _build_main(self) -> None:
         cfg = ui.Button(
-            label=tr(lang, "roleplay.btn.configure")[:80],
+            label=tr(self.lang, "roleplay.btn.configure")[:80],
             style=discord.ButtonStyle.primary,
             emoji="⚙️",
             row=0,
@@ -447,7 +454,7 @@ class RoleplaySetupView(ui.View):
         self.add_item(cfg)
 
         rnd = ui.Button(
-            label=tr(lang, "roleplay.btn.random")[:80],
+            label=tr(self.lang, "roleplay.btn.random")[:80],
             style=discord.ButtonStyle.secondary,
             emoji="🎲",
             row=0,
@@ -456,7 +463,7 @@ class RoleplaySetupView(ui.View):
         self.add_item(rnd)
 
         reset = ui.Button(
-            label=tr(lang, "roleplay.btn.reset")[:80],
+            label=tr(self.lang, "roleplay.btn.reset")[:80],
             style=discord.ButtonStyle.danger,
             emoji="🗑️",
             row=0,
@@ -464,50 +471,78 @@ class RoleplaySetupView(ui.View):
         reset.callback = self._on_reset
         self.add_item(reset)
 
+        vis = ui.Button(
+            label="Visibility",
+            style=discord.ButtonStyle.secondary,
+            emoji="👁️",
+            row=1,
+        )
+        vis.callback = self._nav_visibility
+        self.add_item(vis)
+
+        intensity = ui.Button(
+            label="Trait Intensity",
+            style=discord.ButtonStyle.secondary,
+            emoji="🎚️",
+            row=1,
+        )
+        intensity.callback = self._nav_intensity
+        self.add_item(intensity)
+
+    def _build_visibility(self) -> None:
         pub = ui.Button(
-            label=tr(lang, "roleplay.visibility.btn_public")[:80],
+            label=tr(self.lang, "roleplay.visibility.btn_public")[:80],
             style=discord.ButtonStyle.secondary,
             emoji="👥",
-            row=1,
+            row=0,
         )
         pub.callback = self._on_vis_public
         self.add_item(pub)
 
         priv = ui.Button(
-            label=tr(lang, "roleplay.visibility.btn_private")[:80],
+            label=tr(self.lang, "roleplay.visibility.btn_private")[:80],
             style=discord.ButtonStyle.primary,
             emoji="🔒",
-            row=1,
+            row=0,
         )
         priv.callback = self._on_vis_private
         self.add_item(priv)
+        
+        back = ui.Button(label="Back", style=discord.ButtonStyle.danger, emoji="🔙", row=1)
+        back.callback = self._nav_main
+        self.add_item(back)
 
+    def _build_intensity(self) -> None:
         low = ui.Button(
-            label=tr(lang, "roleplay.btn.intensity_low")[:80],
+            label=tr(self.lang, "roleplay.btn.intensity_low")[:80],
             style=discord.ButtonStyle.secondary,
             emoji="🌱",
-            row=2,
+            row=0,
         )
         low.callback = self._on_intensity_low
         self.add_item(low)
 
         med = ui.Button(
-            label=tr(lang, "roleplay.btn.intensity_medium")[:80],
+            label=tr(self.lang, "roleplay.btn.intensity_medium")[:80],
             style=discord.ButtonStyle.secondary,
             emoji="⚖️",
-            row=2,
+            row=0,
         )
         med.callback = self._on_intensity_medium
         self.add_item(med)
 
         high = ui.Button(
-            label=tr(lang, "roleplay.btn.intensity_high")[:80],
+            label=tr(self.lang, "roleplay.btn.intensity_high")[:80],
             style=discord.ButtonStyle.secondary,
             emoji="🔥",
-            row=2,
+            row=0,
         )
         high.callback = self._on_intensity_high
         self.add_item(high)
+        
+        back = ui.Button(label="Back", style=discord.ButtonStyle.danger, emoji="🔙", row=1)
+        back.callback = self._nav_main
+        self.add_item(back)
 
     def bind_message(self, message: discord.Message) -> None:
         self._host_message = message
@@ -520,6 +555,23 @@ class RoleplaySetupView(ui.View):
                 await self._host_message.edit(view=self)
             except discord.HTTPException:
                 pass
+
+    async def _switch_state(self, interaction: discord.Interaction, new_state: str) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(tr(self.lang, "roleplay.profile.not_you"), ephemeral=True)
+            return
+        new_view = RoleplaySetupView(self.user_id, self.lang, pink=self.pink, state=new_state)
+        new_view.bind_message(self._host_message)
+        await interaction.response.edit_message(view=new_view)
+
+    async def _nav_main(self, interaction: discord.Interaction) -> None:
+        await self._switch_state(interaction, "main")
+
+    async def _nav_visibility(self, interaction: discord.Interaction) -> None:
+        await self._switch_state(interaction, "visibility")
+
+    async def _nav_intensity(self, interaction: discord.Interaction) -> None:
+        await self._switch_state(interaction, "intensity")
 
     async def _on_configure(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.user_id:

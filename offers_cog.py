@@ -421,17 +421,11 @@ def _load_history() -> dict:
 
 
 def _save_history(history: dict) -> None:
-    tmp = f"{HISTORY_FILE}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, HISTORY_FILE)
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(history, HISTORY_FILE, ensure_ascii=False, indent=2)
     except Exception:
         log.exception("Failed to save offers history")
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
 
 
 def _deal_hash(url: str) -> str:
@@ -1020,6 +1014,22 @@ def _discount_from_html(html: str) -> Optional[float]:
     return None
 
 
+def _parse_enrich_html(html: str) -> dict | None:
+    """Synchronous parsing helper to offload to thread."""
+    soup = BeautifulSoup(html, "html.parser")
+    for script in soup.find_all("script"):
+        text = script.string or ""
+        if "oldPrice" not in text or not text.strip().startswith("{"):
+            continue
+        try:
+            data = json.loads(text)
+            server_offer = data.get("props", {}).get("pageProps", {}).get("serverOffer")
+            if server_offer:
+                return server_offer
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return None
+
 async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     """Fetch the individual Promobit deal page and extract serverOffer (Next.js JSON)."""
     url = deal.get("url")
@@ -1029,21 +1039,8 @@ async def _enrich_deal(session: aiohttp.ClientSession, deal: dict) -> dict:
     if not html:
         return deal
 
-    soup = BeautifulSoup(html, "html.parser")
-
     # Promobit uses Next.js — full data lives in an inline JSON <script>
-    server_offer = None
-    for script in soup.find_all("script"):
-        text = script.string or ""
-        if "oldPrice" not in text or not text.strip().startswith("{"):
-            continue
-        try:
-            data = json.loads(text)
-            server_offer = data.get("props", {}).get("pageProps", {}).get("serverOffer")
-        except (json.JSONDecodeError, AttributeError):
-            pass
-        if server_offer:
-            break
+    server_offer = await asyncio.to_thread(_parse_enrich_html, html)
 
     if not server_offer:
         return deal
@@ -1449,6 +1446,37 @@ def _store_search_url(store: str, title: str) -> Optional[str]:
     return None
 
 
+def _parse_store_rating_html(html: str, deal: dict) -> dict:
+    """Synchronous parsing helper to offload to thread."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    if deal.get("stars") is None:
+        for sel in [
+            "[itemprop='ratingValue']", "[data-rating]",
+            "[class*='rating'] [class*='value']", "[class*='stars']",
+        ]:
+            el = soup.select_one(sel)
+            if el:
+                raw = el.get("content") or el.get("data-rating") or el.get_text()
+                m = re.search(r"(\d+[.,]\d+)", raw)
+                if m:
+                    deal["stars"] = float(m.group(1).replace(",", "."))
+                    break
+
+    if deal.get("sales_count") is None:
+        for sel in [
+            "[itemprop='reviewCount']", "[class*='review-count']",
+            "[class*='sold']", "[class*='vendido']",
+        ]:
+            el = soup.select_one(sel)
+            if el:
+                raw = el.get("content") or el.get_text()
+                m = re.search(r"(\d+)", raw.replace(".", ""))
+                if m:
+                    deal["sales_count"] = int(m.group(1))
+                    break
+    return deal
+
 async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) -> dict:
     """Attempt (B): fetch stars/sales directly from the store page. Best effort."""
     fetch_url = deal.get("product_url") or deal.get("real_store_url")
@@ -1469,35 +1497,7 @@ async def _try_fetch_store_rating(session: aiohttp.ClientSession, deal: dict) ->
                 deal["real_store_url"] = final
             html = await resp.text()
 
-        soup = BeautifulSoup(html, "html.parser")
-
-        # Stars — only fetch if Promobit did not provide them
-        if deal.get("stars") is None:
-            for sel in [
-                "[itemprop='ratingValue']", "[data-rating]",
-                "[class*='rating'] [class*='value']", "[class*='stars']",
-            ]:
-                el = soup.select_one(sel)
-                if el:
-                    raw = el.get("content") or el.get("data-rating") or el.get_text()
-                    m = re.search(r"(\d+[.,]\d+)", raw)
-                    if m:
-                        deal["stars"] = float(m.group(1).replace(",", "."))
-                        break
-
-        # Sales / reviews — only fetch if Promobit did not provide them
-        if deal.get("sales_count") is None:
-            for sel in [
-                "[itemprop='reviewCount']", "[class*='review-count']",
-                "[class*='sold']", "[class*='vendido']",
-            ]:
-                el = soup.select_one(sel)
-                if el:
-                    raw = el.get("content") or el.get_text()
-                    m = re.search(r"(\d+)", raw.replace(".", ""))
-                    if m:
-                        deal["sales_count"] = int(m.group(1))
-                        break
+        deal = await asyncio.to_thread(_parse_store_rating_html, html, deal)
 
     except Exception as e:
         log.debug(f"Failed to fetch store rating: {e}")
@@ -2292,8 +2292,8 @@ async def _run_deals_cycle_inner() -> None:
         if not html:
             continue
 
-        deals = _parse_deals_from_html(html, cat_path)
-        # Extract category name from path
+        deals = await asyncio.to_thread(_parse_deals_from_html, html, cat_path)
+        log.info(f"[{cat_path}] Parsed {len(deals)} items.")
         cat_slug = cat_path.strip("/").split("/")[-2]
         cat_name = _SLUG_TO_CATEGORY.get(cat_slug, cat_slug.replace("-", " ").title())
         for d in deals:
