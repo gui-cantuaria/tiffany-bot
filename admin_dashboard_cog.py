@@ -13,7 +13,7 @@ from discord.ext import commands
 from infra import postgres
 import owner_dashboard
 from brand_colors import TIFFANY_PINK
-
+import tiffany_voice
 log = logging.getLogger("tiffany-bot")
 
 class AdminDashboardCog(commands.Cog):
@@ -24,7 +24,7 @@ class AdminDashboardCog(commands.Cog):
     async def metrics_cmd(self, ctx: commands.Context):
         """Displays business and telemetry metrics (Owner Only)."""
         if ctx.author.id != 842799130630815754:
-            return await ctx.send("Comando exclusivo do dono da Tiffany.", ephemeral=True)
+            return await tiffany_voice.hybrid_ctx_reply(ctx, "Comando exclusivo do dono da Tiffany.", ephemeral=True)
             
         # Get base JSON metrics
         embed = owner_dashboard.build_owner_stats_embed(self.bot)
@@ -34,9 +34,9 @@ class AdminDashboardCog(commands.Cog):
         if pool:
             try:
                 async with pool.acquire() as conn:
-                    today = discord.utils.utcnow().strftime("%Y-%m-%d")
+                    today = discord.utils.utcnow().date()
                     total_quotas = await conn.fetchval(
-                        "SELECT SUM(tokens_used) FROM ai_usage_daily WHERE date = $1", today
+                        "SELECT SUM(quota_used) FROM ai_usage_daily WHERE day = $1", today
                     ) or 0
                     
                     ai_calls = await conn.fetchval(

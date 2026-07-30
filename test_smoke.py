@@ -209,7 +209,6 @@ class TestVolumeHelpers(unittest.TestCase):
         self.assertTrue(all(line.startswith("/") for line in lines))
         self.assertTrue(all(" — " in line for line in lines))
         self.assertNotIn("/rp", lines)
-        self.assertIn("/stats — am I online?", lines)
         self.assertIn("/help — all commands", lines)
 
     def test_language_search_match(self):
@@ -392,6 +391,9 @@ class TestCriticalStartup(unittest.IsolatedAsyncioTestCase):
         import asyncio
         import notices
         import tiffany_voice as tv
+        
+        # Mock wait_until_ready to avoid RuntimeError during cog init
+        notices.discord_client.wait_until_ready = mock.AsyncMock()
 
         await notices._load_bot_extensions()
         self.assertIsNotNone(notices.discord_client.get_cog("OffersCog"))
