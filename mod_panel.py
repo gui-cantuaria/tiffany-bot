@@ -20,28 +20,32 @@ def build_mod_panel_embed(guild: discord.Guild, lang: GuildLang, *, pink: int) -
         description=tr(lang, "mod.panel.desc"),
         color=pink,
     )
-    embed.add_field(name=tr(lang, "mod.field.strict_filter"), value=strict_filter, inline=True)
-    embed.add_field(name=tr(lang, "mod.field.anti_spam"), value=anti_spam, inline=True)
     embed.add_field(
-        name=tr(lang, "mod.field.blacklist"),
-        value=tr(lang, "mod.blacklist_count", count=blacklist_count),
-        inline=True,
+        name="🛡️ Segurança",
+        value=(
+            f"**{tr(lang, 'mod.field.strict_filter')}:** {strict_filter}\n"
+            f"**{tr(lang, 'mod.field.anti_spam')}:** {anti_spam}\n"
+            f"**{tr(lang, 'mod.field.blacklist')}:** {tr(lang, 'mod.blacklist_count', count=blacklist_count)}"
+        ),
+        inline=False
     )
-    embed.add_field(name=tr(lang, "mod.field.dj"), value=dj_role, inline=False)
-    embed.add_field(name=tr(lang, "mod.field.mod_log"), value=mod_log, inline=False)
-    embed.add_field(name=tr(lang, "mod.field.offers"), value=offers_ch, inline=True)
     embed.add_field(
-        name=tr(lang, "mod.field.affiliate_tags"),
-        value=tr(lang, "mod.tags_count", count=tags_count),
-        inline=True,
+        name="⚙️ Configurações",
+        value=(
+            f"**{tr(lang, 'mod.field.dj')}:** {dj_role}\n"
+            f"**{tr(lang, 'mod.field.mod_log')}:** {mod_log}\n"
+            f"**{tr(lang, 'mod.field.offers')}:** {offers_ch}\n"
+            f"**{tr(lang, 'mod.field.affiliate_tags')}:** {tr(lang, 'mod.tags_count', count=tags_count)}"
+        ),
+        inline=False
     )
     features = config.get("features") or {}
     feat_lines = []
     for key in GUILD_FEATURE_KEYS:
         state = tr(lang, "mod.on") if features.get(key, True) else tr(lang, "mod.off")
-        feat_lines.append(f"{feature_label(lang, key)}: {state}")
+        feat_lines.append(f"**{feature_label(lang, key)}:** {state}")
     embed.add_field(
-        name=tr(lang, "mod.field.features"),
+        name="🧩 Módulos",
         value="\n".join(feat_lines[:12]) or tr(lang, "mod.none"),
         inline=False,
     )
@@ -104,6 +108,10 @@ class ModPanelMainView(View):
         btn_spam.callback = self.toggle_spam
         self.add_item(btn_spam)
 
+        btn_bl = Button(label=tr(lang, "mod.btn.blacklist"), style=discord.ButtonStyle.secondary, row=0)
+        btn_bl.callback = self.config_blacklist
+        self.add_item(btn_bl)
+
         btn_dj = Button(label=tr(lang, "mod.btn.dj"), style=discord.ButtonStyle.secondary, row=1)
         btn_dj.callback = self.config_dj
         self.add_item(btn_dj)
@@ -112,19 +120,15 @@ class ModPanelMainView(View):
         btn_logs.callback = self.config_logs
         self.add_item(btn_logs)
 
-        btn_bl = Button(label=tr(lang, "mod.btn.blacklist"), style=discord.ButtonStyle.secondary, row=2)
-        btn_bl.callback = self.config_blacklist
-        self.add_item(btn_bl)
-
-        btn_offers = Button(label=tr(lang, "mod.btn.offers"), style=discord.ButtonStyle.primary, row=3)
+        btn_offers = Button(label=tr(lang, "mod.btn.offers"), style=discord.ButtonStyle.primary, row=2)
         btn_offers.callback = self.config_offers
         self.add_item(btn_offers)
 
-        btn_affiliates = Button(label=tr(lang, "mod.btn.affiliates"), style=discord.ButtonStyle.success, row=3)
+        btn_affiliates = Button(label=tr(lang, "mod.btn.affiliates"), style=discord.ButtonStyle.success, row=2)
         btn_affiliates.callback = self.config_affiliates
         self.add_item(btn_affiliates)
 
-        btn_features = Button(label=tr(lang, "mod.btn.features"), style=discord.ButtonStyle.primary, row=4)
+        btn_features = Button(label="🧩 " + tr(lang, "mod.btn.features"), style=discord.ButtonStyle.primary, row=3)
         btn_features.callback = self.config_features
         self.add_item(btn_features)
 

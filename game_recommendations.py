@@ -70,6 +70,7 @@ class GameFilters:
     stores: list[str] = field(default_factory=lambda: ["steam", "epic"])
     max_price_brl: Optional[float] = None
     min_price_brl: Optional[float] = None
+    currency: str = "USD"
     free_only: bool = False
     multiplayer: bool = False
     single_player: bool = False
@@ -158,10 +159,15 @@ def _filters_from_json(data: dict) -> GameFilters:
         if rating_source not in ("steam", "metacritic", "opencritic"):
             rating_source = None
 
+    curr = str(data.get("currency") or "USD").upper()
+    if curr not in ("USD", "BRL"):
+        curr = "USD"
+
     return GameFilters(
         stores=stores,
         max_price_brl=_as_float(data.get("max_price_brl")),
         min_price_brl=_as_float(data.get("min_price_brl")),
+        currency=curr,
         free_only=bool(data.get("free_only")),
         multiplayer=bool(data.get("multiplayer")),
         single_player=bool(data.get("single_player")),
@@ -210,13 +216,19 @@ def _regex_parse_filters(text: str) -> GameFilters:
         stores = ["steam", "epic"]
 
     max_price = None
+    currency = "USD"
     m = re.search(
         r"(?:at[eé]|ate|m[aá]ximo|max|under|below|at[eé]\s+)?\s*"
-        r"r?\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:reais?|brl|real)?",
+        r"(r?\$|usd|brl|€|£)?\s*(\d+(?:[.,]\d{1,2})?)\s*(reais?|brl|real|dolares|dólares|d[oó]lar|usd|bucks)?",
         low,
     )
     if m:
-        max_price = float(m.group(1).replace(",", "."))
+        c1, val, c2 = m.groups()
+        max_price = float(val.replace(",", "."))
+        if c1 in ("r$", "brl") or c2 in ("reais", "real", "brl"):
+            currency = "BRL"
+        elif c1 in ("$", "usd") or c2 in ("dolares", "dólares", "dólar", "dolar", "usd", "bucks"):
+            currency = "USD"
 
     min_rating = None
     rm = re.search(
@@ -243,6 +255,7 @@ def _regex_parse_filters(text: str) -> GameFilters:
     return GameFilters(
         stores=stores,
         max_price_brl=max_price,
+        currency=currency,
         free_only=bool(re.search(r"\b(gr[aá]tis|free|de\s+gra[cç]a)\b", low)),
         multiplayer=bool(re.search(r"\b(multiplayer|multijogador|co-?op|coop|online)\b", low)),
         single_player=bool(re.search(r"\b(single[\s-]?player|singleplayer|solo)\b", low)),
@@ -646,20 +659,27 @@ def filters_summary(filters: GameFilters, lang: GuildLang = "pt") -> str:
     if filters.free_only:
         lines.append(f"• **{tr(lang, 'game.filter.price')}:** {tr(lang, 'game.filter.free')}")
     else:
+        c_sym = "US$" if filters.currency == "USD" else "R$"
+        c_fmt = "{:.2f}" if filters.currency == "USD" else "{:.2f}".replace(".", ",")
+        
         if filters.min_price_brl is not None and filters.max_price_brl is not None:
+            min_str = f"{filters.min_price_brl:.2f}".replace(".", ",") if filters.currency == "BRL" else f"{filters.min_price_brl:.2f}"
+            max_str = f"{filters.max_price_brl:.2f}".replace(".", ",") if filters.currency == "BRL" else f"{filters.max_price_brl:.2f}"
             lines.append(
                 f"• **{tr(lang, 'game.filter.price')}:** "
-                f"R$ {filters.min_price_brl:.2f} – R$ {filters.max_price_brl:.2f}".replace(".", ",")
+                f"{c_sym} {min_str} – {c_sym} {max_str}"
             )
         elif filters.max_price_brl is not None:
+            max_str = f"{filters.max_price_brl:.2f}".replace(".", ",") if filters.currency == "BRL" else f"{filters.max_price_brl:.2f}"
             lines.append(
                 f"• **{tr(lang, 'game.filter.price')}:** "
-                f"{tr(lang, 'game.filter.up_to')} R$ {filters.max_price_brl:.2f}".replace(".", ",")
+                f"{tr(lang, 'game.filter.up_to')} {c_sym} {max_str}"
             )
         elif filters.min_price_brl is not None:
+            min_str = f"{filters.min_price_brl:.2f}".replace(".", ",") if filters.currency == "BRL" else f"{filters.min_price_brl:.2f}"
             lines.append(
                 f"• **{tr(lang, 'game.filter.price')}:** "
-                f"{tr(lang, 'game.filter.from')} R$ {filters.min_price_brl:.2f}".replace(".", ",")
+                f"{tr(lang, 'game.filter.from')} {c_sym} {min_str}"
             )
 
     if filters.genres:

@@ -8476,8 +8476,8 @@ def register_voice(bot: commands.Bot) -> None:
         
         import mod_panel
         embed = mod_panel.build_mod_panel_embed(ctx.guild, lang, pink=TIFFANY_PINK)
-        view = mod_panel.ModPanelMainView(ctx.guild, lang, pink=TIFFANY_PINK)
-        msg = await ctx.send(embed=embed, view=view)
+        view = mod_panel.ModPanelMainView(ctx.guild, lang, pink=TIFFANY_PINK, author_id=ctx.author.id)
+        msg = await hybrid_ctx_reply(ctx, embed=embed, view=view, ephemeral=True)
         view.message = msg
 
     @bot.hybrid_command(name="chat", aliases=["c"], **hybrid_desc_kwargs("slash.cmd.chat"))
