@@ -8121,9 +8121,18 @@ def register_voice(bot: commands.Bot) -> None:
             try:
                 tracks = await wavelink.Playable.search(search_query)
             except Exception:
-                log.exception("Lavalink search failed")
-                await status.edit(embed=_embed(tr(lang, "cmd.play.search_failed")))
-                return
+                log.warning("Lavalink search failed on ytsearch, attempting scsearch fallback...")
+                tracks = []
+                if not is_url:
+                    try:
+                        tracks = await wavelink.Playable.search(f"scsearch:{search_query}")
+                    except Exception:
+                        pass
+                
+                if not tracks:
+                    log.exception("Lavalink fallback search failed entirely")
+                    await status.edit(embed=_embed(tr(lang, "cmd.play.search_failed")))
+                    return
             if not tracks:
                 # AI fallback: try AI interpretation
                 if not is_url and search_query and _ai_rate_limit_peek(0)[0] and _needs_ai_song_interpret(search_query):

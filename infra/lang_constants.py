@@ -10,7 +10,7 @@ ALL_LANGS: tuple[str, ...] = (
 
 CORE_LANGS: tuple[str, ...] = ("en", "es", "fr", "pt", "de")
 
-DEFAULT_LANG = "en"
+DEFAULT_LANG = "pt"
 
 LANG_CODES_DISPLAY = " · ".join(code.upper() for code in ALL_LANGS)
 

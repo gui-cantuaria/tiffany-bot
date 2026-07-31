@@ -55,7 +55,7 @@ class AIQuotaService:
         # 1. Determine User Plan & Limits
         user_plan = await SubscriptionService.get_plan(user_id, subject_type="user")
         user_details = SubscriptionService.get_plan_details(user_plan)
-        user_limit = user_details.get("daily_ai_quotas", 30)
+        user_limit = user_details.get("daily_ai_quotas", 3000)
         
         async with pool.acquire() as conn:
             # Check user usage
