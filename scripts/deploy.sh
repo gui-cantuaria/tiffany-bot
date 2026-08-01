@@ -28,12 +28,12 @@ git checkout origin/main -- \
   affiliate_config.py random_songs.py requirements.txt brand_colors.py \
   giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
   feature_flags.py user_settings.py settings_panel.py imagine.py imagine_safety.py \
-  premium_cog.py premium_panel.py premium_ai_guardrails.py config/ \
+  premium_cog.py premium_panel.py premium_ai_guardrails.py config/ tiffany_core/ \
   updates.py updates.json owner_dashboard.py roleplay_config.py roleplay_i18n.py \
-  infra/ schema/ locales/ test_payments_phase3.py \
+  infra/ schema/ locales/ test_*.py LICENSE SECURITY.md \
   docker-compose.yml Dockerfile .env.example 2>/dev/null || true
 git checkout origin/main -- \
-  docs/voice-technical.md docs/games-technical.md docs/offers-technical.md docs/python-migration.md docs/deploy-automation.md docs/rate-limits.md docs/ha-architecture.md docs/infrastructure-roadmap.md lavalink/application.yml CONTRIBUTING.md 2>/dev/null || true
+  docs/ lavalink/ application.yml CONTRIBUTING.md README.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
