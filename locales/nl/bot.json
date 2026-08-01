@@ -256,7 +256,7 @@
   "manipulation.2": "🛡️ **Bypass-poging gedetecteerd.** Ik herhaal, spell of vertaal geblokkeerde content niet.",
   "manipulation.3": "🛡️ **Dat werkt niet bij mij.** Encoderen, omdraaien of vermommen verandert het antwoord niet.",
   "manipulation.4": "🛡️ **Filter geactiveerd.** Hoe je het ook schrijft — de content telt.",
-  "mod.affiliate_saved": "✅ Tags opgeslagen!\n⚠️ 50/50-plan: je tags hebben 50% kans op links in je server.",
+  "mod.affiliate_saved": "✅ Tags opgeslagen!\n⚠️ 70/30-plan: je tags hebben 70% kans op links in je server.",
   "mod.blacklist_added": "Toegevoegd: {names}",
   "mod.blacklist_count": "{count} gebruiker(s)",
   "mod.blacklist_removed": "Verwijderd: {names}",

@@ -2443,6 +2443,12 @@ async def _load_bot_extensions() -> None:
                 log.info("%s loaded successfully.", ext)
             except Exception as e:
                 log.error("Failed to load %s: %s", ext, e)
+    if os.getenv("STRIPE_SECRET_KEY", "").strip() and not discord_client.get_cog("PremiumCog"):
+        try:
+            await discord_client.load_extension("premium_cog")
+            log.info("Premium Cog loaded (Stripe checkout enabled).")
+        except Exception as e:
+            log.error("Failed to load Premium Cog: %s", e)
 
 
 async def _reload_offers_extension() -> None:

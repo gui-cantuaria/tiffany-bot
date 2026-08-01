@@ -256,7 +256,7 @@
   "manipulation.2": "🛡️ **Atlama girişimi tespit edildi.** Engellenen içeriği tekrarlamayacağım, hecelemeyeceğim veya çevirmeyeceğim.",
   "manipulation.3": "🛡️ **Bu bende işe yaramıyor.** Metni kodlamak, ters çevirmek veya gizlemek cevabı değiştirmez.",
   "manipulation.4": "🛡️ **Filtre tetiklendi.** Nasıl yazarsanız yazın — önemli olan içeriktir.",
-  "mod.affiliate_saved": "✅ Etiketler kaydedildi!\n⚠️ 50/50 planı: Etiketlerinizin sunucunuzdaki bağlantılarda %50 şansı vardır.",
+  "mod.affiliate_saved": "✅ Etiketler kaydedildi!\n⚠️ 70/30 planı: Etiketlerinizin sunucunuzdaki bağlantılarda %70 şansı vardır.",
   "mod.blacklist_added": "Eklendi: {names}",
   "mod.blacklist_count": "{count} kullanıcı(lar)",
   "mod.blacklist_removed": "Kaldırıldı: {names}",

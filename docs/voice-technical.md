@@ -58,7 +58,7 @@ Discord voice packets -> discord-ext-voice-recv -> Opus decode
 - `_after()` callback protected against `loop.is_closed()`
 - Stale temp files (`tiffany_*`) cleaned on startup (>30min old)
 
-## Random Music (`t!r` / `/random`)
+## Random Music (`t!rs` / `t!randomsong` / `/randomsong`)
 - Exactly 10,000 international hits in `random_songs.py` (format: `Title - Artist`)
 - Avoids songs already in queue, recent history, or picked this session (resets session picks when catalog exhausted)
 

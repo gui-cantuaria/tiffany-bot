@@ -2451,9 +2451,9 @@ async def _run_deals_cycle_inner() -> None:
             if not _deal_matches_guild_categories(deal_cat, allowed):
                 continue
 
-            # 50/50 Logic
+            # 70/30 Logic (70% chance to use server/user affiliate tags, 30% to bot)
             use_tags = target["tags"]
-            if use_tags and random.random() < 0.5:
+            if use_tags and random.random() < 0.30:
                 use_tags = {}
 
             embed = _build_embed(deal, guild_tags=use_tags)

@@ -10,14 +10,10 @@ except ImportError:
     print("Instale rodando: pip install stripe")
     sys.exit(1)
 
-# Ensure the user has passed their secret key as an argument or env var
+# Secret key must come from environment or local .env — never argv (shell history leak).
 STRIPE_SECRET = os.getenv("STRIPE_SECRET_KEY")
 
-# Fallback 1: Command line argument
-if not STRIPE_SECRET and len(sys.argv) > 1:
-    STRIPE_SECRET = sys.argv[1]
-
-# Fallback 2: Read manually from .env file
+# Read manually from .env file
 if not STRIPE_SECRET:
     env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
     if os.path.exists(env_path):
@@ -28,8 +24,8 @@ if not STRIPE_SECRET:
                     break
 
 if not STRIPE_SECRET:
-    print("[ERRO] STRIPE_SECRET_KEY nao foi encontrada no ambiente, nos argumentos nem no .env.")
-    print("Uso: python scripts/setup_stripe_products.py sk_test_...")
+    print("[ERRO] STRIPE_SECRET_KEY nao foi encontrada no ambiente nem no .env.")
+    print("Defina STRIPE_SECRET_KEY no .env ou exporte no ambiente antes de executar.")
     sys.exit(1)
 
 stripe.api_key = STRIPE_SECRET

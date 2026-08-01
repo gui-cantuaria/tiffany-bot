@@ -11,7 +11,7 @@ import datetime
 import json
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 from infra import postgres
 from infra.services.subscription import SubscriptionService
@@ -42,47 +42,54 @@ class AIQuotaService:
         return model_data.get("weight", 1) if model_data else 1
 
     @staticmethod
-    async def get_remaining(user_id: int, guild_id: Optional[int] = None) -> Tuple[int, bool]:
+    async def get_remaining(user_id: int, guild_id: Optional[int] = None, conn: Optional[Any] = None) -> Tuple[int, bool]:
         """
-        Returns (remaining_units, is_using_guild_pool)
+        Returns (remaining_units, is_using_guild_pool), reusing DB connection if provided to prevent pool exhaustion.
         """
+        if conn is not None:
+            return await AIQuotaService._check_limits_on_conn(conn, user_id, guild_id)
+
         pool = postgres.pool()
         if not pool:
             return 0, False
             
+        async with pool.acquire() as db_conn:
+            return await AIQuotaService._check_limits_on_conn(db_conn, user_id, guild_id)
+
+    @staticmethod
+    async def _check_limits_on_conn(conn: Any, user_id: int, guild_id: Optional[int]) -> Tuple[int, bool]:
         today = await AIQuotaService._get_today_str()
         
-        # 1. Determine User Plan & Limits
-        user_plan = await SubscriptionService.get_plan(user_id, subject_type="user")
+        # 1. Determine User Plan & Limits (passing conn to avoid nested acquire in SubscriptionService)
+        user_plan = await SubscriptionService.get_plan(user_id, subject_type="user", conn=conn)
         user_details = SubscriptionService.get_plan_details(user_plan)
-        user_limit = user_details.get("daily_ai_quotas", 3000)
+        user_limit = user_details.get("daily_ai_quotas", 30) # Corrected fallback to match pricing.json Free Tier
         
-        async with pool.acquire() as conn:
-            # Check user usage
-            user_used = await conn.fetchval(
-                "SELECT quota_used FROM ai_usage_daily WHERE subject_type = 'user' AND subject_id = $1 AND day = $2::date",
-                int(user_id), today
-            ) or 0
+        # Check user usage
+        user_used = await conn.fetchval(
+            "SELECT quota_used FROM ai_usage_daily WHERE subject_type = 'user' AND subject_id = $1 AND day = $2::date",
+            int(user_id), today
+        ) or 0
+        
+        user_remaining = max(0, user_limit - user_used)
+        if user_remaining > 0:
+            return user_remaining, False
             
-            user_remaining = max(0, user_limit - user_used)
-            if user_remaining > 0:
-                return user_remaining, False
+        # 2. If user is out, check Guild Limit (if in a guild)
+        if guild_id:
+            guild_plan = await SubscriptionService.get_plan(guild_id, subject_type="guild", conn=conn)
+            guild_details = SubscriptionService.get_plan_details(guild_plan)
+            guild_limit = guild_details.get("daily_ai_quotas", 0)
+            
+            if guild_limit > 0:
+                guild_used = await conn.fetchval(
+                    "SELECT quota_used FROM ai_usage_daily WHERE subject_type = 'guild' AND subject_id = $1 AND day = $2::date",
+                    int(guild_id), today
+                ) or 0
                 
-            # 2. If user is out, check Guild Limit (if in a guild)
-            if guild_id:
-                guild_plan = await SubscriptionService.get_plan(guild_id, subject_type="guild")
-                guild_details = SubscriptionService.get_plan_details(guild_plan)
-                guild_limit = guild_details.get("daily_ai_quotas", 0)
-                
-                if guild_limit > 0:
-                    guild_used = await conn.fetchval(
-                        "SELECT quota_used FROM ai_usage_daily WHERE subject_type = 'guild' AND subject_id = $1 AND day = $2::date",
-                        int(guild_id), today
-                    ) or 0
-                    
-                    guild_remaining = max(0, guild_limit - guild_used)
-                    if guild_remaining > 0:
-                        return guild_remaining, True
+                guild_remaining = max(0, guild_limit - guild_used)
+                if guild_remaining > 0:
+                    return guild_remaining, True
 
         return 0, False
 
@@ -96,7 +103,7 @@ class AIQuotaService:
     @staticmethod
     async def consume(user_id: int, guild_id: Optional[int], model_name: str, latency_ms: int = 0) -> bool:
         """
-        Consumes Quota Units for the model. Records telemetry.
+        Consumes Quota Units for the model. Records telemetry. Reuses active connection.
         """
         cost = AIQuotaService.get_model_weight(model_name)
         
@@ -107,8 +114,8 @@ class AIQuotaService:
         today = await AIQuotaService._get_today_str()
         
         async with pool.acquire() as conn:
-            # Check limits
-            remaining, use_guild = await AIQuotaService.get_remaining(user_id, guild_id)
+            # Check limits reusing the active connection (no nested pool acquisition!)
+            remaining, use_guild = await AIQuotaService.get_remaining(user_id, guild_id, conn=conn)
             
             if remaining < cost:
                 # Log rate limit event

@@ -256,7 +256,7 @@
   "manipulation.2": "🛡️ **回避試行を検出。** ブロックされたコンテンツの繰り返し、綴り、翻訳はしません。",
   "manipulation.3": "🛡️ **通用しません。** エンコード、逆順、偽装しても答えは変わりません。",
   "manipulation.4": "🛡️ **フィルター作動。** 書き方に関係なく — 内容が重要です。",
-  "mod.affiliate_saved": "✅ タグを保存！\n⚠️ 50/50プラン: あなたのタグはサーバーのリンクに50%の確率で使われます。",
+  "mod.affiliate_saved": "✅ タグを保存！\n⚠️ 70/30プラン: あなたのタグはサーバーのリンクに70%の確率で使われます。",
   "mod.blacklist_added": "追加: {names}",
   "mod.blacklist_count": "{count} ユーザー",
   "mod.blacklist_removed": "削除: {names}",

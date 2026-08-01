@@ -268,7 +268,7 @@
   "manipulation.2": "🛡️ **Bypass attempt detected.** I won't repeat, spell out, or translate blocked content.",
   "manipulation.3": "🛡️ **That doesn't work on me.** Encoding, reversing, or disguising text won't change the answer.",
   "manipulation.4": "🛡️ **Filter triggered.** No matter how you write it — the content is what counts.",
-  "mod.affiliate_saved": "✅ Tags saved!\n⚠️ 50/50 plan: your tags have a 50% chance on links in your server.",
+  "mod.affiliate_saved": "✅ Tags saved!\n⚠️ 70/30 plan: your tags have a 70% chance on links in your server.",
   "mod.blacklist_added": "Added: {names}",
   "mod.blacklist_count": "{count} user(s)",
   "mod.blacklist_removed": "Removed: {names}",

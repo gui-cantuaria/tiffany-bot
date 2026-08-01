@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS guild_premium_config (
     --     show_affiliate:   bool (default true),
     --   },
     --   nsfw_enabled:         bool (default false),
-    --   affiliate_override:   bool (default false → 50/50; true → 100% user),
+    --   affiliate_override:   bool (default false → 70/30; true → 100% user),
     -- }
     --
     -- news: {

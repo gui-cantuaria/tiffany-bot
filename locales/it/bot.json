@@ -256,7 +256,7 @@
   "manipulation.2": "🛡️ **Tentativo di bypass rilevato.** Non ripeterò, scriverò né tradurrò contenuti bloccati.",
   "manipulation.3": "🛡️ **Non funziona con me.** Codificare, invertire o mascherare il testo non cambia la risposta.",
   "manipulation.4": "🛡️ **Filtro attivato.** Non importa come lo scrivi — conta il contenuto.",
-  "mod.affiliate_saved": "✅ Tag salvati!\n⚠️ Piano 50/50: i tuoi tag hanno il 50% di probabilità sui link nel tuo server.",
+  "mod.affiliate_saved": "✅ Tag salvati!\n⚠️ Piano 70/30: i tuoi tag hanno il 70% di probabilità sui link nel tuo server.",
   "mod.blacklist_added": "Aggiunti: {names}",
   "mod.blacklist_count": "{count} utente/i",
   "mod.blacklist_removed": "Rimossi: {names}",

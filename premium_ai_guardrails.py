@@ -54,8 +54,8 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
     Returns a dict with 'classification', 'confidence', and 'reasoning'.
     """
     if not OPENROUTER_API_KEY:
-        log.warning("OPENROUTER_API_KEY not set. Defaulting to SAFE.")
-        return {"classification": "SAFE", "confidence": 1.0, "reasoning": "Fallback"}
+        log.error("OPENROUTER_API_KEY not set. Operating in Fail-Closed mode: blocking request.")
+        return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": "Fail-Closed: Missing API Key"}
 
     prompt = (
         "You are an AI Safety Guardrail for a Discord bot.\n"
@@ -95,8 +95,8 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
         except Exception as e:
             log.exception("Error during API classification: %s", e)
 
-    # Fallback to SAFE if API fails to prevent blocking legitimate content
-    return {"classification": "SAFE", "confidence": 1.0, "reasoning": "API Error Fallback"}
+    # Fail-Closed: Block content if API fails to protect community and maintain compliance
+    return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": "Fail-Closed: Moderation API Error"}
 
 
 # ---------------------------------------------------------------------------

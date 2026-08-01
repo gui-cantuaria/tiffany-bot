@@ -407,6 +407,10 @@ def hybrid_desc_kwargs(key: str) -> dict[str, object]:
 _CMD_HELP_KEY_BY_NAME: dict[str, str] = {
     "su": "slash.cmd.summary",
     "summary": "slash.cmd.summary",
+    "rs": "slash.cmd.random",
+    "randomsong": "slash.cmd.random",
+    "r": "slash.cmd.random",
+    "random": "slash.cmd.random",
 }
 
 
@@ -985,7 +989,7 @@ _AI_HELP_COMMANDS_TEXT = (
     "- t!p / t!play <song or URL> — play music (auto-joins voice channel)\n"
     "- t!s / t!skip — skip track · t!pa / t!pause · t!re / t!resume\n"
     "- t!cl / t!clear — stop and leave voice · t!l / t!loop · t!sh / t!shuffle · t!rpl / t!replay\n"
-    "- t!q / t!queue — now playing + queue · t!r / t!random (10k famous hits) · t!ap / t!autoplay\n"
+    "- t!q / t!queue — now playing + queue · t!rs / t!randomsong (10k famous hits) · t!ap / t!autoplay\n"
     "- t!ff / t!seek +30,-15,1:30\n"
     "- t!v / t!volume [0-150] — stream volume (everyone in the call)\n"
     "- t!ly / t!lyrics — lyrics · t!c / t!chat <question> — AI chat (images OK)\n"
@@ -2787,23 +2791,23 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
     "help.music.body": {
         "de": "`/play` — Musik in Voice · `/skip` — Track überspringen · `/pause` — pausieren · `/resume` — fortsetzen\n\n"
         "`/queue` — Warteschlange + Now Playing · `/shuffle` — mischen · `/loop` — Loop · `/replay` — von vorn\n\n"
-        "`/random` — Zufallshit (10k) · `/autoplay` — Autoplay · `/lyrics` — Songtext · `/seek` — +30 / -15\n\n"
+        "`/randomsong` — Zufallshit (10k) · `/autoplay` — Autoplay · `/lyrics` — Songtext · `/seek` — +30 / -15\n\n"
         "`/volume` — Stream-Lautstärke (t!v) · `/clear` — stoppen & Voice verlassen · `/247` — 24/7 · `/clip` — letzte 30s · `/playlist` — Listen",
         "en": "`/play` — play in voice · `/skip` — skip track · `/pause` — pause · `/resume` — resume\n\n"
         "`/queue` — now playing + queue · `/shuffle` — shuffle queue · `/loop` — loop track · `/replay` — replay from start\n\n"
-        "`/random` — random hit (10k catalog) · `/autoplay` — toggle autoplay · `/lyrics` — song lyrics · `/seek` — jump +30 / -15\n\n"
+        "`/randomsong` — random hit (10k catalog) · `/autoplay` — toggle autoplay · `/lyrics` — song lyrics · `/seek` — jump +30 / -15\n\n"
         "`/volume` — stream volume (t!v) · `/clear` — stop & leave voice · `/247` — 24/7 in call · `/clip` — last 30s audio · `/playlist` — save/load lists",
         "es": "`/play` — música en voz · `/skip` — saltar pista · `/pause` — pausar · `/resume` — reanudar\n\n"
         "`/queue` — cola + reproduciendo · `/shuffle` — mezclar cola · `/loop` — repetir pista · `/replay` — reiniciar pista\n\n"
-        "`/random` — hit aleatorio (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra · `/seek` — +30 / -15\n\n"
+        "`/randomsong` — hit aleatorio (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra · `/seek` — +30 / -15\n\n"
         "`/volume` — volumen del stream (t!v) · `/clear` — parar y salir del voice · `/247` — 24/7 · `/clip` — últimos 30s · `/playlist` — listas guardadas",
         "fr": "`/play` — musique en vocal · `/skip` — piste suivante · `/pause` — pause · `/resume` — reprendre\n\n"
         "`/queue` — file + en cours · `/shuffle` — mélanger · `/loop` — boucle · `/replay` — rejouer du début\n\n"
-        "`/random` — hit aléatoire (10k) · `/autoplay` — autoplay · `/lyrics` — paroles · `/seek` — +30 / -15\n\n"
+        "`/randomsong` — hit aléatoire (10k) · `/autoplay` — autoplay · `/lyrics` — paroles · `/seek` — +30 / -15\n\n"
         "`/volume` — volume stream (t!v) · `/clear` — stop & quitter le vocal · `/247` — 24/7 · `/clip` — 30 dernières s · `/playlist` — listes",
         "pt": "`/play` — tocar na call · `/skip` — pular faixa · `/pause` — pausar · `/resume` — retomar\n\n"
         "`/queue` — fila + tocando agora · `/shuffle` — embaralhar fila · `/loop` — repetir faixa · `/replay` — recomeçar do início\n\n"
-        "`/random` — hit aleatório (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra da música · `/seek` — pular +30 / -15\n\n"
+        "`/randomsong` — hit aleatório (10k) · `/autoplay` — autoplay on/off · `/lyrics` — letra da música · `/seek` — pular +30 / -15\n\n"
         "`/volume` — volume do stream (t!v) · `/clear` — parar e sair da call · `/247` — modo 24/7 · `/clip` — últimos 30s · `/playlist` — listas salvas",
     },
     "help.music.title": {
@@ -4273,11 +4277,11 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "pt": "Este painel não pertence a este servidor.",
     },
     "mod.affiliate_saved": {
-        "de": "✅ Tags gespeichert!\n⚠️ 50/50-Plan: deine Tags haben 50% Chance in Links auf deinem Server.",
-        "en": "✅ Tags saved!\n⚠️ 50/50 plan: your tags have a 50% chance on links in your server.",
-        "es": "✅ Tags guardadas!\n⚠️ Plan 50/50: tus tags tienen 50% de chance en los links de tu servidor.",
-        "fr": "✅ Tags enregistrées !\n⚠️ Plan 50/50 : tes tags ont 50% de chance sur les liens de ton serveur.",
-        "pt": "✅ Tags salvas com sucesso!\n⚠️ O plano atual é 50/50: suas tags têm 50% de chance de serem usadas nos links enviados no seu servidor.",
+        "de": "✅ Tags gespeichert!\n⚠️ 70/30-Plan: deine Tags haben 70% Chance in Links auf deinem Server.",
+        "en": "✅ Tags saved!\n⚠️ 70/30 plan: your tags have a 70% chance on links in your server.",
+        "es": "✅ Tags guardadas!\n⚠️ Plan 70/30: tus tags tienen 70% de chance en los links de tu servidor.",
+        "fr": "✅ Tags enregistrées !\n⚠️ Plan 70/30 : tes tags ont 70% de chance sur les liens de ton serveur.",
+        "pt": "✅ Tags salvas com sucesso!\n⚠️ O plano grátis é 70/30: suas tags têm 70% de chance de serem usadas nos links enviados no seu servidor.",
     },
     "mod.blacklist_added": {
         "de": "Hinzugefügt: {names}",

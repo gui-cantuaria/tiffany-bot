@@ -21,8 +21,10 @@ Run tests: `python -m unittest test_smoke -q`
 | Deals cog | `offers_cog.py` |
 | Supervisor | `launcher.py` |
 | i18n | `locale_utils.py`, `locales/` |
+| Tiffany OS Core (experimental, private-boundary) | `tiffany_core/` — see `tiffany_core/PRIVATE_CORE.md` |
 
-See `docs/*-technical.md` for module-specific notes.
+See `docs/*-technical.md` for module-specific notes.  
+Strategic boundary: `docs/open-ecosystem-strategy.md`. Security: `SECURITY.md`.
 
 ## Conventions
 

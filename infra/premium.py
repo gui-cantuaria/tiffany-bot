@@ -95,6 +95,7 @@ async def get_entitlement(
                     """
                     SELECT tier, expires_at, source FROM subscriptions
                     WHERE subject_type = $1 AND subject_id = $2
+                      AND cancelled_at IS NULL
                       AND (expires_at IS NULL OR expires_at > now())
                     ORDER BY tier DESC
                     LIMIT 1

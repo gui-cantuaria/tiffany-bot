@@ -1414,6 +1414,7 @@ class _GuildVoiceSession:
     history: list[str] = field(default_factory=list)  # recently played tracks (display names)
     random_picked: set[str] = field(default_factory=set)  # keys already picked by t!r this session
     autoplay: bool = False  # autoplay: play similar songs when queue ends
+    nightcore_enabled: bool = False  # state for Nightcore filter button sync
     stay_24_7: bool = False  # 24/7 mode: do not disconnect on inactivity
     volume_pct: int = VOLUME_DEFAULT  # stream volume 0–150 (everyone in VC)
     bitrate_kbps: int = 128  # Opus encode bitrate — matches the voice channel's cap (boost-aware)
@@ -1576,7 +1577,7 @@ _CMD_COOLDOWN_MAP: dict[str, float] = {
     "pl": 1.5, "playlist": 1.5,
     # 1.5–2s — network / AI / queue
     "p": 1.5, "play": 1.5, "join": 2.0,
-    "r": 1.5, "random": 1.5,
+    "rs": 1.5, "randomsong": 1.5, "r": 1.5, "random": 1.5,
     "c": 1.5, "chat": 1.5,
     "ff": 2.0, "seek": 2.0,
     "v": 1.0, "volume": 1.0, "vol": 1.0,
@@ -4041,7 +4042,7 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("sh", ["shuffle"], "t!sh / t!shuffle — embaralhar fila"),
     ("rpl", ["replay"], "t!replay — repetir do início"),
     ("q", ["queue", "np"], "t!q / t!queue — fila + música tocando agora"),
-    ("r", ["random"], "t!r / t!random — hit aleatório (catálogo 10.000; sem repetir na fila/sessão)"),
+    ("rs", ["randomsong", "r", "random"], "t!rs / t!randomsong — hit aleatório (catálogo 10.000; sem repetir na fila/sessão)"),
     ("pl", ["playlist"], "t!pl save|load|list|del <nome>"),
     ("ff", ["seek"], "t!ff / t!seek +30, -15, 1:30"),
     ("v", ["volume", "vol"], "t!v / t!volume [0-150] — volume do stream"),
@@ -4151,6 +4152,7 @@ PRESENCE_CMD_TAGLINES: dict[str, str] = {
     "play": "music in voice",
     "playlist": "saved playlists",
     "queue": "queue & now playing",
+    "randomsong": "random famous hit",
     "random": "random famous hit",
     "replay": "replay from start",
     "resume": "resume playback",
@@ -4445,59 +4447,197 @@ def _format_song_and_artist(title: str) -> str:
     return clean
 
 
-def _embed_now_playing(*, source_label: str, track_title: str, lang: GuildLang = "pt") -> discord.Embed:
-    """Single line: platform emoji + bold, localized 'Now playing: Song - Artist'."""
+def _embed_now_playing(
+    *, 
+    source_label: str, 
+    track_title: str, 
+    lang: GuildLang = "pt",
+    thumbnail: str = "",
+    duration_sec: float = 0,
+    requester: str = ""
+) -> discord.Embed:
+    """Enhanced, world-class Now Playing card with album thumbnail, duration, and requester info."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
     emoji = _platform_emoji(source_label)
     em.description = f"{emoji} " + tr(lang, "music.now_playing", title=track_line)
+    if thumbnail:
+        em.set_thumbnail(url=thumbnail)
+    footer_parts = []
+    if duration_sec > 0:
+        footer_parts.append(f"⏱️ Duração: {_fmt_dur(duration_sec)}")
+    if requester:
+        footer_parts.append(f"👤 Pedido por: {requester}")
+    if footer_parts:
+        em.set_footer(text="  ·  ".join(footer_parts))
     return em
 
 
 class PlayerControlView(discord.ui.View):
     def __init__(self, session: "_GuildVoiceSession", bot: discord.Client):
-        super().__init__(timeout=None)
+        super().__init__(timeout=3600.0)
         self.session = session
         self.bot = bot
 
-    @discord.ui.button(label="Autoplay", emoji="🤖", style=discord.ButtonStyle.secondary, custom_id="tiffany_autoplay")
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+        if getattr(self.session, "now_playing_msg", None):
+            try:
+                await self.session.now_playing_msg.edit(view=self)
+            except Exception:
+                pass
+
+    async def _check_permissions(self, interaction: discord.Interaction) -> bool:
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if not vc or not vc.is_connected():
+            await interaction.response.send_message("⚠️ O bot não está conectado em nenhum canal de voz no momento.", ephemeral=True)
+            return False
+        user_voice = getattr(interaction.user, "voice", None)
+        if not user_voice or not user_voice.channel or user_voice.channel != vc.channel:
+            await interaction.response.send_message("⚠️ Você precisa estar no mesmo canal de voz da Tiffany para controlar o player!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Pausar", emoji="⏯️", style=discord.ButtonStyle.secondary, row=0, custom_id="tif_ctrl_pause")
+    async def btn_pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
+        vc = interaction.guild.voice_client
+        is_wave = _is_wavelink_player(vc)
+        paused = vc.paused if is_wave else vc.is_paused()
+        if paused:
+            if is_wave:
+                await vc.pause(False)
+            else:
+                vc.resume()
+            button.label = "Pausar"
+            button.style = discord.ButtonStyle.secondary
+            msg = "▶️ Música retomada!"
+        else:
+            if is_wave:
+                await vc.pause(True)
+            else:
+                vc.pause()
+            button.label = "Retomar"
+            button.style = discord.ButtonStyle.primary
+            msg = "⏸️ Música pausada!"
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(msg, ephemeral=True)
+
+    @discord.ui.button(label="Pular", emoji="⏭️", style=discord.ButtonStyle.secondary, row=0, custom_id="tif_ctrl_skip")
+    async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
+        vc = interaction.guild.voice_client
+        self.session.skip_votes.clear()
+        _clear_loop(self.session)
+        if _is_wavelink_player(vc):
+            await vc.skip(force=True)
+        else:
+            vc.stop()
+        await interaction.response.send_message("⏭️ Faixa pulada para a próxima da fila!", ephemeral=True)
+
+    @discord.ui.button(label="Parar", emoji="⏹️", style=discord.ButtonStyle.danger, row=0, custom_id="tif_ctrl_stop")
+    async def btn_stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
+        vc = interaction.guild.voice_client
+        self.session.music_queue = asyncio.Queue()
+        self.session.queue_display.clear()
+        self.session.queue_durations.clear()
+        self.session.queue_requesters.clear()
+        _clear_loop(self.session)
+        if _is_wavelink_player(vc):
+            vc.queue.clear()
+            await vc.disconnect()
+        else:
+            await vc.disconnect()
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send("⏹️ Player encerrado e fila desconectada!", ephemeral=True)
+
+    @discord.ui.button(label="Loop", emoji="🔁", style=discord.ButtonStyle.secondary, row=0, custom_id="tif_ctrl_loop")
+    async def btn_loop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
+        self.session.loop_enabled = not getattr(self.session, "loop_enabled", False)
+        button.style = discord.ButtonStyle.success if self.session.loop_enabled else discord.ButtonStyle.secondary
+        status = "ativada" if self.session.loop_enabled else "desativada"
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(f"🔁 Repeticão da faixa {status}!", ephemeral=True)
+
+    @discord.ui.button(label="Shuffle", emoji="🔀", style=discord.ButtonStyle.secondary, row=0, custom_id="tif_ctrl_shuffle")
+    async def btn_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
+        vc = interaction.guild.voice_client
+        if _is_wavelink_player(vc) and hasattr(vc.queue, "shuffle") and len(vc.queue) > 1:
+            vc.queue.shuffle()
+        elif len(self.session.queue_display) > 1:
+            import random
+            combined = list(zip(self.session.queue_display, self.session.queue_durations, self.session.queue_requesters))
+            random.shuffle(combined)
+            self.session.queue_display, self.session.queue_durations, self.session.queue_requesters = map(list, zip(*combined))
+        await interaction.response.send_message("🔀 A fila de reprodução foi embaralhada!", ephemeral=True)
+
+    @discord.ui.button(label="Autoplay", emoji="🤖", style=discord.ButtonStyle.secondary, row=1, custom_id="tif_ctrl_autoplay")
     async def toggle_autoplay(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
         self.session.autoplay = not getattr(self.session, "autoplay", False)
         button.style = discord.ButtonStyle.success if self.session.autoplay else discord.ButtonStyle.secondary
         status = "ativado" if self.session.autoplay else "desativado"
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(f"🤖 Autoplay {status}! A festa não vai parar.", ephemeral=True)
 
-    @discord.ui.button(label="Nightcore", emoji="🌙", style=discord.ButtonStyle.secondary, custom_id="tiffany_nightcore")
+    @discord.ui.button(label="Nightcore", emoji="🌙", style=discord.ButtonStyle.secondary, row=1, custom_id="tif_ctrl_nightcore")
     async def toggle_nightcore(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permissions(interaction):
+            return
         vc = interaction.guild.voice_client if interaction.guild else None
         if not vc or not _is_wavelink_player(vc):
-            await interaction.response.send_message("Efeitos não suportados no modo atual.", ephemeral=True)
+            await interaction.response.send_message("Efeitos não suportados no modo atual (requer Lavalink).", ephemeral=True)
             return
         
         try:
             import wavelink
-            # Wavelink 3.x Filters
-            current = getattr(vc, "filters", None)
-            
-            # Simple toggle check based on button style
-            if button.style == discord.ButtonStyle.success:
-                filters = wavelink.Filters()
-                await vc.set_filters(filters)
+            self.session.nightcore_enabled = not getattr(self.session, "nightcore_enabled", False)
+            if not self.session.nightcore_enabled:
+                await vc.set_filters(wavelink.Filters())
                 button.style = discord.ButtonStyle.secondary
-                msg = "Filtro Nightcore desativado!"
+                msg = "🌙 Filtro Nightcore desativado!"
             else:
                 filters = wavelink.Filters()
                 filters.timescale.set(pitch=1.2, speed=1.1, rate=1.0)
                 await vc.set_filters(filters)
                 button.style = discord.ButtonStyle.success
-                msg = "Filtro Nightcore ativado!"
-                
+                msg = "🌙 Filtro Nightcore ativado!"
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(msg, ephemeral=True)
         except Exception as e:
             log.error(f"Filter error: {e}")
             await interaction.response.send_message("Erro ao aplicar o filtro.", ephemeral=True)
+
+    @discord.ui.button(label="Ver Fila", emoji="📜", style=discord.ButtonStyle.secondary, row=1, custom_id="tif_ctrl_queue")
+    async def btn_queue_show(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if vc and _is_wavelink_player(vc) and getattr(vc, "queue", None):
+            items = [f"**{i+1}.** {t.title[:50]} (`{_fmt_dur((t.length or 0)/1000)}`)" for i, t in enumerate(vc.queue[:10])]
+            total = len(vc.queue)
+        else:
+            items = [f"**{i+1}.** {q[:50]}" for i, q in enumerate(self.session.queue_display[:10])]
+            total = len(self.session.queue_display)
+        if not items:
+            await interaction.response.send_message("📜 A fila está vazia no momento. Adicione mais músicas com `/play`!", ephemeral=True)
+            return
+        desc = "\n".join(items)
+        if total > 10:
+            desc += f"\n\n*... e mais **{total - 10}** música(s) na fila.*"
+        em = discord.Embed(title="📜 Fila de Reprodução", description=desc, color=TIFFANY_PINK)
+        await interaction.response.send_message(embed=em, ephemeral=True)
+
 
 async def _post_now_playing(
     bot: discord.Client,
@@ -4511,13 +4651,49 @@ async def _post_now_playing(
     ch = bot.get_channel(session.text_channel_id)
     lang = resolve_guild_lang(getattr(ch, "guild", None))
     src = _track_source_label(query, resolved_platform=bool(_detect_music_platform(query)))
-    em = _embed_now_playing(source_label=src, track_title=track_title, lang=lang)
+
+    dur = getattr(session, "current_duration", 0)
+    req_id = getattr(session, "current_requester_id", 0)
+    requester_name = ""
+    if req_id and ch and getattr(ch, "guild", None):
+        member = ch.guild.get_member(req_id)
+        if member:
+            requester_name = member.display_name
+        else:
+            try:
+                user = bot.get_user(req_id)
+                if user:
+                    requester_name = user.name
+            except Exception:
+                pass
+
+    thumb = ""
+    vc = ch.guild.voice_client if getattr(ch, "guild", None) else None
+    if vc and _is_wavelink_player(vc):
+        curr = getattr(vc, "current", None)
+        if curr and getattr(curr, "artwork", None):
+            thumb = curr.artwork
+
+    em = _embed_now_playing(
+        source_label=src, 
+        track_title=track_title, 
+        lang=lang,
+        thumbnail=thumb,
+        duration_sec=dur,
+        requester=requester_name,
+    )
     view = PlayerControlView(session, bot)
     
-    # Check current Autoplay state
-    if getattr(session, "autoplay", False):
-        view.children[0].style = discord.ButtonStyle.success
-        
+    # Sync button styles from current session state
+    for b in view.children:
+        cid = getattr(b, "custom_id", "")
+        if cid == "tif_ctrl_autoplay" and getattr(session, "autoplay", False):
+            b.style = discord.ButtonStyle.success
+        elif cid == "tif_ctrl_nightcore" and getattr(session, "nightcore_enabled", False):
+            b.style = discord.ButtonStyle.success
+        elif cid == "tif_ctrl_loop" and getattr(session, "loop_enabled", False):
+            b.style = discord.ButtonStyle.success
+            
     q_key = _play_query_key(query)
     prev_np = session.now_playing_msg
     # Case 1 — this track has its own fresh command bubble ("🔎 Procurando" /
@@ -7888,7 +8064,7 @@ def register_voice(bot: commands.Bot) -> None:
         else:
             await ctx.send(embed=_embed(tr(lang, "cmd.playlist.invalid_action")))
 
-    @bot.hybrid_command(name="random", aliases=["r"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.random"))
+    @bot.hybrid_command(name="randomsong", aliases=["rs", "r", "random"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.random"))
     @_guild_slash
     async def cmd_random(ctx: commands.Context, *, query: str = ""):
         if not await _require_voice(ctx):

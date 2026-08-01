@@ -256,7 +256,7 @@
   "manipulation.2": "🛡️ **우회 시도 감지.** 차단된 콘텐츠를 반복·철자·번역하지 않아요.",
   "manipulation.3": "🛡️ **저한테는 통하지 않아요.** 인코딩, 뒤집기, 위장해도 답은 같아요.",
   "manipulation.4": "🛡️ **필터 작동.** 어떻게 쓰든 — 내용이 중요해요.",
-  "mod.affiliate_saved": "✅ 태그 저장!\n⚠️ 50/50 플랜: 서버 링크에 태그가 50% 확률로 적용됩니다.",
+  "mod.affiliate_saved": "✅ 태그 저장!\n⚠️ 70/30 플랜: 서버 링크에 태그가 70% 확률로 적용됩니다.",
   "mod.blacklist_added": "추가됨: {names}",
   "mod.blacklist_count": "{count}명",
   "mod.blacklist_removed": "제거됨: {names}",

@@ -53,9 +53,9 @@ class TestResolveLang(unittest.TestCase):
             locale_utils._user_lang_cache.pop("999001", None)
 
     def test_guild_locale_not_used_without_user_pref(self):
-        """Interactive output ignores server locale — defaults to en."""
+        """Interactive output ignores server locale — defaults to pt."""
         lang = locale_utils.resolve_lang(None, None)
-        self.assertEqual(lang, "en")
+        self.assertEqual(lang, "pt")
 
     def test_discord_locale_fallback(self):
         lang = locale_utils.resolve_lang(None, None, discord_locale="fr")
@@ -314,7 +314,7 @@ class TestI18nLoader(unittest.TestCase):
                 self.assertNotEqual(got, key, msg=f"{lang}:{key} leaked raw key")
 
     def test_fallback_chain_defaults_to_english(self):
-        self.assertEqual(locale_utils.DEFAULT_LANG, "en")
+        self.assertEqual(locale_utils.DEFAULT_LANG, "pt")
         unknown = locale_utils.tr("xx", "help.title")  # type: ignore[arg-type]
         self.assertEqual(unknown, locale_utils.tr("en", "help.title"))
 

@@ -3,6 +3,7 @@ from discord.ui import View, Button, Select, ChannelSelect, RoleSelect, UserSele
 import guild_config
 from feature_flags import GUILD_FEATURE_KEYS, feature_label
 from locale_utils import tr, GuildLang, interaction_lang
+from tiffany_core.adapters.command_visibility import command_visibility_syncer
 
 def build_mod_panel_embed(guild: discord.Guild, lang: GuildLang, *, pink: int) -> discord.Embed:
     config = guild_config.get_guild_config(guild.id)
@@ -234,6 +235,13 @@ class GuildFeatureSelectView(View):
             ephemeral=True,
         )
         await self.parent._update(interaction)
+        # Automatically conceal/restore slash commands from this guild's Discord UI menu
+        if interaction.client and self.parent.guild:
+            command_visibility_syncer.schedule_guild_sync(
+                interaction.client,
+                self.parent.guild,
+                self.parent.config.get("features", {})
+            )
 
 
 class RoleSelectView(View):

@@ -28,14 +28,10 @@ except Exception as e:
 class SubscriptionService:
     
     @staticmethod
-    async def get_plan(subject_id: int, subject_type: str = "guild") -> str:
-        """Returns the active plan name for a user or guild, or 'free'."""
-        pool = postgres.pool()
-        if not pool:
-            return "free"
-            
-        try:
-            async with pool.acquire() as conn:
+    async def get_plan(subject_id: int, subject_type: str = "guild", conn: Any = None) -> str:
+        """Returns the active plan name for a user or guild, or 'free'. Reuses DB conn if provided."""
+        if conn is not None:
+            try:
                 row = await conn.fetchrow(
                     """
                     SELECT tier, expires_at 
@@ -45,7 +41,26 @@ class SubscriptionService:
                     int(subject_id), subject_type
                 )
                 if row:
-                    # In a real app, check expires_at here
+                    return row["tier"]
+            except Exception as e:
+                log.warning("SubscriptionService.get_plan error on provided conn: %s", e)
+            return "free"
+
+        pool = postgres.pool()
+        if not pool:
+            return "free"
+            
+        try:
+            async with pool.acquire() as db_conn:
+                row = await db_conn.fetchrow(
+                    """
+                    SELECT tier, expires_at 
+                    FROM subscriptions 
+                    WHERE subject_id = $1 AND subject_type = $2 AND cancelled_at IS NULL
+                    """,
+                    int(subject_id), subject_type
+                )
+                if row:
                     return row["tier"]
         except Exception as e:
             log.warning("SubscriptionService.get_plan error: %s", e)
@@ -72,6 +87,8 @@ class SubscriptionService:
             
         # 2. Time in server check (simulated via guild.me.joined_at)
         import datetime
+
+        import discord
         if guild.me and guild.me.joined_at:
             days_in_server = (discord.utils.utcnow() - guild.me.joined_at).days
             if days_in_server < 30:

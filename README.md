@@ -85,6 +85,8 @@ The bot relies heavily on the `.env` file to toggle modules and configure APIs. 
 
 We welcome contributions from the open-source community! If you'd like to improve Tiffany, please follow these steps:
 
+> **Boundary notice:** This repository contains both the production **Tiffany Bot** (Discord integration) and the experimental **Tiffany OS Core** (`tiffany_core/`, private-boundary intelligence). See [`docs/open-ecosystem-strategy.md`](docs/open-ecosystem-strategy.md) before contributing to core platform code.
+
 1. Fork the project.
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
