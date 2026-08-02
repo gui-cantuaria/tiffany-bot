@@ -118,7 +118,7 @@ jobs:
             -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \
-            root@"$VPS_HOST" "export DEPLOY_MODE=systemd EXPECTED_SHA=${{ github.sha }} && bash /opt/tiffany-bot/scripts/deploy.sh"
+            root@"$VPS_HOST" "cd /opt/tiffany-bot && git fetch origin main && git reset --hard origin/main && export DEPLOY_MODE=systemd EXPECTED_SHA=${{ github.sha }} && bash /opt/tiffany-bot/scripts/deploy.sh"
 
       - name: Post-deploy health check
         env:

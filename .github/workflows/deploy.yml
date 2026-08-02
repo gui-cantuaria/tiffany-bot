@@ -75,4 +75,4 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=45 \
-            root@"$VPS_HOST" "export DEPLOY_MODE=systemd EXPECTED_SHA=$EXPECTED_SHA && bash /opt/tiffany-bot/scripts/deploy.sh"
+            root@"$VPS_HOST" "cd /opt/tiffany-bot && git fetch origin main && git reset --hard origin/main && export DEPLOY_MODE=systemd EXPECTED_SHA=$EXPECTED_SHA && bash /opt/tiffany-bot/scripts/deploy.sh"

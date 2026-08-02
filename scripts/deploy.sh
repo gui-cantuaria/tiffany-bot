@@ -4,6 +4,7 @@
 # Redesigned for Phase 12, 13, 14, 18: Atomic state preservation, deployment locking, and automatic rollback on health failure.
 set -e
 
+_deploy_main() {
 cd /opt/tiffany-bot
 REPO_DIR="$(pwd)"
 LOCK_FILE="${REPO_DIR}/.deploy.lock"
@@ -161,11 +162,11 @@ if [ ! -x "$VENV/bin/python" ]; then
     echo "[deploy] Criando venv..."
     (python3.11 -m venv "$VENV" 2>/dev/null) || python3 -m venv "$VENV"
 fi
-PIP="$VENV/bin/pip"
+PIP_PYTHON="$VENV/bin/python"
 
 echo "[deploy] Instalando dependências novas..."
-"$PIP" install -q --upgrade pip || { _trigger_rollback; exit 1; }
-"$PIP" install -q -r requirements.txt || { _trigger_rollback; exit 1; }
+"$PIP_PYTHON" -m pip install -q --no-cache-dir --upgrade pip || { _trigger_rollback; exit 1; }
+"$PIP_PYTHON" -m pip install -q --no-cache-dir -r requirements.txt || { _trigger_rollback; exit 1; }
 
 if [ -f .env ] && grep -qE '^LAVALINK_ENABLED=1' .env; then
     echo "[deploy] LAVALINK_ENABLED=1 — starting Lavalink container..."
@@ -232,3 +233,6 @@ else
     _trigger_rollback
     exit 1
 fi
+}
+
+_deploy_main "$@"
