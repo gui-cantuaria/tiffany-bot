@@ -4454,22 +4454,36 @@ def _embed_now_playing(
     lang: GuildLang = "pt",
     thumbnail: str = "",
     duration_sec: float = 0,
-    requester: str = ""
+    requester: str = "",
+    requester_icon: str = "",
+    url: str = "",
+    artist: str = ""
 ) -> discord.Embed:
-    """Enhanced, world-class Now Playing card with album thumbnail, duration, and requester info."""
+    """Enhanced, world-class Now Playing card in Jockie Music style with clickable title, artist, duration, and album artwork."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
+    if track_line in ("link recebido", ""):
+        track_line = "Faixa Selecionada"
     emoji = _platform_emoji(source_label)
-    em.description = f"{emoji} " + tr(lang, "music.now_playing", title=track_line)
+    em.title = f"🎵 {'Tocando agora' if lang == 'pt' else 'Now Playing'}"
+    if url and url.startswith("http"):
+        em.description = f"{emoji} **[{track_line}]({url})**"
+    else:
+        em.description = f"{emoji} **{track_line}**"
+    if artist:
+        artist_lbl = "👤 Canal / Artista" if lang == "pt" else "👤 Artist / Channel"
+        em.add_field(name=artist_lbl, value=f"`{artist[:80]}`", inline=True)
+    if duration_sec > 0:
+        dur_lbl = "⏱️ Duração" if lang == "pt" else "⏱️ Duration"
+        em.add_field(name=dur_lbl, value=f"`{_fmt_dur(duration_sec)}`", inline=True)
     if thumbnail:
         em.set_thumbnail(url=thumbnail)
-    footer_parts = []
-    if duration_sec > 0:
-        footer_parts.append(f"⏱️ Duração: {_fmt_dur(duration_sec)}")
-    if requester:
-        footer_parts.append(f"👤 Pedido por: {requester}")
-    if footer_parts:
-        em.set_footer(text="  ·  ".join(footer_parts))
+    footer_txt = f"Pedido por {requester[:80]}" if lang == "pt" and requester else (f"Requested by {requester[:80]}" if requester else "")
+    if footer_txt:
+        if requester_icon and requester_icon.startswith("http"):
+            em.set_footer(text=footer_txt, icon_url=requester_icon)
+        else:
+            em.set_footer(text=footer_txt)
     return em
 
 
@@ -4668,11 +4682,20 @@ async def _post_now_playing(
                 pass
 
     thumb = ""
+    curr_url = ""
+    curr_artist = ""
     vc = ch.guild.voice_client if getattr(ch, "guild", None) else None
     if vc and _is_wavelink_player(vc):
         curr = getattr(vc, "current", None)
-        if curr and getattr(curr, "artwork", None):
-            thumb = curr.artwork
+        if curr:
+            thumb = getattr(curr, "artwork", "") or getattr(curr, "artwork_url", "") or _youtube_thumb_url(getattr(curr, "uri", "") or query) or ""
+            curr_url = getattr(curr, "uri", "") or query
+            curr_artist = getattr(curr, "author", "") or ""
+
+    if not thumb:
+        thumb = _youtube_thumb_url(query) or ""
+    if not curr_url and query.startswith("http"):
+        curr_url = query
 
     em = _embed_now_playing(
         source_label=src, 
@@ -4681,6 +4704,8 @@ async def _post_now_playing(
         thumbnail=thumb,
         duration_sec=dur,
         requester=requester_name,
+        url=curr_url,
+        artist=curr_artist,
     )
     view = PlayerControlView(session, bot)
     
@@ -4841,29 +4866,50 @@ def _embed_music_added(
     track_count: int = 0,
     playlist_duration_sec: float = 0,
     source_label: str = "",
+    requester_icon: str = "",
+    url: str = "",
+    artist: str = "",
 ) -> discord.Embed:
     em = discord.Embed(color=TIFFANY_PINK)
     if kind == "playlist":
-        em.title = tr(lang, "music.playlist_added.title")
+        em.title = f"📁 {'Playlist adicionada à fila' if lang == 'pt' else 'Playlist added to queue'}"
         em.description = f"**{title[:200]}**"
-        em.add_field(name=tr(lang, "music.field.tracks"), value=str(track_count), inline=True)
+        em.add_field(name=tr(lang, "music.field.tracks"), value=f"`{track_count}`", inline=True)
         em.add_field(
             name=tr(lang, "music.field.est_duration"),
-            value=_fmt_dur(playlist_duration_sec),
+            value=f"`{_fmt_dur(playlist_duration_sec)}`",
             inline=True,
         )
     else:
-        em.title = tr(lang, "music.track_added.title")
-        # Clean "Song - Artist" (drops '(Official Video)', reorders) like now playing.
-        em.description = f"**{_format_song_and_artist(title)[:200]}**"
+        em.title = f"🎵 {'Adicionado à fila' if lang == 'pt' else 'Added to queue'}"
+        clean_title = _format_song_and_artist(title)[:200]
+        if clean_title in ("link recebido", ""):
+            clean_title = "Faixa Selecionada"
+        if url and url.startswith("http"):
+            em.description = f"**[{clean_title}]({url})**"
+        else:
+            em.description = f"**{clean_title}**"
+        if artist:
+            artist_lbl = "👤 Canal" if lang == "pt" else "👤 Channel"
+            em.add_field(name=artist_lbl, value=f"`{artist[:80]}`", inline=True)
         if duration_sec > 0:
-            em.add_field(name=tr(lang, "music.field.duration"), value=_fmt_dur(duration_sec), inline=True)
-        if position > 1:
-            em.add_field(name=tr(lang, "music.field.position"), value=str(position), inline=True)
-            em.add_field(name=tr(lang, "music.field.eta"), value=_fmt_dur(eta_sec), inline=True)
-        if queue_total > 0:
-            em.add_field(name=tr(lang, "music.field.queue_items"), value=str(queue_total), inline=True)
-    em.set_footer(text=tr(lang, "music.footer.requester", requester=requester[:80]))
+            dur_lbl = "⏱️ Duração" if lang == "pt" else "⏱️ Duration"
+            em.add_field(name=dur_lbl, value=f"`{_fmt_dur(duration_sec)}`", inline=True)
+        if position >= 1:
+            pos_lbl = "🔢 Posição na fila" if lang == "pt" else "🔢 Position in queue"
+            em.add_field(name=pos_lbl, value=f"`#{position}`", inline=True)
+        if eta_sec > 0 and position > 1:
+            eta_lbl = "⏳ Tempo estimado" if lang == "pt" else "⏳ Estimated time"
+            em.add_field(name=eta_lbl, value=f"`{_fmt_dur(eta_sec)}`", inline=True)
+        elif position == 1:
+            eta_lbl = "⏳ Tempo estimado" if lang == "pt" else "⏳ Estimated time"
+            now_txt = "A seguir" if lang == "pt" else "Next up"
+            em.add_field(name=eta_lbl, value=f"`{now_txt}`", inline=True)
+    footer_txt = f"Pedido por {requester[:80]}" if lang == "pt" else f"Requested by {requester[:80]}"
+    if requester_icon and requester_icon.startswith("http"):
+        em.set_footer(text=footer_txt, icon_url=requester_icon)
+    else:
+        em.set_footer(text=footer_txt)
     if thumbnail:
         em.set_thumbnail(url=thumbnail)
     return em
@@ -8334,7 +8380,13 @@ def register_voice(bot: commands.Bot) -> None:
                 ))
                 return
 
-            track_display = track.title or display
+            _t_title = getattr(track, "title", None)
+            if _t_title and _t_title != "link recebido":
+                track_display = _t_title
+            elif display and display != "link recebido":
+                track_display = display
+            else:
+                track_display = "Faixa do YouTube / Plataforma"
             # Post-resolution block: literal list only — AI runs in background like yt-dlp mode.
             _lv_src = getattr(track, "uri", "") or query
             if _contains_blocked_content(track_display) or _contains_blocked_content(_lv_src):
@@ -8373,6 +8425,12 @@ def register_voice(bot: commands.Bot) -> None:
 
             _append_queue_item(sess, track_display, track_dur_sec, ctx.author.id)
 
+            req = ctx.author.display_name or str(ctx.author)
+            req_icon = getattr(getattr(ctx.author, "display_avatar", None), "url", "") or ""
+            _lbl_q = getattr(track, "uri", "") or query
+            _author = getattr(track, "author", "") or ""
+            _thumb = getattr(track, "artwork", "") or getattr(track, "artwork_url", "") or _youtube_thumb_url(_lbl_q) or ""
+
             if not player.playing:
                 await player.play(track)
                 await _apply_stream_volume(player, sess)
@@ -8391,19 +8449,24 @@ def register_voice(bot: commands.Bot) -> None:
                     ),
                     track_title=track_display[:200],
                     lang=lang,
+                    thumbnail=_thumb,
+                    duration_sec=track_dur_sec,
+                    requester=req,
+                    requester_icon=req_icon,
+                    url=_lbl_q,
+                    artist=_author,
                 ))
                 asyncio.create_task(_bg_moderation_guard(sess, vc, bot, track_display, _lv_src))
             else:
                 player.queue.put(track)
-                req = ctx.author.display_name or str(ctx.author)
                 pos = len(sess.queue_display) + (1 if sess.current_song else 0)
                 eta = _queue_eta_sec(sess)
-                _lbl_q = getattr(track, "uri", "") or query
                 await status.edit(embed=_embed_music_added(
                     kind="track", title=track_display, requester=req, lang=lang,
                     duration_sec=track_dur_sec, position=pos,
                     queue_total=pos, eta_sec=eta,
                     source_label=_track_source_label(_lbl_q, resolved_platform=bool(_detect_music_platform(_lbl_q))),
+                    requester_icon=req_icon, url=_lbl_q, artist=_author, thumbnail=_thumb,
                 ))
             return
 
@@ -8603,6 +8666,7 @@ def register_voice(bot: commands.Bot) -> None:
         _append_queue_item(sess, display, track_dur, ctx.author.id)
         await sess.music_queue.put(query)
         req = ctx.author.display_name or str(ctx.author)
+        req_icon = getattr(getattr(ctx.author, "display_avatar", None), "url", "") or ""
         pos = len(sess.queue_display) + (1 if sess.current_song else 0)
         eta = _queue_eta_sec(sess)
         await status.edit(
@@ -8616,6 +8680,9 @@ def register_voice(bot: commands.Bot) -> None:
                 queue_total=len(sess.queue_display) + (1 if sess.current_song else 0),
                 eta_sec=eta,
                 source_label=_track_source_label(query, resolved_platform=bool(_detect_music_platform(query))),
+                requester_icon=req_icon,
+                url=query if query.startswith("http") else "",
+                thumbnail=_youtube_thumb_url(query) or "",
             )
         )
         sess.last_play_status_msg = status
