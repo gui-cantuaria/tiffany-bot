@@ -29,10 +29,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
 
-      - name: [Gate A] Static Analysis & Syntax Verification
+      - name: Gate A - Static Analysis & Syntax Verification
         run: python -m py_compile *.py infra/*.py
 
-      - name: [Gate B] Run lifecycle and smoke unit tests
+      - name: Gate B - Run lifecycle and smoke unit tests
         env:
           PYTHONUTF8: '1'
         run: |
@@ -41,7 +41,7 @@ jobs:
             test_premium_isolation.py test_failure_classification.py -v
           python -m unittest test_smoke -v
 
-      - name: [Gate C] Run Dedicated Music/Voice Regression & Isolation Suite
+      - name: Gate C - Run Dedicated Music/Voice Regression & Isolation Suite
         env:
           PYTHONUTF8: '1'
         run: python -m unittest test_music_regression -v
@@ -63,7 +63,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
 
-      - name: [Gate E] Deploy via SSH
+      - name: Gate E - Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}

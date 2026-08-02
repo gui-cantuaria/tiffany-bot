@@ -32,10 +32,10 @@ jobs:
       - name: Record validated SHA
         run: echo "VALIDATED_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
 
-      - name: [Gate A] Static Analysis & Syntax Verification
+      - name: Gate A - Static Analysis & Syntax Verification
         run: python -m py_compile *.py infra/*.py
 
-      - name: [Gate B] Run lifecycle, rollback, isolation, and smoke unit tests
+      - name: Gate B - Run lifecycle, rollback, isolation, and smoke unit tests
         env:
           PYTHONUTF8: '1'
         run: |
@@ -44,7 +44,7 @@ jobs:
             test_premium_isolation.py test_failure_classification.py -v --tb=short
           python -m unittest test_smoke -v
 
-      - name: [Gate C] Run Dedicated Music/Voice Regression & Isolation Suite
+      - name: Gate C - Run Dedicated Music/Voice Regression & Isolation Suite
         env:
           PYTHONUTF8: '1'
         run: python -m unittest test_music_regression -v
