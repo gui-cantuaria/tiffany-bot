@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script de deploy para a VPS — chamado pelo GitHub Actions ou manualmente.
 # Uso: bash /opt/tiffany-bot/scripts/deploy.sh
-# Retrigger deploy: 2026-08-01 (retrigger vps deployment after configuration updates)
+# Retrigger deploy: 2026-08-01-v2 (upgrade lavalink youtube-source plugin to 1.14.0 for YouTube cipher fix)
 #
 # Modos:
 #   Docker (padrão se docker compose + docker-compose.yml existirem)
