@@ -16,6 +16,23 @@ def db_enabled() -> bool:
     return bool(os.getenv("DATABASE_URL", "").strip())
 
 
+def _parse_database_url(url: str) -> tuple[str, dict[str, Any]]:
+    """Strip libpq-style query params that asyncpg expects as kwargs."""
+    from urllib.parse import parse_qs, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    if not parsed.query:
+        return url, {}
+    qs = parse_qs(parsed.query, keep_blank_values=True)
+    kwargs: dict[str, Any] = {}
+    ssl_vals = qs.pop("ssl", [])
+    if ssl_vals and ssl_vals[0].lower() in ("disable", "false", "0", "off"):
+        kwargs["ssl"] = False
+    clean_query = "&".join(f"{k}={v[0]}" for k, v in qs.items() if v)
+    clean = urlunparse(parsed._replace(query=clean_query))
+    return clean, kwargs
+
+
 async def init_db() -> None:
     global _pool
     url = os.getenv("DATABASE_URL", "").strip()
@@ -24,7 +41,14 @@ async def init_db() -> None:
         return
     try:
         import asyncpg
-        _pool = await asyncpg.create_pool(url, min_size=1, max_size=10, command_timeout=30)
+        clean_url, pool_kwargs = _parse_database_url(url)
+        _pool = await asyncpg.create_pool(
+            clean_url,
+            min_size=1,
+            max_size=10,
+            command_timeout=30,
+            **pool_kwargs,
+        )
         log.info("PostgreSQL pool ready")
     except ImportError:
         log.warning("asyncpg not installed — pip install asyncpg for DB features")

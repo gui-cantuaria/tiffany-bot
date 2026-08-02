@@ -1,0 +1,62 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'schema/**'
+      - 'docker-compose.integration.yml'
+      - '.github/workflows/integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'schema/**'
+      - 'docker-compose.integration.yml'
+      - '.github/workflows/integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      TIFFANY_INTEGRATION_TESTS: "1"
+      INTEGRATION_DATABASE_URL: postgresql://tiffany_test:tiffany_test@127.0.0.1:5433/tiffany_test?ssl=disable
+      INTEGRATION_REDIS_URL: redis://127.0.0.1:6380/0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL 16 and Redis 7
+        run: docker compose -f docker-compose.integration.yml up -d --wait
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run unit lifecycle tests
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          python -m pytest test_phase10_lifecycle.py test_phase11_lifecycle.py test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py -v
+
+      - name: Run real infrastructure integration tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m pytest tests/integration -v --tb=short
+
+      - name: Run smoke tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest test_smoke -v
+
+      - name: Tear down integration containers
+        if: always()
+        run: docker compose -f docker-compose.integration.yml down -v

@@ -8028,7 +8028,7 @@ def register_voice(bot: commands.Bot) -> None:
                 await existing_vc.disconnect(force=True)
             except Exception:
                 pass
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(1.0)
 
         # Connect
         try:
@@ -8069,7 +8069,7 @@ def register_voice(bot: commands.Bot) -> None:
                                 await existing.disconnect(force=True)
                             except Exception:
                                 pass
-                            await asyncio.sleep(0.05)
+                            await asyncio.sleep(1.0)
                         vc = await asyncio.wait_for(
                             channel.connect(self_deaf=False),
                             timeout=timeout,
@@ -8722,7 +8722,7 @@ def register_voice(bot: commands.Bot) -> None:
                 _thumb = ""
 
             try:
-                if not player.playing:
+                if not player.playing or not getattr(player, "current", None):
                     await player.play(track)
                     await _apply_stream_volume(player, sess)
                     sess.current_song = track_display
