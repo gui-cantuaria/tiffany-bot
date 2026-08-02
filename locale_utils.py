@@ -710,7 +710,14 @@ def build_public_status_embed(
     em.add_field(name=tr(lang, "status.public.field_connection"), value=conexao_txt, inline=True)
     em.add_field(name=tr(lang, "status.public.field_resources"), value=recursos_txt, inline=True)
     em.add_field(name=tr(lang, "status.public.field_offers"), value=tr(lang, "status.public.offers_active"), inline=True)
-    em.set_footer(text=tr(lang, "status.public.footer"))
+    try:
+        from infra import subsystems
+        ver = subsystems.get_version()
+        sha = subsystems.get_commit_sha()[:7]
+        footer_txt = f"{tr(lang, 'status.public.footer')} • v{ver} (Commit {sha})"
+    except Exception:
+        footer_txt = tr(lang, "status.public.footer")
+    em.set_footer(text=footer_txt)
     return em
 
 

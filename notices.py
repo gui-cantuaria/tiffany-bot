@@ -26,6 +26,10 @@ import updates as tiffany_updates
 import owner_dashboard
 import guild_config
 from brand_colors import TIFFANY_PINK, TIFFANY_RED
+from infra import subsystems
+
+subsystems.register_subsystem("Core commands", "READY", "Basic bot routing and events initialized", mandatory=True)
+subsystems.log_event("BOOT_START", "core", "INFO", f"Initializing Tiffany Bot (commit {subsystems.get_commit_sha()})")
 
 try:
     import tiffany_voice
@@ -39,6 +43,8 @@ except Exception as _ve:
     )
     tiffany_voice = None
     _voice_available = False
+    subsystems.register_subsystem("Voice subsystem", "FAILED", f"Import exception: {_ve}", mandatory=True)
+    subsystems.log_event("EXTENSION_LOAD_FAILED", "voice", "ERROR", str(_ve))
 
 # =========================
 # CONFIGURATION
@@ -2425,30 +2431,52 @@ async def setup_hook():
     """Load cogs and sync slash commands before the bot goes online (reduces 'outdated command')."""
     await _load_bot_extensions()
     await _sync_slash_commands()
+    subsystems.log_boot_summary(log)
     log.info("Bot extensions loaded and slash commands synced (setup_hook).")
 
 
 async def _load_bot_extensions() -> None:
+    # 1. Offers Cog (Optional)
     if not discord_client.get_cog("OffersCog"):
         try:
             await discord_client.load_extension("offers_cog")
-            log.info("🛒 Offers Cog loaded successfully.")
+            subsystems.register_subsystem("Offers", "READY", "Offers Cog loaded successfully", mandatory=False, log_instance=log)
+            subsystems.log_event("EXTENSION_LOAD", "offers", details="offers_cog loaded")
         except Exception as e:
             log.error("❌ Failed to load Offers Cog: %s", e)
-    for ext in ("giveaways_cog", "embed_builder_cog"):
-        cog_name = {"giveaways_cog": "GiveawaysCog", "embed_builder_cog": "EmbedBuilderCog"}[ext]
-        if not discord_client.get_cog(cog_name):
+            subsystems.register_subsystem("Offers", "DEGRADED", f"Load failed: {e}", mandatory=False, log_instance=log)
+            subsystems.log_event("EXTENSION_LOAD_FAILED", "offers", "WARNING", details=str(e))
+
+    # 2. Giveaways & EmbedBuilder (Optional)
+    for ext, name, sub_name in [("giveaways_cog", "GiveawaysCog", "Giveaways"), ("embed_builder_cog", "EmbedBuilderCog", "EmbedBuilder")]:
+        if not discord_client.get_cog(name):
             try:
                 await discord_client.load_extension(ext)
-                log.info("%s loaded successfully.", ext)
+                subsystems.register_subsystem(sub_name, "READY", f"{ext} loaded", mandatory=False, log_instance=log)
+                subsystems.log_event("EXTENSION_LOAD", sub_name.lower(), details=ext)
             except Exception as e:
                 log.error("Failed to load %s: %s", ext, e)
-    if os.getenv("STRIPE_SECRET_KEY", "").strip() and not discord_client.get_cog("PremiumCog"):
-        try:
-            await discord_client.load_extension("premium_cog")
-            log.info("Premium Cog loaded (Stripe checkout enabled).")
-        except Exception as e:
-            log.error("Failed to load Premium Cog: %s", e)
+                subsystems.register_subsystem(sub_name, "DEGRADED", f"Load failed: {e}", mandatory=False, log_instance=log)
+                subsystems.log_event("EXTENSION_LOAD_FAILED", sub_name.lower(), "WARNING", details=str(e))
+
+    # 3. Premium & Payments (Optional/Conditional)
+    if os.getenv("STRIPE_SECRET_KEY", "").strip():
+        if not discord_client.get_cog("PremiumCog"):
+            try:
+                await discord_client.load_extension("premium_cog")
+                subsystems.register_subsystem("Premium", "READY", "Stripe checkout integrated", mandatory=False, log_instance=log)
+                subsystems.register_subsystem("Payments", "READY", "Stripe secret configured", mandatory=False, log_instance=log)
+                subsystems.log_event("PREMIUM_READY", "premium", details="premium_cog loaded")
+                subsystems.log_event("STRIPE_READY", "payments", details="Stripe secret key present")
+            except Exception as e:
+                log.error("Failed to load Premium Cog: %s", e)
+                subsystems.register_subsystem("Premium", "DEGRADED", f"Load exception: {e}", mandatory=False, log_instance=log)
+                subsystems.register_subsystem("Payments", "DEGRADED", "Premium cog failed to initialize", mandatory=False, log_instance=log)
+                subsystems.log_event("EXTENSION_LOAD_FAILED", "premium", "WARNING", details=str(e))
+    else:
+        subsystems.register_subsystem("Premium", "DISABLED", "STRIPE_SECRET_KEY not set in env", mandatory=False, log_instance=log)
+        subsystems.register_subsystem("Payments", "DISABLED", "STRIPE_SECRET_KEY not set in env", mandatory=False, log_instance=log)
+
 
 
 async def _reload_offers_extension() -> None:
@@ -2500,12 +2528,27 @@ async def on_ready():
     _first_ready_done = True
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
     try:
-        from infra import redis_client, postgres, stripe_server
+        from infra import redis_client, postgres, stripe_server, subsystems
         from infra import i18n_loader
-        await redis_client.init_redis()
-        await postgres.init_db()
-        await postgres.run_migrations()
-        await stripe_server.start_stripe_server(discord_client)
+        try:
+            await redis_client.init_redis()
+            subsystems.register_subsystem("Redis", "READY", "Redis connection initialized", mandatory=False, log_instance=log)
+            subsystems.log_event("REDIS_READY", "infra")
+        except Exception as e:
+            subsystems.register_subsystem("Redis", "DEGRADED", f"Redis init failed: {e}", mandatory=False, log_instance=log)
+        try:
+            await postgres.init_db()
+            await postgres.run_migrations()
+            subsystems.register_subsystem("PostgreSQL", "READY", "PostgreSQL database and migrations ready", mandatory=False, log_instance=log)
+            subsystems.log_event("POSTGRES_READY", "infra")
+        except Exception as e:
+            subsystems.register_subsystem("PostgreSQL", "DEGRADED", f"PostgreSQL init failed: {e}", mandatory=False, log_instance=log)
+        try:
+            await stripe_server.start_stripe_server(discord_client)
+            subsystems.register_subsystem("Stripe", "READY", "Stripe server running", mandatory=False, log_instance=log)
+            subsystems.log_event("STRIPE_READY", "infra")
+        except Exception as e:
+            subsystems.register_subsystem("Stripe", "DEGRADED", f"Stripe server failed: {e}", mandatory=False, log_instance=log)
         i18n_loader.ensure_loaded()
         try:
             from infra.repositories import user_preferences as up
@@ -2527,6 +2570,31 @@ async def on_ready():
     if not _heartbeat_logger.is_running():
         _heartbeat_logger.start()
 
+    # Phase 14 & 15: Runtime Version Verification Banner
+    try:
+        from infra import subsystems
+        status_data = subsystems.get_all_subsystems()
+        sha = subsystems.get_commit_sha()
+        build_ts = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        env_val = os.getenv("TIFFANY_ENV", "production" if os.getenv("VPS_HOST") or os.path.exists("/opt/tiffany-bot") else "development")
+
+        log.info("=================================================================")
+        log.info("🚀 TIFFANY OS — RUNTIME VERSION VERIFICATION BANNER")
+        log.info(f"Tiffany version: {subsystems.get_version()}")
+        log.info(f"Git commit: {sha}")
+        log.info(f"Build timestamp: {build_ts}")
+        log.info(f"Environment: {env_val}")
+        log.info(f"Music subsystem: {status_data.get('Voice subsystem', {}).get('status', 'UNINITIALIZED')}")
+        log.info(f"Lavalink: {status_data.get('Lavalink', {}).get('status', 'UNINITIALIZED')}")
+        log.info(f"PostgreSQL: {status_data.get('PostgreSQL', {}).get('status', 'UNINITIALIZED')}")
+        log.info(f"Redis: {status_data.get('Redis', {}).get('status', 'UNINITIALIZED')}")
+        log.info(f"Stripe: {status_data.get('Stripe', {}).get('status', 'UNINITIALIZED')}")
+        opt_mods = [f"{k}={v.get('status')}" for k, v in status_data.items() if k in ("Premium", "Offers", "Giveaways", "EmbedBuilder")]
+        log.info(f"Optional modules: {', '.join(opt_mods)}")
+        log.info("=================================================================")
+    except Exception as e:
+        log.warning("Failed to emit runtime version banner: %s", e)
+
 
 @discord_client.event
 async def on_disconnect():
@@ -2541,6 +2609,7 @@ async def on_resumed():
 @discord_client.event
 async def on_close():
     global http_session
+    subsystems.log_event("SHUTDOWN_START", "core", details="Initiating graceful bot shutdown sequence")
     try:
         from infra import redis_client, postgres, stripe_server
         if _voice_available and tiffany_voice:
@@ -2556,6 +2625,7 @@ async def on_close():
     if http_session:
         await http_session.close()
         http_session = None
+    subsystems.log_event("SHUTDOWN_COMPLETE", "core", details="All background tasks and infrastructures cleanly terminated")
     log.info("🔌 HTTP session closed. Bot shutting down.")
 
 
@@ -2642,6 +2712,13 @@ atexit.register(_sync_cleanup)
 if _voice_available and tiffany_voice:
     try:
         tiffany_voice.register_voice(discord_client)
+        subsystems.register_subsystem("Voice subsystem", "READY", "Music & Voice active", mandatory=True, log_instance=log)
+        subsystems.log_event("VOICE_READY", "voice", "INFO", "Voice commands registered successfully")
+        if os.getenv("LAVALINK_ENABLED") == "1":
+            subsystems.register_subsystem("Lavalink", "READY", "Lavalink connection enabled", mandatory=False, log_instance=log)
+            subsystems.log_event("LAVALINK_READY", "voice", "INFO", "Lavalink enabled via env")
+        else:
+            subsystems.register_subsystem("Lavalink", "DISABLED", "Using local yt-dlp/ffmpeg fallback", mandatory=False, log_instance=log)
         log.info("Voice commands registered (t! + slash).")
     except Exception:
         log.exception("register_voice failed — voice/prefix/slash commands disabled.")

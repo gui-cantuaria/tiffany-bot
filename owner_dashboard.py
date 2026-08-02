@@ -136,5 +136,14 @@ def build_owner_stats_embed(client: discord.Client) -> discord.Embed:
         ),
         inline=True,
     )
+    try:
+        from infra.subsystems import format_status_report, get_commit_sha, get_version
+        em.add_field(
+            name=f"🛠️ Tiffany OS Runtime (v{get_version()} · `{get_commit_sha()}`)",
+            value=format_status_report()[:1020],
+            inline=False,
+        )
+    except Exception:
+        pass
     em.set_footer(text="Valores de IA são estimativas · ajuste COST_EST_* no .env se quiser")
     return em

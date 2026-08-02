@@ -35,21 +35,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
 
-      - name: Run unit lifecycle tests
+      - name: [Gate A] Static Analysis & Syntax Verification
+        run: python -m py_compile *.py infra/*.py
+
+      - name: [Gate B] Run lifecycle & smoke unit tests
         env:
           PYTHONUTF8: '1'
         run: |
-          python -m pytest test_phase10_lifecycle.py test_phase11_lifecycle.py test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py -v
+          python -m pytest test_phase10_lifecycle.py test_phase11_lifecycle.py test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py test_deployment_rollback.py test_premium_isolation.py test_failure_classification.py -v --tb=short
+          python -m unittest test_smoke -v
 
-      - name: Run real infrastructure integration tests
+      - name: [Gate C] Run Dedicated Music/Voice Regression & Isolation Suite
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest test_music_regression -v
+
+      - name: [Gate D] Run real infrastructure integration tests
         env:
           PYTHONUTF8: '1'
         run: python -m pytest tests/integration -v --tb=short
-
-      - name: Run smoke tests
-        env:
-          PYTHONUTF8: '1'
-        run: python -m unittest test_smoke -v
 
       - name: Tear down integration containers
         if: always()

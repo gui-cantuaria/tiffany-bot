@@ -1,23 +1,47 @@
 #!/bin/bash
 # Script de deploy para a VPS — chamado pelo GitHub Actions ou manualmente.
 # Uso: bash /opt/tiffany-bot/scripts/deploy.sh
-# Retrigger deploy: 2026-08-01-v2 (upgrade lavalink youtube-source plugin to 1.14.0 for YouTube cipher fix)
-#
-# Modos:
-#   Docker (padrão se docker compose + docker-compose.yml existirem)
-#   systemd (fallback) — defina DEPLOY_MODE=systemd para forçar
-
+# Redesigned for Phase 12, 13, 14, 18: Atomic state preservation, deployment locking, and automatic rollback on health failure.
 set -e
 
 cd /opt/tiffany-bot
+REPO_DIR="$(pwd)"
+LOCK_FILE="${REPO_DIR}/.deploy.lock"
+PREV_RELEASE_FILE="${REPO_DIR}/.prev_good_release"
+LAST_GOOD_FILE="${REPO_DIR}/.last_good_release"
+
+# --- Phase 14: Deployment Locking against concurrent executions ---
+if [ -f "$LOCK_FILE" ]; then
+    LOCK_PID="$(cat "$LOCK_FILE" 2>/dev/null || echo 0)"
+    if [ "$LOCK_PID" -gt 0 ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        echo "[deploy] ⚠️ ERROR: Another deploy is already in progress (PID $LOCK_PID). Aborting concurrently safely."
+        exit 1
+    else
+        echo "[deploy] Removing stale deploy lock file (PID $LOCK_PID no longer active)."
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+echo "$$" > "$LOCK_FILE"
+trap 'rm -f "$LOCK_FILE"' EXIT INT TERM HUP
 
 # Production VPS uses systemd + venv (not Docker).
 export DEPLOY_MODE="${DEPLOY_MODE:-systemd}"
+CURRENT_SHA="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+echo "[deploy] Current running commit: $CURRENT_SHA"
 
-echo "[deploy] Baixando e aplicando atualizações (git reset --hard para garantir integridade)..."
+# Record current state as previous good release before touching workspace
+if [ "$CURRENT_SHA" != "unknown" ]; then
+    echo "$CURRENT_SHA" > "$PREV_RELEASE_FILE"
+    echo "[deploy] Saved current commit $CURRENT_SHA to .prev_good_release for automatic rollback."
+fi
+
+echo "[deploy] Baixando e aplicando atualizações (git fetch & reset --hard para sincronia atômica de estado)..."
 git fetch origin main
 git reset --hard origin/main
 
+NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+echo "[deploy] Target release commit: $NEW_SHA"
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
@@ -73,12 +97,11 @@ else
 fi
 
 _stop_systemd() {
-    echo "[deploy] Parando systemd e processos órfãos..."
+    echo "[deploy] Parando systemd e processos órfãos sob garantia de instância única..."
     if [ -x scripts/kill-orphans.sh ]; then
         bash scripts/kill-orphans.sh || true
     else
         systemctl stop tiffany-bot 2>/dev/null || true
-        # Graceful: SIGTERM first, wait, then SIGKILL as last resort
         pkill -TERM -f '[l]auncher.py' 2>/dev/null || true
         pkill -TERM -f '[n]otices.py' 2>/dev/null || true
         pkill -TERM -f '[o]ffers.py' 2>/dev/null || true
@@ -90,43 +113,50 @@ _stop_systemd() {
     fi
 }
 
+_trigger_rollback() {
+    echo "[deploy] ❌ DEPLOY OR HEALTH CHECK FAILED — TRIGGERING AUTOMATIC ATOMIC ROLLBACK..."
+    if [ -x scripts/rollback.sh ]; then
+        bash scripts/rollback.sh || echo "[deploy] Rollback script also failed!"
+    elif [ -f "$PREV_RELEASE_FILE" ]; then
+        git reset --hard "$(cat "$PREV_RELEASE_FILE")" || true
+        systemctl restart tiffany-bot || true
+    fi
+}
+
 if [ "$USE_DOCKER" -eq 1 ]; then
     echo "[deploy] Modo Docker Compose..."
     _stop_systemd
 
     echo "[deploy] Rebuild e restart do container..."
-    docker compose build --quiet
-    docker compose up -d --force-recreate --remove-orphans
+    docker compose build --quiet || { _trigger_rollback; exit 1; }
+    docker compose up -d --force-recreate --remove-orphans || { _trigger_rollback; exit 1; }
 
     echo "[deploy] Aguardando estabilização (10s)..."
     sleep 10
 
     if docker compose ps --status running 2>/dev/null | grep -q tiffany; then
         echo "[deploy] Container Docker ativo!"
-        docker compose ps
-        echo "[deploy] Últimas linhas de log:"
-        docker compose logs --tail=20 tiffany-bot 2>/dev/null || docker compose logs --tail=20
+        echo "$NEW_SHA" > "$LAST_GOOD_FILE"
         exit 0
     fi
 
     echo "[deploy] Container não está running! Logs:"
     docker compose logs --tail=40 tiffany-bot 2>/dev/null || docker compose logs --tail=40
+    _trigger_rollback
     exit 1
 fi
 
 echo "[deploy] Modo systemd..."
 cp -f scripts/tiffany-bot.service /etc/systemd/system/tiffany-bot.service
-chmod +x scripts/run.sh scripts/kill-orphans.sh scripts/vps-restart.sh scripts/warp-setup.sh scripts/warp-healthcheck.sh 2>/dev/null || true
+chmod +x scripts/*.sh 2>/dev/null || true
 systemctl daemon-reload
 
-# Ensure WARP healthcheck timer is installed (idempotent).
 if [ -f scripts/tiffany-warp-healthcheck.timer ]; then
     cp -f scripts/tiffany-warp-healthcheck.service /etc/systemd/system/
     cp -f scripts/tiffany-warp-healthcheck.timer /etc/systemd/system/
     systemctl enable --now tiffany-warp-healthcheck.timer 2>/dev/null || true
 fi
 
-# Prefer the project venv (Python 3.11+); create it if missing.
 if [ ! -x "$VENV/bin/python" ]; then
     echo "[deploy] Criando venv..."
     (python3.11 -m venv "$VENV" 2>/dev/null) || python3 -m venv "$VENV"
@@ -134,14 +164,8 @@ fi
 PIP="$VENV/bin/pip"
 
 echo "[deploy] Instalando dependências novas..."
-"$PIP" install -q --upgrade pip
-"$PIP" install -q -r requirements.txt
-
-# Guard: locale_utils imports roleplay_i18n — ensure file exists before restart.
-if grep -q "roleplay_i18n" locale_utils.py 2>/dev/null && [ ! -f roleplay_i18n.py ]; then
-    echo "[deploy] roleplay_i18n.py ausente — baixando do origin/main..."
-    git checkout origin/main -- roleplay_i18n.py 2>/dev/null || true
-fi
+"$PIP" install -q --upgrade pip || { _trigger_rollback; exit 1; }
+"$PIP" install -q -r requirements.txt || { _trigger_rollback; exit 1; }
 
 if [ -f .env ] && grep -qE '^LAVALINK_ENABLED=1' .env; then
     echo "[deploy] LAVALINK_ENABLED=1 — starting Lavalink container..."
@@ -150,11 +174,10 @@ if [ -f .env ] && grep -qE '^LAVALINK_ENABLED=1' .env; then
 fi
 
 _stop_systemd
-
 rm -f /tmp/tiffany_launcher.lock
 
 echo "[deploy] Iniciando serviço systemd..."
-systemctl start tiffany-bot
+systemctl start tiffany-bot || { _trigger_rollback; exit 1; }
 
 echo "[deploy] Aguardando estabilização (10s)..."
 sleep 10
@@ -175,7 +198,7 @@ if ! systemctl is-active --quiet tiffany-bot; then
     rm -f /tmp/tiffany_launcher.lock
     bash scripts/kill-orphans.sh || true
     sleep 2
-    systemctl start tiffany-bot
+    systemctl start tiffany-bot || true
     sleep 10
 fi
 
@@ -184,23 +207,28 @@ if systemctl is-active --quiet tiffany-bot; then
     echo "[deploy] Bot reiniciado — launchers ativos (tiffany-bot): $LAUNCHERS"
     pgrep -af "launcher.py|notices.py" 2>/dev/null || true
     if [ "$LAUNCHERS" -gt 1 ]; then
-        echo "[deploy] AVISO: mais de 1 launcher — rode: bash scripts/kill-orphans.sh && systemctl restart tiffany-bot"
+        echo "[deploy] ERRO CRÍTICO: mais de 1 launcher. Duplicidade detectada!"
+        _trigger_rollback
         exit 1
     fi
     if [ "$LAUNCHERS" -eq 0 ]; then
-        echo "[deploy] AVISO: systemd ativo mas nenhum launcher em /opt/tiffany-bot"
+        echo "[deploy] ERRO: systemd ativo mas nenhum launcher em /opt/tiffany-bot"
         journalctl -u tiffany-bot -n 40 --no-pager || true
+        _trigger_rollback
         exit 1
     fi
     RUNNING_SHA=$(git rev-parse HEAD 2>/dev/null || echo unknown)
     echo "[deploy] Running commit: $RUNNING_SHA"
     if [ -n "${EXPECTED_SHA:-}" ] && [ "$RUNNING_SHA" != "$EXPECTED_SHA" ]; then
         echo "[deploy] ERRO: SHA mismatch — expected $EXPECTED_SHA got $RUNNING_SHA"
+        _trigger_rollback
         exit 1
     fi
-    echo "[deploy] Post-deploy health: service active, launcher running"
+    echo "[deploy] ✅ Post-deploy health: service active, launcher running, single instance verified!"
+    echo "$RUNNING_SHA" > "$LAST_GOOD_FILE"
 else
     echo "[deploy] Serviço não está ativo após 10s! Últimos logs:"
     journalctl -u tiffany-bot -n 40 --no-pager || true
+    _trigger_rollback
     exit 1
 fi
