@@ -34,6 +34,7 @@ from discord.ext import commands
 import game_recommendations
 import locale_utils
 import guild_config
+from infra.voice_lifecycle import OwnedBackgroundTask, cancel_task_bounded, spawn_ephemeral
 from locale_utils import GuildLang, resolve_guild_lang, resolve_lang, interaction_lang, tr, slash_desc_kwargs, slash_param, hybrid_desc_kwargs, localized_cmd_help, hybrid_ctx_reply, hybrid_defer, hybrid_ctx_send
 
 try:
@@ -1444,6 +1445,12 @@ _YTDL_PROBE_CACHE_MAX = 20
 
 _sessions: dict[int, _GuildVoiceSession] = {}
 
+_voice_runtime_bot: Optional[commands.Bot] = None
+_lavalink_pool_connected = False
+_voice_watchdog = OwnedBackgroundTask("tiffany-voice-watchdog")
+_warp_monitor_bg = OwnedBackgroundTask("tiffany-warp-monitor")
+_presence_rotation_bg = OwnedBackgroundTask("tiffany-presence")
+
 # Conversational context cache PER USER: user_id -> {history, last_used}
 # Each user has a separate conversation window with Tiffany
 _CONTEXT_MAX_TURNS = 4   # turns per user (8 messages in prompt)
@@ -1897,7 +1904,6 @@ def check_warp_proxy_ok() -> bool:
 
 
 _warp_was_ok: Optional[bool] = None
-_warp_monitor_task: Optional[asyncio.Task] = None
 
 
 def _healthcheck_webhook_notify(message: str) -> None:
@@ -1916,10 +1922,8 @@ def _healthcheck_webhook_notify(message: str) -> None:
 
 async def start_warp_monitor(client: discord.Client) -> None:
     """Alert admins when WARP proxy goes down or recovers."""
-    global _warp_monitor_task, _warp_was_ok
+    global _warp_was_ok
     if os.getenv("WARP_MONITOR", "1").strip() == "0":
-        return
-    if _warp_monitor_task and not _warp_monitor_task.done():
         return
 
     async def _loop() -> None:
@@ -1945,7 +1949,11 @@ async def start_warp_monitor(client: discord.Client) -> None:
                 interval = 300
             await asyncio.sleep(interval)
 
-    _warp_monitor_task = asyncio.create_task(_loop(), name="tiffany-warp-monitor")
+    _warp_monitor_bg.start(_loop)
+
+
+async def stop_warp_monitor() -> None:
+    await _warp_monitor_bg.stop()
 
 
 def _prune_game_history(data: dict) -> dict:
@@ -3336,10 +3344,239 @@ def _schedule_prefetch_next(
     if not next_q:
         return
     next_display = session.queue_display[0] if session.queue_display else display_hint
-    asyncio.create_task(
+    spawn_ephemeral(
         _prefetch_track(session, next_q, next_display),
         name="tiffany-prefetch-next",
     )
+
+
+async def cleanup_voice_session_tasks(
+    session: Optional["_GuildVoiceSession"],
+    *,
+    guild_id: int,
+    reason: str,
+) -> None:
+    """Cancel all session-owned asyncio tasks (idempotent, bounded await)."""
+    if session is None:
+        return
+    prefetch = getattr(session, "prefetch_task", None)
+    session.prefetch_key = ""
+    session.prefetch_bundle = None
+    session.prefetch_task = None
+    if prefetch is not None and not prefetch.done():
+        await cancel_task_bounded(
+            prefetch, label=f"prefetch:{guild_id}:{reason}",
+        )
+    for attr, label in (
+        ("music_task", "music"),
+        ("listen_task", "listen"),
+        ("question_task", "question"),
+    ):
+        task = getattr(session, attr, None)
+        if task is not None and not task.done():
+            await cancel_task_bounded(task, label=f"{label}:{guild_id}:{reason}")
+        setattr(session, attr, None)
+    log.debug("Voice session tasks cleaned guild=%s reason=%s", guild_id, reason)
+
+
+async def disconnect_voice_guild(
+    guild: discord.Guild,
+    vc: Any,
+    *,
+    bot: commands.Bot,
+    reason: str,
+    notify_message: Optional[str] = None,
+    mark_voluntary: bool = True,
+) -> None:
+    """Canonical guild voice disconnect — tasks, state, optional VC disconnect."""
+    gid = guild.id
+    sess = _sessions.pop(gid, None)
+    await cleanup_voice_session_tasks(sess, guild_id=gid, reason=reason)
+    if sess and notify_message and sess.text_channel_id:
+        text_ch = bot.get_channel(sess.text_channel_id)
+        if text_ch and hasattr(text_ch, "send"):
+            try:
+                await text_ch.send(notify_message)
+            except Exception:
+                log.debug("Notify failed on disconnect guild=%s", gid, exc_info=True)
+    _clear_voice_state(gid)
+    if mark_voluntary:
+        _mark_voluntary_leave(gid)
+    if vc:
+        try:
+            if _is_wavelink_player(vc):
+                try:
+                    await vc.stop()
+                except Exception:
+                    pass
+            elif vc.is_playing() or vc.is_paused():
+                vc.stop()
+            await vc.disconnect(force=True)
+        except Exception:
+            log.debug("VC disconnect failed guild=%s reason=%s", gid, reason, exc_info=True)
+
+
+async def cleanup_all_voice_sessions(bot: commands.Bot, *, reason: str = "shutdown") -> None:
+    """Stop every active guild voice session."""
+    for gid in list(_sessions.keys()):
+        guild = bot.get_guild(gid)
+        vc = guild.voice_client if guild else None
+        if guild and vc and vc.is_connected():
+            await disconnect_voice_guild(
+                guild,
+                vc,
+                bot=bot,
+                reason=reason,
+                mark_voluntary=True,
+            )
+        else:
+            sess = _sessions.pop(gid, None)
+            await cleanup_voice_session_tasks(sess, guild_id=gid, reason=reason)
+            _clear_voice_state(gid)
+
+
+async def _empty_channel_watchdog_loop(bot: commands.Bot) -> None:
+    """Safety net: disconnect from empty or idle channels every 60s."""
+    await asyncio.sleep(90)
+    while not bot.is_closed():
+        await asyncio.sleep(60)
+        try:
+            for guild in bot.guilds:
+                vc = guild.voice_client
+                if not vc or not vc.is_connected():
+                    continue
+                bot_channel = vc.channel
+                if not bot_channel:
+                    continue
+                gid = guild.id
+                humans = [m for m in bot_channel.members if not m.bot]
+                if not humans:
+                    log.info("Watchdog: empty channel guild=%s, disconnecting.", gid)
+                    await disconnect_voice_guild(
+                        guild,
+                        vc,
+                        bot=bot,
+                        reason="watchdog_empty_channel",
+                        notify_message="👋 **Tiffany saiu** — canal ficou vazio.",
+                    )
+                    continue
+                sess = _sessions.get(gid)
+                if not sess:
+                    continue
+                if sess.stay_24_7:
+                    continue
+                tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
+                if tocando:
+                    continue
+                idle_sec = time.monotonic() - sess.last_activity
+                if idle_sec >= _IDLE_TIMEOUT_SEC:
+                    log.info("Watchdog: idle for %.0fs guild=%s, disconnecting.", idle_sec, gid)
+                    await disconnect_voice_guild(
+                        guild,
+                        vc,
+                        bot=bot,
+                        reason="watchdog_idle",
+                        notify_message=f"💤 **Tiffany saiu** — {_IDLE_TIMEOUT_SEC // 60} minutos sem interação.",
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Empty channel watchdog error")
+
+        try:
+            import glob as _glob
+            _tmp_base = tempfile.gettempdir()
+            for d in _glob.glob(os.path.join(_tmp_base, "tiffany_*")):
+                try:
+                    age = time.time() - os.path.getmtime(d)
+                    if age > 600:
+                        if os.path.isdir(d):
+                            shutil.rmtree(d, ignore_errors=True)
+                        elif os.path.isfile(d):
+                            os.remove(d)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        _save_stats_now()
+
+
+def _ensure_voice_watchdog(bot: commands.Bot) -> None:
+    global _voice_runtime_bot
+    _voice_runtime_bot = bot
+    _voice_watchdog.start(lambda: _empty_channel_watchdog_loop(bot))
+
+
+async def _connect_lavalink_once(bot: commands.Bot) -> None:
+    global _lavalink_pool_connected
+    if _lavalink_pool_connected or not _lavalink_enabled() or not _WAVELINK_AVAILABLE:
+        return
+    try:
+        from infra.audio.lavalink_nodes import build_wavelink_nodes
+        nodes = build_wavelink_nodes()
+        if not nodes:
+            log.warning("Lavalink enabled but no nodes configured — yt-dlp fallback.")
+            return
+        log.info(
+            "Connecting Lavalink cluster (%d node(s), LAVALINK_ENABLED=%s)...",
+            len(nodes),
+            os.getenv("LAVALINK_ENABLED", "?"),
+        )
+        await asyncio.wait_for(
+            wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100),
+            timeout=20.0,
+        )
+        _lavalink_pool_connected = True
+        ids = [getattr(n, "identifier", "?") for n in nodes]
+        log.info("Lavalink cluster connected: %s", ", ".join(ids))
+    except asyncio.TimeoutError:
+        log.warning("Lavalink connect timed out (20s) — using yt-dlp as fallback.")
+    except Exception as e:
+        log.warning("Lavalink unavailable (%s) — using yt-dlp as fallback.", e)
+
+
+async def _disconnect_lavalink_pool() -> None:
+    global _lavalink_pool_connected
+    if not _lavalink_pool_connected or not _WAVELINK_AVAILABLE:
+        return
+    try:
+        await wavelink.Pool.close()
+        log.info("Lavalink pool closed")
+    except Exception:
+        log.debug("Lavalink pool close failed", exc_info=True)
+    _lavalink_pool_connected = False
+
+
+async def start_voice_background_tasks(bot: commands.Bot) -> None:
+    """Idempotent startup for process-wide voice background tasks."""
+    global _voice_runtime_bot
+    _voice_runtime_bot = bot
+    await start_warp_monitor(bot)
+    _ensure_voice_watchdog(bot)
+    await start_presence_rotation(bot)
+
+
+async def stop_voice_background_tasks() -> None:
+    """Idempotent shutdown for process-wide voice background tasks."""
+    await _voice_watchdog.stop()
+    await stop_presence_rotation()
+    await stop_warp_monitor()
+
+
+async def shutdown_voice_runtime(bot: commands.Bot, *, reason: str = "shutdown") -> None:
+    """Graceful voice subsystem shutdown (sessions first, then background tasks)."""
+    await cleanup_all_voice_sessions(bot, reason=reason)
+    await stop_voice_background_tasks()
+    await _disconnect_lavalink_pool()
+
+
+def count_owned_background_tasks() -> dict[str, bool]:
+    """Development helper — process-wide task running state."""
+    return {
+        "watchdog": _voice_watchdog.is_running(),
+        "warp_monitor": _warp_monitor_bg.is_running(),
+        "presence": _presence_rotation_bg.is_running(),
+    }
 
 
 async def _amazon_music_url_to_search(url: str) -> Optional[str]:
@@ -4128,7 +4365,6 @@ def invite_link_view(invite_url: str, lang: GuildLang = "en") -> discord.ui.View
     return _InviteLinkView(invite_url, lang)
 
 
-_presence_rotation_task: asyncio.Task | None = None
 _presence_lines: tuple[str, ...] = ()
 
 # Short English taglines after "/cmd — …" (Discord Playing status, max 128 chars total).
@@ -4221,12 +4457,9 @@ async def _set_playing_presence(client: discord.Client, name: str) -> bool:
 
 async def start_presence_rotation(client: discord.Client) -> None:
     """Rotate playing status through every slash command (/name — tagline), 8s each."""
-    global _presence_rotation_task
     lines = refresh_presence_lines(client)
     if lines:
         await _set_playing_presence(client, lines[0])
-    if _presence_rotation_task and not _presence_rotation_task.done():
-        return
 
     async def _loop() -> None:
         await client.wait_until_ready()
@@ -4244,12 +4477,16 @@ async def start_presence_rotation(client: discord.Client) -> None:
             idx += 1
             await asyncio.sleep(PRESENCE_ROTATE_SEC)
 
-    _presence_rotation_task = asyncio.create_task(_loop(), name="tiffany-presence")
+    _presence_rotation_bg.start(_loop)
     log.info(
         "Presence rotation: %d slash commands, %ds interval",
         len(_presence_lines),
         PRESENCE_ROTATE_SEC,
     )
+
+
+async def stop_presence_rotation() -> None:
+    await _presence_rotation_bg.stop()
 
 
 def _fmt_dur(sec: float) -> str:
@@ -5311,7 +5548,7 @@ async def _ctx_reply_ai(
             else:
                 msg = await ctx.send(embed=embed, **kwargs)
             if delete_after and msg:
-                asyncio.create_task(_delete_message_later(msg, delete_after))
+                spawn_ephemeral(_delete_message_later(msg, delete_after))
             return msg
         except discord.HTTPException:
             return None
@@ -5542,18 +5779,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     and not vc.is_paused()
                 ):
                     session._queue_empty_since = 0.0
-                    _mark_voluntary_leave(guild_id)
-                    _sessions.pop(guild_id, None)
-                    for t in (session.music_task, session.listen_task, session.question_task):
-                        if t:
-                            t.cancel()
-                    await vc.disconnect(force=True)
-                    _clear_voice_state(guild_id)
-                    await _notify(
-                        bot,
-                        session.text_channel_id,
-                        "👋 **Tiffany saiu** — 3 minutos sem música na fila. Use `t!247` para ficar 24/7.",
-                    )
+                    _guild = bot.get_guild(guild_id)
+                    if _guild:
+                        await disconnect_voice_guild(
+                            _guild,
+                            vc,
+                            bot=bot,
+                            reason="queue_empty_timeout",
+                            notify_message="👋 **Tiffany saiu** — 3 minutos sem música na fila. Use `t!247` para ficar 24/7.",
+                        )
                     return
                 continue
             session._queue_empty_since = 0.0
@@ -5669,7 +5903,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     yt_source.cleanup()
                     await _notify(bot, session.text_channel_id, _pick_blocked_reply())
                     continue
-                asyncio.create_task(_bg_moderation_guard(session, vc, bot, display_name, query))
+                spawn_ephemeral(_bg_moderation_guard(session, vc, bot, display_name, query))
                 if _restore_seek > 0 and dl_fp and dl_duration > 10:
                     capped = min(_restore_seek, dl_duration - 5.0)
                     if capped > 5:
@@ -5719,7 +5953,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 if vc.channel:
                     _vs_entry = _snapshot_voice_entry(guild_id, vc.channel.id, session.text_channel_id, session)
                     asyncio.get_running_loop().run_in_executor(None, _write_voice_state, guild_id, _vs_entry)
-                asyncio.create_task(_post_now_playing(
+                spawn_ephemeral(_post_now_playing(
                     bot, session, track_title=display_name, query=query,
                 ))
                 watchdog_timeout = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
@@ -5921,18 +6155,14 @@ async def _voice_listen_loop(
                     if _empty_since is None:
                         _empty_since = agora
                     elif (agora - _empty_since) > _EMPTY_CHANNEL_LEAVE_SEC:
-                        sess = _sessions.pop(guild_id, None)
-                        if sess:
-                            if sess.listen_task:
-                                sess.listen_task.cancel()
-                            if sess.music_task:
-                                sess.music_task.cancel()
-                            if sess.question_task:
-                                sess.question_task.cancel()
-                        if vc and vc.is_connected():
-                            _mark_voluntary_leave(guild_id)
-                            await vc.disconnect(force=True)
-                        _clear_voice_state(guild_id)
+                        _guild = bot.get_guild(guild_id)
+                        if _guild and vc and vc.is_connected():
+                            await disconnect_voice_guild(
+                                _guild,
+                                vc,
+                                bot=bot,
+                                reason="listen_empty_channel",
+                            )
                         return
                 else:
                     _empty_since = None
@@ -6121,14 +6351,14 @@ async def _voice_listen_loop(
                 session.queue_display.clear()
                 session.queue_durations.clear()
                 session.queue_requesters.clear()
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, tr(vlang, "voice.stopped"))
                 continue
 
             if action == "skip":
                 _clear_loop(session)
                 vc.stop()
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, tr(vlang, "voice.skipped"))
                 continue
 
@@ -6142,7 +6372,7 @@ async def _voice_listen_loop(
                 if session.loop_enabled:
                     session.loop_query = session.current_query
                     session.loop_display = session.current_song or session.current_query
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(
                         bot,
                         session.text_channel_id,
@@ -6150,7 +6380,7 @@ async def _voice_listen_loop(
                     )
                 else:
                     _clear_loop(session)
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.loop_off"))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
@@ -6175,7 +6405,7 @@ async def _voice_listen_loop(
                     for _, q in _combined:
                         await _new_q.put(q)
                     session.music_queue = _new_q
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.shuffled", count=len(session.queue_display)))
                 else:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.queue_too_small"))
@@ -6200,35 +6430,36 @@ async def _voice_listen_loop(
                         await session.music_queue.put(item)
                     _clear_loop(session)
                     vc.stop()
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.replaying", title=d[:80]))
                 else:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.nothing_to_loop"))
                 continue
 
             if action == "leave":
-                # Leave channel
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
-                await asyncio.sleep(1.5)  # wait for TTS to finish before disconnecting
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."), name="tiffany-tts-leave")
+                await asyncio.sleep(1.5)
                 text_ch_id = session.text_channel_id if session else None
-                sess = _sessions.pop(guild_id, None)
-                if sess:
-                    if sess.listen_task:
-                        sess.listen_task.cancel()
-                    if sess.music_task:
-                        sess.music_task.cancel()
-                    if sess.question_task:
-                        sess.question_task.cancel()
-                if vc and vc.is_connected():
-                    _mark_voluntary_leave(guild_id)
-                    await vc.disconnect(force=True)
+                _guild = bot.get_guild(guild_id)
+                if _guild and vc and vc.is_connected():
+                    await disconnect_voice_guild(
+                        _guild,
+                        vc,
+                        bot=bot,
+                        reason="voice_command_leave",
+                        mark_voluntary=True,
+                    )
+                else:
+                    sess = _sessions.pop(guild_id, None)
+                    await cleanup_voice_session_tasks(sess, guild_id=guild_id, reason="voice_command_leave")
+                    _clear_voice_state(guild_id)
                 await _notify(bot, text_ch_id, tr(vlang, "voice.left"))
                 return
             
             if action == "pause":
                 if vc.is_playing():
                     vc.pause()
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.paused"))
                 else:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.err.no_music_now"))
@@ -6237,7 +6468,7 @@ async def _voice_listen_loop(
             if action == "resume":
                 if vc.is_paused():
                     vc.resume()
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.resumed"))
                 else:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.not_paused"))
@@ -6262,7 +6493,7 @@ async def _voice_listen_loop(
                 if vc.is_playing() or vc.is_paused():
                     vc.stop()
                 _clear_voice_state(guild_id)
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, tr(vlang, "voice.cleared"))
                 continue
 
@@ -6315,7 +6546,7 @@ async def _voice_listen_loop(
                         session.song_start_time = time.monotonic() - target
                         vc.play(new_src)
                         direction = "⏩" if action == "seek_fwd" else "⏪"
-                        asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                        spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                         await _notify(bot, session.text_channel_id, tr(vlang, "voice.seeking_to", direction=direction, pos=_fmt_dur(target)))
                 except Exception as e:
                     log.debug("Voice seek failed: %s", e)
@@ -6332,7 +6563,7 @@ async def _voice_listen_loop(
                 display = _format_track_display(re.sub(r"^(ytsearch|scsearch)\d*:", "", song).strip())
                 _append_queue_item(session, display, _DEFAULT_TRACK_EST_SEC, speaker_uid or 0)
                 await session.music_queue.put(song)
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 await _notify(bot, session.text_channel_id, tr(vlang, "voice.random_added", display=display))
                 if _paused_for_listen and vc.is_connected() and vc.is_paused():
                     vc.resume()
@@ -6340,7 +6571,7 @@ async def _voice_listen_loop(
 
             if action == "autoplay":
                 session.autoplay = not session.autoplay
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 if session.autoplay:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.autoplay_on"))
                 else:
@@ -6353,7 +6584,7 @@ async def _voice_listen_loop(
                 session.stay_24_7 = not session.stay_24_7
                 session._queue_empty_since = 0.0
                 _touch_activity(guild_id)
-                asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 if session.stay_24_7:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.nonstop_on"))
                 else:
@@ -6395,7 +6626,7 @@ async def _voice_listen_loop(
                 if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    asyncio.create_task(_tts_speak_quick(vc, tr(vlang, "voice.tts.blocked")))
+                    spawn_ephemeral(_tts_speak_quick(vc, tr(vlang, "voice.tts.blocked")))
                     await _notify(bot, session.text_channel_id, _pick_blocked_reply(vlang))
                     continue
                 allowed, remaining = _check_cooldown(speaker_uid)
@@ -6427,7 +6658,7 @@ async def _voice_listen_loop(
                 if await _should_block_content(arg):
                     if _paused_for_listen and vc.is_connected() and vc.is_paused():
                         vc.resume()
-                    asyncio.create_task(_tts_speak_quick(vc, tr(vlang, "voice.tts.wont_play")))
+                    spawn_ephemeral(_tts_speak_quick(vc, tr(vlang, "voice.tts.wont_play")))
                     await _notify(bot, session.text_channel_id, _pick_blocked_reply(vlang))
                     continue
                 # Check queue limit
@@ -6459,7 +6690,7 @@ async def _voice_listen_loop(
                         break
 
                 if added > 0:
-                    asyncio.create_task(_tts_speak_quick(vc, "Ok."))
+                    spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
                 if added > 1:
                     await _notify(bot, session.text_channel_id, tr(vlang, "voice.added_multi", count=added))
                 elif added == 1:
@@ -6481,8 +6712,11 @@ async def _voice_listen_loop(
             cur = _sessions.get(guild_id)
             if cur is session:
                 removed = _sessions.pop(guild_id, None)
-                if removed and removed.music_task:
-                    removed.music_task.cancel()
+                await cleanup_voice_session_tasks(
+                    removed,
+                    guild_id=guild_id,
+                    reason="listen_loop_ended",
+                )
 
 
 async def _join_voice_recv_client(
@@ -8228,17 +8462,23 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(embed=_embed(tr(lang, "cmd.play.queue_full", cur=fila_atual, max=QUEUE_MAX)))
             return
 
-        # Immediate feedback: search/resolution may take a few seconds.
-        # All final replies edit THIS same status bubble -> never silent.
-        _ack_name = re.sub(r"^https?://\S*", "link", query)[:80]
-        if not was_connected and vc and vc.channel:
-            status = await ctx.send(embed=_embed(
-                tr(lang, "music.join_searching", channel=vc.channel.name, name=_ack_name)
-            ))
-        else:
-            status = await ctx.send(embed=_embed(tr(lang, "music.searching", name=_ack_name)))
-
+        # Immediate feedback: sleek Jockie Music aesthetic status bubble
         is_url = bool(re.match(r"^https?://", query))
+        em_status = discord.Embed(color=TIFFANY_PINK)
+        ch_name = getattr(vc.channel, "name", "") if (vc and getattr(vc, "channel", None)) else ""
+        clean_term = "link recebido" if is_url else f"**{query[:60]}**"
+        
+        if not was_connected and ch_name:
+            if lang == "pt":
+                em_status.description = f"🔊 Conectada a **{ch_name}**\n🔎 Buscando {clean_term}..."
+            else:
+                em_status.description = f"🔊 Joined **{ch_name}**\n🔎 Searching {clean_term}..."
+        else:
+            if lang == "pt":
+                em_status.description = f"🔎 Buscando {clean_term}..."
+            else:
+                em_status.description = f"🔎 Searching {clean_term}..."
+        status = await ctx.send(embed=em_status)
 
         # Normalize platform URLs (Spotify /intl-XX/, YouTube Music, tracking params)
         if is_url:
@@ -8435,47 +8675,62 @@ def register_voice(bot: commands.Bot) -> None:
 
             req = ctx.author.display_name or str(ctx.author)
             req_icon = getattr(getattr(ctx.author, "display_avatar", None), "url", "") or ""
+            if not isinstance(req_icon, str) or not req_icon.startswith("http"):
+                req_icon = ""
             _lbl_q = getattr(track, "uri", "") or query
+            if not isinstance(_lbl_q, str):
+                _lbl_q = str(query) if query else ""
             _author = getattr(track, "author", "") or ""
+            if not isinstance(_author, str):
+                _author = str(_author)
             _thumb = getattr(track, "artwork", "") or getattr(track, "artwork_url", "") or _youtube_thumb_url(_lbl_q) or ""
+            if not isinstance(_thumb, str) or not _thumb.startswith("http"):
+                _thumb = ""
 
-            if not player.playing:
-                await player.play(track)
-                await _apply_stream_volume(player, sess)
-                sess.current_song = track_display
-                sess.current_query = getattr(track, "uri", None) or search_query or query
-                sess.current_duration = track_dur_sec
-                sess.current_requester_id = ctx.author.id
-                sess.song_start_time = time.monotonic()
-                sess.history.append(track_display)
-                if len(sess.history) > 50:
-                    sess.history = sess.history[-50:]
-                await status.edit(embed=_embed_now_playing(
-                    source_label=_track_source_label(
-                        getattr(track, "uri", "") or query,
-                        resolved_platform=bool(_detect_music_platform(query)),
-                    ),
-                    track_title=track_display[:200],
-                    lang=lang,
-                    thumbnail=_thumb,
-                    duration_sec=track_dur_sec,
-                    requester=req,
-                    requester_icon=req_icon,
-                    url=_lbl_q,
-                    artist=_author,
-                ))
-                asyncio.create_task(_bg_moderation_guard(sess, vc, bot, track_display, _lv_src))
-            else:
-                player.queue.put(track)
-                pos = len(sess.queue_display) + (1 if sess.current_song else 0)
-                eta = _queue_eta_sec(sess)
-                await status.edit(embed=_embed_music_added(
-                    kind="track", title=track_display, requester=req, lang=lang,
-                    duration_sec=track_dur_sec, position=pos,
-                    queue_total=pos, eta_sec=eta,
-                    source_label=_track_source_label(_lbl_q, resolved_platform=bool(_detect_music_platform(_lbl_q))),
-                    requester_icon=req_icon, url=_lbl_q, artist=_author, thumbnail=_thumb,
-                ))
+            try:
+                if not player.playing:
+                    await player.play(track)
+                    await _apply_stream_volume(player, sess)
+                    sess.current_song = track_display
+                    sess.current_query = getattr(track, "uri", None) or search_query or query
+                    sess.current_duration = track_dur_sec
+                    sess.current_requester_id = ctx.author.id
+                    sess.song_start_time = time.monotonic()
+                    sess.history.append(track_display)
+                    if len(sess.history) > 50:
+                        sess.history = sess.history[-50:]
+                    await status.edit(embed=_embed_now_playing(
+                        source_label=_track_source_label(
+                            getattr(track, "uri", "") or query,
+                            resolved_platform=bool(_detect_music_platform(query)),
+                        ),
+                        track_title=track_display[:200],
+                        lang=lang,
+                        thumbnail=_thumb,
+                        duration_sec=track_dur_sec,
+                        requester=req,
+                        requester_icon=req_icon,
+                        url=_lbl_q,
+                        artist=_author,
+                    ))
+                    spawn_ephemeral(_bg_moderation_guard(sess, vc, bot, track_display, _lv_src))
+                else:
+                    player.queue.put(track)
+                    pos = len(sess.queue_display) + (1 if sess.current_song else 0)
+                    eta = _queue_eta_sec(sess)
+                    await status.edit(embed=_embed_music_added(
+                        kind="track", title=track_display, requester=req, lang=lang,
+                        duration_sec=track_dur_sec, position=pos,
+                        queue_total=pos, eta_sec=eta,
+                        source_label=_track_source_label(_lbl_q, resolved_platform=bool(_detect_music_platform(_lbl_q))),
+                        requester_icon=req_icon, url=_lbl_q, artist=_author, thumbnail=_thumb,
+                    ))
+            except Exception as e:
+                log.error("Error during Lavalink playback/embed update: %s", e, exc_info=True)
+                try:
+                    await status.edit(embed=_embed(f"⚠️ Não foi possível iniciar reprodução no servidor Lavalink: `{e}`"))
+                except Exception:
+                    pass
             return
 
         # === YT-DLP MODE (fallback) ===
@@ -9307,21 +9562,19 @@ def register_voice(bot: commands.Bot) -> None:
         elif vc.is_playing() or vc.is_paused():
             vc.stop()
         session.current_song = ""
-        # Disconnect from call (replaces legacy t!l)
-        sess = _sessions.pop(gid, None)
-        if sess:
-            if sess.listen_task:
-                sess.listen_task.cancel()
-            if sess.music_task:
-                sess.music_task.cancel()
-            if sess.question_task:
-                sess.question_task.cancel()
-        _clear_voice_state(gid)
-        _mark_voluntary_leave(gid)
-        try:
-            await vc.disconnect(force=True)
-        except Exception:
-            pass
+        _guild = ctx.guild
+        if _guild and vc and vc.is_connected():
+            await disconnect_voice_guild(
+                _guild,
+                vc,
+                bot=bot,
+                reason="cmd_clear",
+                mark_voluntary=True,
+            )
+        else:
+            sess = _sessions.pop(gid, None)
+            await cleanup_voice_session_tasks(sess, guild_id=gid, reason="cmd_clear")
+            _clear_voice_state(gid)
         await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.clear.done")))
 
     @bot.hybrid_command(name="shuffle", aliases=["sh"], dm_permission=False, **hybrid_desc_kwargs("slash.cmd.shuffle"))
@@ -9852,7 +10105,6 @@ def register_voice(bot: commands.Bot) -> None:
         if member.id == bot.user.id:
             gid = member.guild.id
             if before.channel and not after.channel:
-                # Bot was disconnected (kicked or server disconnect)
                 voluntary = _consume_voluntary_leave(gid)
                 sess = _sessions.pop(gid, None)
                 text_ch_id = sess.text_channel_id if sess else 0
@@ -9860,13 +10112,11 @@ def register_voice(bot: commands.Bot) -> None:
                     "Bot disconnected from call guild=%s (voluntary=%s)",
                     gid, voluntary,
                 )
-                if sess:
-                    if sess.listen_task:
-                        sess.listen_task.cancel()
-                    if sess.music_task:
-                        sess.music_task.cancel()
-                    if sess.question_task:
-                        sess.question_task.cancel()
+                await cleanup_voice_session_tasks(
+                    sess,
+                    guild_id=gid,
+                    reason="bot_voice_disconnect",
+                )
                 _clear_voice_state(gid)
                 if not voluntary and text_ch_id:
                     text_ch = bot.get_channel(text_ch_id)
@@ -9919,111 +10169,14 @@ def register_voice(bot: commands.Bot) -> None:
                 return
         gid = guild.id
         log.info("Empty channel for 60s (on_voice_state_update), disconnecting guild=%s", gid)
-        sess = _sessions.pop(gid, None)
-        if sess:
-            if sess.listen_task:
-                sess.listen_task.cancel()
-            if sess.music_task:
-                sess.music_task.cancel()
-            if sess.question_task:
-                sess.question_task.cancel()
-            text_ch = bot.get_channel(sess.text_channel_id)
-            if text_ch and hasattr(text_ch, "send"):
-                try:
-                    await text_ch.send(tr(resolve_guild_lang(getattr(text_ch, "guild", None)), "cmd.left_empty"))
-                except Exception:
-                    pass
-        _clear_voice_state(gid)
-        _mark_voluntary_leave(gid)
-        try:
-            await vc.disconnect(force=True)
-        except Exception:
-            pass
-
-    async def _disconnect_idle(guild, vc, reason: str) -> None:
-        """Disconnect bot from a voice channel and clean up session."""
-        gid = guild.id
-        sess = _sessions.pop(gid, None)
-        if sess:
-            if sess.listen_task:
-                sess.listen_task.cancel()
-            if sess.music_task:
-                sess.music_task.cancel()
-            if sess.question_task:
-                sess.question_task.cancel()
-            text_ch = bot.get_channel(sess.text_channel_id)
-            if text_ch and hasattr(text_ch, "send"):
-                try:
-                    await text_ch.send(reason)
-                except Exception:
-                    pass
-        _clear_voice_state(gid)
-        _mark_voluntary_leave(gid)
-        try:
-            await vc.disconnect(force=True)
-        except Exception:
-            pass
-
-    async def _empty_channel_watchdog() -> None:
-        """Safety net: disconnect from empty or idle channels every 60s."""
-        await asyncio.sleep(90)  # aguarda startup completo
-        while True:
-            await asyncio.sleep(60)  # check every 1 minute
-            try:
-                for guild in bot.guilds:
-                    vc = guild.voice_client
-                    if not vc or not vc.is_connected():
-                        continue
-                    bot_channel = vc.channel
-                    if not bot_channel:
-                        continue
-                    gid = guild.id
-
-                    # Empty channel: disconnect immediately
-                    humans = [m for m in bot_channel.members if not m.bot]
-                    if not humans:
-                        log.info("Watchdog: empty channel guild=%s, disconnecting.", gid)
-                        await _disconnect_idle(guild, vc, "👋 **Tiffany saiu** — canal ficou vazio.")
-                        continue
-
-                    # Inactivity: no music and no interaction for 5 minutes
-                    sess = _sessions.get(gid)
-                    if not sess:
-                        continue
-                    # 24/7 mode: never disconnect due to inactivity
-                    if sess.stay_24_7:
-                        continue
-                    tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
-                    if tocando:
-                        continue  # active music = not idle
-                    idle_sec = time.monotonic() - sess.last_activity
-                    if idle_sec >= _IDLE_TIMEOUT_SEC:
-                        log.info("Watchdog: idle for %.0fs guild=%s, disconnecting.", idle_sec, gid)
-                        await _disconnect_idle(guild, vc, f"💤 **Tiffany saiu** — {_IDLE_TIMEOUT_SEC // 60} minutos sem interação.")
-            except Exception:
-                log.exception("Empty channel watchdog error")
-
-            # Clean up yt-dlp temp dirs (tiffany_* dirs older than 10 min)
-            try:
-                import glob as _glob
-                _tmp_base = tempfile.gettempdir()
-                for d in _glob.glob(os.path.join(_tmp_base, "tiffany_*")):
-                    try:
-                        age = time.time() - os.path.getmtime(d)
-                        if age > 600:  # more than 10 minutes
-                            if os.path.isdir(d):
-                                shutil.rmtree(d, ignore_errors=True)
-                                log.debug("Temp dir removed: %s", d)
-                            elif os.path.isfile(d):
-                                os.remove(d)
-                                log.debug("Temp file removed: %s", d)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            # Persist statistics periodically
-            _save_stats_now()
+        lang = resolve_guild_lang(guild)
+        await disconnect_voice_guild(
+            guild,
+            vc,
+            bot=bot,
+            reason="voice_state_empty_channel",
+            notify_message=tr(lang, "cmd.left_empty"),
+        )
 
     @bot.listen("on_ready")
     async def _rejoin_on_ready() -> None:
@@ -10036,37 +10189,8 @@ def register_voice(bot: commands.Bot) -> None:
             except Exception:
                 log.debug("Stale voice cleanup failed guild=%s", guild.id, exc_info=True)
 
-        # Connect to Lavalink cluster when LAVALINK_ENABLED=1 (bot orchestrates; nodes stream).
-        if _lavalink_enabled() and _WAVELINK_AVAILABLE:
-            try:
-                from infra.audio.lavalink_nodes import build_wavelink_nodes
-                nodes = build_wavelink_nodes()
-                if nodes:
-                    log.info(
-                        "Connecting Lavalink cluster (%d node(s), LAVALINK_ENABLED=%s)...",
-                        len(nodes),
-                        os.getenv("LAVALINK_ENABLED", "?"),
-                    )
-                    await asyncio.wait_for(
-                        wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100),
-                        timeout=20.0,
-                    )
-                    ids = [getattr(n, "identifier", "?") for n in nodes]
-                    log.info("Lavalink cluster connected: %s", ", ".join(ids))
-                else:
-                    log.warning("Lavalink enabled but no nodes configured — yt-dlp fallback.")
-            except asyncio.TimeoutError:
-                log.warning("Lavalink connect timed out (20s) — using yt-dlp as fallback.")
-            except Exception as e:
-                log.warning("Lavalink unavailable (%s) — using yt-dlp as fallback.", e)
-        elif _WAVELINK_AVAILABLE:
-            log.info(
-                "Lavalink disabled (LAVALINK_ENABLED=0) — yt-dlp music mode (STT off unless VOICE_STT_ENABLED=1)."
-            )
-
-        asyncio.create_task(_empty_channel_watchdog(), name="tiffany-voice-watchdog")
-        
-        # Start the presence rotation to show /help · High-Quality Audio
+        await _connect_lavalink_once(bot)
+        _ensure_voice_watchdog(bot)
         await start_presence_rotation(bot)
         state = _load_voice_state()
         if not state:
@@ -10249,9 +10373,21 @@ def register_voice(bot: commands.Bot) -> None:
             
             _track_user_song(session.current_requester_id, track.title)
             
-            asyncio.create_task(_post_now_playing(
+            spawn_ephemeral(_post_now_playing(
                 bot, session, track_title=track.title or "Desconhecido", query=uri,
             ))
+
+        @bot.listen("on_wavelink_track_exception")
+        async def _on_track_exception(payload: Any) -> None:
+            player = getattr(payload, "player", None)
+            if not player or not getattr(player, "guild", None):
+                return
+            session = _sessions.get(player.guild.id)
+            if not session:
+                return
+            err = getattr(payload, "exception", None) or getattr(payload, "error", "Erro de transmissão no YouTube/Lavalink")
+            log.warning("Lavalink track exception on guild %s: %s", player.guild.id, err)
+            await _notify(bot, session.text_channel_id, f"⚠️ Erro ao reproduzir faixa na plataforma (possível restrição do YouTube/Lavalink): `{err}`")
 
         @bot.listen("on_wavelink_track_end")
         async def _on_track_end(payload: wavelink.TrackEndEventPayload) -> None:
@@ -10262,7 +10398,12 @@ def register_voice(bot: commands.Bot) -> None:
             if not session:
                 return
             track = payload.track
-            log.debug("Lavalink track ended: %s (reason=%s)", track.title, payload.reason)
+            reason_str = str(getattr(payload, "reason", "")).upper()
+            log.debug("Lavalink track ended: %s (reason=%s)", getattr(track, "title", "None"), reason_str)
+
+            if any(r in reason_str for r in ("LOAD_FAILED", "CLEANUP", "REPLACED", "EXCEPTION")):
+                log.warning("Lavalink track halted with reason: %s", reason_str)
+                return
 
             # Loop: replay the same track
             if session.loop_enabled and track:

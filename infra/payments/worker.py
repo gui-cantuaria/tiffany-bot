@@ -57,25 +57,30 @@ async def process_outbox_batch(*, limit: int = 20) -> int:
     )
     set_gauge("outbox_pending_depth", int(pending_depth or 0))
 
-    processed = 0
+    rows: list[Any] = []
     async with pool.acquire() as conn:
         async with conn.transaction():
-            rows = await outbox_mod.fetch_pending_batch(conn, limit=limit)
-            for row in rows:
-                delivery_type = row["delivery_type"]
-                payload = row["payload"]
-                if isinstance(payload, str):
-                    payload = json.loads(payload)
-                try:
-                    if delivery_type == OUTBOX_DISCORD_NOTIFY:
-                        await _deliver_discord_notify(payload)
-                    await outbox_mod.mark_delivered(conn, row["id"])
-                    processed += 1
-                except Exception as exc:
-                    log.warning("Outbox delivery failed id=%s: %s", row["id"], exc)
-                    await outbox_mod.mark_failed(
-                        conn, row["id"], error=str(exc), attempt_count=row["attempt_count"]
-                    )
+            rows = list(await outbox_mod.fetch_pending_batch(conn, limit=limit))
+
+    processed = 0
+    for row in rows:
+        delivery_type = row["delivery_type"]
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        outbox_id = row["id"]
+        try:
+            if delivery_type == OUTBOX_DISCORD_NOTIFY:
+                await _deliver_discord_notify(payload)
+            async with pool.acquire() as conn:
+                await outbox_mod.mark_delivered(conn, outbox_id)
+            processed += 1
+        except Exception as exc:
+            log.warning("Outbox delivery failed id=%s: %s", outbox_id, exc)
+            async with pool.acquire() as conn:
+                await outbox_mod.mark_failed(
+                    conn, outbox_id, error=str(exc), attempt_count=row["attempt_count"]
+                )
     return processed
 
 

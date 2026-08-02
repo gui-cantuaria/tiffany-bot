@@ -324,8 +324,10 @@ async def stop_stripe_server() -> None:
         _reconcile_task.cancel()
         try:
             await _reconcile_task
-        except Exception:
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            log.exception("Reconciliation task shutdown error")
     _reconcile_task = None
 
     await stop_payment_worker()

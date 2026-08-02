@@ -2519,7 +2519,7 @@ async def on_ready():
     if _voice_available and tiffany_voice:
         lines = tiffany_voice.refresh_presence_lines(discord_client)
         log.info("Presence slash list refreshed (%d commands).", len(lines))
-        await tiffany_voice.start_warp_monitor(discord_client)
+        await tiffany_voice.start_voice_background_tasks(discord_client)
     if not verificar_feeds.is_running():
         verificar_feeds.start()
     if not _critical_tasks_watchdog.is_running():
@@ -2543,11 +2543,16 @@ async def on_close():
     global http_session
     try:
         from infra import redis_client, postgres, stripe_server
+        if _voice_available and tiffany_voice:
+            try:
+                await tiffany_voice.shutdown_voice_runtime(discord_client, reason="bot_shutdown")
+            except Exception:
+                log.exception("Voice runtime shutdown error")
         await stripe_server.stop_stripe_server()
         await redis_client.close_redis()
         await postgres.close_db()
     except Exception:
-        pass
+        log.exception("Infrastructure shutdown error")
     if http_session:
         await http_session.close()
         http_session = None
