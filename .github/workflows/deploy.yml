@@ -1,29 +1,25 @@
-name: Deploy to VPS
+# Manual / emergency deploy only. Normal releases use release.yml (validate → integration → deploy).
+name: Deploy to VPS (manual)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**.py'
-      - 'scripts/**'
-      - 'requirements.txt'
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Full git SHA that must be running after deploy (defaults to branch HEAD)'
+        required: false
+        type: string
 
-# Evita dois deploys rodando ao mesmo tempo (um mataria os processos do outro).
-# cancel-in-progress: false => o deploy em andamento SEMPRE termina o ciclo
-# stop->start completo; o novo push espera a vez (não derruba o bot no meio).
 concurrency:
   group: deploy-vps
   cancel-in-progress: false
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,15 +27,18 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
-      - name: Run unit tests
+      - name: Run lifecycle and smoke
         env:
           PYTHONUTF8: '1'
-        run: python -m unittest test_smoke -v
+        run: |
+          python -m pytest test_postgres_config.py test_phase10_lifecycle.py test_phase11_lifecycle.py \
+            test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py -v
+          python -m unittest test_smoke -v
 
   deploy:
-    needs: test
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Setup SSH key
@@ -48,10 +47,9 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           if [ -z "$SSH_KEY" ]; then
-            echo "VPS_SSH_KEY secret is empty — add the private key in GitHub Settings → Secrets."
+            echo "VPS_SSH_KEY secret is empty"
             exit 1
           fi
-          # Preserve multiline key; strip Windows CR that breaks libcrypto.
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
@@ -59,14 +57,13 @@ jobs:
       - name: Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
         run: |
           if [ -z "$VPS_HOST" ]; then
-            echo "VPS_HOST secret is empty — add the VPS IP in GitHub Settings → Secrets."
+            echo "VPS_HOST secret is empty"
             exit 1
           fi
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=45 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=4 \
-            root@"$VPS_HOST" "export DEPLOY_MODE=systemd && bash /opt/tiffany-bot/scripts/deploy.sh"
+            root@"$VPS_HOST" "export DEPLOY_MODE=systemd EXPECTED_SHA=$EXPECTED_SHA && bash /opt/tiffany-bot/scripts/deploy.sh"

@@ -1,13 +1,6 @@
 name: Integration Tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**.py'
-      - 'schema/**'
-      - 'docker-compose.integration.yml'
-      - '.github/workflows/integration.yml'
   pull_request:
     branches: [main]
     paths:
@@ -27,6 +20,7 @@ jobs:
       TIFFANY_INTEGRATION_TESTS: "1"
       INTEGRATION_DATABASE_URL: postgresql://tiffany_test:tiffany_test@127.0.0.1:5433/tiffany_test?ssl=disable
       INTEGRATION_REDIS_URL: redis://127.0.0.1:6380/0
+      DATABASE_SSL: disable
     steps:
       - uses: actions/checkout@v4
 

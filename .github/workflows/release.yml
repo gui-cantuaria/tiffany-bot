@@ -1,0 +1,151 @@
+# Canonical release pipeline — every push to main must pass all gates before deploy.
+# Replaces the scripts-only deploy bypass (947ad5d failure mode).
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-vps
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate (unit + lifecycle + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Record validated SHA
+        run: echo "VALIDATED_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: PostgreSQL config unit tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m pytest test_postgres_config.py -v
+
+      - name: Lifecycle and payments tests
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          python -m pytest test_phase10_lifecycle.py test_phase11_lifecycle.py \
+            test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py -v
+
+      - name: Smoke tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest test_smoke -v
+
+  integration:
+    name: Integration (PostgreSQL 16 + Redis 7)
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      TIFFANY_INTEGRATION_TESTS: "1"
+      INTEGRATION_DATABASE_URL: postgresql://tiffany_test:tiffany_test@127.0.0.1:5433/tiffany_test?ssl=disable
+      INTEGRATION_REDIS_URL: redis://127.0.0.1:6380/0
+      DATABASE_SSL: disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL 16 and Redis 7
+        run: docker compose -f docker-compose.integration.yml up -d --wait
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Integration tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m pytest tests/integration -v --tb=short
+
+      - name: Tear down integration containers
+        if: always()
+        run: docker compose -f docker-compose.integration.yml down -v
+
+  deploy:
+    name: Deploy to VPS
+    needs: integration
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify gate SHA
+        run: |
+          echo "Deploying validated SHA: ${{ github.sha }}"
+          echo "EXPECTED_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Setup SSH key
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          if [ -z "$SSH_KEY" ]; then
+            echo "VPS_SSH_KEY secret is empty — add the private key in GitHub Settings → Secrets."
+            exit 1
+          fi
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
+
+      - name: Deploy via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "VPS_HOST secret is empty — add the VPS IP in GitHub Settings → Secrets."
+            exit 1
+          fi
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=45 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            root@"$VPS_HOST" "export DEPLOY_MODE=systemd EXPECTED_SHA=${{ github.sha }} && bash /opt/tiffany-bot/scripts/deploy.sh"
+
+      - name: Post-deploy health check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=45 \
+            root@"$VPS_HOST" "export EXPECTED_SHA=${{ github.sha }}; bash -s" << 'HEALTH'
+          set -e
+          cd /opt/tiffany-bot || exit 1
+          RUNNING=$(git rev-parse HEAD 2>/dev/null || echo unknown)
+          echo "Running commit: $RUNNING"
+          if [ -n "${EXPECTED_SHA:-}" ] && [ "$RUNNING" != "$EXPECTED_SHA" ]; then
+            echo "SHA mismatch: expected $EXPECTED_SHA got $RUNNING"
+            exit 1
+          fi
+          if ! systemctl is-active --quiet tiffany-bot; then
+            echo "tiffany-bot service not active"
+            journalctl -u tiffany-bot -n 30 --no-pager || true
+            exit 1
+          fi
+          LAUNCHERS=$(pgrep -f "launcher.py" 2>/dev/null | wc -l || echo 0)
+          echo "launcher processes: $LAUNCHERS"
+          if [ "$LAUNCHERS" -eq 0 ]; then
+            journalctl -u tiffany-bot -n 30 --no-pager || true
+            exit 1
+          fi
+          echo "Post-deploy health: OK"
+          HEALTH

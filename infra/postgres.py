@@ -33,6 +33,30 @@ def _parse_database_url(url: str) -> tuple[str, dict[str, Any]]:
     return clean, kwargs
 
 
+def resolve_pool_connect_args(url: str) -> tuple[str, dict[str, Any]]:
+    """Resolve asyncpg ``create_pool`` kwargs from ``DATABASE_URL`` and ``DATABASE_SSL``.
+
+    Precedence:
+    1. ``DATABASE_SSL`` env (explicit operator intent)
+    2. ``?ssl=disable`` in URL (legacy/integration convenience)
+    3. Default — no ``ssl`` kwarg; asyncpg negotiates with the server
+    """
+    clean_url, url_kwargs = _parse_database_url(url)
+    env_ssl = os.getenv("DATABASE_SSL", "").strip().lower()
+
+    if env_ssl in ("disable", "false", "0", "off"):
+        return clean_url, {"ssl": False}
+    if env_ssl in ("require", "verify-full", "verify-ca"):
+        import ssl
+
+        return clean_url, {"ssl": ssl.create_default_context()}
+
+    if url_kwargs:
+        return clean_url, url_kwargs
+
+    return clean_url, {}
+
+
 async def init_db() -> None:
     global _pool
     url = os.getenv("DATABASE_URL", "").strip()
@@ -41,7 +65,7 @@ async def init_db() -> None:
         return
     try:
         import asyncpg
-        clean_url, pool_kwargs = _parse_database_url(url)
+        clean_url, pool_kwargs = resolve_pool_connect_args(url)
         _pool = await asyncpg.create_pool(
             clean_url,
             min_size=1,

@@ -192,6 +192,13 @@ if systemctl is-active --quiet tiffany-bot; then
         journalctl -u tiffany-bot -n 40 --no-pager || true
         exit 1
     fi
+    RUNNING_SHA=$(git rev-parse HEAD 2>/dev/null || echo unknown)
+    echo "[deploy] Running commit: $RUNNING_SHA"
+    if [ -n "${EXPECTED_SHA:-}" ] && [ "$RUNNING_SHA" != "$EXPECTED_SHA" ]; then
+        echo "[deploy] ERRO: SHA mismatch — expected $EXPECTED_SHA got $RUNNING_SHA"
+        exit 1
+    fi
+    echo "[deploy] Post-deploy health: service active, launcher running"
 else
     echo "[deploy] Serviço não está ativo após 10s! Últimos logs:"
     journalctl -u tiffany-bot -n 40 --no-pager || true
