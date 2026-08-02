@@ -25,7 +25,7 @@ import unicodedata
 import wave
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Coroutine, Optional
 
 import discord
 from discord import app_commands, FFmpegPCMAudio
@@ -34,7 +34,12 @@ from discord.ext import commands
 import game_recommendations
 import locale_utils
 import guild_config
-from infra.voice_lifecycle import OwnedBackgroundTask, cancel_task_bounded, spawn_ephemeral
+from infra.voice_lifecycle import (
+    OwnedBackgroundTask,
+    cancel_task_bounded,
+    register_session_task,
+    spawn_ephemeral,
+)
 from locale_utils import GuildLang, resolve_guild_lang, resolve_lang, interaction_lang, tr, slash_desc_kwargs, slash_param, hybrid_desc_kwargs, localized_cmd_help, hybrid_ctx_reply, hybrid_defer, hybrid_ctx_send
 
 try:
@@ -3350,6 +3355,24 @@ def _schedule_prefetch_next(
     )
 
 
+def _set_session_task(
+    session: "_GuildVoiceSession",
+    attr: str,
+    coro: Coroutine,
+    *,
+    guild_id: int,
+    label: str,
+    name: str,
+) -> asyncio.Task:
+    """Create a session-owned task with failure observability."""
+    task = asyncio.create_task(coro, name=name)
+    register_session_task(
+        task, session=session, attr=attr, guild_id=guild_id, label=label,
+    )
+    setattr(session, attr, task)
+    return task
+
+
 async def cleanup_voice_session_tasks(
     session: Optional["_GuildVoiceSession"],
     *,
@@ -6104,13 +6127,15 @@ def _attach_voice_stt(
     try:
         sink = _PCMBufferSink(session)
         vc.listen(sink)
-        session.listen_task = asyncio.create_task(
+        session.listen_task = _set_session_task(
+            session, "listen_task",
             _voice_listen_loop(guild_id, vc, bot),
-            name=f"tiffany-voice-{guild_id}",
+            guild_id=guild_id, label="listen", name=f"tiffany-voice-{guild_id}",
         )
-        session.question_task = asyncio.create_task(
+        session.question_task = _set_session_task(
+            session, "question_task",
             _question_worker(guild_id, vc, bot),
-            name=f"tiffany-question-{guild_id}",
+            guild_id=guild_id, label="question", name=f"tiffany-question-{guild_id}",
         )
     except Exception as e:
         log.warning("Failed to start STT listeners guild=%s: %s", guild_id, e)
@@ -7854,14 +7879,18 @@ def register_voice(bot: commands.Bot) -> None:
                 return
             if session.music_task is None or session.music_task.done():
                 log.warning("Music worker dead — reviving via command guild=%s", gid)
-                session.music_task = asyncio.create_task(
-                    _play_worker(gid, vc, bot), name=f"tiffany-music-{gid}"
+                session.music_task = _set_session_task(
+                    session, "music_task",
+                    _play_worker(gid, vc, bot),
+                    guild_id=gid, label="music", name=f"tiffany-music-{gid}",
                 )
             if session.question_task is None or session.question_task.done():
                 if _voice_stt_enabled():
                     log.warning("Question worker dead — reviving via command guild=%s", gid)
-                    session.question_task = asyncio.create_task(
-                        _question_worker(gid, vc, bot), name=f"tiffany-question-{gid}"
+                    session.question_task = _set_session_task(
+                        session, "question_task",
+                        _question_worker(gid, vc, bot),
+                        guild_id=gid, label="question", name=f"tiffany-question-{gid}",
                     )
             if (
                 _voice_stt_enabled()
@@ -7872,9 +7901,10 @@ def register_voice(bot: commands.Bot) -> None:
                     import voice_recv  # noqa: F401
                     if getattr(vc, "listen", None):
                         log.warning("Listen task dead — reviving guild=%s", gid)
-                        session.listen_task = asyncio.create_task(
+                        session.listen_task = _set_session_task(
+                            session, "listen_task",
                             _voice_listen_loop(gid, vc, bot),
-                            name=f"tiffany-voice-{gid}",
+                            guild_id=gid, label="listen", name=f"tiffany-voice-{gid}",
                         )
                 except Exception:
                     pass
@@ -7889,9 +7919,10 @@ def register_voice(bot: commands.Bot) -> None:
         """Rebuild in-memory session when voice_client exists but _sessions entry was lost."""
         session = _GuildVoiceSession(text_channel_id=text_channel_id)
         if not _is_wavelink_player(vc):
-            session.music_task = asyncio.create_task(
+            session.music_task = _set_session_task(
+                session, "music_task",
                 _play_worker(guild_id, vc, bot),
-                name=f"tiffany-music-{guild_id}",
+                guild_id=guild_id, label="music", name=f"tiffany-music-{guild_id}",
             )
             _attach_voice_stt(session, guild_id, vc, bot)
         _sessions[guild_id] = session
@@ -7942,15 +7973,17 @@ def register_voice(bot: commands.Bot) -> None:
             # Restart dead workers (ensures queue always processed)
             if sess.music_task is None or sess.music_task.done():
                 log.warning("Music worker died — restarting guild=%s", gid)
-                sess.music_task = asyncio.create_task(
+                sess.music_task = _set_session_task(
+                    sess, "music_task",
                     _play_worker(gid, vc, bot),
-                    name=f"tiffany-music-{gid}",
+                    guild_id=gid, label="music", name=f"tiffany-music-{gid}",
                 )
             if sess.question_task is None or sess.question_task.done():
                 log.warning("Question worker died — restarting guild=%s", gid)
-                sess.question_task = asyncio.create_task(
+                sess.question_task = _set_session_task(
+                    sess, "question_task",
                     _question_worker(gid, vc, bot),
-                    name=f"tiffany-question-{gid}",
+                    guild_id=gid, label="question", name=f"tiffany-question-{gid}",
                 )
             return sess, vc
 
@@ -8075,9 +8108,10 @@ def register_voice(bot: commands.Bot) -> None:
 
         # Music worker: only needed in yt-dlp mode (Lavalink uses event listeners)
         if not use_lavalink:
-            session.music_task = asyncio.create_task(
+            session.music_task = _set_session_task(
+                session, "music_task",
                 _play_worker(gid, vc, bot),
-                name=f"tiffany-music-{gid}",
+                guild_id=gid, label="music", name=f"tiffany-music-{gid}",
             )
         else:
             session.music_task = None
@@ -10232,9 +10266,10 @@ def register_voice(bot: commands.Bot) -> None:
                 session = _GuildVoiceSession(text_channel_id=text_channel_id)
                 if voice_recv_ok:
                     _attach_voice_stt(session, gid, vc, bot)
-                session.music_task = asyncio.create_task(
+                session.music_task = _set_session_task(
+                    session, "music_task",
                     _play_worker(gid, vc, bot),
-                    name=f"tiffany-music-{gid}",
+                    guild_id=gid, label="music", name=f"tiffany-music-{gid}",
                 )
                 _sessions[gid] = session
                 log.info("Auto-reconnected guild=%s channel=%s", gid, channel.name)

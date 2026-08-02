@@ -6,12 +6,14 @@ on:
     paths:
       - '**.py'
       - 'requirements.txt'
+      - 'schema/**'
       - '.github/workflows/test.yml'
   pull_request:
     branches: [main]
     paths:
       - '**.py'
       - 'requirements.txt'
+      - 'schema/**'
       - '.github/workflows/test.yml'
   workflow_dispatch:
 
@@ -32,7 +34,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests
+      - name: Run lifecycle and payments tests
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          python -m pytest test_phase10_lifecycle.py test_phase11_lifecycle.py test_outbox_concurrency.py test_payments_phase3.py test_launcher_signals.py -v
+
+      - name: Run smoke tests
         env:
           PYTHONUTF8: '1'
         run: python -m unittest test_smoke -v

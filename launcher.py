@@ -121,11 +121,16 @@ def start_bot(bot_config: dict):
     log_file.write(f"\n--- Started at {datetime.now().isoformat()} ---\n")
     log_file.flush()
     try:
+        popen_kw: dict = {
+            "stdout": log_file,
+            "stderr": subprocess.STDOUT,
+            "env": {**os.environ, "PYTHONIOENCODING": "utf-8"},
+        }
+        if sys.platform != "win32":
+            popen_kw["start_new_session"] = True
         proc = subprocess.Popen(
             [sys.executable, "-u", bot_config["file"]],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            **popen_kw,
         )
     except Exception as e:
         log_file.close()
@@ -133,102 +138,119 @@ def start_bot(bot_config: dict):
     return proc, log_file
 
 
-log("🚀 Starting Tiffany system...")
+def main() -> None:
+    log("🚀 Starting Tiffany system...")
 
-# Start all bots for the first time
-for bot in bots:
-    proc, log_file = start_bot(bot)
-    processes[bot["name"]] = {"process": proc, "log_file": log_file, "config": bot}
+    # Start all bots for the first time
+    for bot in bots:
+        proc, log_file = start_bot(bot)
+        processes[bot["name"]] = {"process": proc, "log_file": log_file, "config": bot}
 
-log("✅ Bots active! Monitoring crashes (watchdog enabled)...")
-webhook_notify(f"✅ Sistema iniciado com {len(bots)} bot(s)")
+    log("✅ Bots active! Monitoring crashes (watchdog enabled)...")
+    webhook_notify(f"✅ Sistema iniciado com {len(bots)} bot(s)")
 
-try:
-    while True:
-        # Health check every 10 seconds
-        time.sleep(10)
+    try:
+        while True:
+            # Health check every 10 seconds
+            time.sleep(10)
 
-        for name, data in list(processes.items()):
-            p = data["process"]
-            bot_config = data["config"]
+            for name, data in list(processes.items()):
+                p = data["process"]
+                bot_config = data["config"]
 
-            # poll() != None means the process exited
-            if p.poll() is not None:
-                crash_tail = _read_crash_tail(bot_config)
-                log(f"⚠️ ALERT: {name} crashed (exit code: {p.returncode})!")
-                log(f"📋 Last log lines:\n{crash_tail}")
-                webhook_notify(
-                    f"⚠️ {name} caiu (exit code: {p.returncode})!\n"
-                    f"```\n{crash_tail[:400]}\n```"
-                )
-                # Circuit breaker: give up if too many total crashes
-                _total_restarts[name] = _total_restarts.get(name, 0) + 1
-                if _total_restarts[name] >= MAX_TOTAL_RESTARTS:
-                    log(f"💀 {name} crashed {MAX_TOTAL_RESTARTS}x total! Giving up permanently.")
-                    webhook_notify(f"💀 {name} desativado — crashou {MAX_TOTAL_RESTARTS}x. Requer restart manual.")
-                    continue
-                # Anti restart-storm with exponential backoff
-                now = time.time()
-                if name not in _restart_times:
-                    _restart_times[name] = []
-                _restart_times[name].append(now)
-                _restart_times[name] = [t for t in _restart_times[name] if now - t < RESTART_WINDOW]
-                if len(_restart_times[name]) >= MAX_RAPID_RESTARTS:
-                    level = _backoff_level.get(name, 0)
-                    wait = min(BACKOFF_BASE * (2 ** level), BACKOFF_MAX)
-                    _backoff_level[name] = level + 1
-                    log(f"🚨 {name} crashed {MAX_RAPID_RESTARTS}x in {RESTART_WINDOW}s! Backoff: {wait}s (level {level + 1})...")
-                    webhook_notify(f"🚨 {name} em restart storm! Backoff de {wait}s.")
-                    time.sleep(wait)
-                    _restart_times[name].clear()
+                # poll() != None means the process exited
+                if p.poll() is not None:
+                    crash_tail = _read_crash_tail(bot_config)
+                    log(f"⚠️ ALERT: {name} crashed (exit code: {p.returncode})!")
+                    log(f"📋 Last log lines:\n{crash_tail}")
+                    webhook_notify(
+                        f"⚠️ {name} caiu (exit code: {p.returncode})!\n"
+                        f"```\n{crash_tail[:400]}\n```"
+                    )
+                    # Circuit breaker: give up if too many total crashes
+                    _total_restarts[name] = _total_restarts.get(name, 0) + 1
+                    if _total_restarts[name] >= MAX_TOTAL_RESTARTS:
+                        log(f"💀 {name} crashed {MAX_TOTAL_RESTARTS}x total! Giving up permanently.")
+                        webhook_notify(f"💀 {name} desativado — crashou {MAX_TOTAL_RESTARTS}x. Requer restart manual.")
+                        continue
+                    # Anti restart-storm with exponential backoff
+                    now = time.time()
+                    if name not in _restart_times:
+                        _restart_times[name] = []
+                    _restart_times[name].append(now)
+                    _restart_times[name] = [t for t in _restart_times[name] if now - t < RESTART_WINDOW]
+                    if len(_restart_times[name]) >= MAX_RAPID_RESTARTS:
+                        level = _backoff_level.get(name, 0)
+                        wait = min(BACKOFF_BASE * (2 ** level), BACKOFF_MAX)
+                        _backoff_level[name] = level + 1
+                        log(f"🚨 {name} crashed {MAX_RAPID_RESTARTS}x in {RESTART_WINDOW}s! Backoff: {wait}s (level {level + 1})...")
+                        webhook_notify(f"🚨 {name} em restart storm! Backoff de {wait}s.")
+                        time.sleep(wait)
+                        _restart_times[name].clear()
+                    else:
+                        # Reset backoff on stable restart
+                        _backoff_level[name] = 0
+                    if data.get("log_file"):
+                        data["log_file"].close()
+                    log(f"🔄 Restarting {name}...")
+                    try:
+                        proc, log_file = start_bot(bot_config)
+                        processes[name]["process"] = proc
+                        processes[name]["log_file"] = log_file
+                    except Exception as e:
+                        log(f"💀 Failed to restart {name}: {e}")
+                        webhook_notify(f"💀 Falha ao reiniciar {name}: {e}")
+
+    except KeyboardInterrupt:
+        log("🛑 Stop command received. Shutting down bots...")
+        webhook_notify("🛑 Sistema encerrado manualmente.")
+        for name, data in processes.items():
+            # Graceful: SIGINT to process group first (allows discord.py + child ffmpeg cleanup)
+            try:
+                if sys.platform != "win32":
+                    os.killpg(os.getpgid(data["process"].pid), signal.SIGINT)
                 else:
-                    # Reset backoff on stable restart
-                    _backoff_level[name] = 0
-                if data.get("log_file"):
-                    data["log_file"].close()
-                log(f"🔄 Restarting {name}...")
-                try:
-                    proc, log_file = start_bot(bot_config)
-                    processes[name]["process"] = proc
-                    processes[name]["log_file"] = log_file
-                except Exception as e:
-                    log(f"💀 Failed to restart {name}: {e}")
-                    webhook_notify(f"💀 Falha ao reiniciar {name}: {e}")
-
-except KeyboardInterrupt:
-    log("🛑 Stop command received. Shutting down bots...")
-    webhook_notify("🛑 Sistema encerrado manualmente.")
-    for name, data in processes.items():
-        # Graceful: SIGINT first (allows discord.py to clean up), then SIGTERM, then SIGKILL
-        try:
-            if sys.platform != "win32":
-                data["process"].send_signal(signal.SIGINT)
-            else:
-                data["process"].terminate()
-        except OSError:
-            pass
-        try:
-            data["process"].wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            log(f"⚠️ {name} did not exit after SIGINT (10s), sending SIGTERM...")
-            data["process"].terminate()
+                    data["process"].terminate()
+            except OSError:
+                pass
             try:
                 data["process"].wait(timeout=10)
             except subprocess.TimeoutExpired:
-                log(f"⚠️ {name} did not exit after SIGTERM (10s), forcing SIGKILL...")
-                data["process"].kill()
-                data["process"].wait(timeout=5)
-        if data.get("log_file"):
-            data["log_file"].close()
-        log(f"💤 {name} shut down successfully.")
+                log(f"⚠️ {name} did not exit after SIGINT (10s), sending SIGTERM...")
+                try:
+                    if sys.platform != "win32":
+                        os.killpg(os.getpgid(data["process"].pid), signal.SIGTERM)
+                    else:
+                        data["process"].terminate()
+                except OSError:
+                    pass
+                try:
+                    data["process"].wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    log(f"⚠️ {name} did not exit after SIGTERM (10s), forcing SIGKILL...")
+                    try:
+                        if sys.platform != "win32":
+                            os.killpg(os.getpgid(data["process"].pid), signal.SIGKILL)
+                        else:
+                            data["process"].kill()
+                    except OSError:
+                        pass
+                    data["process"].wait(timeout=5)
+            if data.get("log_file"):
+                data["log_file"].close()
+            log(f"💤 {name} shut down successfully.")
 
-    log("👋 Tiffany system shut down safely.")
-finally:
-    if _lock_fd:
-        try:
-            if sys.platform != "win32":
-                import fcntl
-                fcntl.flock(_lock_fd, fcntl.LOCK_UN)
-            _lock_fd.close()
-        except Exception:
-            pass
+        log("👋 Tiffany system shut down safely.")
+    finally:
+        if _lock_fd:
+            try:
+                if sys.platform != "win32":
+                    import fcntl
+                    fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+                _lock_fd.close()
+            except Exception:
+                pass
+
+
+if __name__ == "__main__":
+    main()

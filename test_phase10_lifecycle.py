@@ -145,79 +145,76 @@ class TestRepeatedReadyIdempotency(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(counts_after["presence"])
 
 
+class _FakeTx:
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def __aenter__(self):
+        self._conn.in_tx = True
+        return self._conn
+
+    async def __aexit__(self, *a):
+        self._conn.in_tx = False
+
+
 class TestOutboxSideEffectOutsideTransaction(unittest.IsolatedAsyncioTestCase):
-    async def test_deliver_runs_outside_fetch_transaction(self):
+    async def test_deliver_runs_outside_claim_transaction(self):
         import infra.payments.worker as worker
 
         calls: list[str] = []
 
         class FakeConn:
-            def __init__(self):
-                self.in_tx = False
-
-            async def fetchval(self, *a, **k):
-                return 0
+            in_tx = False
 
             def transaction(self):
                 return _FakeTx(self)
 
-        class _FakeTx:
+            async def fetchval(self, *a, **k):
+                return 0
+
+        class _Acquire:
             def __init__(self, conn):
                 self._conn = conn
 
             async def __aenter__(self):
-                self._conn.in_tx = True
                 return self._conn
 
             async def __aexit__(self, *a):
-                self._conn.in_tx = False
+                pass
 
         fake_pool = MagicMock()
         fake_pool.fetchval = AsyncMock(return_value=0)
-        fake_pool.acquire = MagicMock(return_value=_FakeAcquire(FakeConn()))
+        fake_pool.acquire = MagicMock(return_value=_Acquire(FakeConn()))
 
         row = {
             "id": "00000000-0000-0000-0000-000000000001",
             "delivery_type": "discord_notify",
             "payload": {"kind": "premium_activated", "guild_id": 1, "user_id": 2, "tier": "ultimate"},
-            "attempt_count": 0,
-            "provider_event_id": "evt_1",
-            "correlation_id": None,
-            "trace_id": "t",
+            "attempt_count": 1,
+            "lease_owner": "worker-test",
         }
 
-        async def _fetch_batch(conn, *, limit=20):
-            calls.append("fetch")
+        async def _claim(conn, *, worker_id, limit=20):
+            calls.append("claim")
             assert conn.in_tx is True
             return [row]
 
         async def _deliver(payload):
             calls.append("deliver")
 
-        async def _mark_delivered(conn, outbox_id):
+        async def _mark(conn, outbox_id, *, lease_owner):
             calls.append("mark")
             assert conn.in_tx is False
+            return True
 
         with patch("infra.postgres.pool", return_value=fake_pool):
             with patch("infra.payments.metrics.set_gauge"):
-                with patch.object(worker.outbox_mod, "fetch_pending_batch", side_effect=_fetch_batch):
+                with patch.object(worker.outbox_mod, "claim_batch", side_effect=_claim):
                     with patch.object(worker, "_deliver_discord_notify", side_effect=_deliver):
-                        with patch.object(worker.outbox_mod, "mark_delivered", side_effect=_mark_delivered):
-                            with patch.object(worker.outbox_mod, "mark_failed", new=AsyncMock()):
-                                n = await worker.process_outbox_batch()
+                        with patch.object(worker.outbox_mod, "mark_delivered", side_effect=_mark):
+                            n = await worker.process_outbox_batch()
         self.assertEqual(n, 1)
-        self.assertEqual(calls, ["fetch", "deliver", "mark"])
-
-
-class _FakeAcquire:
-    def __init__(self, conn):
-        self._conn = conn
-
-    async def __aenter__(self):
-        return self._conn
-
-    async def __aexit__(self, *a):
-        pass
+        self.assertEqual(calls, ["claim", "deliver", "mark"])
 
 
 class TestGracefulShutdown(unittest.IsolatedAsyncioTestCase):
