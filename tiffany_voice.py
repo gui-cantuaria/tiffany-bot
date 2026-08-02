@@ -4618,12 +4618,19 @@ class PlayerControlView(discord.ui.View):
         try:
             import wavelink
             self.session.nightcore_enabled = not getattr(self.session, "nightcore_enabled", False)
+            filters: wavelink.Filters = getattr(vc, "filters", None) or wavelink.Filters()
             if not self.session.nightcore_enabled:
-                await vc.set_filters(wavelink.Filters())
+                try:
+                    filters.reset()
+                except AttributeError:
+                    try:
+                        filters.timescale.reset()
+                    except AttributeError:
+                        filters.timescale.set(pitch=1.0, speed=1.0, rate=1.0)
+                await vc.set_filters(filters)
                 button.style = discord.ButtonStyle.secondary
                 msg = "🌙 Filtro Nightcore desativado!"
             else:
-                filters = wavelink.Filters()
                 filters.timescale.set(pitch=1.2, speed=1.1, rate=1.0)
                 await vc.set_filters(filters)
                 button.style = discord.ButtonStyle.success
@@ -4631,8 +4638,9 @@ class PlayerControlView(discord.ui.View):
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(msg, ephemeral=True)
         except Exception as e:
-            log.error(f"Filter error: {e}")
-            await interaction.response.send_message("Erro ao aplicar o filtro.", ephemeral=True)
+            log.error("Nightcore filter error: %s", e, exc_info=True)
+            self.session.nightcore_enabled = not getattr(self.session, "nightcore_enabled", False)
+            await interaction.response.send_message(f"⚠️ Erro ao aplicar o filtro Nightcore: {e}", ephemeral=True)
 
     @discord.ui.button(label="Ver Fila", emoji="📜", style=discord.ButtonStyle.secondary, row=1, custom_id="tif_ctrl_queue")
     async def btn_queue_show(self, interaction: discord.Interaction, button: discord.ui.Button):
