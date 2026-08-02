@@ -4719,31 +4719,20 @@ def _embed_now_playing(
     url: str = "",
     artist: str = ""
 ) -> discord.Embed:
-    """Enhanced, world-class Now Playing card in Jockie Music style with clickable title, artist, duration, and album artwork."""
+    """Compact, sleek Now Playing card matching the clean legacy style without bulky fields or thumbnails."""
     em = discord.Embed(color=TIFFANY_PINK)
     track_line = _format_song_and_artist(track_title)[:200]
     if track_line in ("link recebido", ""):
         track_line = "Faixa Selecionada"
-    emoji = _platform_emoji(source_label)
-    em.title = f"🎵 {'Tocando agora' if lang == 'pt' else 'Now Playing'}"
-    if url and url.startswith("http"):
-        em.description = f"{emoji} **[{track_line}]({url})**"
-    else:
-        em.description = f"{emoji} **{track_line}**"
-    if artist:
-        artist_lbl = "👤 Canal / Artista" if lang == "pt" else "👤 Artist / Channel"
-        em.add_field(name=artist_lbl, value=f"`{artist[:80]}`", inline=True)
-    if duration_sec > 0:
-        dur_lbl = "⏱️ Duração" if lang == "pt" else "⏱️ Duration"
-        em.add_field(name=dur_lbl, value=f"`{_fmt_dur(duration_sec)}`", inline=True)
-    if thumbnail:
-        em.set_thumbnail(url=thumbnail)
-    footer_txt = f"Pedido por {requester[:80]}" if lang == "pt" and requester else (f"Requested by {requester[:80]}" if requester else "")
-    if footer_txt:
-        if requester_icon and requester_icon.startswith("http"):
-            em.set_footer(text=footer_txt, icon_url=requester_icon)
-        else:
-            em.set_footer(text=footer_txt)
+    title_lbl = "Tocando agora" if lang == "pt" else "Now Playing"
+    dur_lbl = "Duração" if lang == "pt" else "Duration"
+    req_lbl = "Pedido por" if lang == "pt" else "Requested by"
+    dur_str = _fmt_dur(duration_sec) if duration_sec > 0 else "00:00"
+
+    desc = f"▶️ **{title_lbl}: {track_line}**\n\n⏱️ {dur_lbl}: {dur_str}"
+    if requester:
+        desc += f" · 👤 {req_lbl}: {requester[:80]}"
+    em.description = desc
     return em
 
 
@@ -5149,37 +5138,21 @@ def _embed_music_added(
             inline=True,
         )
     else:
-        em.title = f"🎵 {'Adicionado à fila' if lang == 'pt' else 'Added to queue'}"
         clean_title = _format_song_and_artist(title)[:200]
         if clean_title in ("link recebido", ""):
             clean_title = "Faixa Selecionada"
-        if url and url.startswith("http"):
-            em.description = f"**[{clean_title}]({url})**"
-        else:
-            em.description = f"**{clean_title}**"
-        if artist:
-            artist_lbl = "👤 Canal" if lang == "pt" else "👤 Channel"
-            em.add_field(name=artist_lbl, value=f"`{artist[:80]}`", inline=True)
-        if duration_sec > 0:
-            dur_lbl = "⏱️ Duração" if lang == "pt" else "⏱️ Duration"
-            em.add_field(name=dur_lbl, value=f"`{_fmt_dur(duration_sec)}`", inline=True)
+        add_lbl = "Adicionado à fila" if lang == "pt" else "Added to queue"
+        dur_lbl = "Duração" if lang == "pt" else "Duration"
+        pos_lbl = "Posição na fila" if lang == "pt" else "Position in queue"
+        req_lbl = "Pedido por" if lang == "pt" else "Requested by"
+        dur_str = _fmt_dur(duration_sec) if duration_sec > 0 else "00:00"
+
+        desc = f"🎵 **{add_lbl}: {clean_title}**\n\n⏱️ {dur_lbl}: {dur_str}"
         if position >= 1:
-            pos_lbl = "🔢 Posição na fila" if lang == "pt" else "🔢 Position in queue"
-            em.add_field(name=pos_lbl, value=f"`#{position}`", inline=True)
-        if eta_sec > 0 and position > 1:
-            eta_lbl = "⏳ Tempo estimado" if lang == "pt" else "⏳ Estimated time"
-            em.add_field(name=eta_lbl, value=f"`{_fmt_dur(eta_sec)}`", inline=True)
-        elif position == 1:
-            eta_lbl = "⏳ Tempo estimado" if lang == "pt" else "⏳ Estimated time"
-            now_txt = "A seguir" if lang == "pt" else "Next up"
-            em.add_field(name=eta_lbl, value=f"`{now_txt}`", inline=True)
-    footer_txt = f"Pedido por {requester[:80]}" if lang == "pt" else f"Requested by {requester[:80]}"
-    if requester_icon and requester_icon.startswith("http"):
-        em.set_footer(text=footer_txt, icon_url=requester_icon)
-    else:
-        em.set_footer(text=footer_txt)
-    if thumbnail:
-        em.set_thumbnail(url=thumbnail)
+            desc += f" · 🔢 {pos_lbl}: #{position}"
+        if requester:
+            desc += f" · 👤 {req_lbl}: {requester[:80]}"
+        em.description = desc
     return em
 
 
