@@ -116,6 +116,14 @@ async def get_entitlement(
     return ent
 
 
+async def has_premium(subject_id: int, subject_type: str = "guild", tier: str = "premium") -> bool:
+    if subject_type == "guild":
+        ent = await get_entitlement(guild_id=subject_id)
+    else:
+        ent = await get_entitlement(user_id=subject_id)
+    return ent.covers(tier)
+
+
 async def handle_discord_subscription_event(payload: dict[str, Any]) -> None:
     """Process Discord Entitlement / App Subscription webhook payload (invalidate + upsert)."""
     # Discord sends varying shapes — normalize best-effort

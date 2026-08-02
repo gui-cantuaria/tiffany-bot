@@ -248,12 +248,12 @@ class WhiteLabelConfigView(View):
 # Main Premium Dashboard
 # ---------------------------------------------------------------------------
 class PremiumDashboardView(View):
-    def __init__(self, guild_id: int, package: str):
     def __init__(self, guild_id: int, package: str, author_id: int = None):
         super().__init__(timeout=600)
         self.guild_id = guild_id
         self.package = package
         self.author_id = author_id
+        self.add_item(Button(label="Manage Subscription (Stripe)", style=discord.ButtonStyle.link, url="https://billing.stripe.com/p/session/test", row=1))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.author_id is not None and interaction.user.id != self.author_id:
@@ -310,8 +310,3 @@ class PremiumDashboardView(View):
         
         embed = discord.Embed(title="🎨 White-Label Configuration", color=TIFFANY_PINK)
         await interaction.response.edit_message(embed=embed, view=view)
-
-    @discord.ui.button(label="Manage Subscription (Stripe)", style=discord.ButtonStyle.link, url="https://billing.stripe.com/p/session/test", row=1)
-    def btn_stripe(self, button: Button):
-        # NOTE: This URL should be dynamically generated via Stripe Customer Portal API in production.
-        pass

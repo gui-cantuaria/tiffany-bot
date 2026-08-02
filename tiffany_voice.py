@@ -4410,6 +4410,7 @@ PRESENCE_CMD_TAGLINES: dict[str, str] = {
     "pause": "pause track",
     "play": "music in voice",
     "playlist": "saved playlists",
+    "premium": "manage VIP features",
     "queue": "queue & now playing",
     "randomsong": "random famous hit",
     "random": "random famous hit",
@@ -4438,10 +4439,8 @@ PRESENCE_ROTATE_SEC = 8
 
 def presence_line_for_cmd(name: str) -> str:
     """Format one Playing status line: `/name — short tagline`."""
-    tag = PRESENCE_CMD_TAGLINES.get(name)
-    if tag:
-        return f"/{name} — {tag}"[:128]
-    return f"/{name}"[:128]
+    tag = PRESENCE_CMD_TAGLINES.get(name, "bot command")
+    return f"/{name} — {tag}"[:128]
 
 
 def presence_lines_for(client: discord.Client) -> tuple[str, ...]:
