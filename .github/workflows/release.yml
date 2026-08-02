@@ -124,28 +124,13 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "VPS_HOST secret is empty"
+            exit 1
+          fi
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=45 \
-            root@"$VPS_HOST" "export EXPECTED_SHA=${{ github.sha }}; bash -s" << 'HEALTH'
-          set -e
-          cd /opt/tiffany-bot || exit 1
-          RUNNING=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-          echo "Running commit: $RUNNING"
-          if [ -n "${EXPECTED_SHA:-}" ] && [ "$RUNNING" != "$EXPECTED_SHA" ]; then
-            echo "SHA mismatch: expected $EXPECTED_SHA got $RUNNING"
-            exit 1
-          fi
-          if ! systemctl is-active --quiet tiffany-bot; then
-            echo "tiffany-bot service not active"
-            journalctl -u tiffany-bot -n 30 --no-pager || true
-            exit 1
-          fi
-          LAUNCHERS=$(pgrep -f "launcher.py" 2>/dev/null | wc -l || echo 0)
-          echo "launcher processes: $LAUNCHERS"
-          if [ "$LAUNCHERS" -eq 0 ]; then
-            journalctl -u tiffany-bot -n 30 --no-pager || true
-            exit 1
-          fi
-          echo "Post-deploy health: OK"
-          HEALTH
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            root@"$VPS_HOST" "export EXPECTED_SHA=${{ github.sha }} READINESS_TIMEOUT_SEC=60 && bash /opt/tiffany-bot/scripts/post-deploy-health.sh"
