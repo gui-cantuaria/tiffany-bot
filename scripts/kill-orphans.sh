@@ -59,7 +59,11 @@ if [ "$remain" -gt 0 ]; then
   done
 fi
 
-rm -f /tmp/tiffany_launcher.lock
+if command -v docker &>/dev/null; then
+  docker ps -q --filter "name=tiffany" | xargs -r docker stop 2>/dev/null || true
+fi
+
+rm -f /tmp/tiffany_*.lock
 
 left=$(pgrep -af "launcher.py|notices.py" 2>/dev/null || true)
 if [ -n "$left" ]; then

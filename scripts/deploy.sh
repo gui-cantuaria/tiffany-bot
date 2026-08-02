@@ -14,26 +14,10 @@ cd /opt/tiffany-bot
 # Production VPS uses systemd + venv (not Docker).
 export DEPLOY_MODE="${DEPLOY_MODE:-systemd}"
 
-echo "[deploy] Baixando atualizações..."
+echo "[deploy] Baixando e aplicando atualizações (git reset --hard para garantir integridade)..."
 git fetch origin main
+git reset --hard origin/main
 
-echo "[deploy] Atualizando scripts de deploy primeiro (evita checkout parcial)..."
-git checkout origin/main -- scripts/deploy.sh scripts/run.sh scripts/tiffany-bot.service scripts/kill-orphans.sh scripts/vps-restart.sh scripts/start-lavalink.sh \
-  scripts/warp-setup.sh scripts/warp-healthcheck.sh scripts/setup-github-actions.sh \
-  scripts/tiffany-warp-healthcheck.service scripts/tiffany-warp-healthcheck.timer 2>/dev/null || true
-
-echo "[deploy] Aplicando arquivos atualizados..."
-git checkout origin/main -- \
-  launcher.py notices.py tiffany_voice.py offers_cog.py locale_utils.py game_recommendations.py \
-  affiliate_config.py random_songs.py requirements.txt brand_colors.py \
-  giveaways_cog.py embed_builder_cog.py moderation_auto.py guild_config.py mod_panel.py \
-  feature_flags.py user_settings.py settings_panel.py imagine.py imagine_safety.py \
-  premium_cog.py premium_panel.py premium_ai_guardrails.py config/ tiffany_core/ \
-  updates.py updates.json owner_dashboard.py roleplay_config.py roleplay_i18n.py \
-  infra/ schema/ locales/ test_*.py LICENSE SECURITY.md \
-  docker-compose.yml Dockerfile .env.example 2>/dev/null || true
-git checkout origin/main -- \
-  docs/ lavalink/ application.yml CONTRIBUTING.md README.md 2>/dev/null || true
 
 USE_DOCKER=0
 if [ "${DEPLOY_MODE:-}" = "systemd" ]; then
