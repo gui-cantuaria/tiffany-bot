@@ -26,13 +26,19 @@ import guild_config
 # =========================
 load_dotenv()
 
+def _safe_int_env(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-CANAL_OFERTAS_ID = int(os.getenv("CANAL_OFERTAS_ID", "1512902840908124281"))
-ID_CARGO_OFERTAS = int(os.getenv("ID_CARGO_OFERTAS", "0"))  # legacy: ping on EVERY offer (0 = disabled)
+CANAL_OFERTAS_ID = _safe_int_env("CANAL_OFERTAS_ID", 1512902840908124281)
+ID_CARGO_OFERTAS = _safe_int_env("ID_CARGO_OFERTAS", 0)  # legacy: ping on EVERY offer (0 = disabled)
 # Role ping ONLY on "ultra deals" (high discount). Default = server offers role.
-ID_CARGO_ULTRA = int(os.getenv("ID_CARGO_OFERTAS_ULTRA", "1386386059390357575"))
-DESCONTO_ULTRA_OFERTA = int(os.getenv("DESCONTO_ULTRA_OFERTA", "60"))  # minimum % to qualify as "ultra deal"
-GUILD_ID = int(os.getenv("GUILD_ID", "0"))
+ID_CARGO_ULTRA = _safe_int_env("ID_CARGO_OFERTAS_ULTRA", 1386386059390357575)
+DESCONTO_ULTRA_OFERTA = _safe_int_env("DESCONTO_ULTRA_OFERTA", 60)  # minimum % to qualify as "ultra deal"
+GUILD_ID = _safe_int_env("GUILD_ID", 0)
 
 HORA_INICIO = 8
 HORA_FIM = 18

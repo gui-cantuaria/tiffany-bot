@@ -139,7 +139,10 @@ logging.getLogger("wavelink").setLevel(logging.WARNING)
 # =========================
 # DISCORD + AI CLIENT
 # =========================
-GUILD_ID = int(os.getenv("GUILD_ID", "0"))
+try:
+    GUILD_ID = int(os.getenv("GUILD_ID", "0"))
+except ValueError:
+    GUILD_ID = 0
 
 intents = discord.Intents.default()
 # Only enable voice intents if voice is enabled
@@ -2728,6 +2731,9 @@ elif not _voice_available:
 
 if __name__ == "__main__":
     try:
+        if not DISCORD_TOKEN:
+            log.critical("💀 DISCORD_TOKEN is empty or unset in environment (.env)! Aborting start without crash-looping.")
+            sys.exit(1)
         discord_client.run(DISCORD_TOKEN, reconnect=True)
     except SystemExit:
         log.info("Bot exited via SystemExit.")

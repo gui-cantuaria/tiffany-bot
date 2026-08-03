@@ -219,7 +219,10 @@ def resolve_guild_lang(guild: Optional[discord.Guild]) -> GuildLang:
     """Map Discord server locale to pt, en, es, fr, or de. Home GUILD_ID always pt."""
     if guild is None:
         return "pt"
-    home_id = int(os.getenv("GUILD_ID", "0") or "0")
+    try:
+        home_id = int(os.getenv("GUILD_ID", "0") or "0")
+    except (ValueError, TypeError):
+        home_id = 0
     if home_id and guild.id == home_id:
         return "pt"
     raw = getattr(guild, "preferred_locale", None)
