@@ -75,7 +75,7 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
 INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "60"))  # interval between news cycles (minutes)
 
-# Clock-aligned schedule: every 45 min from 8:00 to before 18:00
+# Clock-aligned schedule: every INTERVALO_NOTICIAS_MIN (default 60 min) from 8:00 to before 18:00
 def _build_news_schedule():
     times = []
     t = HORA_INICIO * 60
@@ -1807,15 +1807,18 @@ async def verificar_feeds():
 @verificar_feeds.before_loop
 async def _before_verificar_feeds():
     await discord_client.wait_until_ready()
-    now_br = datetime.now(FUSO_HORARIO_BR)
-    if HORA_INICIO <= now_br.hour < HORA_FIM:
-        log.info("News bot ready — running first cycle now.")
-        try:
-            await _verificar_feeds_inner()
-        except Exception as e:
-            log.exception(f"News first cycle error: {e}")
+    if os.getenv("RUN_ON_STARTUP", "0") == "1":
+        now_br = datetime.now(FUSO_HORARIO_BR)
+        if HORA_INICIO <= now_br.hour < HORA_FIM:
+            log.info("News bot ready — running first cycle on startup (RUN_ON_STARTUP=1).")
+            try:
+                await _verificar_feeds_inner()
+            except Exception as e:
+                log.exception(f"News first cycle error: {e}")
+        else:
+            log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
     else:
-        log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
+        log.info("News bot ready — waiting for next scheduled slot to maintain consistent clock alignment.")
 
 
 @tasks.loop(minutes=10)

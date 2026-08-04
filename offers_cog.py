@@ -45,9 +45,9 @@ HORA_FIM = 18
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
-SCAN_INTERVAL_MIN = 30  # deal cycle every 30 min
+SCAN_INTERVAL_MIN = _safe_int_env("OFERTAS_INTERVALO_MIN", 30)  # deal cycle interval (default 30 min)
 
-# Clock-aligned schedule: every 30 min from 8:00 to 18:00 (BR time)
+# Clock-aligned schedule: every SCAN_INTERVAL_MIN from 8:00 to 18:00 (BR time)
 def _build_offer_schedule():
     times = []
     t = HORA_INICIO * 60
@@ -58,8 +58,8 @@ def _build_offer_schedule():
     return times
 
 _OFFER_SCHEDULE = _build_offer_schedule()
-POST_SPACING_SEC = 180  # 3 min between posts
-MAX_POSTS_POR_CICLO = 5
+POST_SPACING_SEC = _safe_int_env("OFERTAS_POST_SPACING_SEC", 180)  # 3 min between posts
+MAX_POSTS_POR_CICLO = _safe_int_env("OFERTAS_MAX_POSTS_POR_CICLO", 1)  # default 1 post per cycle for predictable scheduling
 DESCONTO_MINIMO = int(os.getenv("DESCONTO_MINIMO", "25"))  # minimum discount percentage
 NOTA_MINIMA_ESTRELAS = float(os.getenv("NOTA_MINIMA_ESTRELAS", "4.0"))
 VENDAS_MINIMAS = int(os.getenv("VENDAS_MINIMAS", "15"))
@@ -1678,7 +1678,7 @@ def _passes_filters(deal: dict) -> tuple[bool, str]:
 
     # Discount range. Coupon deals (option A) may lack a listed % — the coupon
     # IS the deal — so they're allowed through here and judged by store/metrics.
-    disc = deal.get("discount_pct", 0)
+    disc = deal.get("discount_pct") or 0
     has_coupon = bool(deal.get("coupon"))
     if disc and disc > 100:
         return False, f"discount {disc}% > 100%"
@@ -2563,15 +2563,18 @@ class OffersCog(commands.Cog):
     @deals_loop.before_loop
     async def _before_deals_loop(self):
         await self.bot.wait_until_ready()
-        now_br = datetime.now(FUSO_HORARIO_BR)
-        if HORA_INICIO <= now_br.hour < HORA_FIM:
-            log.info("Offers cog ready — running first cycle now.")
-            try:
-                await _run_deals_cycle()
-            except Exception as e:
-                log.exception(f"Offers first cycle error: {e}")
+        if os.getenv("RUN_ON_STARTUP", "0") == "1":
+            now_br = datetime.now(FUSO_HORARIO_BR)
+            if HORA_INICIO <= now_br.hour < HORA_FIM:
+                log.info("Offers cog ready — running first cycle on startup (RUN_ON_STARTUP=1).")
+                try:
+                    await _run_deals_cycle()
+                except Exception as e:
+                    log.exception(f"Offers first cycle error: {e}")
+            else:
+                log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
         else:
-            log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
+            log.info("Offers cog ready — waiting for next scheduled slot to maintain consistent clock alignment.")
     
     @commands.Cog.listener()
     async def on_ready(self):

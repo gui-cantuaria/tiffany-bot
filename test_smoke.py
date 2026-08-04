@@ -93,6 +93,22 @@ class TestOffersCategoryFilter(unittest.TestCase):
         oc._release_deal_posting(history, deal)
         self.assertFalse(oc._is_duplicate(history, deal["url"]))
 
+    def test_offers_filter_handles_none_discount_on_network_item(self):
+        import offers_cog as oc
+        deal = {
+            "title": "Adaptador Wi-Fi 6 TP-Link Archer TX20U Plus",
+            "category": "Adaptadores e rede",
+            "discount_pct": None,
+            "stars": None,
+            "sales_count": None,
+            "store": "amazon",
+            "image": "http://example.com/img.jpg",
+            "url": "http://example.com/item"
+        }
+        passed, reason = oc._passes_filters(deal)
+        self.assertFalse(passed)
+        self.assertIsInstance(reason, str)
+
 
 class TestSlashLocalizations(unittest.TestCase):
     def test_slash_desc_has_localizations(self):
