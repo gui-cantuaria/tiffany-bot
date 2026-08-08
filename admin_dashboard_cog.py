@@ -58,5 +58,45 @@ class AdminDashboardCog(commands.Cog):
         ephem = getattr(ctx.interaction, "response", None) is not None
         await ctx.send(embed=embed, ephemeral=ephem)
 
+    @commands.hybrid_command(name="grant_credits", hidden=True, description="Concede cotas/créditos de IA para um usuário (Admin Only)")
+    async def grant_credits_cmd(
+        self, 
+        ctx: commands.Context, 
+        target_user: discord.User, 
+        credits: int, 
+        reason: str = "Admin grant"
+    ):
+        """Securely grants AI quota credits to a specified user (Admin Only)."""
+        if ctx.author.id != 842799130630815754:
+            return await tiffany_voice.hybrid_ctx_reply(ctx, "Comando exclusivo do dono da Tiffany.", ephemeral=True)
+
+        if credits <= 0 or credits > 100000:
+            return await tiffany_voice.hybrid_ctx_reply(ctx, "⚠️ A quantidade de créditos deve ser entre 1 e 100.000.", ephemeral=True)
+
+        from infra.services.ai_quota import AIQuotaService
+        try:
+            res = await AIQuotaService.grant_credits(
+                user_id=target_user.id,
+                credits=credits,
+                reason=reason,
+                granted_by=ctx.author.id
+            )
+            embed = discord.Embed(
+                title="💳 Créditos de IA Concedidos",
+                description=f"Foram adicionados **{credits:,}** créditos de IA para {target_user.mention}.",
+                color=TIFFANY_PINK,
+            )
+            embed.add_field(name="Usuário", value=f"{target_user} (`{target_user.id}`)", inline=True)
+            embed.add_field(name="Motivo", value=reason, inline=True)
+            embed.add_field(name="Novo Saldo Restante", value=f"**{res['new_remaining']:,}** cotas", inline=False)
+            embed.set_footer(text="Transação registrada no Ledger Audit de Segurança")
+            
+            ephem = getattr(ctx.interaction, "response", None) is not None
+            await ctx.send(embed=embed, ephemeral=ephem)
+        except Exception as e:
+            log.exception("Error in grant_credits_cmd: %s", e)
+            await tiffany_voice.hybrid_ctx_reply(ctx, f"❌ Erro ao conceder créditos: {e}", ephemeral=True)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminDashboardCog(bot))
+

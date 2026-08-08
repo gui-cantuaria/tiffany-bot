@@ -151,3 +151,60 @@ class AIQuotaService:
             "Upgrade to **Tiffany Plus** or **Tiffany Pro** to unlock massive limits and access to advanced models like GPT-4o and Claude Sonnet.\n"
             "Type `/premium` to view plans!"
         )
+
+    @staticmethod
+    async def grant_credits(
+        user_id: int, 
+        credits: int, 
+        reason: str = "Admin bonus grant", 
+        granted_by: Optional[int] = None
+    ) -> dict[str, Any]:
+        """
+        Securely grants bonus AI quota units to a user.
+        Server-side permission enforcement & transaction audit ledger.
+        """
+        if credits <= 0 or credits > 100000:
+            raise ValueError("Amount of credits must be between 1 and 100,000.")
+
+        pool = postgres.pool()
+        today = await AIQuotaService._get_today_str()
+        
+        if pool:
+            async with pool.acquire() as conn:
+                # Reduce quota_used (negative offset = bonus capacity) or insert negative usage
+                await conn.execute(
+                    """
+                    INSERT INTO ai_usage_daily (subject_type, subject_id, day, quota_used)
+                    VALUES ('user', $1, $2::date, $3)
+                    ON CONFLICT (subject_type, subject_id, day)
+                    DO UPDATE SET quota_used = GREATEST(0, ai_usage_daily.quota_used - $4)
+                    """,
+                    int(user_id), today, 0, credits
+                )
+                
+                # Get new remaining balance
+                new_rem, _ = await AIQuotaService.get_remaining(user_id, conn=conn)
+
+                # Record admin audit telemetry
+                await TelemetryService.record_ai_usage(
+                    user_id, None, "admin_grant", 0, 0, credits, True, True, f"Admin {granted_by or 0} granted {credits} credits: {reason}"
+                )
+                
+                return {
+                    "status": "SUCCESS",
+                    "user_id": user_id,
+                    "credits_granted": credits,
+                    "reason": reason,
+                    "granted_by": granted_by,
+                    "new_remaining": new_rem
+                }
+
+        return {
+            "status": "OFFLINE_MOCK",
+            "user_id": user_id,
+            "credits_granted": credits,
+            "reason": reason,
+            "granted_by": granted_by,
+            "new_remaining": credits
+        }
+

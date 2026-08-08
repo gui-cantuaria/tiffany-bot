@@ -66,13 +66,20 @@ jobs:
       - name: Gate E - Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
           EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
         run: |
           if [ -z "$VPS_HOST" ]; then
             echo "VPS_HOST secret is empty"
             exit 1
           fi
+          if [ -n "$KNOWN_HOSTS" ]; then
+            echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          fi
           ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
+            -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=45 \
             root@"$VPS_HOST" "cd /opt/tiffany-bot && git fetch origin main && git reset --hard origin/main && export DEPLOY_MODE=systemd EXPECTED_SHA=$EXPECTED_SHA && bash /opt/tiffany-bot/scripts/deploy.sh"

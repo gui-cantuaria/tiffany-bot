@@ -20,7 +20,10 @@ def lavalink_enabled() -> bool:
 
 
 def _default_password() -> str:
-    return os.getenv("LAVALINK_PASSWORD", "").strip() or "tiffany_lavalink_2026"
+    pwd = os.getenv("LAVALINK_PASSWORD", "").strip()
+    if not pwd and lavalink_enabled():
+        log.warning("LAVALINK_PASSWORD is unset while LAVALINK_ENABLED=1. Secure configuration required.")
+    return pwd
 
 
 def build_wavelink_nodes() -> list[Any]:

@@ -85,6 +85,13 @@ class CircuitBreaker:
             exc = RuntimeError("Manual failure recorded")
         self._on_failure(exc)
 
+    def reset(self) -> None:
+        """Resets the circuit breaker state to CLOSED and clears failure counts."""
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.success_count = 0
+
 class Bulkhead:
     """
     Limits maximum concurrent executions for specific high-cost operations (like heavy voice transcoding

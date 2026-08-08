@@ -1658,6 +1658,13 @@ def _is_marketplace(store: str) -> bool:
 
 def _passes_filters(deal: dict) -> tuple[bool, str]:
     """Check whether the deal passes filters. Returns (passed, reason)."""
+    # 0) Intelligent Deal Validation & Fake Discount ("Metade do Dobro") Detection
+    from tiffany_core.deal_validator import validate_deal
+    val_result = validate_deal(deal)
+    deal["validation"] = val_result
+    if not val_result.is_valid_deal:
+        return False, val_result.rejection_reason
+
     # Expired/closed on Promobit
     if deal.get("expired"):
         return False, "offer expired/closed"
@@ -1944,6 +1951,14 @@ def _format_price_line(deal: dict) -> str:
 def _format_description(deal: dict) -> str:
     """Build embed description focused on what the buyer needs to know."""
     lines = []
+
+    # 0) Tiffany Intelligent Validation Verdict Badge
+    val = deal.get("validation")
+    if val:
+        lines.append(val.verdict_badge)
+        if val.expected_market_price:
+            est_str = f"R$ {val.expected_market_price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            lines.append(f"📊 Preço Médio Estimado: **{est_str}** | Desconto Real: **{val.real_discount_pct:.0f}% OFF**")
 
     # 1) Highlighted price
     lines.append(_format_price_line(deal))
@@ -2490,7 +2505,7 @@ async def _run_deals_cycle_inner() -> None:
             send_kwargs: dict = {"content": content, "embed": embed, "file": file}
             if mention_role_id:
                 send_kwargs["allowed_mentions"] = discord.AllowedMentions(
-                    roles=[mention_role_id], everyone=False, users=False,
+                    roles=[discord.Object(id=mention_role_id)], everyone=False, users=False,
                 )
             view = _build_view(deal, guild_tags=use_tags)
             try:

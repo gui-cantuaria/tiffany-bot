@@ -13,5 +13,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante do código do bot
 COPY . .
 
+# Cria usuário não-root por segurança
+RUN groupadd -g 10001 tiffany && \
+    useradd -u 10001 -g tiffany -s /bin/sh -m tiffanyuser && \
+    chown -R tiffanyuser:tiffany /app
+
+USER tiffanyuser
+
 # Comando para iniciar o bot
 CMD ["python", "-u", "launcher.py"]

@@ -85,8 +85,10 @@ def _channel_send_perms(channel: discord.TextChannel) -> discord.Permissions | N
     return channel.permissions_for(channel.guild.me)
 
 
-def _parse_color(raw: str) -> int:
-    s = (raw or "").strip().lower()
+def _parse_color(raw: Any) -> int:
+    if isinstance(raw, int):
+        return raw if 0 <= raw <= 0xFFFFFF else BRAND_PINK
+    s = str(raw or "").strip().lower()
     if not s:
         return BRAND_PINK
     if s.startswith("#"):
@@ -94,8 +96,9 @@ def _parse_color(raw: str) -> int:
     if s.startswith("0x"):
         s = s[2:]
     try:
-        return int(s, 16)
-    except ValueError:
+        val = int(s, 16)
+        return val if 0 <= val <= 0xFFFFFF else BRAND_PINK
+    except (ValueError, TypeError):
         return BRAND_PINK
 
 
@@ -103,7 +106,7 @@ def _build_from_data(data: dict[str, Any]) -> discord.Embed:
     em = discord.Embed(
         title=(data.get("title") or "")[:256] or None,
         description=(data.get("description") or "")[:4096] or None,
-        color=int(data.get("color") or BRAND_PINK),
+        color=_parse_color(data.get("color")),
     )
     footer = (data.get("footer") or "").strip()
     if footer:
@@ -168,7 +171,7 @@ class EmbedEditModal(discord.ui.Modal):
         self.color_input = discord.ui.TextInput(
             label=tr(lang, "emb.modal.color_label"),
             placeholder=tr(lang, "emb.modal.color_placeholder"),
-            default=hex(int(data.get("color") or BRAND_PINK)).replace("0x", "#"),
+            default=f"#{_parse_color(data.get('color')):06x}",
             max_length=16,
             required=False,
         )
@@ -328,7 +331,14 @@ async def setup(bot: commands.Bot):
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.empty_embed", name=name), error=True)
             return
         target = channel or ctx.channel
-        if not isinstance(target, discord.TextChannel):
+        valid_types = (
+            discord.ChannelType.text,
+            discord.ChannelType.news,
+            getattr(discord.ChannelType, "news_thread", None),
+            getattr(discord.ChannelType, "public_thread", None),
+            getattr(discord.ChannelType, "private_thread", None),
+        )
+        if not isinstance(target, (discord.TextChannel, discord.Thread)) or getattr(target, "type", None) not in valid_types:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_channel"), error=True)
             return
         perms = _channel_send_perms(target)

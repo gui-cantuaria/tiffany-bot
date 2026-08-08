@@ -186,8 +186,8 @@ def _pick_kicked_msg(lang: GuildLang) -> str:
 
 async def _require_voice(ctx: commands.Context) -> bool:
     """Return False and notify user when VOICE_ENABLED=0 or missing DJ role."""
+    lang = _ctx_lang(ctx)
     if not _voice_enabled():
-        lang = _ctx_lang(ctx)
         await ctx.send(embed=_embed(tr(lang, "voice.module_disabled")))
         return False
         
@@ -8130,7 +8130,8 @@ def register_voice(bot: commands.Bot) -> None:
         # Ensure worker is alive before skip (otherwise queue won't advance)
         _revive_workers(guild.id, vc, session)
         _is_playing = vc.playing if _is_wavelink_player(vc) else vc.is_playing()
-        if not _is_playing:
+        _is_paused = getattr(vc, "paused", False) if _is_wavelink_player(vc) else vc.is_paused()
+        if not _is_playing and not _is_paused:
             await ctx.send(embed=_embed(tr(lang, "cmd.skip.nothing")))
             return
 
@@ -8264,8 +8265,24 @@ def register_voice(bot: commands.Bot) -> None:
                 # Use current_query to preserve original URL (Spotify, YouTube, etc.)
                 saved_q = session.current_query or f"ytsearch1:{session.current_song}"
                 songs.append({"display": session.current_song, "query": saved_q})
-            for display in session.queue_display:
-                songs.append({"display": display, "query": f"ytsearch1:{display}"})
+
+            vc = getattr(ctx.guild, "voice_client", None)
+            queue_queries = []
+            if _is_wavelink_player(vc) and getattr(vc, "queue", None) is not None:
+                try:
+                    for t in list(vc.queue):
+                        queue_queries.append(getattr(t, "uri", getattr(t, "url", None)) or getattr(t, "title", "") or "")
+                except Exception:
+                    pass
+            elif hasattr(session.music_queue, "_queue"):
+                try:
+                    queue_queries = list(session.music_queue._queue)
+                except Exception:
+                    pass
+
+            for idx, display in enumerate(session.queue_display):
+                q = queue_queries[idx] if idx < len(queue_queries) and queue_queries[idx] else f"ytsearch1:{display}"
+                songs.append({"display": display, "query": q})
             if not songs:
                 await ctx.send(embed=_embed(tr(lang, "cmd.playlist.queue_empty")))
                 return
@@ -10408,8 +10425,23 @@ def register_voice(bot: commands.Bot) -> None:
             reason_str = str(getattr(payload, "reason", "")).upper()
             log.debug("Lavalink track ended: %s (reason=%s)", getattr(track, "title", "None"), reason_str)
 
-            if any(r in reason_str for r in ("LOAD_FAILED", "CLEANUP", "REPLACED", "EXCEPTION")):
-                log.warning("Lavalink track halted with reason: %s", reason_str)
+            if any(r in reason_str for r in ("REPLACED", "CLEANUP")):
+                # User-initiated replacement (seek, clear) — queue managed elsewhere
+                log.debug("Lavalink track replaced/cleanup: %s", reason_str)
+                return
+
+            if any(r in reason_str for r in ("LOAD_FAILED", "EXCEPTION")):
+                # Track failed — still pop queue_display to stay in sync
+                log.warning("Lavalink track halted with reason: %s — popping queue_display to stay in sync", reason_str)
+                if session.queue_display:
+                    session.queue_display.pop(0)
+                if session.queue_durations:
+                    session.queue_durations.pop(0)
+                if session.queue_requesters:
+                    session.queue_requesters.pop(0)
+                session.current_requester_id = (
+                    session.queue_requesters[0] if session.queue_requesters else 0
+                )
                 return
 
             # Loop: replay the same track

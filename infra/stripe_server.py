@@ -33,6 +33,7 @@ except ImportError:
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_WEBHOOK_HOST = os.getenv("STRIPE_WEBHOOK_HOST", "127.0.0.1").strip()
 STRIPE_WEBHOOK_PORT = int(os.getenv("STRIPE_WEBHOOK_PORT", "8080"))
 STRIPE_WEBHOOK_MAX_BODY_BYTES = int(os.getenv("STRIPE_WEBHOOK_MAX_BODY_BYTES", "262144"))
 STRIPE_WEBHOOK_TOLERANCE_SEC = int(os.getenv("STRIPE_WEBHOOK_TOLERANCE_SEC", "300"))
@@ -307,7 +308,7 @@ async def start_stripe_server(bot: Any) -> None:
 
     _runner = web.AppRunner(app)
     await _runner.setup()
-    site = web.TCPSite(_runner, "0.0.0.0", STRIPE_WEBHOOK_PORT)
+    site = web.TCPSite(_runner, STRIPE_WEBHOOK_HOST, STRIPE_WEBHOOK_PORT)
     await site.start()
 
     start_payment_worker(bot)

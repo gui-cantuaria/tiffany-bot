@@ -66,7 +66,7 @@ class TestTiffanyCoreArchitecture(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(ai_router.total_saved_usd, initial_savings)
 
     async def test_fail_closed_guardrails(self):
-        with mock.patch.object(premium_ai_guardrails, "OPENROUTER_API_KEY", ""):
+        with mock.patch.object(premium_ai_guardrails, "get_openrouter_api_key", return_value=""):
             result = await premium_ai_guardrails.classify_content("Test Title", "Test NSFW Content")
             # Must NEVER return SAFE when key is missing! Must be Fail-Closed!
             self.assertEqual(result["classification"], "ILLEGAL_GORE")

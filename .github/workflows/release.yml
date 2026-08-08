@@ -108,13 +108,20 @@ jobs:
       - name: Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           if [ -z "$VPS_HOST" ]; then
             echo "VPS_HOST secret is empty — add the VPS IP in GitHub Settings → Secrets."
             exit 1
           fi
+          if [ -n "$KNOWN_HOSTS" ]; then
+            echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          fi
           ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
+            -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \
@@ -129,7 +136,7 @@ jobs:
             exit 1
           fi
           ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
+            -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=45 \
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=4 \

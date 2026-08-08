@@ -226,23 +226,26 @@ class GiveawaysCog(commands.Cog):
                 except Exception:
                     channel = None
             prize = (gw.get("prize") or tr(glang, "gw.prize_default"))[:300]
-            if channel and picked:
-                mentions = " ".join(f"<@{u}>" for u in picked)
-                await channel.send(
-                    embed=discord.Embed(
-                        title=tr(glang, "gw.expire.title"),
-                        description=tr(glang, "gw.expire.winners", prize=prize, mentions=mentions),
-                        color=BRAND_PINK,
+            try:
+                if channel and picked:
+                    mentions = " ".join(f"<@{u}>" for u in picked)
+                    await channel.send(
+                        embed=discord.Embed(
+                            title=tr(glang, "gw.expire.title"),
+                            description=tr(glang, "gw.expire.winners", prize=prize, mentions=mentions),
+                            color=BRAND_PINK,
+                        )
                     )
-                )
-            elif channel:
-                await channel.send(
-                    embed=discord.Embed(
-                        title=tr(glang, "gw.expire.title_short"),
-                        description=tr(glang, "gw.expire.no_entries", prize=prize),
-                        color=0x808080,
+                elif channel:
+                    await channel.send(
+                        embed=discord.Embed(
+                            title=tr(glang, "gw.expire.title_short"),
+                            description=tr(glang, "gw.expire.no_entries", prize=prize),
+                            color=0x808080,
+                        )
                     )
-                )
+            except Exception as exc:
+                log.warning("Failed to send giveaway expiry message for %s: %s", gw_id, exc)
 
     @_expire_loop.before_loop
     async def _before_expire(self):

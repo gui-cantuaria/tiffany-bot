@@ -13,9 +13,10 @@ import aiohttp
 
 log = logging.getLogger("tiffany-bot")
 
-# Assuming OPENROUTER_API_KEY is available in env
 import os
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+def get_openrouter_api_key() -> str:
+    return (os.getenv("OPENROUTER_API_KEY") or "").strip()
 
 # ---------------------------------------------------------------------------
 # Gemini Tool/Function Calling Structure
@@ -53,7 +54,8 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
     Calls the OpenRouter API (Gemini 3.1 Flash) to evaluate the content.
     Returns a dict with 'classification', 'confidence', and 'reasoning'.
     """
-    if not OPENROUTER_API_KEY:
+    api_key = get_openrouter_api_key()
+    if not api_key:
         log.error("OPENROUTER_API_KEY not set. Operating in Fail-Closed mode: blocking request.")
         return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": "Fail-Closed: Missing API Key"}
 
@@ -66,7 +68,7 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
     )
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://discord.com",
         "X-Title": "Tiffany Bot Guardrails",
