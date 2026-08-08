@@ -24,9 +24,9 @@ RUN groupadd -g 10001 tiffany && \
 
 USER tiffanyuser
 
-# Healthcheck interno do container Python
+# Healthcheck interno da aplicação usando a probe infra.health (verifica DB, Redis e Lavalink)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python -c "import sys; sys.exit(0)"
+  CMD python -m infra.health
 
 # Execução do bot via python unbuffered
 CMD ["python", "-u", "launcher.py"]
