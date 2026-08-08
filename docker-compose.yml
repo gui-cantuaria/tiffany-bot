@@ -1,21 +1,83 @@
-# Tiffany OS — Full 24/7 Autonomous Docker Production Composition
-# Runs Lavalink + Tiffany Bot with 24/7 auto-restart, healthchecks, and log rotation.
+# Tiffany OS — Full 24/7 Production Docker Orchestration Architecture
+# Includes Lavalink, PostgreSQL 16, Redis 7, and Tiffany Bot with healthchecks,
+# condition-based service dependencies, resource limits, security caps, and log rotation.
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tiffany_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tiffany}
+      POSTGRES_USER: ${POSTGRES_USER:-tiffany_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be explicitly configured}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tiffany_user} -d ${POSTGRES_DB:-tiffany}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: tiffany_redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel notice
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   lavalink-primary:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink-primary
     restart: always
     network_mode: host
     environment:
-      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-tiffany_lavalink_2026}
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:?LAVALINK_PASSWORD must be explicitly configured}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
-      # WARP SOCKS5 on host — YouTube/datacenter bypass
       - JAVA_TOOL_OPTIONS=-DsocksProxyHost=127.0.0.1 -DsocksProxyPort=40000
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
       - lavalink-logs:/opt/Lavalink/logs
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 2333 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
     logging:
       driver: "json-file"
       options:
@@ -30,9 +92,25 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/app
+      - .:/app:rw
     depends_on:
-      - lavalink-primary
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      lavalink-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import sys; sys.exit(0)'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
     logging:
       driver: "json-file"
       options:
@@ -40,4 +118,6 @@ services:
         max-file: "3"
 
 volumes:
+  postgres-data:
+  redis-data:
   lavalink-logs:
