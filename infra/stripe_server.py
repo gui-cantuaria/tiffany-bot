@@ -174,6 +174,14 @@ async def _stripe_webhook_handler_inner(request: web.Request) -> web.Response:
     if not STRIPE_WEBHOOK_SECRET:
         return web.json_response({"error": "Webhook secret not configured"}, status=500)
 
+    # Ingress Rate Limiting by client IP (prevents CPU/resource flood on webhook endpoint)
+    client_ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote or "127.0.0.1")
+    from infra import redis_client
+    req_count = await redis_client.cache_incr(f"ratelimit:webhook:{client_ip}", ttl_sec=10)
+    if req_count > 60:
+        inc("webhook_rate_limited")
+        return web.json_response({"error": "Too many requests"}, status=429)
+
     try:
         _stripe_db_required()
     except RuntimeError as exc:
