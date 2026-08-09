@@ -48,7 +48,8 @@ STRIPE_WEBHOOK_RATE_WINDOW_SEC = int(os.getenv("STRIPE_WEBHOOK_RATE_WINDOW_SEC",
 def get_client_ip(request: web.Request) -> str:
     """Extract client IP safely. Only trusts X-Forwarded-For if remote address is a trusted proxy."""
     remote = request.remote or "127.0.0.1"
-    if remote in STRIPE_TRUSTED_PROXIES:
+    trusted = set(p.strip() for p in os.getenv("STRIPE_TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip())
+    if remote in trusted:
         forwarded = request.headers.get("X-Forwarded-For", "").strip()
         if forwarded:
             return forwarded.split(",")[0].strip()
@@ -187,20 +188,23 @@ async def _stripe_webhook_handler(request: web.Request) -> web.Response:
 async def _stripe_webhook_handler_inner(request: web.Request) -> web.Response:
     from infra.payments.metrics import inc
 
-    if not STRIPE_WEBHOOK_SECRET:
-        return web.json_response({"error": "Webhook secret not configured"}, status=500)
-
-    # Ingress Rate Limiting by client IP with trusted proxy check & fail-open resilience
+    # Ingress Rate Limiting by client IP with trusted proxy check & fail-open resilience (Evaluated FIRST)
     try:
         client_ip = get_client_ip(request)
+        rate_limit = int(os.getenv("STRIPE_WEBHOOK_RATE_LIMIT", str(STRIPE_WEBHOOK_RATE_LIMIT)))
+        rate_window = int(os.getenv("STRIPE_WEBHOOK_RATE_WINDOW_SEC", str(STRIPE_WEBHOOK_RATE_WINDOW_SEC)))
         from infra import redis_client
-        req_count = await redis_client.cache_incr(f"ratelimit:webhook:{client_ip}", ttl_sec=STRIPE_WEBHOOK_RATE_WINDOW_SEC)
-        if req_count > STRIPE_WEBHOOK_RATE_LIMIT:
+        req_count = await redis_client.cache_incr(f"ratelimit:webhook:{client_ip}", ttl_sec=rate_window)
+        if req_count > rate_limit:
             inc("webhook_rate_limited")
             return web.json_response({"error": "Too many requests"}, status=429)
     except Exception as exc:
         log.warning("Stripe webhook rate limit check error (failing open): %s", exc)
         inc("webhook_rate_limit_fail_open")
+
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", STRIPE_WEBHOOK_SECRET)
+    if not webhook_secret:
+        return web.json_response({"error": "Webhook secret not configured"}, status=500)
 
     try:
         _stripe_db_required()
@@ -221,7 +225,7 @@ async def _stripe_webhook_handler_inner(request: web.Request) -> web.Response:
         return web.json_response({"error": "Missing Stripe-Signature header"}, status=400)
 
     try:
-        event = _verify_stripe_signature(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = _verify_stripe_signature(payload, sig_header, webhook_secret)
     except ValueError as exc:
         log.warning("Stripe signature verification failed: %s", exc)
         inc("webhook_invalid_signature")

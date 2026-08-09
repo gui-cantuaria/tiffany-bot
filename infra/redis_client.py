@@ -77,14 +77,15 @@ async def cache_delete(key: str) -> None:
 
 
 async def cache_incr(key: str, *, ttl_sec: int = 60) -> int:
-    """Increment counter atomically with bounded TTL windowing."""
+    """Increment counter atomically with bounded TTL windowing (never extends TTL on repeat increments)."""
     if _redis is not None:
         try:
             pipe = _redis.pipeline()
             pipe.incr(key)
-            pipe.expire(key, ttl_sec)
             results = await pipe.execute()
             count = int(results[0])
+            if count == 1:
+                await _redis.expire(key, ttl_sec)
             return count
         except Exception as e:
             log.debug("Redis INCR failed: %s", e)
