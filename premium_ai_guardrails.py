@@ -7,13 +7,13 @@ to respect the premium configuration settings and protect the bot.
 
 import json
 import logging
+import os
 from typing import Any
 
 import aiohttp
 
 log = logging.getLogger("tiffany-bot")
 
-import os
 
 def get_openrouter_api_key() -> str:
     return (os.getenv("OPENROUTER_API_KEY") or "").strip()
@@ -84,7 +84,12 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
 
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=10) as resp:
+            async with session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     message = data["choices"][0]["message"]

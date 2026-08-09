@@ -21,11 +21,11 @@ from unittest.mock import MagicMock, patch
 # Domain & Infrastructure Imports
 from infra.services.ai_quota import AIQuotaService
 from infra.payments import ledger, outbox
-from infra.payments.constants import STATUS_COMPLETED, STATUS_RECEIVED
+from infra.payments.constants import STATUS_COMPLETED, STATUS_RECEIVED, MIN_WITHDRAWAL_BRL, MAX_DAILY_WITHDRAWAL_BRL
 from locale_utils import tr, get_user_lang, set_user_lang, GuildLang
 import premium_ai_guardrails
 from infra.audio.lavalink_nodes import _default_password, lavalink_enabled
-from infra.stripe_server import STRIPE_WEBHOOK_HOST
+from infra.stripe_server import STRIPE_WEBHOOK_HOST, create_checkout_url
 
 
 class TestAdversarialValidation(unittest.TestCase):
@@ -113,6 +113,36 @@ class TestAdversarialValidation(unittest.TestCase):
 
         self.assertEqual(len(new_claims), 1, "Financial Defect: More than 1 worker claimed event as 'new'!")
         self.assertEqual(len(duplicate_claims), 49, "Financial Defect: Concurrent duplicate claims failed!")
+
+    def test_attack_withdrawable_funds_settlement_bounds(self):
+        """Attack: Attempt withdrawal exceeding settled Stripe funds or outside min/max bounds."""
+        loop = asyncio.get_event_loop()
+
+        async def run_settlement_test():
+            class MockDbConn:
+                async def fetchval(self, query, *args):
+                    # Mock settled Stripe funds = R$ 50.00
+                    return 50.0
+
+            conn = MockDbConn()
+
+            # 1. Below minimum (R$ 5.00 < MIN_WITHDRAWAL_BRL 20.00)
+            ok1, r1 = await ledger.verify_withdrawable_funds(conn, 12345, 5.0)
+            self.assertFalse(ok1, "Financial Defect: Withdrawal below minimum was allowed!")
+
+            # 2. Exceeds daily max (R$ 10000.00 > MAX_DAILY_WITHDRAWAL_BRL 5000.00)
+            ok2, r2 = await ledger.verify_withdrawable_funds(conn, 12345, 10000.0)
+            self.assertFalse(ok2, "Financial Defect: Withdrawal exceeding daily max was allowed!")
+
+            # 3. Exceeds settled platform funds (R$ 100.00 > settled R$ 50.00)
+            ok3, r3 = await ledger.verify_withdrawable_funds(conn, 12345, 100.0)
+            self.assertFalse(ok3, "Financial Defect: Withdrawal exceeding settled funds was allowed!")
+
+            # 4. Valid settled withdrawal (R$ 30.00 <= settled R$ 50.00)
+            ok4, r4 = await ledger.verify_withdrawable_funds(conn, 12345, 30.0)
+            self.assertTrue(ok4, f"Financial Defect: Valid withdrawal failed: {r4}")
+
+        loop.run_until_complete(run_settlement_test())
 
     # ---------------------------------------------------------------------------
     # 3. AI GUARDRAILS FAIL-CLOSED DEFENSE
