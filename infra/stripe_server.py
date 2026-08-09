@@ -39,6 +39,22 @@ STRIPE_WEBHOOK_MAX_BODY_BYTES = int(os.getenv("STRIPE_WEBHOOK_MAX_BODY_BYTES", "
 STRIPE_WEBHOOK_TOLERANCE_SEC = int(os.getenv("STRIPE_WEBHOOK_TOLERANCE_SEC", "300"))
 STRIPE_RECONCILE_INTERVAL_SEC = int(os.getenv("STRIPE_RECONCILE_INTERVAL_SEC", "3600"))
 
+# Webhook Ingress Rate Limiting & Proxy Trust Configuration
+STRIPE_TRUSTED_PROXIES = set(p.strip() for p in os.getenv("STRIPE_TRUSTED_PROXIES", "127.0.0.1,::1").split(",") if p.strip())
+STRIPE_WEBHOOK_RATE_LIMIT = int(os.getenv("STRIPE_WEBHOOK_RATE_LIMIT", "120"))
+STRIPE_WEBHOOK_RATE_WINDOW_SEC = int(os.getenv("STRIPE_WEBHOOK_RATE_WINDOW_SEC", "60"))
+
+
+def get_client_ip(request: web.Request) -> str:
+    """Extract client IP safely. Only trusts X-Forwarded-For if remote address is a trusted proxy."""
+    remote = request.remote or "127.0.0.1"
+    if remote in STRIPE_TRUSTED_PROXIES:
+        forwarded = request.headers.get("X-Forwarded-For", "").strip()
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return remote
+
+
 ALLOWED_STRIPE_EVENT_TYPES = frozenset({
     "checkout.session.completed",
     "customer.subscription.updated",
@@ -174,13 +190,17 @@ async def _stripe_webhook_handler_inner(request: web.Request) -> web.Response:
     if not STRIPE_WEBHOOK_SECRET:
         return web.json_response({"error": "Webhook secret not configured"}, status=500)
 
-    # Ingress Rate Limiting by client IP (prevents CPU/resource flood on webhook endpoint)
-    client_ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote or "127.0.0.1")
-    from infra import redis_client
-    req_count = await redis_client.cache_incr(f"ratelimit:webhook:{client_ip}", ttl_sec=10)
-    if req_count > 60:
-        inc("webhook_rate_limited")
-        return web.json_response({"error": "Too many requests"}, status=429)
+    # Ingress Rate Limiting by client IP with trusted proxy check & fail-open resilience
+    try:
+        client_ip = get_client_ip(request)
+        from infra import redis_client
+        req_count = await redis_client.cache_incr(f"ratelimit:webhook:{client_ip}", ttl_sec=STRIPE_WEBHOOK_RATE_WINDOW_SEC)
+        if req_count > STRIPE_WEBHOOK_RATE_LIMIT:
+            inc("webhook_rate_limited")
+            return web.json_response({"error": "Too many requests"}, status=429)
+    except Exception as exc:
+        log.warning("Stripe webhook rate limit check error (failing open): %s", exc)
+        inc("webhook_rate_limit_fail_open")
 
     try:
         _stripe_db_required()
