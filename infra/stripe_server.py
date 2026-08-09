@@ -356,10 +356,11 @@ async def create_checkout_url(
         return None
 
     stripe_sdk.api_key = STRIPE_SECRET_KEY
+    pm_types = [m.strip() for m in os.getenv("STRIPE_PAYMENT_METHOD_TYPES", "card").split(",") if m.strip()]
     try:
         session = stripe_sdk.checkout.Session.create(
             mode="subscription",
-            payment_method_types=["card"],
+            payment_method_types=pm_types or ["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             metadata={
                 "discord_user_id": str(discord_user_id),
