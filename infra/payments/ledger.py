@@ -594,3 +594,31 @@ async def process_stripe_event(
 
     inc("webhook_completed")
     return "ok"
+
+
+async def verify_withdrawable_funds(conn: Any, user_id: int, requested_amount_brl: float) -> tuple[bool, str]:
+    """
+    Kantuaria Financial Model: Verifies settled funds vs requested withdrawal amount.
+    Enforces MIN_WITHDRAWAL_BRL and MAX_DAILY_WITHDRAWAL_BRL bounds.
+    Returns (allowed: bool, reason: str).
+    """
+    from infra.payments.constants import MIN_WITHDRAWAL_BRL, MAX_DAILY_WITHDRAWAL_BRL, STATUS_COMPLETED
+
+    if requested_amount_brl < MIN_WITHDRAWAL_BRL:
+        return False, f"Requested amount R$ {requested_amount_brl:.2f} is below minimum withdrawal threshold R$ {MIN_WITHDRAWAL_BRL:.2f}"
+    if requested_amount_brl > MAX_DAILY_WITHDRAWAL_BRL:
+        return False, f"Requested amount R$ {requested_amount_brl:.2f} exceeds daily limit R$ {MAX_DAILY_WITHDRAWAL_BRL:.2f}"
+
+    settled_credits = await conn.fetchval(
+        """
+        SELECT COALESCE(SUM((data->'object'->>'amount_total')::numeric / 100.0), 0)
+        FROM stripe_events
+        WHERE status = $1 AND (payload_hash IS NOT NULL)
+        """,
+        STATUS_COMPLETED,
+    )
+    settled_val = float(settled_credits or 0)
+    if requested_amount_brl > settled_val:
+        return False, f"Withdrawal request (R$ {requested_amount_brl:.2f}) exceeds settled platform funds (R$ {settled_val:.2f})"
+
+    return True, "withdrawable_funds_verified"

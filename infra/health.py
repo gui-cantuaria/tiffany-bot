@@ -27,10 +27,10 @@ async def verify_postgres(url: str) -> bool:
         parsed = urlparse(url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or 5432
-        if not check_socket(host, port):
+        if not check_socket(host, port, timeout=3.0):
             return False
-        conn = await asyncpg.connect(url, timeout=5)
-        await conn.execute("SELECT 1")
+        conn = await asyncio.wait_for(asyncpg.connect(url, timeout=5), timeout=5.0)
+        await asyncio.wait_for(conn.execute("SELECT 1"), timeout=3.0)
         await conn.close()
         return True
     except Exception as e:
@@ -40,8 +40,8 @@ async def verify_postgres(url: str) -> bool:
 async def verify_redis(url: str) -> bool:
     try:
         import redis.asyncio as aioredis
-        client = aioredis.from_url(url, decode_responses=True)
-        await client.ping()
+        client = aioredis.from_url(url, decode_responses=True, socket_timeout=3.0)
+        await asyncio.wait_for(client.ping(), timeout=3.0)
         await client.close()
         return True
     except Exception as e:
@@ -70,7 +70,7 @@ async def main() -> int:
     lavalink_port = int(os.getenv("LAVALINK_PORT", "2333"))
     lavalink_password = os.getenv("LAVALINK_PASSWORD", "").strip()
     if lavalink_password or os.getenv("LAVALINK_NODES"):
-        if not check_socket(lavalink_host, lavalink_port):
+        if not check_socket(lavalink_host, lavalink_port, timeout=3.0):
             unhealthy_reasons.append(f"Lavalink node unavailable at {lavalink_host}:{lavalink_port}")
 
     if unhealthy_reasons:
@@ -81,5 +81,9 @@ async def main() -> int:
     return 0
 
 if __name__ == "__main__":
-    code = asyncio.run(main())
+    try:
+        code = asyncio.run(asyncio.wait_for(main(), timeout=12.0))
+    except asyncio.TimeoutError:
+        sys.stderr.write("[HealthCheck] STATUS UNHEALTHY: Overall probe timeout (12s)\n")
+        code = 1
     sys.exit(code)
