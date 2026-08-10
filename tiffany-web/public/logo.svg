@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="tiffany-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c026d3" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="15" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <circle cx="256" cy="256" r="240" fill="#050507" stroke="url(#tiffany-grad)" stroke-width="12" />
+  
+  <path d="M160 170 h192 v48 h-72 v140 h-48 v-140 h-72 z" fill="url(#tiffany-grad)" filter="url(#glow)" />
+  
+  <circle cx="180" cy="194" r="8" fill="#ffffff" opacity="0.6" />
+  <circle cx="332" cy="194" r="8" fill="#ffffff" opacity="0.6" />
+</svg>

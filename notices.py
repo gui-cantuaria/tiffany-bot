@@ -2534,7 +2534,7 @@ async def on_ready():
     _first_ready_done = True
     log.info(f"🤖 Tiffany Online: {discord_client.user}")
     try:
-        from infra import redis_client, postgres, stripe_server, subsystems
+        from infra import redis_client, postgres, stripe_server, dashboard_server, subsystems
         from infra import i18n_loader
         try:
             await redis_client.init_redis()
@@ -2555,6 +2555,12 @@ async def on_ready():
             subsystems.log_event("STRIPE_READY", "infra")
         except Exception as e:
             subsystems.register_subsystem("Stripe", "DEGRADED", f"Stripe server failed: {e}", mandatory=False, log_instance=log)
+        try:
+            await dashboard_server.start_dashboard_server()
+            subsystems.register_subsystem("DashboardAPI", "READY", "Dashboard API server running", mandatory=False, log_instance=log)
+            subsystems.log_event("DASHBOARD_READY", "infra")
+        except Exception as e:
+            subsystems.register_subsystem("DashboardAPI", "DEGRADED", f"Dashboard API server failed: {e}", mandatory=False, log_instance=log)
         i18n_loader.ensure_loaded()
         try:
             from infra.repositories import user_preferences as up
@@ -2617,7 +2623,7 @@ async def on_close():
     global http_session
     subsystems.log_event("SHUTDOWN_START", "core", details="Initiating graceful bot shutdown sequence")
     try:
-        from infra import redis_client, postgres, stripe_server
+        from infra import redis_client, postgres, stripe_server, dashboard_server
         if _voice_available and tiffany_voice:
             try:
                 await tiffany_voice.shutdown_voice_runtime(discord_client, reason="bot_shutdown")

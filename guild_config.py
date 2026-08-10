@@ -55,6 +55,16 @@ def save_guild_config(guild_id: int, config: Dict[str, Any]) -> None:
     _cache[str(guild_id)] = config
     _save()
 
+async def async_save_guild_config(guild_id: int, config: Dict[str, Any]) -> None:
+    _load()
+    config["features"] = _ensure_features(config.get("features"))
+    _cache[str(guild_id)] = config
+    try:
+        from infra.utils.json_utils import async_atomic_json_dump
+        await async_atomic_json_dump(_cache, _CONFIG_FILE, indent=4)
+    except Exception as e:
+        log.error("Failed to save guild_config.json asynchronously: %s", e)
+
 def _default_features() -> Dict[str, bool]:
     return {key: True for key in _GUILD_FEATURE_KEYS}
 
@@ -67,8 +77,8 @@ def _ensure_features(raw: Optional[Dict[str, Any]]) -> Dict[str, bool]:
     merged = _default_features()
     if raw:
         for key in merged:
-            if key in raw:
-                merged[key] = bool(raw[key])
+            if key in raw and type(raw[key]) is bool:
+                merged[key] = raw[key]
     return merged
 
 def get_guild_features(guild_id: int) -> Dict[str, bool]:
@@ -81,7 +91,7 @@ def set_feature_enabled(guild_id: int, feature: str, enabled: bool) -> None:
     cfg = get_guild_config(guild_id)
     if feature not in cfg["features"]:
         return
-    cfg["features"][feature] = bool(enabled)
+    cfg["features"][feature] = enabled if type(enabled) is bool else bool(enabled)
     save_guild_config(guild_id, cfg)
 
 def toggle_feature(guild_id: int, feature: str) -> bool:

@@ -88,9 +88,13 @@ services:
     build: .
     container_name: tiffany_bot
     restart: always
-    network_mode: host
     env_file:
       - .env
+    environment:
+      - DASHBOARD_API_HOST=0.0.0.0
+      - LAVALINK_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - .:/app:rw
     depends_on:
@@ -111,6 +115,23 @@ services:
         limits:
           cpus: "1.5"
           memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tiffany-web:
+    build:
+      context: ./tiffany-web
+    container_name: tiffany_web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - INTERNAL_API_URL=http://tiffany-bot:8081
+    depends_on:
+      - tiffany-bot
     logging:
       driver: "json-file"
       options:
