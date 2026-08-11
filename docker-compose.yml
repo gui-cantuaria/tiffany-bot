@@ -90,8 +90,6 @@ services:
       - LAVALINK_HOST=host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - .:/app:rw
     depends_on:
       postgres:
         condition: service_healthy
