@@ -74,7 +74,7 @@ cd "$REPO_DIR" || _fail "REPO_DIR_MISSING"
 echo "[HEALTH] Checking Docker status..."
 docker compose ps || true
 
-if [ -f docker-compose.yml ] && docker compose ps --status running 2>/dev/null | grep -q tiffany; then
+if [ -f docker-compose.yml ] && docker compose ps --status running 2>/dev/null | grep tiffany >/dev/null; then
     echo "[HEALTH] Docker Compose mode detected and containers are running."
     echo "[HEALTH] Post-deploy health: OK"
     exit 0
