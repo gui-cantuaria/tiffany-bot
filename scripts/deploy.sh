@@ -130,7 +130,12 @@ if [ "$USE_DOCKER" -eq 1 ]; then
 
     echo "[deploy] Rebuild e restart do container..."
     docker compose build --quiet || { _trigger_rollback; exit 1; }
-    docker compose up -d --force-recreate --remove-orphans || { _trigger_rollback; exit 1; }
+    docker compose up -d --force-recreate --remove-orphans || { 
+        echo "[deploy] Erro no docker compose up. Logs dos containers:"
+        docker compose logs --tail 50
+        _trigger_rollback; 
+        exit 1; 
+    }
 
     echo "[deploy] Aguardando estabilização (10s)..."
     sleep 10

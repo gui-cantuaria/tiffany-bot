@@ -67,12 +67,7 @@ services:
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
       - lavalink-logs:/opt/Lavalink/logs
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:2333/version || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # Removed healthcheck to prevent deployment blocking if Lavalink is slow or missing WARP
     deploy:
       resources:
         limits:
@@ -103,7 +98,7 @@ services:
       redis:
         condition: service_healthy
       lavalink-primary:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "python3 -m infra.health"]
       interval: 15s
