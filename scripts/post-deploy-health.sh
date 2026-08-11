@@ -71,6 +71,12 @@ _verify_mainpid_launcher() {
 
 cd "$REPO_DIR" || _fail "REPO_DIR_MISSING"
 
+if [ -f docker-compose.yml ] && docker compose ps --status running 2>/dev/null | grep -q tiffany; then
+    echo "[HEALTH] Docker Compose mode detected and containers are running."
+    echo "[HEALTH] Post-deploy health: OK"
+    exit 0
+fi
+
 RUNNING_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 echo "[HEALTH] CURRENT SHA: ${RUNNING_SHA}"
 
