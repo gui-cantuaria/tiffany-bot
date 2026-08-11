@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tiffany}
       POSTGRES_USER: ${POSTGRES_USER:-tiffany_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be explicitly configured}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tiffany_postgres_2026}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -60,7 +60,7 @@ services:
     restart: always
     network_mode: host
     environment:
-      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:?LAVALINK_PASSWORD must be explicitly configured}
+      - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-tiffany_lavalink_2026}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
       - JAVA_TOOL_OPTIONS=-DsocksProxyHost=127.0.0.1 -DsocksProxyPort=40000
