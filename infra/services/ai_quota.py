@@ -145,6 +145,14 @@ class AIQuotaService:
 
     @staticmethod
     def upgrade_message(user_id: int) -> str:
+        from infra import postgres
+        if not postgres.pool():
+            return (
+                "⚠️ **AI Subsystem Offline**\n"
+                "Tiffany requires a PostgreSQL database to track AI Quota usage. "
+                "The database is currently offline or unconfigured (`DATABASE_URL`). AI features are temporarily disabled."
+            )
+            
         return (
             "⚠️ **Daily AI Quota Reached!**\n"
             "You have exhausted your daily quota units for AI generation.\n"
