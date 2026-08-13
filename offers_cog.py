@@ -46,18 +46,6 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
 SCAN_INTERVAL_MIN = _safe_int_env("OFERTAS_INTERVALO_MIN", 30)  # deal cycle interval (default 30 min)
-
-# Clock-aligned schedule: every SCAN_INTERVAL_MIN from 8:00 to 18:00 (BR time)
-def _build_offer_schedule():
-    times = []
-    t = HORA_INICIO * 60
-    while t <= HORA_FIM * 60:  # <= includes 18:00 as last cycle
-        h, m = divmod(t, 60)
-        times.append(dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR))
-        t += SCAN_INTERVAL_MIN
-    return times
-
-_OFFER_SCHEDULE = _build_offer_schedule()
 POST_SPACING_SEC = _safe_int_env("OFERTAS_POST_SPACING_SEC", 180)  # 3 min between posts
 MAX_POSTS_POR_CICLO = _safe_int_env("OFERTAS_MAX_POSTS_POR_CICLO", 1)  # default 1 post per cycle for predictable scheduling
 DESCONTO_MINIMO = int(os.getenv("DESCONTO_MINIMO", "25"))  # minimum discount percentage
@@ -2291,6 +2279,12 @@ async def _run_deals_cycle_inner() -> None:
     """Core offers cycle logic."""
     global http_session
 
+    agora = datetime.now(FUSO_HORARIO_BR)
+    em_horario_ativo = HORA_INICIO <= agora.hour < HORA_FIM
+    if not em_horario_ativo:
+        log.info(f"Outside business hours ({agora.hour}h) — skipping offers cycle.")
+        return
+
     if http_session and not http_session.closed:
         pass  # Reuse existing session
     else:
@@ -2568,7 +2562,7 @@ class OffersCog(commands.Cog):
     def cog_unload(self):
         self.deals_loop.cancel()
     
-    @tasks.loop(time=_OFFER_SCHEDULE)
+    @tasks.loop(minutes=SCAN_INTERVAL_MIN)
     async def deals_loop(self):
         try:
             await _run_deals_cycle()

@@ -75,18 +75,6 @@ FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
 INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "60"))  # interval between news cycles (minutes)
 
-# Clock-aligned schedule: every INTERVALO_NOTICIAS_MIN (default 60 min) from 8:00 to before 18:00
-def _build_news_schedule():
-    times = []
-    t = HORA_INICIO * 60
-    while t < HORA_FIM * 60:
-        h, m = divmod(t, 60)
-        times.append(dt_time(hour=h, minute=m, tzinfo=FUSO_HORARIO_BR))
-        t += INTERVALO_NOTICIAS_MIN
-    return times
-
-_NEWS_SCHEDULE = _build_news_schedule()
-
 # --- Pipeline ---
 SCAN_POR_FEED = int(os.getenv("SCAN_POR_FEED", "8"))
 ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "4"))
@@ -1796,12 +1784,16 @@ _daily_mention_news: int = 0
 _daily_mention_news_date: str = ""
 
 
-@tasks.loop(time=_NEWS_SCHEDULE)
+@tasks.loop(minutes=INTERVALO_NOTICIAS_MIN)
 async def verificar_feeds():
     try:
         await _verificar_feeds_inner()
     except Exception as e:
         log.exception(f"Fatal error in news cycle: {e}")
+
+@verificar_feeds.error
+async def _verificar_feeds_error(error):
+    log.error(f"verificar_feeds Loop Error (internal tasks.loop failure): {error}", exc_info=error)
 
 
 @verificar_feeds.before_loop
@@ -1870,6 +1862,10 @@ async def _verificar_feeds_inner():
     await discord_client.wait_until_ready()
 
     agora = datetime.now(FUSO_HORARIO_BR)
+    em_horario_ativo = HORA_INICIO <= agora.hour < HORA_FIM
+    if not em_horario_ativo:
+        log.info(f"Outside business hours ({agora.hour}h) — skipping news cycle.")
+        return
 
     # Reset prune flags for this cycle
     _simhash_pruned_this_cycle = False
