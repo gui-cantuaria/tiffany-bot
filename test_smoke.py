@@ -418,6 +418,19 @@ class TestCriticalStartup(unittest.IsolatedAsyncioTestCase):
         tv.register_voice(notices.discord_client)
         self.assertIsNotNone(notices.discord_client.get_command("play"))
 
+    async def asyncTearDown(self):
+        import notices
+        cogs_to_unload = ["offers_cog", "embed_builder_cog", "giveaways_cog", "premium_cog"]
+        for cog_name in cogs_to_unload:
+            try:
+                await notices.discord_client.unload_extension(cog_name)
+            except Exception:
+                pass
+        
+        # Ensure notices loop is cancelled as well if it was started
+        if notices.verificar_feeds.is_running():
+            notices.verificar_feeds.cancel()
+
     async def test_watchdog_restarts_stopped_news_loop(self):
         from infra.critical_tasks import ensure_critical_loops
 
