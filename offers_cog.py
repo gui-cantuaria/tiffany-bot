@@ -797,18 +797,35 @@ def _coupon_still_valid(coupon_obj) -> bool:
 # SCRAPING PROMOBIT
 # =========================
 
+def _fetch_page_cloudscraper(url: str) -> Optional[str]:
+    try:
+        import cloudscraper
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False})
+        resp = scraper.get(url, timeout=30)
+        if resp.status_code == 200:
+            return resp.text
+        log.warning(f"Cloudscraper HTTP {resp.status_code} for {url}")
+    except Exception as e:
+        log.error(f"Cloudscraper failed to fetch {url}: {e}")
+    return None
+
 async def _fetch_page(session: aiohttp.ClientSession, url: str, retries: int = 2) -> Optional[str]:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         "Accept-Language": "pt-BR,pt;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     }
     for attempt in range(retries + 1):
         try:
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status == 200:
                     return await resp.text()
-                if resp.status in (429, 503) and attempt < retries:
+                if resp.status in (403, 503):
+                    # Cloudflare block likely on Hetzner IPs. Use cloudscraper fallback.
+                    log.warning(f"HTTP {resp.status} on {url} - attempting Cloudscraper fallback")
+                    return await asyncio.to_thread(_fetch_page_cloudscraper, url)
+                if resp.status == 429 and attempt < retries:
                     await asyncio.sleep(3 * (attempt + 1))
                     continue
                 log.warning(f"HTTP {resp.status} fetching {url}")
@@ -1627,15 +1644,20 @@ def _is_peripheral_deal(deal: dict) -> bool:
 def _is_irrelevant(deal: dict) -> bool:
     """True if the title indicates a non-IT/PC product or spam/obsolete hardware."""
     title = (deal.get("title") or "").lower()
+    
     if any(k in title for k in _IRRELEVANT_KEYWORDS):
         return True
+    
     if any(k in title for k in _OBSOLETE_KEYWORDS):
         return True
+        
     if _is_spam_title(deal.get("title", "")):
         return True
+        
     # Drop pure peripherals/accessories from mixed hardware category.
-    if _is_peripheral_deal(deal):
+    if deal.get("category") == "Hardware e periféricos" and _is_peripheral_deal(deal):
         return True
+        
     return False
 
 
@@ -2585,6 +2607,78 @@ class OffersCog(commands.Cog):
         else:
             log.info("Offers cog ready — waiting for next scheduled slot to maintain consistent clock alignment.")
     
+    @app_commands.command(name="ofertas_diag", description="[Admin] Diagnostica o scraper de ofertas e testa bloqueios do Promobit")
+    @app_commands.default_permissions(administrator=True)
+    async def ofertas_diag(self, interaction: discord.Interaction):
+        """Diagnostic command to check if the scraper is working or blocked."""
+        if not guild_config.is_feature_enabled(interaction.guild_id, "offers"):
+            await interaction.response.send_message("❌ Módulo de ofertas desativado neste servidor.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        
+        url = f"{PROMOBIT_BASE}/promocoes/informatica/"
+        
+        # Test HTTP Fetch
+        status_code = 0
+        html = None
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Accept-Language": "pt-BR,pt;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            }
+            try:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    status_code = resp.status
+                    html = await resp.text()
+            except Exception as e:
+                await interaction.followup.send(f"❌ **Erro de conexão ao Promobit:**\n```\n{e}\n```")
+                return
+
+        if not html:
+            await interaction.followup.send(f"❌ **Falha ao ler HTML (Status: {status_code})**\nO IP da VPS pode estar bloqueado.")
+            return
+
+        # Check for Cloudflare Challenge
+        is_cf_blocked = "id=\"challenge-running\"" in html or "cf-browser-verification" in html or "cloudflare" in html.lower()
+        if is_cf_blocked and status_code in (403, 503):
+            await interaction.followup.send(f"🚨 **BLOQUEIO DETECTADO (Cloudflare) - Status {status_code}**\nO Cloudflare está bloqueando o acesso da VPS (Hetzner) ao Promobit.\nNecessário utilizar um Proxy ou ScraperAPI para bypass.")
+            return
+            
+        # Parse deals
+        deals = await asyncio.to_thread(_parse_deals_from_html, html, "promocoes/informatica/")
+        if not deals:
+            await interaction.followup.send(f"⚠️ **Nenhuma oferta encontrada (Status: {status_code})**\nCloudflare: {'Sim' if is_cf_blocked else 'Não'}\nPode ser uma mudança no HTML/Next.js do Promobit.")
+            return
+            
+        # Check filters
+        approved = 0
+        reasons = {}
+        for d in deals:
+            d["category"] = "Informática"
+            passed, reason = _passes_filters(d)
+            if passed:
+                approved += 1
+            else:
+                reasons[reason] = reasons.get(reason, 0) + 1
+                
+        # Build Report
+        report = f"✅ **Scraper de Ofertas Online (Status: {status_code})**\n"
+        report += f"Cloudflare Challenge: {'Sim' if is_cf_blocked else 'Não'}\n\n"
+        report += f"📊 **Resultados (Página 1):**\n"
+        report += f"- Ofertas lidas: `{len(deals)}`\n"
+        report += f"- Ofertas aprovadas pelos filtros: `{approved}`\n\n"
+        if reasons:
+            report += f"🛑 **Motivos de rejeição (Top 3):**\n"
+            for r, c in sorted(reasons.items(), key=lambda x: -x[1])[:3]:
+                report += f"- {c}x: {r}\n"
+                
+        if approved == 0:
+            report += "\n⚠️ **Alerta:** Nenhuma oferta aprovada. O scraper funciona, mas os filtros estão barrando tudo."
+            
+        await interaction.followup.send(report)
+
     @commands.Cog.listener()
     async def on_ready(self):
         log.info(f"✅ Offers Cog loaded — bot: {self.bot.user}")
