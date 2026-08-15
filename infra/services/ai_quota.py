@@ -148,16 +148,16 @@ class AIQuotaService:
         from infra import postgres
         if not postgres.pool():
             return (
-                "⚠️ **AI Subsystem Offline**\n"
-                "Tiffany requires a PostgreSQL database to track AI Quota usage. "
-                "The database is currently offline or unconfigured (`DATABASE_URL`). AI features are temporarily disabled."
+                "⚠️ **Sistema de IA Indisponível**\n"
+                "Os recursos avançados de Inteligência Artificial estão temporariamente offline para manutenção ou não configurados. "
+                "Por favor, tente novamente mais tarde."
             )
             
         return (
-            "⚠️ **Daily AI Quota Reached!**\n"
-            "You have exhausted your daily quota units for AI generation.\n"
-            "Upgrade to **Tiffany Plus** or **Tiffany Pro** to unlock massive limits and access to advanced models like GPT-4o and Claude Sonnet.\n"
-            "Type `/premium` to view plans!"
+            "⚠️ **Cota Diária de IA Atingida!**\n"
+            "Você esgotou sua cota diária para geração de IA.\n"
+            "Faça o upgrade para **Tiffany Plus** ou **Tiffany Pro** para desbloquear limites maiores e ter acesso a modelos avançados como GPT-4o e Claude Sonnet.\n"
+            "Digite `/premium` para ver os planos!"
         )
 
     @staticmethod
