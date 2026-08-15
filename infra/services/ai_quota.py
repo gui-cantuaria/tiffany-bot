@@ -144,21 +144,14 @@ class AIQuotaService:
             return True
 
     @staticmethod
-    def upgrade_message(user_id: int) -> str:
+    def upgrade_message(lang, user_id: int) -> str:
         from infra import postgres
+        from locale_utils import tr
+        
         if not postgres.pool():
-            return (
-                "⚠️ **Sistema de IA Indisponível**\n"
-                "Os recursos avançados de Inteligência Artificial estão temporariamente offline para manutenção ou não configurados. "
-                "Por favor, tente novamente mais tarde."
-            )
+            return tr(lang, "ai_quota.err.offline")
             
-        return (
-            "⚠️ **Cota Diária de IA Atingida!**\n"
-            "Você esgotou sua cota diária para geração de IA.\n"
-            "Faça o upgrade para **Tiffany Plus** ou **Tiffany Pro** para desbloquear limites maiores e ter acesso a modelos avançados como GPT-4o e Claude Sonnet.\n"
-            "Digite `/premium` para ver os planos!"
-        )
+        return tr(lang, "ai_quota.err.exceeded")
 
     @staticmethod
     async def grant_credits(

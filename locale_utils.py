@@ -1016,6 +1016,20 @@ _AI_HELP_COMMANDS_TEXT = (
 )
 
 _STRINGS: dict[str, dict[GuildLang, str]] = {
+    "ai_quota.err.offline": {
+        "en": "⚠️ **AI Subsystem Offline**\nAdvanced Artificial Intelligence features are temporarily offline for maintenance or unconfigured. Please try again later.",
+        "pt": "⚠️ **Sistema de IA Indisponível**\nOs recursos avançados de Inteligência Artificial estão temporariamente offline para manutenção ou não configurados. Por favor, tente novamente mais tarde.",
+        "es": "⚠️ **Sistema de IA no disponible**\nLas funciones avanzadas de Inteligencia Artificial están temporalmente fuera de línea por mantenimiento o no están configuradas. Por favor, inténtelo de nuevo más tarde.",
+        "fr": "⚠️ **Système d'IA indisponible**\nLes fonctionnalités avancées d'Intelligence Artificielle sont temporairement hors ligne pour maintenance ou non configurées. Veuillez réessayer plus tard.",
+        "de": "⚠️ **KI-Subsystem offline**\nErweiterte Funktionen für Künstliche Intelligenz sind vorübergehend wegen Wartungsarbeiten offline oder nicht konfiguriert. Bitte versuchen Sie es später noch einmal."
+    },
+    "ai_quota.err.exceeded": {
+        "en": "⚠️ **Daily AI Quota Reached!**\nYou have exhausted your daily quota units for AI generation.\nUpgrade to **Tiffany Plus** or **Tiffany Pro** to unlock massive limits and access to advanced models like GPT-4o and Claude Sonnet.\nType `/premium` to view plans!",
+        "pt": "⚠️ **Cota Diária de IA Atingida!**\nVocê esgotou sua cota diária para geração de IA.\nFaça o upgrade para **Tiffany Plus** ou **Tiffany Pro** para desbloquear limites maiores e ter acesso a modelos avançados como GPT-4o e Claude Sonnet.\nDigite `/premium` para ver os planos!",
+        "es": "⚠️ **¡Cuota diaria de IA alcanzada!**\nHa agotado sus unidades de cuota diaria para la generación de IA.\nActualice a **Tiffany Plus** o **Tiffany Pro** para desbloquear límites masivos y acceder a modelos avanzados como GPT-4o y Claude Sonnet.\n¡Escriba `/premium` para ver los planes!",
+        "fr": "⚠️ **Quota quotidien d'IA atteint !**\nVous avez épuisé vos unités de quota quotidien pour la génération d'IA.\nPassez à **Tiffany Plus** ou **Tiffany Pro** pour débloquer des limites massives et accéder à des modèles avancés comme GPT-4o et Claude Sonnet.\nTapez `/premium` pour voir les forfaits !",
+        "de": "⚠️ **Tägliches KI-Kontingent erreicht!**\nSie haben Ihre täglichen Kontingenteinheiten für die KI-Generierung aufgebraucht.\nFühren Sie ein Upgrade auf **Tiffany Plus** oder **Tiffany Pro** durch, um massive Limits freizuschalten und Zugriff auf fortschrittliche Modelle wie GPT-4o und Claude Sonnet zu erhalten.\nGeben Sie `/premium` ein, um die Pläne anzuzeigen!"
+    },
     "about.admin.body": {
         "de": "Berechtigungen: **Verbinden**, **Sprechen**, **Nachrichten senden**, **Links "
         "einbetten**.\n"

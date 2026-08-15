@@ -2255,7 +2255,7 @@ async def _summarize_url(
             return tr(lang, "err.api_key")
         if not await _ai_rate_limit_consume(guild_id, bucket="summary", user_id=user_id):
             from infra.services.ai_quota import AIQuotaService
-            return AIQuotaService.upgrade_message(user_id)
+            return AIQuotaService.upgrade_message(lang, user_id)
         async with _ai_semaphore:
             resp = await client.chat.completions.create(
                 model="google/gemini-3.1-flash-lite",
@@ -5208,7 +5208,7 @@ async def _run_game_recommendation(
 
     if not await _ai_rate_limit_consume(gid, bucket="game", user_id=uid):
         from infra.services.ai_quota import AIQuotaService
-        return _embed(AIQuotaService.upgrade_message(uid))
+        return _embed(AIQuotaService.upgrade_message(lang, uid))
 
     matches, filters, err = await game_recommendations.recommend_games(
         query, _get_openrouter_client(),
@@ -7687,7 +7687,7 @@ def register_voice(bot: commands.Bot) -> None:
                 user_id=user_id if not guild_id else 0,
             ):
                 from infra.services.ai_quota import AIQuotaService
-                return AIQuotaService.upgrade_message(user_id)
+                return AIQuotaService.upgrade_message(lang, user_id)
 
             system_msg = {
                 "role": "system",
@@ -9154,7 +9154,7 @@ def register_voice(bot: commands.Bot) -> None:
         )
         if not await _ai_rate_limit_consume(gid, bucket="imagine", user_id=uid):
             from infra.services.ai_quota import AIQuotaService
-            await _ctx_reply_ai(ctx, AIQuotaService.upgrade_message(uid))
+            await _ctx_reply_ai(ctx, AIQuotaService.upgrade_message(lang, uid))
             return
 
         image_bytes, err_key = await imagine_mod.generate_image_bytes(api_prompt)
@@ -9245,7 +9245,7 @@ def register_voice(bot: commands.Bot) -> None:
             return
         if not await _ai_rate_limit_consume(gid, bucket="chat", user_id=uid_rl):
             from infra.services.ai_quota import AIQuotaService
-            await _ctx_reply_roleplay(ctx, AIQuotaService.upgrade_message(uid_rl), private=private)
+            await _ctx_reply_roleplay(ctx, AIQuotaService.upgrade_message(lang, uid_rl), private=private)
             return
 
         profile = rp_cfg.get_profile(uid)
