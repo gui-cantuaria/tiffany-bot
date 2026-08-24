@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import affiliate_config
 import guild_config
-from locale_utils import tr, resolve_guild_lang, hybrid_desc_kwargs, slash_desc_kwargs, slash_param
+from locale_utils import tr, resolve_guild_lang, hybrid_desc_kwargs, slash_desc_kwargs, slash_param, hybrid_ctx_reply
 
 # =========================
 # CONFIGURATION
@@ -2972,7 +2972,7 @@ async def setup(bot: commands.Bot):
             ),
             color=0xFF69B4,
         )
-        await ctx.send(embed=embed, ephemeral=True)
+        await hybrid_ctx_reply(ctx, embed=embed)
 
     @cmd_alert.command(name="add", aliases=["criar", "novo"], description="Add a personal deal alert for a keyword and optional price limit")
     @app_commands.describe(keyword="Product or keyword (e.g. rtx 4060, ps5)", max_price="Optional maximum price in R$")
@@ -2987,7 +2987,7 @@ async def setup(bot: commands.Bot):
         )
         if ok and max_price:
             embed.add_field(name="💰 Preço Máximo", value=f"R$ {max_price:.2f}", inline=True)
-        await ctx.send(embed=embed, ephemeral=True)
+        await hybrid_ctx_reply(ctx, embed=embed)
 
     @cmd_alert.command(name="remove", aliases=["remover", "del", "rm"], description="Remove an active deal alert")
     @app_commands.describe(keyword="Keyword to remove from your alerts")
@@ -3005,7 +3005,7 @@ async def setup(bot: commands.Bot):
                 description=f"Você não possui nenhum alerta ativo para **`{keyword}`**.",
                 color=0xFF4444,
             )
-        await ctx.send(embed=embed, ephemeral=True)
+        await hybrid_ctx_reply(ctx, embed=embed)
 
     @cmd_alert.command(name="list", aliases=["listar", "ls"], description="List all your active deal alerts")
     async def alert_list(ctx: commands.Context):
@@ -3016,7 +3016,7 @@ async def setup(bot: commands.Bot):
                 description="Você não possui nenhum alerta ativo no momento.\nUse `/alert add <termo>` para cadastrar seu primeiro alerta!",
                 color=0xFF69B4,
             )
-            return await ctx.send(embed=embed, ephemeral=True)
+            return await hybrid_ctx_reply(ctx, embed=embed)
         
         lines = []
         for i, a in enumerate(alerts, 1):
@@ -3031,7 +3031,7 @@ async def setup(bot: commands.Bot):
             color=0xFF69B4,
         )
         embed.set_footer(text="A Tiffany enviará uma DM quando encontrar essas ofertas!")
-        await ctx.send(embed=embed, ephemeral=True)
+        await hybrid_ctx_reply(ctx, embed=embed)
 
     @cmd_alert.command(name="clear", aliases=["limpar"], description="Clear all your active deal alerts")
     async def alert_clear(ctx: commands.Context):
@@ -3041,4 +3041,4 @@ async def setup(bot: commands.Bot):
             description=f"Foram removidos **{count}** alerta(s) ativos.",
             color=0x00FF88,
         )
-        await ctx.send(embed=embed, ephemeral=True)
+        await hybrid_ctx_reply(ctx, embed=embed)
