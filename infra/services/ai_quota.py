@@ -51,7 +51,7 @@ class AIQuotaService:
 
         pool = postgres.pool()
         if not pool:
-            return 0, False
+            return 30, False
             
         async with pool.acquire() as db_conn:
             return await AIQuotaService._check_limits_on_conn(db_conn, user_id, guild_id)
@@ -105,11 +105,9 @@ class AIQuotaService:
         """
         Consumes Quota Units for the model. Records telemetry. Reuses active connection.
         """
-        cost = AIQuotaService.get_model_weight(model_name)
-        
         pool = postgres.pool()
         if not pool:
-            return False
+            return True
 
         today = await AIQuotaService._get_today_str()
         

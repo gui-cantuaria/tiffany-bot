@@ -7699,7 +7699,7 @@ def register_voice(bot: commands.Bot) -> None:
         except discord.HTTPException as e:
             log.debug("Could not delete Rollem message (%s): %s", message.author.id, e)
 
-    async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0) -> str:
+    async def _answer_question(question: str, guild_id: int, session: _GuildVoiceSession, vc, image_urls: list[str] | None = None, *, user_id: int = 0, check_quota: bool = True) -> str:
         """Answer question using AI. If image_urls provided, uses vision model."""
         lang = locale_utils.resolve_lang(
             bot.get_guild(guild_id) if guild_id else None,
@@ -7739,10 +7739,10 @@ def register_voice(bot: commands.Bot) -> None:
             if client is None:
                 return tr(lang, "err.api_key")
 
-            if not await _ai_rate_limit_consume(
+            if check_quota and not await _ai_rate_limit_consume(
                 guild_id or 0,
                 bucket="chat",
-                user_id=user_id if not guild_id else 0,
+                user_id=user_id,
             ):
                 from infra.services.ai_quota import AIQuotaService
                 return AIQuotaService.upgrade_message(lang, user_id)
@@ -7777,10 +7777,15 @@ def register_voice(bot: commands.Bot) -> None:
                     )
             except Exception as e:
                 err_str = str(e).lower()
+                if "401" in err_str or "unauthorized" in err_str or "authentication" in err_str or "invalid api key" in err_str:
+                    log.error("Chat AI OpenRouter authentication failed (check OPENROUTER_API_KEY): %s", e)
+                    return tr(lang, "err.api_key")
                 if "402" in err_str or "insufficient" in err_str or "quota" in err_str or "balance" in err_str:
                     return tr(lang, "err.api_issue")
-                log.exception("Chat AI call failed")
-                return tr(lang, "err.rate_limit")
+                if "429" in err_str or "rate limit" in err_str:
+                    return tr(lang, "err.rate_limit")
+                log.exception("Chat AI call failed: %s", e)
+                return tr(lang, "err.api_issue")
             answer = resp.choices[0].message.content.strip()
             # Truncate if response is too long (Discord limit)
             if len(answer) > 1500:
@@ -9129,12 +9134,13 @@ def register_voice(bot: commands.Bot) -> None:
             await _ctx_reply_ai(ctx, tr(lang, "chat.cooldown", remaining=remaining))
             return
         gid, uid = _ai_rl_ids(ctx)
-        ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=uid)
+        ok, reason = _ai_rate_limit_peek(gid, bucket="chat", user_id=ctx.author.id)
         if not ok:
             await _ctx_reply_ai(ctx, _rate_limit_message(lang, reason), delete_after=8)
             return
-        if not await _ai_rate_limit_consume(gid, bucket="chat", user_id=uid):
-            await _ctx_reply_ai(ctx, _rate_limit_message(lang, "limit"), delete_after=8)
+        if not await _ai_rate_limit_consume(gid, bucket="chat", user_id=ctx.author.id):
+            from infra.services.ai_quota import AIQuotaService
+            await _ctx_reply_ai(ctx, AIQuotaService.upgrade_message(lang, ctx.author.id), delete_after=12)
             return
 
         thinking = await _ctx_reply_ai(ctx, tr(lang, "chat.thinking"))
@@ -9142,6 +9148,7 @@ def register_voice(bot: commands.Bot) -> None:
             question, gid, None, None,
             image_urls=image_urls if image_urls else None,
             user_id=ctx.author.id,
+            check_quota=False,
         )
         if not (answer or "").strip():
             answer = tr(lang, "chat.err.no_answer")
@@ -9327,9 +9334,20 @@ def register_voice(bot: commands.Bot) -> None:
                     temperature=0.85,
                     timeout=20.0,
                 )
-        except Exception:
-            log.exception("Roleplay AI call failed")
-            await _ctx_reply_roleplay(ctx, tr(lang, "err.rate_limit"), private=private)
+        except Exception as e:
+            err_str = str(e).lower()
+            if "401" in err_str or "unauthorized" in err_str or "authentication" in err_str or "invalid api key" in err_str:
+                log.error("Roleplay AI OpenRouter auth failed (check OPENROUTER_API_KEY): %s", e)
+                await _ctx_reply_roleplay(ctx, tr(lang, "err.api_key"), private=private)
+                return
+            if "402" in err_str or "insufficient" in err_str or "quota" in err_str or "balance" in err_str:
+                await _ctx_reply_roleplay(ctx, tr(lang, "err.api_issue"), private=private)
+                return
+            if "429" in err_str or "rate limit" in err_str:
+                await _ctx_reply_roleplay(ctx, tr(lang, "err.rate_limit"), private=private)
+                return
+            log.exception("Roleplay AI call failed: %s", e)
+            await _ctx_reply_roleplay(ctx, tr(lang, "err.api_issue"), private=private)
             return
 
         answer = (resp.choices[0].message.content or "").strip()
