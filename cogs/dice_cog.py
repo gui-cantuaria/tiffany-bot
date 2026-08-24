@@ -687,41 +687,6 @@ class DiceRerollView(discord.ui.View):
 _voice_registered = False
 
 
-class VolumeAdjustView(discord.ui.View):
-    """Quick ±10 stream volume controls."""
-
-    def __init__(self, guild_id: int, lang: GuildLang, *, pink: int):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.lang = lang
-        self.pink = pink
-
-    async def _adjust(self, interaction: discord.Interaction, delta: int) -> None:
-        guild = interaction.guild
-        if not guild or guild.id != self.guild_id:
-            await interaction.response.send_message(tr(self.lang, "volume.need_voice"), ephemeral=True)
-            return
-        session = _sessions.get(self.guild_id)
-        vc = guild.voice_client
-        if not session or not vc or not vc.is_connected():
-            await interaction.response.send_message(tr(self.lang, "volume.need_voice"), ephemeral=True)
-            return
-        session.volume_pct = max(VOLUME_MIN, min(VOLUME_MAX, session.volume_pct + delta))
-        await _apply_stream_volume(vc, session)
-        em = locale_utils.build_volume_embed(self.lang, current=session.volume_pct, pink=self.pink)
-        if not _is_wavelink_player(vc):
-            em.description = (em.description or "") + f"\n\n{tr(self.lang, 'volume.ytdlp_note')}"
-        await interaction.response.edit_message(embed=em, view=self)
-
-    @discord.ui.button(label="−10", style=discord.ButtonStyle.secondary)
-    async def minus_ten(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._adjust(interaction, -10)
-
-    @discord.ui.button(label="+10", style=discord.ButtonStyle.secondary)
-    async def plus_ten(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._adjust(interaction, 10)
-
-
 def register_voice(bot: commands.Bot) -> None:
     global _voice_registered
     if _voice_registered:
@@ -730,9 +695,6 @@ def register_voice(bot: commands.Bot) -> None:
     _voice_registered = True
     _load_dice_macros()
     bot.add_view(DiceRerollView())
-    global _ai_semaphore, _stats
-    _stats = _load_stats()
-    _cleanup_stale_tempfiles()
 
     from infra.i18n_middleware import register_i18n_middleware
     register_i18n_middleware(bot)

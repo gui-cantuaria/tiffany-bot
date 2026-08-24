@@ -2,6 +2,7 @@ import discord
 from discord.ext import tasks, commands
 import feedparser
 import os
+import sys
 import re
 import json
 import time
@@ -78,7 +79,7 @@ INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "60"))  # inter
 # --- Pipeline ---
 SCAN_POR_FEED = int(os.getenv("SCAN_POR_FEED", "8"))
 ENTRADAS_POR_FEED = int(os.getenv("ENTRADAS_POR_FEED", "4"))
-MAX_IA_CALLS_POR_CICLO = int(os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
+MAX_IA_CALLS_POR_CICLO = int(os.getenv("MAX_IA_CALLS_POR_CICLO") or os.getenv("MAX_IA_CALLS_PER_CICLO", "6"))
 MAX_VISION_CALLS_POR_CICLO = int(os.getenv("MAX_VISION_CALLS_POR_CICLO", "4"))
 IA_COOLDOWN_SEC = int(os.getenv("IA_COOLDOWN_SEC", "10"))
 POST_SPACING_SEC = int(os.getenv("POST_SPACING_SEC", "90"))
@@ -512,7 +513,13 @@ def load_history() -> dict:
             data = json.load(f)
             return data if isinstance(data, dict) else {}
     except Exception as e:
-        log.warning(f"Failed to load history: {e}")
+        log.warning(f"Failed to load history (backing up corrupt file): {e}")
+        try:
+            bak_path = f"{HISTORY_FILE}.corrupt.{int(time.time())}.bak"
+            os.rename(HISTORY_FILE, bak_path)
+            log.info("Corrupted history backed up to %s", bak_path)
+        except Exception:
+            pass
         return {}
 
 def save_history(h: dict) -> None:
@@ -544,7 +551,7 @@ def save_history(h: dict) -> None:
             novo[k] = v
     try:
         from infra.utils.json_utils import atomic_json_dump
-        atomic_json_dump(novo, HISTORY_FILE, ensure_ascii=False, indent=2)
+        atomic_json_dump(novo, HISTORY_FILE, ensure_ascii=False, indent=None)
     except Exception:
         log.exception("Failed to save history")
 
@@ -556,14 +563,21 @@ def load_metrics() -> dict:
         return {}
     try:
         with open(METRICS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception as e:
+        log.warning(f"Failed to load metrics (backing up corrupt file): {e}")
+        try:
+            bak_path = f"{METRICS_FILE}.corrupt.{int(time.time())}.bak"
+            os.rename(METRICS_FILE, bak_path)
+        except Exception:
+            pass
         return {}
 
 def save_metrics(m: dict) -> None:
     try:
         from infra.utils.json_utils import atomic_json_dump
-        atomic_json_dump(m, METRICS_FILE, ensure_ascii=False, indent=2)
+        atomic_json_dump(m, METRICS_FILE, ensure_ascii=False, indent=None)
     except Exception as e:
         log.error(f"Failed to save metrics: {e}")
 
@@ -589,13 +603,19 @@ def load_queue() -> list:
         with open(QUEUE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        log.warning(f"Failed to load queue (backing up corrupt file): {e}")
+        try:
+            bak_path = f"{QUEUE_FILE}.corrupt.{int(time.time())}.bak"
+            os.rename(QUEUE_FILE, bak_path)
+        except Exception:
+            pass
         return []
 
 def save_queue(q: list) -> None:
     try:
         from infra.utils.json_utils import atomic_json_dump
-        atomic_json_dump(q, QUEUE_FILE, ensure_ascii=False, indent=2)
+        atomic_json_dump(q, QUEUE_FILE, ensure_ascii=False, indent=None)
     except Exception as e:
         log.error(f"Failed to save queue: {e}")
 
@@ -1105,6 +1125,14 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
     """Use vision AI to verify the image matches the title."""
     if not ai_client or not img_url or not titulo:
         return True  # No AI available — assume valid (do not block)
+    
+    global _last_ai_call
+    now = time.monotonic()
+    elapsed = now - _last_ai_call
+    if elapsed < AI_COOLDOWN_SEC:
+        await asyncio.sleep(AI_COOLDOWN_SEC - elapsed)
+    _last_ai_call = time.monotonic()
+
     try:
         resp = await ai_client.chat.completions.create(
             model="google/gemini-3.1-flash-lite",
@@ -1133,7 +1161,10 @@ async def validar_imagem_ia(img_url: str, titulo: str) -> bool:
             temperature=0.0,
             timeout=15.0,
         )
-        answer = resp.choices[0].message.content.strip().upper()
+        content = resp.choices[0].message.content
+        if not content:
+            return True
+        answer = content.strip().upper()
         relevante = "YES" in answer or (answer.startswith("Y") and "NO" not in answer) or "SIM" in answer
         if not relevante:
             log.info(f"AI rejected image as irrelevant: {img_url[:80]} | title: {titulo[:60]}")
@@ -1529,6 +1560,12 @@ Article Text: {texto_base[:5000]}
                         data = json.loads(resp[json_start:json_end])
                     except json.JSONDecodeError:
                         pass
+            if data is None:
+                log.warning(f"AI returned invalid JSON on attempt {attempt+1}")
+                if attempt < 2:
+                    backoff = 2 ** (attempt + 1)
+                    await asyncio.sleep(backoff)
+                continue
             if data:
                 if isinstance(data.get("resumo"), str):
                     data["resumo"] = _normalizar_resumo_final(data["resumo"])
@@ -1809,8 +1846,15 @@ async def _before_verificar_feeds():
                 log.exception(f"News first cycle error: {e}")
         else:
             log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
+
+    now = datetime.now()
+    next_min = ((now.minute // INTERVALO_NOTICIAS_MIN) + 1) * INTERVALO_NOTICIAS_MIN
+    if next_min >= 60:
+        sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
     else:
-        log.info("News bot ready — waiting for next scheduled slot to maintain consistent clock alignment.")
+        sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+    log.info(f"News bot ready — waiting {sleep_seconds:.1f}s for next scheduled slot to maintain consistent clock alignment.")
+    await asyncio.sleep(sleep_seconds)
 
 
 @tasks.loop(minutes=10)
@@ -2344,6 +2388,11 @@ async def _verificar_feeds_inner():
         if await _postar_noticia(channel, noticia, history, metrics):
             posts_fase3 += 1
             save_metrics(metrics)
+        else:
+            _requeue = load_queue()
+            _requeue.append(noticia)
+            save_queue(_requeue)
+            log.warning(f"  ⚠ Re-queued after post failure: {noticia.get('titulo', '?')[:60]}")
         if i < len(para_postar) - 1:
             await asyncio.sleep(POST_SPACING_SEC)
 
@@ -2361,15 +2410,15 @@ async def _verificar_feeds_inner():
 
 
 _CMD_NAMES = (
-    "nowplaying", "playlist", "summary", "random", "resume", "pause", "clear", "skip",
-    "loop", "play", "chat", "seek", "247", "nonstop", "queue", "language", "mod-panel", "modpanel",
+    "nowplaying", "playlist", "summary", "randomsong", "random", "resume", "pause", "clear", "skip",
+    "loop", "play", "chat", "seek", "247", "nonstop", "queue", "language", "idioma", "mod-panel", "modpanel",
     "shuffle", "replay", "autoplay", "lyrics", "clip", "games", "game", "giveaway", "roleplay",
-    "imagine", "img", "settings", "config", "prefs",
-    "volume", "vol",
-    "embed", "status", "stats", "updates", "novidades", "about", "help", "rewind",
-    "estatisticas", "metricas",
-    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "l",
-    "lang", "mod", "gw", "emb", "rp", "roleplay", "v",
+    "imagine", "img", "settings", "config", "prefs", "ofertas_diag", "deals_diag", "premium", "metrics", "grant_credits",
+    "volume", "vol", "alert", "alerta",
+    "embed", "updates", "novidades", "about", "help", "rewind",
+    "estatisticas", "metricas", "sorteio",
+    "np", "pa", "re", "cl", "pl", "su", "ff", "sh", "rpl", "ap", "ly", "cp", "lo", "l",
+    "lang", "mod", "gw", "emb", "em", "rp", "rs", "v",
     "s", "c", "p", "r", "q", "g",
 )
 

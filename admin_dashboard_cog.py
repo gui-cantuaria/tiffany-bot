@@ -20,10 +20,15 @@ class AdminDashboardCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.hybrid_command(name="metrics", hidden=True, description="Painel exclusivo do criador (Admin)")
+    @commands.hybrid_command(name="metrics", hidden=True, description="Creator business and telemetry metrics (Admin Only)")
     async def metrics_cmd(self, ctx: commands.Context):
         """Displays business and telemetry metrics (Owner Only)."""
-        if ctx.author.id != 842799130630815754:
+        is_owner = (
+            ctx.author.id == 842799130630815754
+            or owner_dashboard.is_bot_owner(ctx.author.id)
+            or await self.bot.is_owner(ctx.author)
+        )
+        if not is_owner:
             return await tiffany_voice.hybrid_ctx_reply(ctx, "Comando exclusivo do dono da Tiffany.", ephemeral=True)
             
         # Get base JSON metrics
@@ -58,7 +63,7 @@ class AdminDashboardCog(commands.Cog):
         ephem = getattr(ctx.interaction, "response", None) is not None
         await ctx.send(embed=embed, ephemeral=ephem)
 
-    @commands.hybrid_command(name="grant_credits", hidden=True, description="Concede cotas/créditos de IA para um usuário (Admin Only)")
+    @commands.hybrid_command(name="grant_credits", hidden=True, description="Grant AI quota credits to a user (Admin Only)")
     async def grant_credits_cmd(
         self, 
         ctx: commands.Context, 
@@ -67,7 +72,12 @@ class AdminDashboardCog(commands.Cog):
         reason: str = "Admin grant"
     ):
         """Securely grants AI quota credits to a specified user (Admin Only)."""
-        if ctx.author.id != 842799130630815754:
+        is_owner = (
+            ctx.author.id == 842799130630815754
+            or owner_dashboard.is_bot_owner(ctx.author.id)
+            or await self.bot.is_owner(ctx.author)
+        )
+        if not is_owner:
             return await tiffany_voice.hybrid_ctx_reply(ctx, "Comando exclusivo do dono da Tiffany.", ephemeral=True)
 
         if credits <= 0 or credits > 100000:

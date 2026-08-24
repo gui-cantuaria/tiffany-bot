@@ -1,4 +1,4 @@
-﻿# Secrets / credentials
+# Secrets / credentials
 .env
 cookies.txt
 
@@ -28,6 +28,8 @@ chat_memory.json
 notices_history.json
 notices_queue.json
 offers_history.json
+deal_claims.json
+deal_alerts.json
 price_monitors.json
 playlists.json
 dice_macros.json
@@ -38,6 +40,9 @@ guild_config.json
 user_settings.json
 roleplay_profiles.json
 roleplay_history.json
+jobs.json
+job_log.txt
+scratch/
 
 # Editor / local tooling (never publish)
 .claude/

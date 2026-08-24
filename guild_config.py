@@ -148,5 +148,5 @@ async def log_mod_action(guild: discord.Guild, embed: discord.Embed) -> None:
     if channel and isinstance(channel, discord.TextChannel):
         try:
             await channel.send(embed=embed)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Failed to send mod log to channel: {e}")

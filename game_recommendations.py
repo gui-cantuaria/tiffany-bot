@@ -426,7 +426,8 @@ async def _steam_search_name(session, name: str, filters: GameFilters, strict_ge
             if resp.status != 200:
                 return None
             data = await resp.json(content_type=None)
-    except Exception:
+    except Exception as e:
+        logging.getLogger("tiffany.games").warning(f"Steam API name search failed: {e}")
         return None
     target = _norm(name)
     for item in data.get("items") or []:
@@ -455,8 +456,9 @@ async def search_steam_catalog(session, filters: GameFilters) -> list[GameMatch]
             if resp.status != 200:
                 return []
             data = await resp.json(content_type=None)
-    except Exception:
-        return []
+    except Exception as e:
+        logging.getLogger("tiffany.games").warning(f"Steam API catalog search failed: {e}")
+        return None
 
     app_ids = [int(i["id"]) for i in (data.get("items") or []) if i.get("id")]
     sem = asyncio.Semaphore(STEAM_DETAIL_CONCURRENCY)
@@ -521,8 +523,9 @@ async def search_epic_catalog(session, filters: GameFilters) -> list[GameMatch]:
             if resp.status != 200:
                 return []
             html = await resp.text(errors="replace")
-    except Exception:
-        return []
+    except Exception as e:
+        logging.getLogger("tiffany.games").warning(f"Epic API catalog search failed: {e}")
+        return None
     m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
     if not m:
         return []
@@ -644,6 +647,8 @@ async def recommend_games(
         if tasks:
             chunks = await asyncio.gather(*tasks)
             for chunk in chunks:
+                if chunk is None:
+                    return [], filters, "api_issue"
                 catalog.extend(chunk)
         matches = _merge_matches(verified, catalog)
 

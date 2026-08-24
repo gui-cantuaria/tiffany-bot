@@ -52,9 +52,10 @@ async def update_premium_config(guild_id: int, section: str, updates: dict[str, 
 
         await conn.execute(
             """
-            UPDATE guild_premium_config 
-            SET config = $1::jsonb, updated_at = now() 
-            WHERE guild_id = $2
+            INSERT INTO guild_premium_config (guild_id, config)
+            VALUES ($2, $1::jsonb)
+            ON CONFLICT (guild_id) DO UPDATE 
+            SET config = EXCLUDED.config, updated_at = now()
             """,
             json.dumps(cfg),
             guild_id,
@@ -64,9 +65,9 @@ async def update_premium_config(guild_id: int, section: str, updates: dict[str, 
 # ---------------------------------------------------------------------------
 # Offers Configuration UI
 # ---------------------------------------------------------------------------
-class OffersLayoutModal(Modal, title="Configure Offers Layout"):
+class OffersLayoutModal(Modal):
     def __init__(self, current_cfg: dict, view: "PremiumDashboardView"):
-        super().__init__()
+        super().__init__(title="Configure Offers Layout")
         self.view_ref = view
         
         layout = current_cfg.get("embed_layout", {})
@@ -141,9 +142,9 @@ class OffersConfigView(View):
 # ---------------------------------------------------------------------------
 # News Configuration UI
 # ---------------------------------------------------------------------------
-class NewsRSSModal(Modal, title="Configure Custom RSS Feeds"):
+class NewsRSSModal(Modal):
     def __init__(self, current_cfg: dict):
-        super().__init__()
+        super().__init__(title="Configure Custom RSS Feeds")
         rss_urls = current_cfg.get("custom_rss_urls", [])
         self.rss_input = TextInput(
             label="Custom RSS URLs (One per line)",
@@ -194,9 +195,9 @@ class NewsConfigView(View):
 # ---------------------------------------------------------------------------
 # White-Label Configuration UI
 # ---------------------------------------------------------------------------
-class WhiteLabelModal(Modal, title="Configure White-Labeling"):
+class WhiteLabelModal(Modal):
     def __init__(self, current_cfg: dict):
-        super().__init__()
+        super().__init__(title="Configure White-Labeling")
         
         self.embed_color = TextInput(
             label="Embed Hex Color (e.g. #FF0000)",

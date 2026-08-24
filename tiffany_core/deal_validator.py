@@ -564,6 +564,9 @@ async def evaluate_deal_with_ai(deal: dict) -> DealValidationResult:
             )
 
     except Exception as e:
-        log.debug(f"AI deal evaluation fallback skipped: {e}")
+        log.warning(f"AI deal evaluation fallback skipped: {e}")
+        note = " [AI Validation Failed]"
+        if note not in rule_res.rejection_reason:
+            rule_res.rejection_reason = (rule_res.rejection_reason + note).strip()
 
     return rule_res

@@ -123,13 +123,18 @@ def resolve_command_error_message(
 ) -> Optional[str]:
     """Map discord permission errors to a user-facing message, or None if unknown."""
     err = _unwrap_command_error(error)
-    if isinstance(err, commands.MissingPermissions):
-        return user_missing_perms_message(lang, err.missing_permissions, command=command)
-    if isinstance(err, commands.BotMissingPermissions):
-        return bot_missing_perms_message(lang, err.missing_permissions)
-    if isinstance(err, commands.NoPrivateMessage):
+    if isinstance(err, (commands.MissingPermissions, discord.app_commands.MissingPermissions)):
+        missing = getattr(err, "missing_permissions", [])
+        return user_missing_perms_message(lang, missing, command=command)
+    if isinstance(err, (commands.BotMissingPermissions, discord.app_commands.BotMissingPermissions)):
+        missing = getattr(err, "missing_permissions", [])
+        return bot_missing_perms_message(lang, missing)
+    if isinstance(err, (commands.NoPrivateMessage, discord.app_commands.NoPrivateMessage)):
         return tr(lang, "err.guild_only")
-    if isinstance(err, commands.CheckFailure):
+    if isinstance(err, (commands.CommandOnCooldown, discord.app_commands.CommandOnCooldown)):
+        retry_sec = getattr(err, "retry_after", 0.0)
+        return tr(lang, "err.cooldown", secs=f"{retry_sec:.0f}")
+    if isinstance(err, (commands.CheckFailure, discord.app_commands.CheckFailure)):
         return tr(lang, "err.guild_only")
     return None
 

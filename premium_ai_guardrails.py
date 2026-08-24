@@ -100,10 +100,11 @@ async def classify_content(raw_title: str, raw_description: str) -> dict[str, An
                 else:
                     log.error("Failed to classify content: HTTP %d", resp.status)
         except Exception as e:
-            log.exception("Error during API classification: %s", e)
+            log.error(f"Moderation API failed: {e}", exc_info=True)
+            return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": f"Fail-Closed: Moderation API Error ({type(e).__name__})"}
 
     # Fail-Closed: Block content if API fails to protect community and maintain compliance
-    return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": "Fail-Closed: Moderation API Error"}
+    return {"classification": "ILLEGAL_GORE", "confidence": 1.0, "reasoning": "Fail-Closed: Moderation API Error (HTTP/Unknown)"}
 
 
 # ---------------------------------------------------------------------------

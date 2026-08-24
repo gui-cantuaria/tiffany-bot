@@ -99,7 +99,14 @@ class UserFeatureSelectView(View):
         self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == self.parent.user_id
+        if interaction.user.id != self.parent.user_id:
+            msg = tr(self.parent.lang, "settings.deny_other")
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+            return False
+        return True
 
     async def on_select(self, interaction: discord.Interaction) -> None:
         select = interaction.data.get("values", [])

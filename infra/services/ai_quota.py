@@ -172,15 +172,15 @@ class AIQuotaService:
         
         if pool:
             async with pool.acquire() as conn:
-                # Reduce quota_used (negative offset = bonus capacity) or insert negative usage
+                # Reduce quota_used (negative usage = bonus capacity over daily base)
                 await conn.execute(
                     """
                     INSERT INTO ai_usage_daily (subject_type, subject_id, day, quota_used)
-                    VALUES ('user', $1, $2::date, $3)
+                    VALUES ('user', $1, $2::date, -$3)
                     ON CONFLICT (subject_type, subject_id, day)
-                    DO UPDATE SET quota_used = GREATEST(0, ai_usage_daily.quota_used - $4)
+                    DO UPDATE SET quota_used = ai_usage_daily.quota_used - $3
                     """,
-                    int(user_id), today, 0, credits
+                    int(user_id), today, int(credits)
                 )
                 
                 # Get new remaining balance

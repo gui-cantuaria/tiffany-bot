@@ -166,7 +166,7 @@ class WorkflowOrchestrator:
                         state["_failed_step"] = step.name
                         state["_error_detail"] = str(exc)
                         return state
-                    await asyncio.sleep(0.05) * attempt  # Exponential backoff
+                    await asyncio.sleep(0.05 * attempt)  # Exponential backoff
 
         state["_workflow_status"] = "COMPLETED"
         log.info("[WorkflowEngine: %s] Successfully completed all %d steps!", self.workflow_name, len(self._steps))

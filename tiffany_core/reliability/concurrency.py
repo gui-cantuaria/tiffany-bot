@@ -30,11 +30,12 @@ class SingleFlightGroup:
         async with self._lock:
             if key in self._calls:
                 log.debug("[SingleFlight] Coalescing duplicate execution for key: %s", key)
-                return await self._calls[key]
-            
-            future: asyncio.Future[Any] = asyncio.Future()
-            self._calls[key] = future
-            is_leader = True
+                future = self._calls[key]
+                is_leader = False
+            else:
+                future = asyncio.Future()
+                self._calls[key] = future
+                is_leader = True
 
         if is_leader:
             try:

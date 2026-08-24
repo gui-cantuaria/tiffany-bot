@@ -56,7 +56,7 @@ async def _ai_chat_moderation(text: str) -> tuple[bool, str]:
             return True, reason[:120]
         return False, reason[:120]
     except Exception as e:
-        log.debug("AI chat moderation failed: %s", e)
+        log.warning("AI chat moderation failed: %s", e)
         if rules.l1_scam_match(text):
             return True, "Link ou texto suspeito (golpe/phishing)."
         return False, ""
@@ -78,8 +78,8 @@ async def _apply_result(message: discord.Message, result, *, default_title: str)
     if me and message.channel.permissions_for(me).manage_messages:
         try:
             await message.delete()
-        except discord.HTTPException:
-            pass
+        except discord.HTTPException as e:
+            log.warning(f"Failed to delete flagged message: {e}")
     await _notify_user(message.author, message.channel, f"🛡️ {result.reason}")
     await _log_mod(
         message.guild,

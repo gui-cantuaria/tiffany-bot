@@ -92,8 +92,8 @@ def _truncate_log_if_large(log_path: str) -> None:
             with open(log_path, "w", encoding="utf-8") as f:
                 f.write(f"--- Log truncated at {datetime.now().isoformat()} ---\n")
                 f.write(content)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f"Log file operation failed: {e}")
 
 
 def _read_crash_tail(bot_config: dict, lines: int = 15) -> str:
@@ -107,7 +107,8 @@ def _read_crash_tail(bot_config: dict, lines: int = 15) -> str:
             all_lines = f.readlines()
             tail = all_lines[-lines:] if len(all_lines) >= lines else all_lines
             return "".join(tail).strip()[-500:]  # cap at 500 chars for webhook
-    except Exception:
+    except Exception as e:
+        log.warning(f"Log file operation failed: {e}")
         return "(failed to read log)"
 
 

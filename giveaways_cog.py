@@ -150,8 +150,8 @@ class GiveawayEnterView(discord.ui.View):
             if interaction.message:
                 glang = _guild_lang(interaction.client, int(gw.get("guild_id") or 0))
                 await interaction.message.edit(embed=_build_giveaway_embed(gw, glang), view=self)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Giveaway update failed: {e}")
 
 
 async def _finish_giveaway(
@@ -180,14 +180,15 @@ async def _finish_giveaway(
     if channel is None and channel_id:
         try:
             channel = await bot.fetch_channel(channel_id)
-        except Exception:
+        except Exception as e:
+            log.warning(f"Giveaway update failed: {e}")
             channel = None
     if channel and msg_id:
         try:
             msg = await channel.fetch_message(msg_id)
             await msg.edit(embed=_build_giveaway_embed(gw, glang, ended=True), view=None)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"Giveaway update failed: {e}")
     return picked
 
 
@@ -223,7 +224,8 @@ class GiveawaysCog(commands.Cog):
             if channel is None and channel_id:
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
-                except Exception:
+                except Exception as e:
+                    log.warning(f"Giveaway update failed: {e}")
                     channel = None
             prize = (gw.get("prize") or tr(glang, "gw.prize_default"))[:300]
             try:
@@ -257,7 +259,7 @@ async def setup(bot: commands.Bot):
 
     @bot.hybrid_group(
         name="giveaway",
-        aliases=["gw"],
+        aliases=["gw", "sorteio"],
         invoke_without_command=True,
         dm_permission=False,
         **hybrid_desc_kwargs("slash.cmd.giveaway"),
@@ -348,6 +350,9 @@ async def setup(bot: commands.Bot):
     @commands.has_permissions(manage_guild=True)
     async def gw_end(ctx: commands.Context, gw_id: str = ""):
         lang = _ctx_lang(ctx)
+        if not ctx.guild:
+            await hybrid_ctx_reply(ctx, tr(lang, "gw.err.guild_only"), error=True)
+            return
         _load_state()
         if not gw_id:
             active = [
@@ -380,6 +385,9 @@ async def setup(bot: commands.Bot):
     @commands.has_permissions(manage_guild=True)
     async def gw_reroll(ctx: commands.Context, gw_id: str = ""):
         lang = _ctx_lang(ctx)
+        if not ctx.guild:
+            await hybrid_ctx_reply(ctx, tr(lang, "gw.err.guild_only"), error=True)
+            return
         _load_state()
         if not gw_id:
             ended = [

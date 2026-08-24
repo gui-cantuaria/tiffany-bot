@@ -131,8 +131,14 @@ def _load_user_langs():
     if os.path.exists(_USER_LANG_FILE):
         try:
             with open(_USER_LANG_FILE, "r", encoding="utf-8") as f:
-                _user_lang_cache = json.load(f)
+                data = json.load(f)
+                _user_lang_cache = data if isinstance(data, dict) else {}
         except Exception:
+            try:
+                bak_path = f"{_USER_LANG_FILE}.corrupt.{int(time.time())}.bak"
+                os.rename(_USER_LANG_FILE, bak_path)
+            except Exception:
+                pass
             _user_lang_cache = {}
 
 
@@ -3325,6 +3331,13 @@ _STRINGS: dict[str, dict[GuildLang, str]] = {
         "es": "Quién es Tiffany y qué hace",
         "fr": "Qui est Tiffany et ce qu'elle fait",
         "pt": "Quem é a Tiffany e o que ela faz",
+    },
+    "slash.cmd.alert": {
+        "de": "Persönliche Benachrichtigungen für Angebote und Rabatte verwalten",
+        "en": "Manage personal deal and discount keyword alerts",
+        "es": "Gestionar alertas personales de ofertas y descuentos",
+        "fr": "Gérer les alertes personnelles d'offres et de réductions",
+        "pt": "Gerenciar alertas pessoais de ofertas e palavras-chave",
     },
     "slash.cmd.autoplay": {
         "de": "Autoplay ein-/ausschalten",

@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import affiliate_config
 import guild_config
+from locale_utils import tr, resolve_guild_lang, hybrid_desc_kwargs, slash_desc_kwargs, slash_param
 
 # =========================
 # CONFIGURATION
@@ -561,7 +562,7 @@ def _clean_history(history: dict) -> None:
     """Remove entries older than DEDUP_DIAS (default 7)."""
     cutoff = time.time() - (DEDUP_DIAS * 24 * 3600)
     deals = history.get("deals", {})
-    to_remove = [k for k, v in deals.items() if v.get("ts", 0) < cutoff]
+    to_remove = [k for k, v in deals.items() if not isinstance(v, dict) or v.get("ts", 0) < cutoff]
     for k in to_remove:
         del deals[k]
     if to_remove:
@@ -1533,7 +1534,7 @@ def _store_allowed(store: str) -> bool:
     # Check whether a whitelist store name is a prefix of the normalized name
     # e.g. "kabum" matches "kabum informatica"
     for allowed in LOJAS_WHITELIST:
-        if norm.startswith(allowed):
+        if norm.startswith(allowed + " "):
             return True
     return False
 
@@ -1568,11 +1569,7 @@ _OBSOLETE_KEYWORDS = (
 
 def _is_spam_title(title: str) -> bool:
     """True if the title looks like spam or a generic listing."""
-    words = title.lower().split()
-    # Consecutive duplicate word (MOUSE MOUSE)
-    for i in range(len(words) - 1):
-        if words[i] == words[i+1] and len(words[i]) >= 3:
-            return True
+    # Note: Duplicate-word check removed as _sanitize_title already handles it.
     return False
 
 def _title_has_parts_keyword(title: str) -> bool:
@@ -2109,24 +2106,207 @@ def _cor_embed(deal: dict) -> int:
     return COR_OFERTA
 
 
+_DEAL_CLAIMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deal_claims.json")
+_deal_claims_data: dict[str, list[int]] = {}
+
+def _load_deal_claims() -> None:
+    global _deal_claims_data
+    if os.path.exists(_DEAL_CLAIMS_FILE):
+        try:
+            with open(_DEAL_CLAIMS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                _deal_claims_data = data if isinstance(data, dict) else {}
+        except Exception:
+            _deal_claims_data = {}
+
+def _save_deal_claims() -> None:
+    try:
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_deal_claims_data, _DEAL_CLAIMS_FILE, ensure_ascii=False, indent=None)
+    except Exception:
+        pass
+
+def _get_deal_claims_count(deal_id: str) -> int:
+    global _deal_claims_data
+    if not _deal_claims_data:
+        _load_deal_claims()
+    return len(_deal_claims_data.get(str(deal_id), []))
+
+def _record_deal_claim(deal_id: str, user_id: int) -> tuple[int, bool]:
+    global _deal_claims_data
+    if not _deal_claims_data:
+        _load_deal_claims()
+    claimed_users = _deal_claims_data.setdefault(str(deal_id), [])
+    if user_id not in claimed_users:
+        claimed_users.append(user_id)
+        _save_deal_claims()
+        return len(claimed_users), True
+    return len(claimed_users), False
+
+
+_DEAL_ALERTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deal_alerts.json")
+_deal_alerts_data: list[dict] = []
+
+def _load_deal_alerts() -> None:
+    global _deal_alerts_data
+    if os.path.exists(_DEAL_ALERTS_FILE):
+        try:
+            with open(_DEAL_ALERTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                _deal_alerts_data = data if isinstance(data, list) else []
+        except Exception:
+            _deal_alerts_data = []
+
+def _save_deal_alerts() -> None:
+    try:
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_deal_alerts_data, _DEAL_ALERTS_FILE, ensure_ascii=False, indent=None)
+    except Exception:
+        pass
+
+def _add_deal_alert(user_id: int, guild_id: int, keyword: str, max_price: Optional[float] = None) -> tuple[bool, str]:
+    global _deal_alerts_data
+    _load_deal_alerts()
+    keyword_clean = keyword.strip().lower()
+    if len(keyword_clean) < 2:
+        return False, "Keyword must have at least 2 characters."
+    user_alerts = [a for a in _deal_alerts_data if a.get("user_id") == user_id]
+    if len(user_alerts) >= 10:
+        return False, "You reached the limit of 10 active alerts. Remove an alert before adding a new one."
+    for a in user_alerts:
+        if a.get("keyword") == keyword_clean:
+            a["max_price"] = max_price
+            a["guild_id"] = guild_id
+            _save_deal_alerts()
+            return True, f"Alert for **{keyword_clean}** updated!"
+    _deal_alerts_data.append({
+        "user_id": user_id,
+        "guild_id": guild_id,
+        "keyword": keyword_clean,
+        "max_price": max_price,
+        "created_at": int(time.time()),
+    })
+    _save_deal_alerts()
+    return True, f"Alert for **{keyword_clean}** successfully created!"
+
+def _remove_deal_alert(user_id: int, keyword: str) -> bool:
+    global _deal_alerts_data
+    _load_deal_alerts()
+    keyword_clean = keyword.strip().lower()
+    before_len = len(_deal_alerts_data)
+    _deal_alerts_data = [a for a in _deal_alerts_data if not (a.get("user_id") == user_id and a.get("keyword") == keyword_clean)]
+    if len(_deal_alerts_data) < before_len:
+        _save_deal_alerts()
+        return True
+    return False
+
+def _list_deal_alerts(user_id: int) -> list[dict]:
+    _load_deal_alerts()
+    return [a for a in _deal_alerts_data if a.get("user_id") == user_id]
+
+def _clear_deal_alerts(user_id: int) -> int:
+    global _deal_alerts_data
+    _load_deal_alerts()
+    before_len = len(_deal_alerts_data)
+    _deal_alerts_data = [a for a in _deal_alerts_data if a.get("user_id") != user_id]
+    count = before_len - len(_deal_alerts_data)
+    if count > 0:
+        _save_deal_alerts()
+    return count
+
+async def _check_and_notify_deal_alerts(bot: discord.Client, deal: dict, buy_url: str) -> None:
+    """Match new deal against user alerts and dispatch DM."""
+    _load_deal_alerts()
+    if not _deal_alerts_data:
+        return
+    title_lower = deal.get("title", "").lower()
+    price = deal.get("price") or 0.0
+    disc = deal.get("discount_pct") or 0.0
+    store = deal.get("store", "Loja")
+    
+    for alert in list(_deal_alerts_data):
+        kw = alert.get("keyword", "")
+        if kw and kw in title_lower:
+            max_p = alert.get("max_price")
+            if max_p is not None and price > max_p:
+                continue
+            user_id = alert.get("user_id")
+            if not user_id:
+                continue
+            try:
+                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                if user:
+                    embed = discord.Embed(
+                        title=f"🔔 Alerta de Oferta: {deal.get('title')[:200]}",
+                        url=buy_url if buy_url.startswith("http") else None,
+                        description=(
+                            f"Encontramos uma oferta correspondente ao seu alerta para **`{kw}`**!\n\n"
+                            f"💰 **Preço:** R$ {price:.2f}\n"
+                            f"🏷️ **Desconto:** {disc:.0f}% OFF\n"
+                            f"🏪 **Loja:** {store}"
+                        ),
+                        color=0xFF69B4,
+                    )
+                    embed.set_footer(text="Tiffany Deals Alert • Gerencie com t!alert list")
+                    view = None
+                    if buy_url.startswith("http"):
+                        view = discord.ui.View()
+                        view.add_item(discord.ui.Button(label="Ver Oferta", emoji="🛒", style=discord.ButtonStyle.link, url=buy_url))
+                    await user.send(embed=embed, view=view)
+                    log.info("Notified user %s of deal alert for '%s'", user_id, kw)
+            except Exception as err:
+                log.warning("Could not send deal alert DM to %s: %s", user_id, err)
+
+
+class DealClaimView(discord.ui.View):
+    """Persistent interactive view with Store Link + 'Peguei!' Claim button."""
+    def __init__(self, deal_id: str, buy_url: str, discount_pct: float = 0, initial_claims: int = 0):
+        super().__init__(timeout=None)
+        self.deal_id = str(deal_id)
+        self.buy_url = buy_url
+        self.claims_count = initial_claims
+        
+        disc_str = f"COMPRAR COM {discount_pct:.0f}% OFF" if discount_pct > 0 else "COMPRAR COM DESCONTO"
+        self.add_item(discord.ui.Button(
+            label=disc_str[:80],
+            emoji="🛒",
+            style=discord.ButtonStyle.link,
+            url=buy_url,
+        ))
+        
+        claim_label = f"Peguei! ({self.claims_count})" if self.claims_count > 0 else "Peguei!"
+        claim_btn = discord.ui.Button(
+            label=claim_label,
+            emoji="🎉",
+            style=discord.ButtonStyle.success,
+            custom_id=f"deal_claim:{self.deal_id[:60]}",
+        )
+        claim_btn.callback = self.claim_callback
+        self.add_item(claim_btn)
+
+    async def claim_callback(self, interaction: discord.Interaction):
+        new_count, is_new = _record_deal_claim(self.deal_id, interaction.user.id)
+        self.claims_count = new_count
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and item.custom_id and item.custom_id.startswith("deal_claim:"):
+                item.label = f"Peguei! ({new_count})"
+                break
+        await interaction.response.edit_message(view=self)
+        if is_new:
+            await interaction.followup.send("🎉 **Parabéns!** Você marcou que aproveitou esta promoção.", ephemeral=True)
+        else:
+            await interaction.followup.send("✅ Você já registrou o resgate desta promoção!", ephemeral=True)
+
+
 def _build_view(deal: dict, guild_tags: dict = None) -> Optional[discord.ui.View]:
-    """Real Discord buy button (link). Returns None when no valid URL exists
-    — embed falls back to a text CTA field.
-    Note: Discord always renders link buttons in gray (cannot be colored);
-    emphasis comes from text (discount) + highlighted CTA in the embed body."""
+    """Real Discord buy button (link) + social claim counter."""
     buy_url = _buy_url(deal, guild_tags=guild_tags)
     if not buy_url.startswith("http"):
         return None
     disc = deal.get("discount_pct") or 0
-    label = f"COMPRAR COM {disc:.0f}% OFF" if disc else "COMPRAR COM DESCONTO"
-    view = discord.ui.View(timeout=None)  # link buttons do not fire interactions
-    view.add_item(discord.ui.Button(
-        label=label[:80],
-        emoji="🛒",
-        style=discord.ButtonStyle.link,
-        url=buy_url,
-    ))
-    return view
+    deal_id = str(deal.get("id") or _deal_listing_key(deal))
+    initial_claims = _get_deal_claims_count(deal_id)
+    return DealClaimView(deal_id=deal_id, buy_url=buy_url, discount_pct=disc, initial_claims=initial_claims)
 
 
 def _build_embed(deal: dict, guild_tags: dict = None) -> discord.Embed:
@@ -2134,6 +2314,8 @@ def _build_embed(deal: dict, guild_tags: dict = None) -> discord.Embed:
     cor = _cor_embed(deal)
     category = deal.get("category") or "Oferta"
     store = deal.get("store", "Loja")
+    disc = deal.get("discount_pct") or 0
+    price = deal.get("price") or 0.0
 
     cat_emoji = CATEGORIAS_EMOJI.get(category, "🖥️")
     for cat_key, emoji in CATEGORIAS_EMOJI.items():
@@ -2142,7 +2324,12 @@ def _build_embed(deal: dict, guild_tags: dict = None) -> discord.Embed:
             break
 
     clean_title = _sanitize_title(deal["title"][:200])
-    title = f"{EMOJI_FOGO} {clean_title}"
+    is_free = (disc >= 99) or (price <= 0 and "grátis" in clean_title.lower()) or ("100%" in clean_title)
+    if is_free:
+        cor = 0x00FF88
+        title = f"🎁 [100% OFF - GRÁTIS] {clean_title}"
+    else:
+        title = f"{EMOJI_FOGO} {clean_title}"
 
     desc = _format_description(deal)
     buy_url = _buy_url(deal, guild_tags=guild_tags)
@@ -2511,12 +2698,19 @@ async def _run_deals_cycle_inner() -> None:
                     _mention_date_ofertas = today_br
                     _mention_count_ofertas = 0
                 
-                cargo_id = ID_CARGO_ULTRA or ID_CARGO_OFERTAS
-                is_ultra = deal.get("discount_pct", 0) >= DESCONTO_ULTRA_OFERTA
+                _disc = deal.get("discount_pct") or 0
+                is_ultra = _disc >= DESCONTO_ULTRA_OFERTA
                 guild = getattr(target["channel"], "guild", None)
-                if is_ultra and cargo_id and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_id):
-                    content = f"<@&{cargo_id}>"
-                    mention_role_id = cargo_id
+                
+                cargo_to_ping = None
+                if is_ultra and ID_CARGO_ULTRA:
+                    cargo_to_ping = ID_CARGO_ULTRA
+                elif ID_CARGO_OFERTAS:
+                    cargo_to_ping = ID_CARGO_OFERTAS
+
+                if cargo_to_ping and _mention_count_ofertas < 3 and guild and guild.get_role(cargo_to_ping):
+                    content = f"<@&{cargo_to_ping}>"
+                    mention_role_id = cargo_to_ping
                     _mention_count_ofertas += 1
 
             send_kwargs: dict = {"content": content, "embed": embed, "file": file}
@@ -2533,7 +2727,10 @@ async def _run_deals_cycle_inner() -> None:
                     await target["channel"].send(**send_kwargs)
                 posted_any = True
             except Exception as e:
-                log.error(f"Failed to post deal in {target['channel'].id}: {e}")
+                guild = getattr(target["channel"], "guild", None)
+                guild_name = guild.name if guild else "Unknown Guild"
+                channel_name = getattr(target["channel"], "name", "Unknown Channel")
+                log.error(f"🚨 Failed to post deal in {guild_name} / #{channel_name} (ID: {target['channel'].id}): {e}")
 
         if posted_any:
             # Mark as posted
@@ -2545,7 +2742,9 @@ async def _run_deals_cycle_inner() -> None:
             _posted_cat_counts[cat] = _posted_cat_counts.get(cat, 0) + 1
 
             posted += 1
-            log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct', 0):.0f}% OFF)")
+            log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct') or 0:.0f}% OFF)")
+            if _bot:
+                asyncio.create_task(_check_and_notify_deal_alerts(_bot, deal, _buy_url(deal)))
 
             if posted < MAX_POSTS_POR_CICLO:
                 await asyncio.sleep(POST_SPACING_SEC)
@@ -2605,10 +2804,17 @@ class OffersCog(commands.Cog):
                     log.exception(f"Offers first cycle error: {e}")
             else:
                 log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
+
+        now = datetime.now()
+        next_min = ((now.minute // SCAN_INTERVAL_MIN) + 1) * SCAN_INTERVAL_MIN
+        if next_min >= 60:
+            sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
         else:
-            log.info("Offers cog ready — waiting for next scheduled slot to maintain consistent clock alignment.")
+            sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+        log.info(f"Offers cog ready — waiting {sleep_seconds:.1f}s for next scheduled slot to maintain consistent clock alignment.")
+        await asyncio.sleep(sleep_seconds)
     
-    @app_commands.command(name="ofertas_diag", description="[Admin] Diagnostica o scraper de ofertas e testa bloqueios do Promobit")
+    @app_commands.command(name="ofertas_diag", description="[Admin] Diagnose deals scraper and verify upstream connectivity")
     @app_commands.default_permissions(administrator=True)
     async def ofertas_diag(self, interaction: discord.Interaction):
         """Diagnostic command to check if the scraper is working or blocked."""
@@ -2633,6 +2839,11 @@ class OffersCog(commands.Cog):
                 async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                     status_code = resp.status
                     html = await resp.text()
+                    if status_code in (403, 503):
+                        fallback_html = await asyncio.to_thread(_fetch_page_cloudscraper, url)
+                        if fallback_html:
+                            html = fallback_html
+                            status_code = 200
             except Exception as e:
                 await interaction.followup.send(f"❌ **Erro de conexão ao Promobit:**\n```\n{e}\n```")
                 return
@@ -2690,11 +2901,38 @@ class OffersCog(commands.Cog):
             log.warning("⚠️ No affiliate program configured in .env")
     
     @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = interaction.data.get("custom_id", "")
+        if not custom_id or not custom_id.startswith("deal_claim:"):
+            return
+        
+        deal_id = custom_id.split("deal_claim:", 1)[1]
+        new_count, is_new = _record_deal_claim(deal_id, interaction.user.id)
+        
+        if not interaction.response.is_done():
+            # Update the button label in the existing message view
+            view = discord.ui.View.from_message(interaction.message) if interaction.message else None
+            if view:
+                for item in view.children:
+                    if isinstance(item, discord.ui.Button) and item.custom_id and item.custom_id.startswith("deal_claim:"):
+                        item.label = f"Peguei! ({new_count})"
+                        break
+                await interaction.response.edit_message(view=view)
+            else:
+                await interaction.response.defer()
+                
+            if is_new:
+                await interaction.followup.send("🎉 **Parabéns!** Você marcou que aproveitou esta promoção.", ephemeral=True)
+            else:
+                await interaction.followup.send("✅ Você já registrou o resgate desta promoção!", ephemeral=True)
+
+    @commands.Cog.listener()
     async def on_disconnect(self):
         log.warning("⚠️ [Offers] Bot disconnected from Discord.")
     
-    @commands.Cog.listener()
-    async def on_close(self):
+    async def cog_unload(self):
         global http_session
         if http_session and not http_session.closed:
             await http_session.close()
@@ -2708,3 +2946,99 @@ async def setup(bot: commands.Bot):
         return
     _cog_loaded = True
     await bot.add_cog(OffersCog(bot))
+
+    @bot.hybrid_group(
+        name="alert",
+        aliases=["alerta"],
+        invoke_without_command=True,
+        dm_permission=True,
+        **hybrid_desc_kwargs("slash.cmd.alert"),
+    )
+    async def cmd_alert(ctx: commands.Context):
+        lang = getattr(ctx, "guild", None) and resolve_guild_lang(ctx.guild) or "en"
+        embed = discord.Embed(
+            title=tr(lang, "alerts.help.title", default="🔔 Deal Alerts • Alertas de Ofertas"),
+            description=tr(
+                lang, "alerts.help.body",
+                default=(
+                    "Cadastre palavras-chave para a Tiffany te avisar no privado quando encontrar uma oferta!\n\n"
+                    "**Comandos / Commands:**\n"
+                    "• `/alert add <keyword> [max_price]` ou `t!alert add <termo> [preço]` — Criar alerta\n"
+                    "• `/alert remove <keyword>` ou `t!alert remove <termo>` — Remover alerta\n"
+                    "• `/alert list` ou `t!alert list` — Ver seus alertas ativos\n"
+                    "• `/alert clear` ou `t!alert clear` — Limpar todos os alertas\n\n"
+                    "*Exemplo:* `/alert add rtx 4060 1900`"
+                ),
+            ),
+            color=0xFF69B4,
+        )
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @cmd_alert.command(name="add", aliases=["criar", "novo"], description="Add a personal deal alert for a keyword and optional price limit")
+    @app_commands.describe(keyword="Product or keyword (e.g. rtx 4060, ps5)", max_price="Optional maximum price in R$")
+    async def alert_add(ctx: commands.Context, keyword: str, max_price: Optional[float] = None):
+        guild_id = ctx.guild.id if ctx.guild else 0
+        ok, msg = _add_deal_alert(ctx.author.id, guild_id, keyword, max_price)
+        color = 0x00FF88 if ok else 0xFF4444
+        embed = discord.Embed(
+            title="🔔 Alerta de Ofertas" if ok else "⚠️ Limite de Alertas",
+            description=msg,
+            color=color,
+        )
+        if ok and max_price:
+            embed.add_field(name="💰 Preço Máximo", value=f"R$ {max_price:.2f}", inline=True)
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @cmd_alert.command(name="remove", aliases=["remover", "del", "rm"], description="Remove an active deal alert")
+    @app_commands.describe(keyword="Keyword to remove from your alerts")
+    async def alert_remove(ctx: commands.Context, keyword: str):
+        ok = _remove_deal_alert(ctx.author.id, keyword)
+        if ok:
+            embed = discord.Embed(
+                title="🗑️ Alerta Removido",
+                description=f"O alerta para **`{keyword}`** foi removido com sucesso.",
+                color=0x00FF88,
+            )
+        else:
+            embed = discord.Embed(
+                title="⚠️ Alerta não encontrado",
+                description=f"Você não possui nenhum alerta ativo para **`{keyword}`**.",
+                color=0xFF4444,
+            )
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @cmd_alert.command(name="list", aliases=["listar", "ls"], description="List all your active deal alerts")
+    async def alert_list(ctx: commands.Context):
+        alerts = _list_deal_alerts(ctx.author.id)
+        if not alerts:
+            embed = discord.Embed(
+                title="📋 Seus Alertas de Ofertas",
+                description="Você não possui nenhum alerta ativo no momento.\nUse `/alert add <termo>` para cadastrar seu primeiro alerta!",
+                color=0xFF69B4,
+            )
+            return await ctx.send(embed=embed, ephemeral=True)
+        
+        lines = []
+        for i, a in enumerate(alerts, 1):
+            kw = a.get("keyword", "")
+            mp = a.get("max_price")
+            p_str = f" (Máx: R$ {mp:.2f})" if mp is not None else ""
+            lines.append(f"**{i}.** `{kw}`{p_str}")
+        
+        embed = discord.Embed(
+            title=f"📋 Seus Alertas de Ofertas ({len(alerts)}/10)",
+            description="\n".join(lines),
+            color=0xFF69B4,
+        )
+        embed.set_footer(text="A Tiffany enviará uma DM quando encontrar essas ofertas!")
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @cmd_alert.command(name="clear", aliases=["limpar"], description="Clear all your active deal alerts")
+    async def alert_clear(ctx: commands.Context):
+        count = _clear_deal_alerts(ctx.author.id)
+        embed = discord.Embed(
+            title="🧹 Alertas Limpos",
+            description=f"Foram removidos **{count}** alerta(s) ativos.",
+            color=0x00FF88,
+        )
+        await ctx.send(embed=embed, ephemeral=True)

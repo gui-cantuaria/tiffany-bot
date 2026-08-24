@@ -45,6 +45,8 @@ class AudioFrameBuffer:
             overflow = (len(self._buffer) + written) - self.capacity
             del self._buffer[:overflow]
         self._buffer.extend(data)
+        if len(self._buffer) > self.capacity:
+            del self._buffer[:len(self._buffer) - self.capacity]
         return written
 
     def read_frames(self, size: int) -> bytes:

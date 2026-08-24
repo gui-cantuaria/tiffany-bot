@@ -28,7 +28,19 @@ def resolve_tier(
     """
     Resolve internal tier from checkout metadata or configured price map.
     Never falls back to a generic premium grant.
+    Prioritizes verified Stripe price_id to prevent metadata spoofing.
     """
+    pid = (price_id or "").strip()
+    if pid and pid in price_to_tier:
+        tier = price_to_tier[pid]
+        if tier not in VALID_TIERS:
+            inc("tier_rejected_unknown")
+            raise UnknownPriceError(f"Mapped tier '{tier}' not in VALID_TIERS")
+        pkg = (metadata_package or "").strip().lower()
+        if pkg and pkg in VALID_TIERS and pkg != tier:
+            log.warning("Metadata package '%s' contradicts price_id tier '%s' — enforcing paid price tier", pkg, tier)
+        return tier
+
     pkg = (metadata_package or "").strip().lower()
     if pkg:
         if pkg not in VALID_TIERS:
@@ -36,7 +48,6 @@ def resolve_tier(
             raise UnknownTierError(f"Unknown metadata package: {pkg}")
         return pkg
 
-    pid = (price_id or "").strip()
     if not pid:
         inc("tier_rejected_unknown")
         raise UnknownPriceError("Missing price_id and package metadata")

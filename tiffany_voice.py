@@ -1289,9 +1289,13 @@ YDL_OPTS: dict[str, Any] = {
     "socket_timeout": 20,
     "retries": 3,
     "fragment_retries": 3,
-    # Cloudflare WARP proxy — bypasses YouTube IP blocks on VPS
-    "proxy": "socks5://127.0.0.1:40000",
 }
+_proxy = os.getenv("YTDL_PROXY", "").strip()
+if _proxy:
+    YDL_OPTS["proxy"] = _proxy
+elif os.getenv("USE_WARP_PROXY", "0") == "1":
+    YDL_OPTS["proxy"] = "socks5://127.0.0.1:40000"
+
 # Do NOT use cookiefile — cookies force "tv downgraded" player that fails.
 # bgutil-ytdlp-pot-provider plugin resolves via android vr player API.
 
@@ -1935,17 +1939,21 @@ async def start_warp_monitor(client: discord.Client) -> None:
         global _warp_was_ok
         await client.wait_until_ready()
         while not client.is_closed():
-            ok = check_warp_proxy_ok()
+            ok = await asyncio.to_thread(check_warp_proxy_ok)
             if _warp_was_ok is None:
                 _warp_was_ok = ok
             elif _warp_was_ok and not ok:
-                _healthcheck_webhook_notify(
+                await asyncio.to_thread(
+                    _healthcheck_webhook_notify,
                     "⚠️ **WARP proxy OFFLINE** (`127.0.0.1:40000`) — música YouTube vai falhar.\n"
                     "Verifique: `systemctl status tiffany-warp-healthcheck.timer` · `bash scripts/warp-healthcheck.sh`"
                 )
                 log.error("WARP proxy offline — YouTube music will fail")
             elif not _warp_was_ok and ok:
-                _healthcheck_webhook_notify("✅ **WARP proxy recuperado** — música YouTube OK.")
+                await asyncio.to_thread(
+                    _healthcheck_webhook_notify,
+                    "✅ **WARP proxy recuperado** — música YouTube OK."
+                )
                 log.info("WARP proxy recovered")
             _warp_was_ok = ok
             try:
@@ -2142,7 +2150,7 @@ def _pick_localized(pool: dict[GuildLang, tuple[str, ...]], lang: GuildLang) -> 
     return random.choice(pool.get(lang) or pool["pt"])
 
 
-def _url_is_safe_to_fetch(url: str) -> bool:
+async def _url_is_safe_to_fetch(url: str) -> bool:
     """Reject non-http(s) URLs and hosts that resolve to private/loopback/
     link-local/reserved IPs (SSRF guard for user-supplied URLs like t!su)."""
     import socket
@@ -2155,8 +2163,10 @@ def _url_is_safe_to_fetch(url: str) -> bool:
         host = parsed.hostname.lower()
         if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
             return False
-        # Resolve every address the host maps to; block if any is not global.
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        # Resolve address asynchronously to avoid blocking the event loop
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP
+        )
         for info in infos:
             ip = ipaddress.ip_address(info[4][0])
             if not ip.is_global or ip.is_multicast:
@@ -2166,13 +2176,24 @@ def _url_is_safe_to_fetch(url: str) -> bool:
         return False
 
 
+_voice_http_session: Optional[Any] = None
+
+async def _get_voice_http_session() -> Any:
+    global _voice_http_session
+    import aiohttp
+    if _voice_http_session is None or _voice_http_session.closed:
+        connector = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300, enable_cleanup_closed=True)
+        _voice_http_session = aiohttp.ClientSession(connector=connector)
+    return _voice_http_session
+
+
 async def _safe_http_get(session, url: str, *, headers: dict | None = None, timeout=None):
     """GET with redirect validation — each hop re-checked against SSRF guard."""
     from urllib.parse import urljoin
     current = url
     hdrs = headers or {}
     for _ in range(4):
-        if not _url_is_safe_to_fetch(current):
+        if not await _url_is_safe_to_fetch(current):
             raise ValueError("unsafe URL")
         async with session.get(
             current, headers=hdrs, timeout=timeout, allow_redirects=False,
@@ -2206,7 +2227,7 @@ async def _summarize_url(
         log.error("beautifulsoup4 not installed — t!su unavailable")
         return tr(lang, "err.summary_blocked")
 
-    if not _url_is_safe_to_fetch(url):
+    if not await _url_is_safe_to_fetch(url):
         return tr(lang, "summary.err.invalid_url")
 
     headers = {
@@ -2218,13 +2239,13 @@ async def _summarize_url(
         "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
     }
     try:
-        async with _aiohttp.ClientSession() as session:
-            resp = await _safe_http_get(
-                session, url, headers=headers, timeout=_aiohttp.ClientTimeout(total=15),
-            )
-            if resp.status != 200:
-                return tr(lang, "summary.err.fetch_failed")
-            html = await resp.text(errors="replace")
+        session = await _get_voice_http_session()
+        resp = await _safe_http_get(
+            session, url, headers=headers, timeout=_aiohttp.ClientTimeout(total=15),
+        )
+        if resp.status != 200:
+            return tr(lang, "summary.err.fetch_failed")
+        html = await resp.text(errors="replace")
     except ValueError:
         return tr(lang, "summary.err.redirect_blocked")
     except Exception:
@@ -2668,11 +2689,17 @@ def _text_to_speech(text: str, lang: GuildLang = "pt") -> Optional[bytes]:
         except RuntimeError:
             loop = None
         if loop and loop.is_running():
-            # Already in a loop — create a new one in a separate thread
+            # Already in a loop — create a new one in a separate thread without blocking on timeout
             import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                result = pool.submit(lambda: _aio.run(_gen())).result(timeout=15)
-            return result
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
+                fut = pool.submit(lambda: _aio.run(_gen()))
+                result = fut.result(timeout=15)
+                pool.shutdown(wait=False)
+                return result
+            except Exception:
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
         else:
             return _aio.run(_gen())
     except ModuleNotFoundError:
@@ -4314,9 +4341,12 @@ _COMMAND_REGISTRY: list[tuple[str, list[str], str]] = [
     ("su", ["summary"], "t!su / t!summary <URL>"),
     ("cp", ["clip"], "t!cp / t!clip [mp3|wav] — últimos 30s de áudio"),
     ("247", ["nonstop"], "t!247 / t!nonstop — não sair da call por inatividade"),
-    ("gw", ["giveaway"], "t!gw create|end|reroll|list — sorteios"),
-    ("emb", ["embed"], "t!emb create|edit|send|list — embeds customizados"),
+    ("gw", ["giveaway", "sorteio"], "t!gw create|end|reroll|list — sorteios"),
+    ("emb", ["embed", "em"], "t!emb create|edit|preview|delete|send|list — embeds customizados"),
     ("rp", ["roleplay"], "t!rp / t!roleplay <mensagem> — conversa casual com personalidade"),
+    ("premium", [], "t!premium / /premium — gerenciar assinatura premium"),
+    ("alert", ["alerta"], "t!alert add|remove|list|clear — alertas pessoais de ofertas"),
+    ("ofertas_diag", ["deals_diag"], "t!ofertas_diag / t!deals_diag — diagnóstico do scraper de ofertas"),
     ("help", [], "t!help / /help — lista de comandos"),
     ("about", [], "t!about / /about — o que a Tiffany faz"),
     ("rewind", [], "t!rewind / /rewind — suas estatísticas"),
@@ -4592,6 +4622,7 @@ def _pick_random_song(
 
 
 def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
+    q = (query or "").lower()
     if resolved_platform:
         p = _detect_music_platform(query) or ""
         if "spotify" in p:
@@ -4604,7 +4635,7 @@ def _track_source_label(query: str, *, resolved_platform: bool = False) -> str:
             return "Amazon Music"
         if "tidal" in p:
             return "Tidal"
-        if "yandex" in p and "music" in q:
+        if "yandex" in p or "yandex" in q:
             return "Yandex Music"
         if "music.youtube" in p:
             return "YouTube Music"
@@ -5074,6 +5105,15 @@ _COMMON_TYPOS: dict[str, str] = {
     "clp": "cp", "clipe": "cp",
     "sum": "su", "sumar": "su", "resumo": "su", "resumir": "su",
     "24": "247", "nstop": "247", "nonstp": "247",
+    "sorteio": "gw", "sorteios": "gw", "giveaways": "gw", "sorteia": "gw",
+    "embeds": "emb", "embedar": "emb",
+    "oferta": "alert", "ofertas": "alert", "alerta": "alert", "alertas": "alert", "promo": "alert", "promocao": "alert",
+    "idiomas": "lang", "language": "lang", "lingua": "lang",
+    "configuracao": "settings", "configuracoes": "settings", "preferencias": "settings",
+    "painel": "mod", "moderacao": "mod", "modpanel": "mod", "admin": "mod",
+    "novidade": "updates", "novidades": "updates", "changelog": "updates",
+    "metricas": "stats", "estatisticas": "stats", "status": "stats", "ping": "stats",
+    "som": "v", "altura": "v", "volum": "v",
     # Prefixes from other common bots
 }
 
@@ -5752,18 +5792,22 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 # Notify empty queue ~5s after last song (once per empty cycle).
                 # Never announce while audio is playing/paused (avoids spurious message).
                 if (
-                    _empty_ticks == 10 and session.history and not session.stay_24_7
+                    _empty_ticks == 10 and not session.stay_24_7
                     and not vc.is_playing() and not vc.is_paused()
                 ):
                     failed = session._failed_songs[:]
                     session._failed_songs.clear()
-                    msg = tr(session.guild_lang, "music.queue.finished")
-                    if failed:
-                        lines = "\n".join(f"• {s}" for s in failed[:20])
-                        if len(failed) > 20:
-                            lines += tr(session.guild_lang, "music.queue.failed_more", count=len(failed) - 20)
-                        msg += tr(session.guild_lang, "music.queue.failed_header", count=len(failed), lines=lines)
-                    await _notify(bot, session.text_channel_id, msg)
+                    
+                    if failed or session.history:
+                        ch = bot.get_channel(session.text_channel_id)
+                        guild_lang = resolve_guild_lang(getattr(ch, "guild", None))
+                        msg = tr(guild_lang, "music.queue.finished")
+                        if failed:
+                            lines = "\n".join(f"• {s}" for s in failed[:20])
+                            if len(failed) > 20:
+                                lines += tr(guild_lang, "music.queue.failed_more", count=len(failed) - 20)
+                            msg += tr(guild_lang, "music.queue.failed_header", count=len(failed), lines=lines)
+                        await _notify(bot, session.text_channel_id, msg)
                 # Leave call after 3 min with no music in queue (Jockie-style; t!247 disables)
                 if (
                     session._queue_empty_since
@@ -5857,12 +5901,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                         log.warning("Download timeout (120s): %s", display_name[:80])
                         await _notify(
                             bot, session.text_channel_id,
-                            f"⏳ Download demorou demais, pulando: `{display_name[:80]}`",
+                        f"⏳ Download demorou demais, pulando: `{display_name[:80]}`",
                         )
                         continue
                 if yt_source is None:
                     session.current_song = ""
                     session._failed_songs.append(display_name[:70])
+                    _ch = bot.get_channel(session.text_channel_id)
+                    if _ch:
+                        bot.loop.create_task(_ch.send(embed=discord.Embed(description=f"❌ Não foi possível baixar: `{display_name[:80]}`", color=0xFF69B4)))
                     if info and "ERR_TOO_LONG" in str(info):
                         parts = str(info).split(":")
                         dur, max_dur = parts[1] if len(parts) > 1 else "?", parts[2] if len(parts) > 2 else "?"
@@ -5871,21 +5918,15 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                             display_name, re.IGNORECASE,
                         )
                         if _playlist_kw:
-                            err_msg = tr(session.guild_lang, "music.err.too_long", dur=dur, max=max_dur)
-                            tip_msg = tr(session.guild_lang, "music.tip.playlist")
+                            guild_lang = resolve_guild_lang(getattr(_ch, "guild", None)) if _ch else "pt-BR"
+                            err_msg = tr(guild_lang, "music.err.too_long", dur=dur, max=max_dur)
+                            tip_msg = tr(guild_lang, "music.tip.playlist")
                             await _notify(
                                 bot, session.text_channel_id,
                                 f"⚠️  `{display_name[:80]}` — {err_msg}\n{tip_msg}",
                             )
                     continue
-                if not vc.is_connected():
-                    yt_source.cleanup()
-                    break
-                if session._cancel_download:
-                    session._cancel_download = False
-                    session.current_song = ""
-                    yt_source.cleanup()
-                    continue
+
                 session.current_file = dl_fp or ""
                 session.current_tmpdir = dl_tmpdir
                 session.current_duration = dl_duration
@@ -5964,10 +6005,10 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 if session.seeking:
                     session.seeking = False
                     await asyncio.sleep(1)
-                    _seek_wait = 0
-                    while (vc.is_playing() or vc.is_paused()) and _seek_wait < 1200:
+                    _seek_max = max(600.0, dl_duration + 120.0) if dl_duration > 0 else 600.0
+                    _seek_start = time.monotonic()
+                    while (vc.is_playing() or vc.is_paused()) and (time.monotonic() - _seek_start) < _seek_max:
                         await asyncio.sleep(0.5)
-                        _seek_wait += 1
                 if session.loop_enabled and session.current_query:
                     _replay = (
                         session.loop_query or session.current_query,
@@ -6002,12 +6043,12 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                     session._loop_cache_file = ""
                     session._loop_cache_tmpdir = None
                     if dl_tmpdir:
-                        shutil.rmtree(dl_tmpdir, ignore_errors=True)
+                        await _async_rmtree(dl_tmpdir)
                 if vc.channel:
                     _vs_entry = _snapshot_voice_entry(guild_id, vc.channel.id, session.text_channel_id, session)
                     asyncio.get_running_loop().run_in_executor(None, _write_voice_state, guild_id, _vs_entry)
                 if session.current_tmpdir:
-                    shutil.rmtree(session.current_tmpdir, ignore_errors=True)
+                    await _async_rmtree(session.current_tmpdir)
                     session.current_tmpdir = None
                 if playback_error and not session.seeking:
                     log.warning(
@@ -6025,7 +6066,7 @@ async def _play_worker(guild_id: int, vc: voice_recv.VoiceRecvClient, bot: disco
                 session.current_song = ""
                 session.seeking = False
                 if session.current_tmpdir:
-                    shutil.rmtree(session.current_tmpdir, ignore_errors=True)
+                    _sync_rmtree_safe(session.current_tmpdir)
                     session.current_tmpdir = None
                 yt_src = locals().get("yt_source")
                 if yt_src is not None:
@@ -6256,7 +6297,8 @@ async def _voice_listen_loop(
             # Debug: save last WAV for analysis (only if DEBUG_STT=1)
             if os.getenv("DEBUG_STT"):
                 try:
-                    with open("/tmp/tiffany_debug_audio.wav", "wb") as _dbg:
+                    import tempfile
+                    with open(os.path.join(tempfile.gettempdir(), "tiffany_debug_audio.wav"), "wb") as _dbg:
                         _dbg.write(wav)
                 except Exception:
                     pass
@@ -6343,7 +6385,7 @@ async def _voice_listen_loop(
                     while True:
                         session.music_queue.get_nowait()
                         session.music_queue.task_done()
-                except Exception:
+                except asyncio.QueueEmpty:
                     pass  # QueueEmpty — queue cleared
                 session.queue_display.clear()
                 session.queue_durations.clear()
@@ -6392,14 +6434,24 @@ async def _voice_listen_loop(
                         while True:
                             _old_items.append(session.music_queue.get_nowait())
                             session.music_queue.task_done()
-                    except Exception:
+                    except asyncio.QueueEmpty:
                         pass
-                    _combined = list(zip(session.queue_display, _old_items, session.queue_requesters))
+                    
+                    n = len(_old_items)
+                    all_durs = list(session.queue_durations[:n])
+                    while len(all_durs) < n:
+                        all_durs.append(0)
+                    all_requesters = list(session.queue_requesters[:n])
+                    while len(all_requesters) < n:
+                        all_requesters.append(0)
+                        
+                    _combined = list(zip(session.queue_display, _old_items, all_durs, all_requesters))
                     _rnd.shuffle(_combined)
-                    session.queue_display = [d for d, _, _ in _combined]
-                    session.queue_requesters = [r for _, _, r in _combined]
+                    session.queue_display = [d for d, _, _, _ in _combined]
+                    session.queue_durations = [du for _, _, du, _ in _combined]
+                    session.queue_requesters = [r for _, _, _, r in _combined]
                     _new_q = asyncio.Queue()
-                    for _, q in _combined:
+                    for _, q, _, _ in _combined:
                         await _new_q.put(q)
                     session.music_queue = _new_q
                     spawn_ephemeral(_tts_speak_quick(vc, "Ok."))
@@ -6785,19 +6837,19 @@ async def _fetch_lyrics(query: str) -> Optional[str]:
     try:
         import aiohttp
         url = f"https://lrclib.net/api/search?q={urllib.parse.quote(query[:100])}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                if not data:
-                    return None
-                # Pick first result with lyrics
-                for item in data[:5]:
-                    plain = item.get("plainLyrics")
-                    if plain and len(plain.strip()) > 50:
-                        return plain.strip()
+        session = await _get_voice_http_session()
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status != 200:
                 return None
+            data = await resp.json()
+            if not data:
+                return None
+            # Pick first result with lyrics
+            for item in data[:5]:
+                plain = item.get("plainLyrics")
+                if plain and len(plain.strip()) > 50:
+                    return plain.strip()
+            return None
     except Exception:
         return None
 
@@ -6934,10 +6986,16 @@ def _roll_one_dice_term(term: str) -> tuple[float, str, int, int]:
     if len(sorted_rolls) > 24:
         rolls_show += "…"
 
+    is_neg = bool(m.group("neg"))
     if pool_op:
         succ = _pool_count(kept, pool_op, pool_target)
-        return float(succ), f"{succ} sucesso(s) ← [{rolls_show}]", crits, fumbles
+        val = -float(succ) if is_neg else float(succ)
+        sign_str = "-" if is_neg else ""
+        return val, f"{sign_str}{succ} sucesso(s) ← [{rolls_show}]", crits, fumbles
     total = sum(kept)
+    if is_neg:
+        total = -total
+        return float(total), f"- [{rolls_show}]", crits, fumbles
     return float(total), f"[{rolls_show}]", crits, fumbles
 
 
@@ -7816,7 +7874,9 @@ def register_voice(bot: commands.Bot) -> None:
                     answer = await _answer_question(question, guild_id, session, vc, user_id=user_id)
                 except Exception:
                     log.exception("Error processing voice question guild=%s", guild_id)
-                    answer = tr(session.guild_lang, "chat.err.process_failed")
+                    _ch = bot.get_channel(session.text_channel_id)
+                    guild_lang = resolve_guild_lang(getattr(_ch, "guild", None)) if _ch else "pt-BR"
+                    answer = tr(guild_lang, "chat.err.process_failed")
                 finally:
                     session.question_queue.task_done()
                 # Resume music if paused (by worker or listen loop)
@@ -8448,7 +8508,7 @@ def register_voice(bot: commands.Bot) -> None:
         if re.match(r"^(file|ftp|sftp)://", query, re.IGNORECASE):
             await ctx.send(embed=_embed("⚠️ URLs locais ou de arquivo não são permitidas por segurança."))
             return
-        if re.match(r"^https?://", query, re.IGNORECASE) and not _url_is_safe_to_fetch(query):
+        if re.match(r"^https?://", query, re.IGNORECASE) and not await _url_is_safe_to_fetch(query):
             await ctx.send(embed=_embed("⚠️ Esse endereço foi bloqueado por segurança (SSRF)."))
             return
 
@@ -9073,6 +9133,9 @@ def register_voice(bot: commands.Bot) -> None:
         if not ok:
             await _ctx_reply_ai(ctx, _rate_limit_message(lang, reason), delete_after=8)
             return
+        if not await _ai_rate_limit_consume(gid, bucket="chat", user_id=uid):
+            await _ctx_reply_ai(ctx, _rate_limit_message(lang, "limit"), delete_after=8)
+            return
 
         thinking = await _ctx_reply_ai(ctx, tr(lang, "chat.thinking"))
         answer = await _answer_question(
@@ -9646,7 +9709,7 @@ def register_voice(bot: commands.Bot) -> None:
                 while True:
                     drained_queries.append(session.music_queue.get_nowait())
                     session.music_queue.task_done()
-            except Exception:
+            except asyncio.QueueEmpty:
                 pass
             n = min(len(drained_queries), len(session.queue_display))
             all_queries = drained_queries[:n]
@@ -10438,10 +10501,9 @@ def register_voice(bot: commands.Bot) -> None:
                 if session.queue_durations:
                     session.queue_durations.pop(0)
                 if session.queue_requesters:
-                    session.queue_requesters.pop(0)
-                session.current_requester_id = (
-                    session.queue_requesters[0] if session.queue_requesters else 0
-                )
+                    session.current_requester_id = session.queue_requesters.pop(0)
+                else:
+                    session.current_requester_id = 0
                 return
 
             # Loop: replay the same track
@@ -10458,10 +10520,9 @@ def register_voice(bot: commands.Bot) -> None:
             if session.queue_durations:
                 session.queue_durations.pop(0)
             if session.queue_requesters:
-                session.queue_requesters.pop(0)
-            session.current_requester_id = (
-                session.queue_requesters[0] if session.queue_requesters else 0
-            )
+                session.current_requester_id = session.queue_requesters.pop(0)
+            else:
+                session.current_requester_id = 0
 
             # Next track in Lavalink queue
             if not player.queue.is_empty:

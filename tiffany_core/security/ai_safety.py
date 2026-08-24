@@ -9,6 +9,7 @@ or privilege escalation vulnerabilities when executing LLM-proposed tool invocat
 
 from __future__ import annotations
 import base64
+import binascii
 import logging
 import re
 import unicodedata
@@ -94,7 +95,7 @@ class PromptInjectionGuard:
                 dec_str = raw_bytes.decode("utf-8", errors="ignore")
                 if len(dec_str) >= 6 and any(c.isalpha() for c in dec_str):
                     decoded_payloads.append(dec_str)
-            except Exception:
+            except (ValueError, binascii.Error):
                 continue
         return decoded_payloads
 
