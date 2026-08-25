@@ -35,16 +35,14 @@ class TestAdversarialValidation(unittest.TestCase):
     # ---------------------------------------------------------------------------
     def test_attack_admin_grant_credits_non_owner_rejection(self):
         """Attack: Non-owner user attempts to grant AI credits to themselves or others."""
-        loop = asyncio.get_event_loop()
-        
         # Test 1: Invalid credit amounts (<1 or >100,000) raise ValueError
         with self.assertRaises(ValueError):
-            loop.run_until_complete(
+            asyncio.run(
                 AIQuotaService.grant_credits(user_id=99999, credits=0, granted_by=11111)
             )
 
         with self.assertRaises(ValueError):
-            loop.run_until_complete(
+            asyncio.run(
                 AIQuotaService.grant_credits(user_id=99999, credits=1000000, granted_by=11111)
             )
 
@@ -64,8 +62,6 @@ class TestAdversarialValidation(unittest.TestCase):
     # ---------------------------------------------------------------------------
     def test_attack_concurrent_webhook_idempotency(self):
         """Attack: Attacker sends 100 identical Stripe webhook events simultaneously."""
-        loop = asyncio.get_event_loop()
-
         async def run_concurrent_claims():
             event_id = f"evt_test_{uuid.uuid4().hex}"
             correlation_id = uuid.uuid4()
@@ -105,7 +101,7 @@ class TestAdversarialValidation(unittest.TestCase):
             results = await asyncio.gather(*tasks)
             return results
 
-        results = loop.run_until_complete(run_concurrent_claims())
+        results = asyncio.run(run_concurrent_claims())
         
         # Exactly ONE claim must succeed as "new"; all 49 others must be identified as "duplicate"
         new_claims = [r for r in results if r == "new"]
@@ -116,8 +112,6 @@ class TestAdversarialValidation(unittest.TestCase):
 
     def test_attack_withdrawable_funds_settlement_bounds(self):
         """Attack: Attempt withdrawal exceeding settled Stripe funds or outside min/max bounds."""
-        loop = asyncio.get_event_loop()
-
         async def run_settlement_test():
             class MockDbConn:
                 async def fetchval(self, query, *args):
@@ -142,21 +136,19 @@ class TestAdversarialValidation(unittest.TestCase):
             ok4, r4 = await ledger.verify_withdrawable_funds(conn, 12345, 30.0)
             self.assertTrue(ok4, f"Financial Defect: Valid withdrawal failed: {r4}")
 
-        loop.run_until_complete(run_settlement_test())
+        asyncio.run(run_settlement_test())
 
     # ---------------------------------------------------------------------------
     # 3. AI GUARDRAILS FAIL-CLOSED DEFENSE
     # ---------------------------------------------------------------------------
     def test_attack_ai_missing_key_fail_closed(self):
         """Attack: AI prompt evaluation when OPENROUTER_API_KEY is missing or empty."""
-        loop = asyncio.get_event_loop()
-
         async def test_guardrail():
             with patch.object(premium_ai_guardrails, "get_openrouter_api_key", return_value=""):
                 res = await premium_ai_guardrails.classify_content("Illegal Title", "Explicit content")
                 return res
 
-        res = loop.run_until_complete(test_guardrail())
+        res = asyncio.run(test_guardrail())
         self.assertEqual(res["classification"], "ILLEGAL_GORE", "Safety Failure: Missing key did not Fail-Closed!")
         self.assertIn("Fail-Closed", res["reasoning"])
 

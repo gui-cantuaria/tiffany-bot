@@ -33,7 +33,7 @@ class AIQuotaService:
     
     @staticmethod
     async def _get_today_str() -> str:
-        return datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
     @staticmethod
     def get_model_weight(model_name: str) -> int:

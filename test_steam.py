@@ -17,4 +17,5 @@ async def main():
         print("_genre_ok:", gr._genre_ok(genres, tags, filters, title="Pacify"))
         print("_multiplayer_ok:", gr._multiplayer_ok(categories, tags, filters))
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
