@@ -510,10 +510,11 @@ def _load_dice_macros():
 
 
 def _save_dice_macros():
-    tmp = _MACROS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_dice_macros, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _MACROS_FILE)
+    try:
+        from infra.utils.json_utils import atomic_json_dump
+        atomic_json_dump(_dice_macros, _MACROS_FILE, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log.error("Failed to save dice macros: %s", e)
 
 
 def _get_dice_macro(user_id: int, name: str) -> str:

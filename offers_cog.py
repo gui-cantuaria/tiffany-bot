@@ -2119,8 +2119,15 @@ def _load_deal_claims() -> None:
         except Exception:
             _deal_claims_data = {}
 
+_DEAL_CLAIMS_MAX = 5000
+
 def _save_deal_claims() -> None:
+    global _deal_claims_data
     try:
+        if len(_deal_claims_data) > _DEAL_CLAIMS_MAX:
+            # Retain the newest 5000 deals
+            keys = list(_deal_claims_data.keys())[-_DEAL_CLAIMS_MAX:]
+            _deal_claims_data = {k: _deal_claims_data[k] for k in keys}
         from infra.utils.json_utils import atomic_json_dump
         atomic_json_dump(_deal_claims_data, _DEAL_CLAIMS_FILE, ensure_ascii=False, indent=None)
     except Exception:
@@ -2781,9 +2788,6 @@ class OffersCog(commands.Cog):
         self.bot = bot
         self.deals_loop.start()
     
-    def cog_unload(self):
-        self.deals_loop.cancel()
-    
     @tasks.loop(minutes=SCAN_INTERVAL_MIN)
     async def deals_loop(self):
         try:
@@ -2933,11 +2937,15 @@ class OffersCog(commands.Cog):
         log.warning("⚠️ [Offers] Bot disconnected from Discord.")
     
     async def cog_unload(self):
+        try:
+            self.deals_loop.cancel()
+        except Exception:
+            pass
         global http_session
         if http_session and not http_session.closed:
             await http_session.close()
             http_session = None
-        log.info("🔌 [Offers] HTTP session closed.")
+        log.info("🔌 [Offers] Deals loop cancelled and HTTP session closed.")
 
 async def setup(bot: commands.Bot):
     global _cog_loaded

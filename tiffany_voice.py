@@ -235,6 +235,18 @@ def _ai_rl_ids(ctx: commands.Context) -> tuple[int, int]:
 
 _dm_guild_ok_cache: dict[int, float] = {}
 _DM_GUILD_CACHE_TTL_SEC = 3600
+_DM_GUILD_CACHE_MAX = 10_000
+
+
+def _set_dm_guild_cache(user_id: int, now: float) -> None:
+    if len(_dm_guild_ok_cache) >= _DM_GUILD_CACHE_MAX:
+        expired = [uid for uid, ts in list(_dm_guild_ok_cache.items()) if (now - ts) >= _DM_GUILD_CACHE_TTL_SEC]
+        for uid in expired:
+            _dm_guild_ok_cache.pop(uid, None)
+        if len(_dm_guild_ok_cache) >= _DM_GUILD_CACHE_MAX:
+            oldest = min(_dm_guild_ok_cache, key=lambda uid: _dm_guild_ok_cache[uid])
+            _dm_guild_ok_cache.pop(oldest, None)
+    _dm_guild_ok_cache[user_id] = now
 
 
 async def _user_shares_guild_with_bot(client: discord.Client, user_id: int) -> bool:
@@ -246,7 +258,7 @@ async def _user_shares_guild_with_bot(client: discord.Client, user_id: int) -> b
 
     for guild in client.guilds:
         if guild.get_member(user_id) is not None:
-            _dm_guild_ok_cache[user_id] = now
+            _set_dm_guild_cache(user_id, now)
             return True
 
     if not client.guilds:
@@ -263,7 +275,7 @@ async def _user_shares_guild_with_bot(client: discord.Client, user_id: int) -> b
             return False
 
     if any(await asyncio.gather(*(_fetch_in_guild(g) for g in client.guilds))):
-        _dm_guild_ok_cache[user_id] = now
+        _set_dm_guild_cache(user_id, now)
         return True
     return False
 
@@ -1466,6 +1478,7 @@ _CONTEXT_MAX_TURNS = 4   # turns per user (8 messages in prompt)
 _CONTEXT_MAX_USERS = 50  # max users tracked in memory
 _CONTEXT_TTL_SEC = 3600  # 1 hour without interaction → context expires
 _user_context: dict[int, dict] = {}
+_in_flight_chat_queries: set[tuple[int, str]] = set()
 
 # --- Persistent memory: saves context to disk to survive restarts ---
 _MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chat_memory.json")
@@ -1886,6 +1899,10 @@ def _check_game_cooldown(user_id: int) -> tuple[bool, int]:
     last = _game_cooldown_last.get(user_id, 0.0)
     if (now - last) < _GAME_CMD_COOLDOWN_SEC:
         return False, max(1, int(math.ceil(_GAME_CMD_COOLDOWN_SEC - (now - last))))
+    if len(_game_cooldown_last) > 2000:
+        stale = [uid for uid, ts in list(_game_cooldown_last.items()) if (now - ts) >= _GAME_CMD_COOLDOWN_SEC]
+        for uid in stale:
+            _game_cooldown_last.pop(uid, None)
     _game_cooldown_last[user_id] = now
     return True, 0
 
@@ -1898,6 +1915,10 @@ def _check_imagine_cooldown(user_id: int) -> tuple[bool, int]:
     last = _imagine_cooldown_last.get(user_id, 0.0)
     if (now - last) < _IMAGINE_CMD_COOLDOWN_SEC:
         return False, max(1, int(math.ceil(_IMAGINE_CMD_COOLDOWN_SEC - (now - last))))
+    if len(_imagine_cooldown_last) > 2000:
+        stale = [uid for uid, ts in list(_imagine_cooldown_last.items()) if (now - ts) >= _IMAGINE_CMD_COOLDOWN_SEC]
+        for uid in stale:
+            _imagine_cooldown_last.pop(uid, None)
     _imagine_cooldown_last[user_id] = now
     return True, 0
 
@@ -2185,6 +2206,16 @@ async def _get_voice_http_session() -> Any:
         connector = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300, enable_cleanup_closed=True)
         _voice_http_session = aiohttp.ClientSession(connector=connector)
     return _voice_http_session
+
+
+async def close_voice_http_session() -> None:
+    global _voice_http_session
+    if _voice_http_session and not _voice_http_session.closed:
+        try:
+            await _voice_http_session.close()
+        except Exception:
+            pass
+        _voice_http_session = None
 
 
 async def _safe_http_get(session, url: str, *, headers: dict | None = None, timeout=None):
@@ -3483,6 +3514,7 @@ async def cleanup_all_voice_sessions(bot: commands.Bot, *, reason: str = "shutdo
             sess = _sessions.pop(gid, None)
             await cleanup_voice_session_tasks(sess, guild_id=gid, reason=reason)
             _clear_voice_state(gid)
+    await close_voice_http_session()
 
 
 async def _empty_channel_watchdog_loop(bot: commands.Bot) -> None:
@@ -5593,9 +5625,12 @@ async def _ctx_reply_ai(
             return await ctx.author.send(embed=embed, delete_after=delete_after)
         except (discord.Forbidden, discord.HTTPException):
             text = embed.description or str(content)
-            await _send_private_notice(
-                ctx.author, ctx.channel, text, interaction=None, delete_after=delete_after,
-            )
+            try:
+                await _send_private_notice(
+                    ctx.author, ctx.channel, text, interaction=None, delete_after=delete_after,
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                pass
             return None
 
     return await ctx.send(embed=embed, delete_after=delete_after, **kwargs)
@@ -7705,14 +7740,20 @@ def register_voice(bot: commands.Bot) -> None:
             bot.get_guild(guild_id) if guild_id else None,
             user_id or None,
         )
+        in_flight_key = None
         try:
             _ctx_id = user_id or guild_id
             
-            # Anti-spam: check for repeated / very similar questions
+            # Anti-spam: check for repeated / very similar questions (in history or currently in flight)
             if _ctx_id and question and not image_urls:
+                q_norm = _strip_accents_lower(question.strip())
+                in_flight_key = (_ctx_id, q_norm)
+                if in_flight_key in _in_flight_chat_queries:
+                    return tr(lang, "err.duplicate_question")
+                _in_flight_chat_queries.add(in_flight_key)
+
                 entry = _user_context.get(_ctx_id)
                 if entry and entry.get("history"):
-                    q_norm = _strip_accents_lower(question.strip())
                     q_words = set(q_norm.split())
                     for turn in entry["history"][-5:]:
                         prev = _strip_accents_lower((turn.get("q") or "").strip())
@@ -7837,6 +7878,9 @@ def register_voice(bot: commands.Bot) -> None:
         except Exception as e:
             log.exception("Error answering question: %s", e)
             return "Desculpa, deu erro ao processar — não tenho uma resposta confiável agora."
+        finally:
+            if in_flight_key:
+                _in_flight_chat_queries.discard(in_flight_key)
 
     async def _question_worker(guild_id: int, vc, bot: discord.Client) -> None:
         """Worker that processes question queue."""
@@ -9509,7 +9553,10 @@ def register_voice(bot: commands.Bot) -> None:
             ctx.guild, ctx.author, query, history_line=history_line,
         )
         if status:
-            await status.edit(embed=result)
+            try:
+                await status.edit(embed=result)
+            except (discord.NotFound, discord.HTTPException):
+                await _ctx_reply_ai(ctx, result)
         else:
             await _ctx_reply_ai(ctx, result)
 
@@ -9699,10 +9746,9 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.too_small")))
                 return
             # Drain wavelink queue
-            wl_tracks = []
-            while not vc.queue.is_empty:
-                wl_tracks.append(vc.queue.get())
-            n = min(len(wl_tracks), len(session.queue_display))
+            while len(session.queue_display) < len(wl_tracks):
+                session.queue_display.append(getattr(wl_tracks[len(session.queue_display)], "title", "Música"))
+            n = len(wl_tracks)
             all_displays = session.queue_display[:n]
             all_durs = list(session.queue_durations[:n])
             while len(all_durs) < n:
@@ -9710,7 +9756,7 @@ def register_voice(bot: commands.Bot) -> None:
             all_requesters = list(session.queue_requesters[:n])
             while len(all_requesters) < n:
                 all_requesters.append(0)
-            combined = list(zip(all_displays, wl_tracks[:n], all_durs, all_requesters))
+            combined = list(zip(all_displays, wl_tracks, all_durs, all_requesters))
             random.shuffle(combined)
             session.queue_display = [d for d, _, _, _ in combined]
             session.queue_durations = [du for _, _, du, _ in combined]
@@ -9729,14 +9775,16 @@ def register_voice(bot: commands.Bot) -> None:
                     session.music_queue.task_done()
             except asyncio.QueueEmpty:
                 pass
-            n = min(len(drained_queries), len(session.queue_display))
-            all_queries = drained_queries[:n]
-            all_displays = session.queue_display[:n]
-            if len(all_queries) < 2:
+            if len(drained_queries) < 2:
                 for q in drained_queries:
                     session.music_queue.put_nowait(q)
                 await ctx.send(embed=_embed(tr(_ctx_lang(ctx), "cmd.shuffle.too_small")))
                 return
+            while len(session.queue_display) < len(drained_queries):
+                session.queue_display.append("Música")
+            n = len(drained_queries)
+            all_queries = drained_queries
+            all_displays = session.queue_display[:n]
             all_durs = list(session.queue_durations[:n])
             while len(all_durs) < n:
                 all_durs.append(_DEFAULT_TRACK_EST_SEC)

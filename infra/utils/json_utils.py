@@ -6,7 +6,7 @@ import logging
 
 log = logging.getLogger("tiffany-bot")
 
-def _atomic_dump_worker(data, filepath, ensure_ascii=False, indent=None):
+def _atomic_write_worker(raw_json: str, filepath: str):
     filepath = os.path.abspath(filepath)
     dir_name = os.path.dirname(filepath)
     
@@ -18,7 +18,7 @@ def _atomic_dump_worker(data, filepath, ensure_ascii=False, indent=None):
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".tmp_", suffix=".json")
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=ensure_ascii, indent=indent)
+            f.write(raw_json)
             f.flush()
             os.fsync(f.fileno())  # Ensure it is written to disk
             
@@ -32,24 +32,27 @@ def _atomic_dump_worker(data, filepath, ensure_ascii=False, indent=None):
             pass
         raise
 
+
 def atomic_json_dump(data, filepath, ensure_ascii=False, indent=None):
     """
     Writes JSON data to a temporary file and atomically replaces the target file.
     This prevents file corruption if the process crashes during writing.
-    Automatically offloads disk execution to a worker thread if an asyncio event loop is running
-    (unless in unit tests) to eliminate ~15ms event-loop blocking across hot paths.
+    Serializes JSON in the calling thread to prevent race conditions (dictionary changed size during iteration)
+    when offloading disk I/O to background threads.
     """
+    raw_json = json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    
     if "PYTEST_CURRENT_TEST" not in os.environ:
         try:
             loop = asyncio.get_running_loop()
             if loop.is_running():
                 log.debug("Offloading synchronous atomic_json_dump to worker thread for %s to protect event loop.", filepath)
-                loop.run_in_executor(None, _atomic_dump_worker, data, filepath, ensure_ascii, indent)
+                loop.run_in_executor(None, _atomic_write_worker, raw_json, filepath)
                 return
         except RuntimeError:
             pass
 
-    _atomic_dump_worker(data, filepath, ensure_ascii, indent)
+    _atomic_write_worker(raw_json, filepath)
 
 
 async def async_atomic_json_dump(data, filepath, ensure_ascii=False, indent=None):
@@ -57,7 +60,8 @@ async def async_atomic_json_dump(data, filepath, ensure_ascii=False, indent=None
     Asynchronous version of atomic_json_dump using asyncio.to_thread.
     Executes disk writing and fsync without blocking the Event Loop.
     """
-    await asyncio.to_thread(_atomic_dump_worker, data, filepath, ensure_ascii, indent)
+    raw_json = json.dumps(data, ensure_ascii=ensure_ascii, indent=indent)
+    await asyncio.to_thread(_atomic_write_worker, raw_json, filepath)
 
 
 def _load_json_sync(filepath, default=None):

@@ -59,9 +59,8 @@ class AdminDashboardCog(commands.Cog):
         else:
             embed.add_field(name="💳 Banco de Dados", value="Desconectado.", inline=False)
             
-        # Send ephemeral if slash, normal if prefix
-        ephem = getattr(ctx.interaction, "response", None) is not None
-        await ctx.send(embed=embed, ephemeral=ephem)
+        # Send ephemeral reply (safe across slash and prefix)
+        await tiffany_voice.hybrid_ctx_reply(ctx, embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name="grant_credits", hidden=True, description="Grant AI quota credits to a user (Admin Only)")
     async def grant_credits_cmd(
@@ -101,8 +100,7 @@ class AdminDashboardCog(commands.Cog):
             embed.add_field(name="Novo Saldo Restante", value=f"**{res['new_remaining']:,}** cotas", inline=False)
             embed.set_footer(text="Transação registrada no Ledger Audit de Segurança")
             
-            ephem = getattr(ctx.interaction, "response", None) is not None
-            await ctx.send(embed=embed, ephemeral=ephem)
+            await tiffany_voice.hybrid_ctx_reply(ctx, embed=embed, ephemeral=True)
         except Exception as e:
             log.exception("Error in grant_credits_cmd: %s", e)
             await tiffany_voice.hybrid_ctx_reply(ctx, f"❌ Erro ao conceder créditos: {e}", ephemeral=True)

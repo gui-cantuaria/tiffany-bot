@@ -52,8 +52,25 @@ def _load_state() -> None:
     _loaded = True
 
 
+_gw_last_edit: dict[str, float] = {}
+
 def _save_state() -> None:
     try:
+        # Prune ended giveaways older than 30 days or keep last 200
+        cutoff = time.time() - (30 * 86400)
+        ended = _state.get("ended", {})
+        if len(ended) > 200:
+            pruned_ended = {
+                k: v for k, v in ended.items()
+                if float(v.get("ended_at", 0) or 0) > cutoff
+            }
+            if len(pruned_ended) > 200:
+                # Keep top 200 by ended_at
+                sorted_ended = sorted(pruned_ended.items(), key=lambda item: float(item[1].get("ended_at", 0) or 0), reverse=True)[:200]
+                _state["ended"] = dict(sorted_ended)
+            else:
+                _state["ended"] = pruned_ended
+
         from infra.utils.json_utils import atomic_json_dump
         atomic_json_dump(_state, _STATE_FILE, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -148,8 +165,13 @@ class GiveawayEnterView(discord.ui.View):
         await interaction.response.send_message(tr(lang, "gw.enter_ok"), ephemeral=True)
         try:
             if interaction.message:
-                glang = _guild_lang(interaction.client, int(gw.get("guild_id") or 0))
-                await interaction.message.edit(embed=_build_giveaway_embed(gw, glang), view=self)
+                now = time.monotonic()
+                last_edit = _gw_last_edit.get(self.giveaway_id, 0.0)
+                # Rate limit embed edits to at most once every 2.0 seconds to protect against Discord 429
+                if (now - last_edit) >= 2.0:
+                    _gw_last_edit[self.giveaway_id] = now
+                    glang = _guild_lang(interaction.client, int(gw.get("guild_id") or 0))
+                    await interaction.message.edit(embed=_build_giveaway_embed(gw, glang), view=self)
         except Exception as e:
             log.warning(f"Giveaway update failed: {e}")
 
