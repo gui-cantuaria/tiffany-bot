@@ -1290,7 +1290,7 @@ def _try_chat_zoeira_reply(question: str, *, user_id: int = 0, lang: str = "pt")
 
 
 YDL_OPTS: dict[str, Any] = {
-    "format": "bestaudio/best",
+    "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=720]/best",
     "noplaylist": True,
     "quiet": False,
     "no_warnings": False,
@@ -1301,6 +1301,17 @@ YDL_OPTS: dict[str, Any] = {
     "socket_timeout": 20,
     "retries": 3,
     "fragment_retries": 3,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["web", "mweb"]
+        }
+    },
+    "js_runtimes": {
+        "node": {}
+    },
+    "remote_components": {
+        "ejs:github": {}
+    },
 }
 _proxy = os.getenv("YTDL_PROXY", "").strip()
 if _proxy:
@@ -3531,6 +3542,9 @@ async def _empty_channel_watchdog_loop(bot: commands.Bot) -> None:
                 if not bot_channel:
                     continue
                 gid = guild.id
+                sess = _sessions.get(gid)
+                if sess and sess.stay_24_7:
+                    continue
                 humans = [m for m in bot_channel.members if not m.bot]
                 if not humans:
                     log.info("Watchdog: empty channel guild=%s, disconnecting.", gid)
@@ -3542,10 +3556,7 @@ async def _empty_channel_watchdog_loop(bot: commands.Bot) -> None:
                         notify_message="👋 **Tiffany saiu** — canal ficou vazio.",
                     )
                     continue
-                sess = _sessions.get(gid)
                 if not sess:
-                    continue
-                if sess.stay_24_7:
                     continue
                 tocando = vc.is_playing() or vc.is_paused() or bool(sess.current_song)
                 if tocando:
@@ -4244,7 +4255,7 @@ def _blocking_ytdl_download(
 
             dl_opts = {
                 **YDL_OPTS,
-                "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best",
+                "format": "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=720]/best",
                 "outtmpl": os.path.join(tmp_dir, "audio.%(ext)s"),
                 "quiet": True,
                 "no_warnings": True,
@@ -6225,7 +6236,9 @@ async def _voice_listen_loop(
                     members_in_vc = []
 
                 if not members_in_vc:
-                    if _empty_since is None:
+                    if session.stay_24_7:
+                        _empty_since = None
+                    elif _empty_since is None:
                         _empty_since = agora
                     elif (agora - _empty_since) > _EMPTY_CHANNEL_LEAVE_SEC:
                         _guild = bot.get_guild(guild_id)
@@ -8693,10 +8706,10 @@ def register_voice(bot: commands.Bot) -> None:
                 await ctx.message.edit(suppress=True)
             except Exception:
                 pass
-        # Direct URLs: skip blocking probe in yt-dlp mode — worker/prefetch resolve title once.
+        # Direct URLs: probe asynchronously to extract title & duration and populate cache
         _probe_dur: Optional[float] = None
         _probe_title: str = ""
-        if is_url and not resolved_from_platform and _is_wavelink_player(vc):
+        if is_url and not resolved_from_platform:
             try:
                 entry = await asyncio.wait_for(
                     asyncio.to_thread(_blocking_ytdl_extract_entry, query), timeout=25.0
@@ -8711,8 +8724,6 @@ def register_voice(bot: commands.Bot) -> None:
                 dur = _probe_dur  # type: ignore[assignment]
             else:
                 display = "link recebido"
-        elif is_url and not resolved_from_platform:
-            display = "link recebido"
         # === LAVALINK MODE ===
         if _is_wavelink_player(vc):
             player: wavelink.Player = vc
@@ -10297,19 +10308,24 @@ def register_voice(bot: commands.Bot) -> None:
         # Only act when a human LEFT the channel where the bot is
         if before.channel is None or before.channel.id != bot_channel.id:
             return
+        sess = _sessions.get(guild.id)
+        if sess and sess.stay_24_7:
+            return
         humans = [m for m in bot_channel.members if not m.bot]
         if humans:
             return
         # Channel went empty — wait 60s then disconnect
         # Guard: avoid multiple simultaneous sleeps per guild
-        sess = _sessions.get(guild.id)
         if sess:
             if getattr(sess, "_empty_channel_pending", False):
                 return
             sess._empty_channel_pending = True
         await asyncio.sleep(60)
+        sess = _sessions.get(guild.id)
         if sess:
             sess._empty_channel_pending = False
+            if sess.stay_24_7:
+                return
         # Re-fetch vc (may have changed during sleep)
         vc = guild.voice_client
         if not vc or not vc.is_connected():
