@@ -1,8 +1,9 @@
 FROM python:3.11-slim
 
-# Instala ffmpeg (necessário para áudio/voz no Discord), netcat/curl para healthchecks e ferramentas essenciais
+# Instala ffmpeg (necessário para áudio/voz no Discord), nodejs (runtime JS para resolver desafios yt-dlp), netcat/curl para healthchecks e ferramentas essenciais
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    nodejs \
     netcat-openbsd \
     curl \
     && rm -rf /var/lib/apt/lists/*

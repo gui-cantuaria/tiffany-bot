@@ -3743,6 +3743,29 @@ async def _yandex_music_url_to_search(url: str) -> Optional[str]:
     return await _scrape_og_title_search(url, label="Yandex Music")
 
 
+def _blocking_fetch_youtube_oembed_title(url: str) -> Optional[str]:
+    """Fetch official video title via YouTube oEmbed API (fast, reliable, no auth or JS required)."""
+    try:
+        import json
+        import urllib.parse
+        import urllib.request
+        oe_url = f"https://www.youtube.com/oembed?url={urllib.parse.quote(url, safe='')}&format=json"
+        req = urllib.request.Request(oe_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            title = (data.get("title") or "").strip()
+            if title and len(title) >= 2:
+                return title
+    except Exception as e:
+        log.debug("YouTube oEmbed fetch failed for %s: %s", url[:60], e)
+    return None
+
+
+async def _fetch_youtube_oembed_title(url: str) -> Optional[str]:
+    """Async wrapper for YouTube oEmbed title extraction."""
+    return await asyncio.to_thread(_blocking_fetch_youtube_oembed_title, url)
+
+
 def _is_playlist_url(url: str) -> bool:
     """Detect whether URL is a playlist (YouTube, Spotify, Deezer).
     Ignores YouTube Radio/Mix (list=RD...) which are auto-generated."""
@@ -4212,10 +4235,16 @@ def _blocking_ytdl_download(
     elif query.startswith("scsearch"):
         term = re.sub(r"^scsearch\d*:", "", query).strip()
         queries.append(f"ytsearch1:{term}")
-    elif re.match(r"^https?://", query) and display and not re.match(r"^https?://", display):
-        # Direct URL failed: try search by display title as fallback
-        queries.append(f"ytsearch1:{display}")
-        queries.append(f"scsearch1:{display}")
+    elif re.match(r"^https?://", query):
+        clean_fallback_title = ""
+        if display and not re.match(r"^https?://", display) and display not in ("link recebido", "Faixa Selecionada"):
+            clean_fallback_title = display
+        elif "youtube.com" in query or "youtu.be" in query:
+            clean_fallback_title = _blocking_fetch_youtube_oembed_title(query) or ""
+        
+        if clean_fallback_title:
+            queries.append(f"ytsearch1:{clean_fallback_title}")
+            queries.append(f"scsearch1:{clean_fallback_title}")
 
     _last_error = "sem resultado para a busca"
     probe_used = False
@@ -4239,18 +4268,22 @@ def _blocking_ytdl_download(
                 log.info("yt-dlp downloading (probe cache): %s", dl_q)
             else:
                 log.info("yt-dlp downloading: %s", q)
-                with yt_dlp.YoutubeDL(extract_opts) as ydl:
-                    info = ydl.extract_info(q, download=False)
-                    if info and "entries" in info:
-                        info = info["entries"][0] if info["entries"] else None
-                    if not info:
-                        continue
-                    duration = float(info.get("duration") or 0)
-                    title = _title_from_ytdl_info(info)
-                    if duration > MAX_SONG_DURATION_SEC:
-                        dur_min = int(duration // 60)
-                        _last_error = f"ERR_TOO_LONG:{dur_min}:{MAX_SONG_DURATION_SEC // 60}"
-                        continue
+                title = display or "audio"
+                duration = 0.0
+                try:
+                    with yt_dlp.YoutubeDL(extract_opts) as ydl:
+                        info = ydl.extract_info(q, download=False)
+                        if info and "entries" in info:
+                            info = info["entries"][0] if info["entries"] else None
+                        if info:
+                            duration = float(info.get("duration") or 0)
+                            title = _title_from_ytdl_info(info)
+                            if duration > MAX_SONG_DURATION_SEC:
+                                dur_min = int(duration // 60)
+                                _last_error = f"ERR_TOO_LONG:{dur_min}:{MAX_SONG_DURATION_SEC // 60}"
+                                continue
+                except Exception as ex_ext:
+                    log.debug("Pre-extract failed on %s: %s", q, ex_ext)
                 dl_q = q
 
             dl_opts = {
@@ -8712,7 +8745,7 @@ def register_voice(bot: commands.Bot) -> None:
         if is_url and not resolved_from_platform:
             try:
                 entry = await asyncio.wait_for(
-                    asyncio.to_thread(_blocking_ytdl_extract_entry, query), timeout=25.0
+                    asyncio.to_thread(_blocking_ytdl_extract_entry, query), timeout=15.0
                 )
             except (asyncio.TimeoutError, Exception):
                 entry = None
@@ -8723,7 +8756,12 @@ def register_voice(bot: commands.Bot) -> None:
                 display = _probe_title
                 dur = _probe_dur  # type: ignore[assignment]
             else:
-                display = "link recebido"
+                oe_title = await _fetch_youtube_oembed_title(query)
+                if oe_title:
+                    display = oe_title
+                    _probe_title = oe_title
+                else:
+                    display = "link recebido"
         # === LAVALINK MODE ===
         if _is_wavelink_player(vc):
             player: wavelink.Player = vc
