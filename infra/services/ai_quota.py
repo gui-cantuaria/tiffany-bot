@@ -110,6 +110,7 @@ class AIQuotaService:
             return True
 
         today = await AIQuotaService._get_today_str()
+        cost = AIQuotaService.get_model_weight(model_name)
         
         async with pool.acquire() as conn:
             # Check limits reusing the active connection (no nested pool acquisition!)

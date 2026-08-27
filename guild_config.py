@@ -122,14 +122,25 @@ def is_blacklisted(guild_id: int, user_id: int) -> bool:
     return user_id in get_blacklist(guild_id)
 
 
+_GLOBAL_BLACKLIST: set[int] = set()
+
+
+def is_global_blacklisted(user_id: int) -> bool:
+    """True only if user is globally banned by the bot owner."""
+    raw = os.getenv("BOT_GLOBAL_BLACKLIST", "").strip()
+    if raw:
+        try:
+            ids = {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
+            if int(user_id) in ids:
+                return True
+        except Exception:
+            pass
+    return int(user_id) in _GLOBAL_BLACKLIST
+
+
 def is_user_blacklisted_anywhere(user_id: int) -> bool:
-    """True if user_id appears on any guild blacklist (used for DM / cross-guild checks)."""
-    _load()
-    uid = int(user_id)
-    for cfg in _cache.values():
-        if uid in cfg.get("blacklist", []):
-            return True
-    return False
+    """Check global bot blacklist for DM/cross-guild safety without allowing individual server admins to grief users globally."""
+    return is_global_blacklisted(user_id)
 
 def get_offers_channel(guild_id: int) -> Optional[int]:
     return get_guild_config(guild_id).get("offers_channel")

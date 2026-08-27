@@ -149,6 +149,9 @@ class GiveawayEnterView(discord.ui.View):
         if not gw:
             await interaction.response.send_message(tr(lang, "gw.err.not_found"), ephemeral=True)
             return
+        if interaction.guild_id and interaction.guild_id != int(gw.get("guild_id") or 0):
+            await interaction.response.send_message(tr(lang, "gw.err.not_found"), ephemeral=True)
+            return
         if time.time() >= float(gw.get("ends_at") or 0):
             await interaction.response.send_message(tr(lang, "gw.err.ended"), ephemeral=True)
             return

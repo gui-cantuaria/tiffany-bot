@@ -341,6 +341,9 @@ async def setup(bot: commands.Bot):
         if not isinstance(target, (discord.TextChannel, discord.Thread)) or getattr(target, "type", None) not in valid_types:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_channel"), error=True)
             return
+        if getattr(target, "guild", None) and target.guild.id != ctx.guild.id:
+            await hybrid_ctx_reply(ctx, tr(lang, "emb.err.bad_channel"), error=True)
+            return
         perms = _channel_send_perms(target)
         if not perms or not perms.send_messages or not perms.embed_links:
             await hybrid_ctx_reply(ctx, tr(lang, "emb.err.no_send_perms", channel=target.mention), error=True)
