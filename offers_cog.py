@@ -42,8 +42,8 @@ ID_CARGO_ULTRA = _safe_int_env("ID_CARGO_OFERTAS_ULTRA", 1386386059390357575)
 DESCONTO_ULTRA_OFERTA = _safe_int_env("DESCONTO_ULTRA_OFERTA", 60)  # minimum % to qualify as "ultra deal"
 GUILD_ID = _safe_int_env("GUILD_ID", 0)
 
-HORA_INICIO = 8
-HORA_FIM = 18
+HORA_INICIO = _safe_int_env("HORA_INICIO", 7)
+HORA_FIM = _safe_int_env("HORA_FIM", 23)
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 
 # --- Pipeline ---
@@ -2750,6 +2750,8 @@ async def _run_deals_cycle_inner() -> None:
 
             posted += 1
             log.info(f"  🛒 Posted: {deal['title'][:60]} ({deal.get('discount_pct') or 0:.0f}% OFF)")
+            history["last_post_ts"] = time.time()
+            _save_history(history)
             if _bot:
                 asyncio.create_task(_check_and_notify_deal_alerts(_bot, deal, _buy_url(deal)))
 
@@ -2765,6 +2767,8 @@ async def _run_deals_cycle_inner() -> None:
             "Approved %d deals but posted 0 — check CANAL_OFERTAS_ID, guild offers_channel, or category filters",
             len(approved),
         )
+    from infra.critical_tasks import record_offers_heartbeat
+    record_offers_heartbeat()
     log.info(f"=== Cycle finished: {posted} deals posted ===")
 
 
@@ -2798,24 +2802,47 @@ class OffersCog(commands.Cog):
     @deals_loop.before_loop
     async def _before_deals_loop(self):
         await self.bot.wait_until_ready()
-        if os.getenv("RUN_ON_STARTUP", "0") == "1":
-            now_br = datetime.now(FUSO_HORARIO_BR)
-            if HORA_INICIO <= now_br.hour < HORA_FIM:
-                log.info("Offers cog ready — running first cycle on startup (RUN_ON_STARTUP=1).")
-                try:
-                    await _run_deals_cycle()
-                except Exception as e:
-                    log.exception(f"Offers first cycle error: {e}")
-            else:
-                log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
+        now_br = datetime.now(FUSO_HORARIO_BR)
+        is_active_hours = HORA_INICIO <= now_br.hour < HORA_FIM
 
-        now = datetime.now()
-        next_min = ((now.minute // SCAN_INTERVAL_MIN) + 1) * SCAN_INTERVAL_MIN
-        if next_min >= 60:
-            sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+        last_post_ts = 0.0
+        try:
+            hist = _load_history()
+            last_post_ts = float(hist.get("last_post_ts") or 0.0)
+        except Exception:
+            pass
+
+        time_since_last_post = time.time() - last_post_ts
+        should_run_startup = (
+            is_active_hours
+            and (
+                os.getenv("RUN_ON_STARTUP", "1") == "1"
+                or time_since_last_post >= (SCAN_INTERVAL_MIN * 60)
+            )
+        )
+
+        if should_run_startup:
+            log.info("Offers cog ready — running startup cycle (time since last post: %.1f min).", time_since_last_post / 60)
+            try:
+                await _run_deals_cycle()
+            except Exception as e:
+                log.exception(f"Offers startup cycle error: {e}")
+        elif not is_active_hours:
+            log.info(f"Outside business hours ({now_br.hour}h) — first cycle at next scheduled time.")
+
+        # Calculate smart sleep to prevent starvation on rapid restarts
+        if should_run_startup:
+            sleep_seconds = float(SCAN_INTERVAL_MIN * 60)
         else:
-            sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
-        log.info(f"Offers cog ready — waiting {sleep_seconds:.1f}s for next scheduled slot to maintain consistent clock alignment.")
+            now = datetime.now()
+            next_min = ((now.minute // SCAN_INTERVAL_MIN) + 1) * SCAN_INTERVAL_MIN
+            if next_min >= 60:
+                sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+            else:
+                sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+            sleep_seconds = max(30.0, min(sleep_seconds, float(SCAN_INTERVAL_MIN * 60)))
+
+        log.info(f"Offers cog ready — next cycle in {sleep_seconds:.1f}s.")
         await asyncio.sleep(sleep_seconds)
     
     @app_commands.command(name="ofertas_diag", description="[Admin] Diagnose deals scraper and verify upstream connectivity")

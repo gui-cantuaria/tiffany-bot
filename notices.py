@@ -70,8 +70,8 @@ try:
 except ValueError:
     ID_CARGO_PARA_MARCAR = 0
 
-HORA_INICIO = 8
-HORA_FIM = 18
+HORA_INICIO = int(os.getenv("HORA_INICIO", "7"))
+HORA_FIM = int(os.getenv("HORA_FIM", "23"))
 FUSO_HORARIO_BR = timezone(timedelta(hours=-3))
 MINUTO_PRE_AQUECIMENTO = 0
 INTERVALO_NOTICIAS_MIN = int(os.getenv("INTERVALO_NOTICIAS_MIN", "60"))  # interval between news cycles (minutes)
@@ -1836,24 +1836,47 @@ async def _verificar_feeds_error(error):
 @verificar_feeds.before_loop
 async def _before_verificar_feeds():
     await discord_client.wait_until_ready()
-    if os.getenv("RUN_ON_STARTUP", "0") == "1":
-        now_br = datetime.now(FUSO_HORARIO_BR)
-        if HORA_INICIO <= now_br.hour < HORA_FIM:
-            log.info("News bot ready — running first cycle on startup (RUN_ON_STARTUP=1).")
-            try:
-                await _verificar_feeds_inner()
-            except Exception as e:
-                log.exception(f"News first cycle error: {e}")
-        else:
-            log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
+    now_br = datetime.now(FUSO_HORARIO_BR)
+    is_active_hours = HORA_INICIO <= now_br.hour < HORA_FIM
+    
+    last_post_ts = 0.0
+    try:
+        hist = load_history()
+        last_post_ts = float(hist.get("last_post_ts") or 0.0)
+    except Exception:
+        pass
 
-    now = datetime.now()
-    next_min = ((now.minute // INTERVALO_NOTICIAS_MIN) + 1) * INTERVALO_NOTICIAS_MIN
-    if next_min >= 60:
-        sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+    time_since_last_post = time.time() - last_post_ts
+    should_run_startup = (
+        is_active_hours
+        and (
+            os.getenv("RUN_ON_STARTUP", "1") == "1"
+            or time_since_last_post >= (INTERVALO_NOTICIAS_MIN * 60)
+        )
+    )
+
+    if should_run_startup:
+        log.info("News bot ready — running startup cycle (time since last post: %.1f min).", time_since_last_post / 60)
+        try:
+            await _verificar_feeds_inner()
+        except Exception as e:
+            log.exception(f"News startup cycle error: {e}")
+    elif not is_active_hours:
+        log.info(f"Outside business hours ({now_br.hour}h) — first news cycle at next scheduled time.")
+
+    # Calculate smart sleep to prevent starvation on rapid restarts
+    if should_run_startup:
+        sleep_seconds = float(INTERVALO_NOTICIAS_MIN * 60)
     else:
-        sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
-    log.info(f"News bot ready — waiting {sleep_seconds:.1f}s for next scheduled slot to maintain consistent clock alignment.")
+        now = datetime.now()
+        next_min = ((now.minute // INTERVALO_NOTICIAS_MIN) + 1) * INTERVALO_NOTICIAS_MIN
+        if next_min >= 60:
+            sleep_seconds = ((60 - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+        else:
+            sleep_seconds = ((next_min - now.minute) * 60) - now.second - (now.microsecond / 1_000_000)
+        sleep_seconds = max(30.0, min(sleep_seconds, float(INTERVALO_NOTICIAS_MIN * 60)))
+
+    log.info(f"News bot ready — next cycle in {sleep_seconds:.1f}s.")
     await asyncio.sleep(sleep_seconds)
 
 
@@ -1867,6 +1890,8 @@ async def _critical_tasks_watchdog():
             discord_client,
             news_task=verificar_feeds,
             reload_offers=_reload_offers_extension,
+            hora_inicio=HORA_INICIO,
+            hora_fim=HORA_FIM,
         )
     except Exception:
         log.exception("Critical tasks watchdog error")
@@ -2387,6 +2412,7 @@ async def _verificar_feeds_inner():
         log.info(f"  🏆 Posting (score {noticia['nota']}): [{noticia['site']}] {noticia['titulo'][:60]}")
         if await _postar_noticia(channel, noticia, history, metrics):
             posts_fase3 += 1
+            history["last_post_ts"] = time.time()
             save_metrics(metrics)
         else:
             _requeue = load_queue()
@@ -2406,6 +2432,8 @@ async def _verificar_feeds_inner():
         "posts": posts_feitos + posts_fase3,
         "fila": len(load_queue()),
     }
+    from infra.critical_tasks import record_news_heartbeat
+    record_news_heartbeat()
     log.info("Cycle complete.")
 
 
@@ -2498,8 +2526,12 @@ async def _load_bot_extensions() -> None:
             subsystems.register_subsystem("Offers", "DEGRADED", f"Load failed: {e}", mandatory=False, log_instance=log)
             subsystems.log_event("EXTENSION_LOAD_FAILED", "offers", "WARNING", details=str(e))
 
-    # 2. Giveaways & EmbedBuilder (Optional)
-    for ext, name, sub_name in [("giveaways_cog", "GiveawaysCog", "Giveaways"), ("embed_builder_cog", "EmbedBuilderCog", "EmbedBuilder")]:
+    # 2. Giveaways, EmbedBuilder & Admin Dashboard (Optional)
+    for ext, name, sub_name in [
+        ("giveaways_cog", "GiveawaysCog", "Giveaways"),
+        ("embed_builder_cog", "EmbedBuilderCog", "EmbedBuilder"),
+        ("admin_dashboard_cog", "AdminDashboardCog", "AdminDashboard"),
+    ]:
         if not discord_client.get_cog(name):
             try:
                 await discord_client.load_extension(ext)
